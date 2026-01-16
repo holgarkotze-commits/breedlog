@@ -1,0 +1,270 @@
+BUILD A COMPLETE MOBILE APPLICATION: “BreedLog (by Kwantam)”
+
+CORE PURPOSE (VERY IMPORTANT – PRIORITY ORDER)
+
+BreedLog is a PRIVATE, OFFLINE-FIRST livestock breeding and management app for sheep farmers.
+The PRIMARY purpose of the app is:
+1) To RECORD, MANAGE, and TRACE BREEDING LINEAGES (family trees, bloodlines, sire/dam connections).
+2) To STORE COMPLETE ANIMAL DATA (performance, reproduction, health, traits).
+3) To ASSIST WITH EVALUATION (manual classing + optional AI valuation as a secondary tool).
+
+This is NOT primarily an AI app.
+It is a BREEDING RECORD SYSTEM with genealogy at its core.
+
+The app must function fully OFFLINE for all core features.
+Only AI valuation requires internet and login.
+
+---
+
+PLATFORM & TECH (MANDATORY)
+
+- Use Replit Mobile Apps flow.
+- Generate a REAL, INSTALLABLE Android mobile app.
+- Core data must be stored locally using SQLite (offline-first).
+- App must work in airplane mode.
+- No cloud dependency for core data.
+- App must be usable by farmers with low technical skills.
+- Avoid fragile entry points (no custom index.tsx parsing issues).
+- Project must be buildable into APK/AAB for Google Play.
+- Use device storage for photos (animal images).
+
+---
+
+APP STRUCTURE OVERVIEW
+
+BOTTOM TAB NAVIGATION (in this order):
+1) Animals
+2) Breeding / Family Tree
+3) Records & Performance
+4) AI Valuation (login required)
+5) Settings
+(Debug tab visible only in development)
+
+---
+
+DESIGN & BRANDING (MANDATORY)
+
+- Theme: Black & Yellow (professional, agricultural)
+- Background: #0B0B0B
+- Accent Yellow: #FFC300
+- Cards: #141414
+- Body text: #F5F5F3
+- Headings: #FFFFFF
+- Input fields: Off-white #EDEDE9
+- Large buttons, clear text, no clutter.
+- Designed for outdoor use (sunlight readability).
+- Simple icons, no fancy animations.
+
+---
+
+DATA MODEL (OFFLINE SQLITE – CORE OF THE APP)
+
+TABLE: animals
+- id (PK)
+- tag_id (unique animal ID)
+- electronic_id (optional)
+- name (optional)
+- sex (ram / ewe / wether)
+- breed (Meatmaster default)
+- birth_date
+- birth_weight
+- current_weight
+- dam_id (FK → animals.id)
+- sire_id (FK → animals.id)
+- breeder_name
+- owner_name
+- farm_name
+- generation_number
+- status (active / sold / dead)
+- notes
+- created_at
+
+TABLE: breeding_events
+- id
+- ewe_id (FK)
+- ram_id (FK)
+- mating_date
+- mating_type (natural / AI / hand-mated)
+- lambing_date
+- lamb_count
+- notes
+
+TABLE: offspring
+- id
+- lamb_id (FK → animals.id)
+- breeding_event_id (FK)
+
+TABLE: performance_records
+- id
+- animal_id (FK)
+- date
+- weight
+- age_days
+- trait_notes
+- EBV_placeholder (manual entry for now)
+- GEBV_placeholder (manual entry for now)
+
+TABLE: health_records
+- id
+- animal_id
+- date
+- treatment
+- medication
+- dosage
+- vet
+- notes
+
+TABLE: evaluations
+- id
+- animal_id
+- evaluator (manual / AI)
+- head_score (1–6)
+- front_score (1–6)
+- middle_score (1–6)
+- rear_score (1–6)
+- overall_type (Euro / Afro / Middle)
+- comments
+- created_at
+
+TABLE: ai_valuations
+- id
+- animal_id
+- valuation_text
+- created_at
+
+Foreign keys must enforce integrity.
+Deleting an animal must cascade logically (with warnings).
+
+---
+
+TAB 1: ANIMALS (PRIMARY DAILY USE)
+
+- List all animals (filter by sex, age, status).
+- “Add Animal” button.
+- Capture animal PHOTO using phone camera.
+- Animal profile screen shows:
+  - Photo
+  - Tag ID
+  - Sex
+  - Breed
+  - Birth data
+  - Sire & Dam (clickable links)
+  - Current status
+- Buttons:
+  - Edit
+  - Record breeding
+  - Add offspring
+  - View family tree
+
+---
+
+TAB 2: BREEDING & FAMILY TREE (CORE FEATURE)
+
+This is the HEART of the app.
+
+Features:
+- Visual family tree (pedigree) for any animal:
+  - Parents
+  - Grandparents
+  - Offspring
+  - Multi-generation as far back as data allows
+- Select a ewe → select a ram → record mating
+- When lamb is born:
+  - Create lamb record
+  - Auto-link sire & dam
+  - Increment generation
+- Show inbreeding warnings (simple logic placeholder).
+- Family tree must be PRIVATE (no sharing unless exported).
+
+---
+
+TAB 3: RECORDS & PERFORMANCE
+
+- Weight tracking over time
+- Performance notes
+- Reproduction history
+- Health & treatment records
+- Manual entry fields similar to LogiX-style livestock systems:
+  - Identification
+  - Birth records
+  - Weights
+  - Traits
+  - Fertility notes
+  - Functional conformation notes
+
+---
+
+TAB 4: AI VALUATION (TERTIARY FEATURE – LOGIN REQUIRED)
+
+Purpose:
+Assist with professional-style Meatmaster evaluation language.
+
+Rules:
+- App works WITHOUT login.
+- AI Valuation requires login (email/user ID + password).
+- Login stored securely.
+- AI requires internet.
+
+Features:
+- Select an animal
+- Use stored data + evaluation scores
+- Generate structured report:
+  - Head
+  - Front Quarter
+  - Middle Section
+  - Rear Quarter
+  - Overall Type
+  - Breeding recommendation
+- AI output must be:
+  - Copyable
+  - Savable to animal record
+- Use OpenAI via Replit integrations (no hardcoded keys).
+- Graceful offline handling.
+
+---
+
+TAB 5: SETTINGS
+
+- App info & version
+- Data status: “Offline-first SQLite enabled”
+- EXPORT FUNCTIONS (MANDATORY):
+  - Export full database to CSV:
+    - animals.csv
+    - breeding_events.csv
+    - offspring.csv
+    - performance_records.csv
+    - health_records.csv
+    - evaluations.csv
+  - Share/save files
+- Import CSV (optional but preferred)
+- Reset database (with confirmation)
+
+---
+
+DEBUG (DEV ONLY)
+
+- Test SQLite insert/read/delete
+- Test breeding linkage
+- Test family tree generation
+- Test AI eligibility logic
+- Show pass/fail clearly
+
+---
+
+QUALITY REQUIREMENTS
+
+- Farmer-first UX
+- No crashes
+- Defensive validation
+- Works fully offline
+- Scales to hundreds/thousands of animals
+- Designed for long-term breeding programs
+- Professional, clean, no gimmicks
+
+DELIVERABLE
+
+Generate a FULLY FUNCTIONAL mobile app project inside Replit Mobile Apps that:
+- Runs on phone via QR preview
+- Works offline
+- Can be built into Android APK/AAB
+- Is suitable for real farmers managing breeding programs
