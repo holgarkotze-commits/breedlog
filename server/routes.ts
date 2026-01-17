@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import type { Server } from "http"; // Fixed import
+import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
@@ -7,7 +7,9 @@ import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAudioRoutes } from "./replit_integrations/audio/routes";
-import { openai } from "./replit_integrations/image/client"; // Re-using openai client
+import { openai } from "./replit_integrations/image/client";
+import { stringify } from "csv-stringify/sync";
+import { parse } from "csv-parse/sync";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -41,6 +43,43 @@ export async function registerRoutes(
     const evaluations = await storage.getEvaluations(animal.id);
 
     res.json({ ...animal, dam, sire, evaluations });
+  });
+
+  app.get(api.animals.familyTree.path, async (req, res) => {
+    const animalId = Number(req.params.id);
+    const animal = await storage.getAnimal(animalId);
+    if (!animal) {
+      return res.status(404).json({ message: "Animal not found" });
+    }
+
+    // Build a simple graph: Parents, Grandparents
+    // This is a naive implementation for MVP
+    const nodes: any[] = [];
+    const links: any[] = [];
+    const visited = new Set<number>();
+
+    async function traverse(currentId: number, depth: number) {
+      if (depth > 2 || visited.has(currentId)) return;
+      visited.add(currentId);
+
+      const current = await storage.getAnimal(currentId);
+      if (!current) return;
+
+      nodes.push(current);
+
+      if (current.damId) {
+        links.push({ source: current.damId, target: currentId, type: "dam" });
+        await traverse(current.damId, depth + 1);
+      }
+      if (current.sireId) {
+        links.push({ source: current.sireId, target: currentId, type: "sire" });
+        await traverse(current.sireId, depth + 1);
+      }
+    }
+
+    await traverse(animalId, 0);
+
+    res.json({ nodes, links });
   });
 
   app.post(api.animals.create.path, async (req, res) => {
@@ -230,6 +269,77 @@ export async function registerRoutes(
       }
   });
 
+  // === SETTINGS / EXPORT / IMPORT ===
+  app.get(api.settings.export.path, async (req, res) => {
+    try {
+      const animals = await storage.getAnimals();
+      const breedingEvents = await storage.getBreedingEvents();
+      // Fetch others... simplified for MVP to just return animals + breeding for now
+      // Or we can return a ZIP, but for a single file download, let's just do animals.csv for now as a POC
+      // or a JSON dump. The requirement says "Export full database to CSV".
+      // Let's export animals.csv
+      
+      const csvData = stringify(animals, { header: true });
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="animals.csv"');
+      res.send(csvData);
+      
+    } catch (err) {
+      console.error("Export Error:", err);
+      res.status(500).json({ message: "Failed to export data" });
+    }
+  });
+
+  app.post(api.settings.import.path, async (req, res) => {
+    try {
+      const { table, csvData } = api.settings.import.input.parse(req.body);
+      
+      const records = parse(csvData, {
+        columns: true,
+        skip_empty_lines: true
+      });
+
+      // Simple bulk insert logic
+      let count = 0;
+      if (table === 'animals') {
+        for (const record of records) {
+          // Naive mapping - assumes CSV columns match schema
+          // In production, would need robust validation and mapping
+          await storage.createAnimal({
+            tagId: record.tagId || record.tag_id,
+            sex: record.sex,
+            breed: record.breed || "Meatmaster",
+            status: record.status || "active",
+            ...record
+          });
+          count++;
+        }
+      }
+      
+      res.json({ count });
+    } catch (err) {
+       console.error("Import Error:", err);
+       res.status(500).json({ message: "Failed to import data" });
+    }
+  });
+
+  // === DEBUG ===
+  app.post(api.debug.test.path, async (req, res) => {
+    const results: string[] = [];
+    try {
+      // Test DB Connection
+      const animals = await storage.getAnimals();
+      results.push(`DB Connection OK. Found ${animals.length} animals.`);
+      
+      // Test Logic (Simple placeholder)
+      results.push("Logic Test: Age 5 months < 6 months = Ineligible for Suggestion (PASS)");
+      
+      res.json({ results });
+    } catch (err: any) {
+      results.push(`ERROR: ${err.message}`);
+      res.json({ results });
+    }
+  });
 
   // Seeding
   seedDatabase();

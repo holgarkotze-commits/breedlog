@@ -171,6 +171,36 @@ export const api = {
       },
     },
   },
+  settings: {
+    export: {
+      method: 'GET' as const,
+      path: '/api/settings/export',
+      responses: {
+        200: z.any(), // File download
+      },
+    },
+    import: {
+      method: 'POST' as const,
+      path: '/api/settings/import',
+      input: z.object({
+        table: z.enum(['animals', 'breedingEvents', 'performanceRecords', 'healthRecords', 'evaluations']),
+        csvData: z.string(),
+      }),
+      responses: {
+        200: z.object({ count: z.number() }),
+        400: errorSchemas.validation,
+      },
+    },
+  },
+  debug: {
+    test: {
+      method: 'POST' as const,
+      path: '/api/debug/test',
+      responses: {
+        200: z.object({ results: z.array(z.string()) }),
+      },
+    },
+  },
 };
 
 export function buildUrl(path: string, params?: Record<string, string | number>): string {
