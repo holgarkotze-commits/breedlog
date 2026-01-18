@@ -7,6 +7,7 @@ import {
   healthRecords,
   evaluations,
   aiValuations,
+  matingGroups,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -14,6 +15,7 @@ import {
   type InsertHealthRecord,
   type InsertEvaluation,
   type InsertAiValuation,
+  type InsertMatingGroup,
   type Animal,
   type BreedingEvent,
   type Offspring,
@@ -21,6 +23,7 @@ import {
   type HealthRecord,
   type Evaluation,
   type AiValuation,
+  type MatingGroup,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -37,6 +40,10 @@ export interface IStorage {
   createBreedingEvent(event: InsertBreedingEvent): Promise<BreedingEvent>;
   getOffspringByBreedingEvent(eventId: number): Promise<Offspring[]>;
   createOffspring(offspring: InsertOffspring): Promise<Offspring>;
+  
+  // Mating Groups
+  getMatingGroups(): Promise<MatingGroup[]>;
+  createMatingGroup(group: InsertMatingGroup): Promise<MatingGroup>;
 
   // Records
   getPerformanceRecords(animalId: number): Promise<PerformanceRecord[]>;
@@ -59,10 +66,6 @@ export class DatabaseStorage implements IStorage {
     let query = db.select().from(animals);
     
     // Simple in-memory filtering for now or basic SQL WHEREs if needed.
-    // Drizzle's query builder is powerful enough.
-    // For now, returning all and letting frontend filter or adding simple WHEREs if high volume.
-    // Given the prompt suggests offline-first/local SQLite feel, loading all isn't terrible for reasonable herd sizes.
-    // But let's add basic status filtering at least.
     
     if (filters?.status) {
       query.where(eq(animals.status, filters.status));
@@ -112,6 +115,16 @@ export class DatabaseStorage implements IStorage {
   async createOffspring(newOffspring: InsertOffspring): Promise<Offspring> {
     const [created] = await db.insert(offspring).values(newOffspring).returning();
     return created;
+  }
+  
+  // Mating Groups
+  async getMatingGroups(): Promise<MatingGroup[]> {
+      return await db.select().from(matingGroups).orderBy(desc(matingGroups.dateIn));
+  }
+  
+  async createMatingGroup(group: InsertMatingGroup): Promise<MatingGroup> {
+      const [newGroup] = await db.insert(matingGroups).values(group).returning();
+      return newGroup;
   }
 
   // Records

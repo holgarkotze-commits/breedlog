@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@shared/routes";
-import { type InsertBreedingEvent } from "@shared/schema";
+import { api, buildUrl } from "@shared/routes";
+import { type InsertBreedingEvent, type InsertMatingGroup } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 export function useBreedingEvents() {
   return useQuery({
@@ -15,6 +16,8 @@ export function useBreedingEvents() {
 
 export function useCreateBreedingEvent() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   return useMutation({
     mutationFn: async (data: InsertBreedingEvent) => {
       const res = await fetch(api.breeding.create.path, {
@@ -28,6 +31,46 @@ export function useCreateBreedingEvent() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.breeding.list.path] });
+      toast({ title: "Recorded", description: "Breeding event recorded successfully" });
     },
+    onError: (error) => {
+        toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
   });
+}
+
+export function useMatingGroups() {
+    return useQuery({
+        queryKey: [api.breeding.groups.list.path],
+        queryFn: async () => {
+            const res = await fetch(api.breeding.groups.list.path, { credentials: "include" });
+            if(!res.ok) throw new Error("Failed to fetch mating groups");
+            return api.breeding.groups.list.responses[200].parse(await res.json());
+        }
+    });
+}
+
+export function useCreateMatingGroup() {
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
+
+    return useMutation({
+        mutationFn: async (data: InsertMatingGroup) => {
+            const res = await fetch(api.breeding.groups.create.path, {
+                method: api.breeding.groups.create.method,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+                credentials: "include"
+            });
+            if(!res.ok) throw new Error("Failed to create mating group");
+            return api.breeding.groups.create.responses[201].parse(await res.json());
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [api.breeding.groups.list.path] });
+            toast({ title: "Success", description: "Mating group created" });
+        },
+        onError: (error) => {
+            toast({ title: "Error", description: error.message, variant: "destructive" });
+        }
+    });
 }

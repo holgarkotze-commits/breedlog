@@ -7,13 +7,15 @@ import {
   insertHealthRecordSchema, 
   insertEvaluationSchema, 
   insertAiValuationSchema,
+  insertMatingGroupSchema,
   animals,
   breedingEvents,
   performanceRecords,
   healthRecords,
   evaluations,
   aiValuations,
-  offspring
+  offspring,
+  matingGroups
 } from './schema';
 
 // Shared error schemas
@@ -105,6 +107,23 @@ export const api = {
         400: errorSchemas.validation,
       },
     },
+    groups: {
+        list: {
+            method: 'GET' as const,
+            path: '/api/mating-groups',
+            responses: {
+                200: z.array(z.custom<typeof matingGroups.$inferSelect>()),
+            }
+        },
+        create: {
+            method: 'POST' as const,
+            path: '/api/mating-groups',
+            input: insertMatingGroupSchema,
+            responses: {
+                201: z.custom<typeof matingGroups.$inferSelect>(),
+            }
+        }
+    }
   },
   records: {
     performance: {

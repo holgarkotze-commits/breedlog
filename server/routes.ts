@@ -35,9 +35,6 @@ export async function registerRoutes(
       return res.status(404).json({ message: "Animal not found" });
     }
     
-    // Enrich with relations if possible (basic version)
-    // For a real app, we'd do this in the storage layer with a join or multiple queries
-    // Doing it here for simplicity and MVP speed
     const dam = animal.damId ? await storage.getAnimal(animal.damId) : null;
     const sire = animal.sireId ? await storage.getAnimal(animal.sireId) : null;
     const evaluations = await storage.getEvaluations(animal.id);
@@ -52,8 +49,6 @@ export async function registerRoutes(
       return res.status(404).json({ message: "Animal not found" });
     }
 
-    // Build a simple graph: Parents, Grandparents
-    // This is a naive implementation for MVP
     const nodes: any[] = [];
     const links: any[] = [];
     const visited = new Set<number>();
@@ -139,6 +134,27 @@ export async function registerRoutes(
       }
       throw err;
     }
+  });
+  
+  app.get(api.breeding.groups.list.path, async (req, res) => {
+      const groups = await storage.getMatingGroups();
+      res.json(groups);
+  });
+  
+  app.post(api.breeding.groups.create.path, async (req, res) => {
+      try {
+          const input = api.breeding.groups.create.input.parse(req.body);
+          const group = await storage.createMatingGroup(input);
+          res.status(201).json(group);
+      } catch (err) {
+           if (err instanceof z.ZodError) {
+              return res.status(400).json({
+                  message: err.errors[0].message,
+                  field: err.errors[0].path.join("."),
+              });
+          }
+          throw err;
+      }
   });
 
   // === RECORDS ===
@@ -230,6 +246,8 @@ export async function registerRoutes(
             Sex: ${animal.sex}
             Breed: ${animal.breed}
             Weight: ${animal.currentWeight}kg
+            Status: ${animal.status}
+            Environment: ${animal.environmentGroup}
             
             Latest Manual Scores (1-6 scale):
             Head: ${latestEval?.headScore || 'N/A'}
@@ -358,6 +376,8 @@ async function seedDatabase() {
       status: "active",
       currentWeight: "85.5",
       notes: "Top breeding ram, excellent conformation.",
+      environmentGroup: "Veld",
+      lambingSeason: "24A"
     });
 
     const ewe = await storage.createAnimal({
@@ -368,6 +388,8 @@ async function seedDatabase() {
       status: "active",
       currentWeight: "65.0",
       notes: "Good mothering ability.",
+      environmentGroup: "Veld",
+      lambingSeason: "24A"
     });
 
     await storage.createBreedingEvent({

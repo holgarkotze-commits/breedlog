@@ -2,6 +2,7 @@ import { useAnimals } from "@/hooks/use-animals";
 import { useBreedingEvents } from "@/hooks/use-breeding";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatCard } from "@/components/StatCard";
 import { Activity, Users, TrendingUp, AlertTriangle } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -140,32 +141,5 @@ export default function Dashboard() {
         </div>
       </div>
     </Layout>
-  );
-}
-
-function StatCard({ title, value, loading, icon: Icon, trend, className }: any) {
-  return (
-    <Card className={cn("rugged-card bg-card hover:-translate-y-1 transition-transform", className)}>
-      <CardContent className="p-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">{title}</p>
-            {loading ? (
-              <Skeleton className="h-10 w-20 mt-2 bg-secondary" />
-            ) : (
-              <h3 className="text-4xl font-black mt-2 text-foreground font-display">{value}</h3>
-            )}
-          </div>
-          <div className="p-3 bg-secondary rounded-full text-primary">
-            <Icon className="w-6 h-6" />
-          </div>
-        </div>
-        {trend && (
-          <p className="text-xs font-medium text-primary mt-4 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" /> {trend}
-          </p>
-        )}
-      </CardContent>
-    </Card>
   );
 }

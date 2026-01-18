@@ -1,15 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertPerformanceRecord, type InsertHealthRecord } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
-// --- PERFORMANCE RECORDS ---
 export function usePerformanceRecords(animalId: number) {
   return useQuery({
     queryKey: [api.records.performance.list.path, animalId],
     queryFn: async () => {
       const url = buildUrl(api.records.performance.list.path, { id: animalId });
       const res = await fetch(url, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch performance records");
+      if (!res.ok) throw new Error("Failed to fetch records");
       return api.records.performance.list.responses[200].parse(await res.json());
     },
     enabled: !!animalId,
@@ -18,6 +18,8 @@ export function usePerformanceRecords(animalId: number) {
 
 export function useCreatePerformanceRecord() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   return useMutation({
     mutationFn: async (data: InsertPerformanceRecord) => {
       const res = await fetch(api.records.performance.create.path, {
@@ -26,18 +28,16 @@ export function useCreatePerformanceRecord() {
         body: JSON.stringify(data),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to create performance record");
+      if (!res.ok) throw new Error("Failed to add record");
       return api.records.performance.create.responses[201].parse(await res.json());
     },
     onSuccess: (_, variables) => {
-      const url = buildUrl(api.records.performance.list.path, { id: variables.animalId });
-      queryClient.invalidateQueries({ queryKey: [url] });
       queryClient.invalidateQueries({ queryKey: [api.records.performance.list.path, variables.animalId] });
+      toast({ title: "Success", description: "Weight record added" });
     },
   });
 }
 
-// --- HEALTH RECORDS ---
 export function useHealthRecords(animalId: number) {
   return useQuery({
     queryKey: [api.records.health.list.path, animalId],
@@ -53,6 +53,8 @@ export function useHealthRecords(animalId: number) {
 
 export function useCreateHealthRecord() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   return useMutation({
     mutationFn: async (data: InsertHealthRecord) => {
       const res = await fetch(api.records.health.create.path, {
@@ -61,13 +63,12 @@ export function useCreateHealthRecord() {
         body: JSON.stringify(data),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to create health record");
+      if (!res.ok) throw new Error("Failed to add record");
       return api.records.health.create.responses[201].parse(await res.json());
     },
     onSuccess: (_, variables) => {
-      const url = buildUrl(api.records.health.list.path, { id: variables.animalId });
-      queryClient.invalidateQueries({ queryKey: [url] });
       queryClient.invalidateQueries({ queryKey: [api.records.health.list.path, variables.animalId] });
+      toast({ title: "Success", description: "Health record added" });
     },
   });
 }

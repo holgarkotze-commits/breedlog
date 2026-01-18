@@ -7,25 +7,79 @@ import { z } from "zod";
 export * from "./models/auth";
 export * from "./models/chat";
 
+// === MATING GROUPS ===
+export const matingGroups = pgTable("mating_groups", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  ramId: integer("ram_id").notNull(),
+  dateIn: date("date_in").notNull(),
+  dateOut: date("date_out"),
+  lambingSeason: text("lambing_season"), // e.g. 26A
+  environmentGroup: text("environment_group"),
+  managementGroup: text("management_group"),
+  status: text("status").default("active"), // active, closed
+  notes: text("notes"),
+});
+
+export const matingGroupsRelations = relations(matingGroups, ({ one, many }) => ({
+  ram: one(animals, {
+    fields: [matingGroups.ramId],
+    references: [animals.id],
+    relationName: "matingGroupRam",
+  }),
+  breedingEvents: many(breedingEvents),
+}));
+
+export const insertMatingGroupSchema = createInsertSchema(matingGroups).omit({ id: true });
+
+
 // === ANIMALS ===
 export const animals = pgTable("animals", {
   id: serial("id").primaryKey(),
-  tagId: text("tag_id").notNull().unique(),
-  electronicId: text("electronic_id"),
+  // Identification
+  tagId: text("tag_id").notNull().unique(), // Ear tag
+  tattooId: text("tattoo_id"), // Tattoo
+  electronicId: text("electronic_id"), // RFID
+  studPrefix: text("stud_prefix"),
   name: text("name"),
+  
+  // Basic Info
   sex: text("sex").notNull(), // ram, ewe, wether
   breed: text("breed").default("Meatmaster"),
-  birthDate: date("birth_date"),
-  birthWeight: decimal("birth_weight"),
-  currentWeight: decimal("current_weight"),
-  damId: integer("dam_id"), // Self-referential FK handled in relations
-  sireId: integer("sire_id"), // Self-referential FK handled in relations
   status: text("status").default("active"), // active, sold, dead, culled, lost
-  notes: text("notes"),
   photo: text("photo"), // URL/Path to photo
+  
+  // Birth & Parentage
+  birthDate: date("birth_date"),
+  birthStatus: text("birth_status"), // single, twin, triplet
+  damId: integer("dam_id"), 
+  sireId: integer("sire_id"),
+  
+  // Grouping & Stamboek Info
+  lambingSeason: text("lambing_season"), // e.g. 24A
+  environmentGroup: text("environment_group"), // Veld, Lands
+  managementGroup: text("management_group"), // 1, 2, 3
+  
+  // Performance (Specific Stamboek fields)
+  birthWeight: decimal("birth_weight"),
+  currentWeight: decimal("current_weight"), // Latest known weight
+  
+  weight100Day: decimal("weight_100_day"),
+  weight100DayDate: date("weight_100_day_date"),
+  
+  weight270Day: decimal("weight_270_day"),
+  weight270DayDate: date("weight_270_day_date"),
+  
+  weaningStatus: text("weaning_status"), // "Twin died before weaning", etc.
+  
+  // Ownership
   breederName: text("breeder_name"),
   ownerName: text("owner_name"),
   farmName: text("farm_name"),
+  location: text("location"), // Camp/Location
+  
+  // Notes
+  notes: text("notes"),
 });
 
 export const animalsRelations = relations(animals, ({ one, many }) => ({
@@ -43,6 +97,7 @@ export const animalsRelations = relations(animals, ({ one, many }) => ({
   offspringAsSire: many(animals, { relationName: "sireRelation" }),
   breedingEventsAsEwe: many(breedingEvents, { relationName: "eweRelation" }),
   breedingEventsAsRam: many(breedingEvents, { relationName: "ramRelation" }),
+  matingGroupsAsRam: many(matingGroups, { relationName: "matingGroupRam" }),
   performanceRecords: many(performanceRecords),
   healthRecords: many(healthRecords),
   evaluations: many(evaluations),
@@ -51,11 +106,13 @@ export const animalsRelations = relations(animals, ({ one, many }) => ({
 
 export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true });
 
+
 // === BREEDING EVENTS ===
 export const breedingEvents = pgTable("breeding_events", {
   id: serial("id").primaryKey(),
   eweId: integer("ewe_id").notNull(),
   ramId: integer("ram_id").notNull(),
+  matingGroupId: integer("mating_group_id"), // Optional link to group
   matingDate: date("mating_date").notNull(),
   matingType: text("mating_type").notNull(), // natural, AI, hand-mated
   lambingDate: date("lambing_date"),
@@ -74,10 +131,15 @@ export const breedingEventsRelations = relations(breedingEvents, ({ one, many })
     references: [animals.id],
     relationName: "ramRelation",
   }),
+  matingGroup: one(matingGroups, {
+    fields: [breedingEvents.matingGroupId],
+    references: [matingGroups.id],
+  }),
   offspring: many(offspring),
 }));
 
 export const insertBreedingEventSchema = createInsertSchema(breedingEvents).omit({ id: true });
+
 
 // === OFFSPRING ===
 // Links a breeding event to the resulting lamb(s)
@@ -100,6 +162,7 @@ export const offspringRelations = relations(offspring, ({ one }) => ({
 
 export const insertOffspringSchema = createInsertSchema(offspring).omit({ id: true });
 
+
 // === PERFORMANCE RECORDS ===
 export const performanceRecords = pgTable("performance_records", {
   id: serial("id").primaryKey(),
@@ -107,6 +170,7 @@ export const performanceRecords = pgTable("performance_records", {
   date: date("date").notNull(),
   weight: decimal("weight"),
   ageDays: integer("age_days"),
+  type: text("type"), // 100-day, 270-day, ad-hoc, weaning
   traitNotes: text("trait_notes"),
   notes: text("notes"),
 });
@@ -120,6 +184,7 @@ export const performanceRecordsRelations = relations(performanceRecords, ({ one 
 
 export const insertPerformanceRecordSchema = createInsertSchema(performanceRecords).omit({ id: true });
 
+
 // === HEALTH RECORDS ===
 export const healthRecords = pgTable("health_records", {
   id: serial("id").primaryKey(),
@@ -129,6 +194,7 @@ export const healthRecords = pgTable("health_records", {
   medication: text("medication"),
   dosage: text("dosage"),
   vet: text("vet"),
+  withdrawalPeriod: text("withdrawal_period"),
   notes: text("notes"),
 });
 
@@ -140,6 +206,7 @@ export const healthRecordsRelations = relations(healthRecords, ({ one }) => ({
 }));
 
 export const insertHealthRecordSchema = createInsertSchema(healthRecords).omit({ id: true });
+
 
 // === EVALUATIONS (Manual) ===
 export const evaluations = pgTable("evaluations", {
@@ -164,6 +231,7 @@ export const evaluationsRelations = relations(evaluations, ({ one }) => ({
 
 export const insertEvaluationSchema = createInsertSchema(evaluations).omit({ id: true });
 
+
 // === AI VALUATIONS ===
 export const aiValuations = pgTable("ai_valuations", {
   id: serial("id").primaryKey(),
@@ -183,6 +251,8 @@ export const insertAiValuationSchema = createInsertSchema(aiValuations).omit({ i
 
 
 // === EXPLICIT TYPES ===
+export type MatingGroup = typeof matingGroups.$inferSelect;
+export type InsertMatingGroup = z.infer<typeof insertMatingGroupSchema>;
 export type Animal = typeof animals.$inferSelect;
 export type InsertAnimal = z.infer<typeof insertAnimalSchema>;
 export type BreedingEvent = typeof breedingEvents.$inferSelect;

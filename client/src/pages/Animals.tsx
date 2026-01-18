@@ -1,93 +1,73 @@
 import { useState } from "react";
-import { useAnimals, useCreateAnimal } from "@/hooks/use-animals";
 import { Layout } from "@/components/Layout";
+import { useAnimals, useCreateAnimal } from "@/hooks/use-animals";
 import { AnimalCard } from "@/components/AnimalCard";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Filter, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertAnimalSchema, type InsertAnimal } from "@shared/schema";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { insertAnimalSchema } from "@shared/schema";
+import { Search, Plus, Filter, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Animals() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("active");
-  const { data: animals, isLoading, error } = useAnimals({ search, status: statusFilter === "all" ? undefined : statusFilter });
-  const [isOpen, setIsOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("active");
+  const { data: animals, isLoading } = useAnimals({ search, status: statusFilter });
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-black uppercase tracking-tight">Livestock</h1>
-            <p className="text-muted-foreground">Manage your herd registry.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <CreateAnimalDialog open={isOpen} onOpenChange={setIsOpen} />
-          </div>
+          <h1 className="text-4xl font-black uppercase tracking-tight">Livestock</h1>
+          <CreateAnimalDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
         </div>
 
-        {/* Filters Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-card border border-border p-4 rounded-sm shadow-sm sticky top-20 md:top-0 z-30">
-          <div className="md:col-span-6 relative">
+        {/* Filters */}
+        <div className="flex flex-col md:flex-row gap-4 bg-card p-4 rounded-md border border-border shadow-sm">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
-              placeholder="Search by Tag ID, EID, or Name..." 
-              className="pl-10 rugged-input"
+              placeholder="Search by Tag ID..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 rugged-input"
             />
           </div>
-          <div className="md:col-span-3">
-             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="rugged-input">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="sold">Sold</SelectItem>
-                <SelectItem value="dead">Dead</SelectItem>
-                <SelectItem value="culled">Culled</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="md:col-span-3 flex justify-end">
-            <Button variant="outline" className="w-full md:w-auto border-border hover:border-primary">
-              <Filter className="w-4 h-4 mr-2" /> More Filters
-            </Button>
-          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px] rugged-input">
+              <Filter className="w-4 h-4 mr-2" />
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="sold">Sold</SelectItem>
+              <SelectItem value="dead">Dead</SelectItem>
+              <SelectItem value="culled">Culled</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Grid */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-              <Skeleton key={i} className="h-[280px] w-full bg-card rounded-sm" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
+              <Skeleton key={i} className="aspect-[4/3] rounded-md bg-secondary" />
             ))}
           </div>
-        ) : error ? (
-          <div className="p-12 text-center text-red-500 bg-red-500/5 rounded-sm border border-red-500/20">
-            Error loading animals. Please try again.
-          </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-500">
-            {animals?.map((animal) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {animals?.map(animal => (
               <AnimalCard key={animal.id} animal={animal} />
             ))}
             {animals?.length === 0 && (
-              <div className="col-span-full py-20 text-center">
-                <div className="w-20 h-20 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Search className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-xl font-bold uppercase text-foreground">No animals found</h3>
-                <p className="text-muted-foreground mt-2">Try adjusting your search or filters.</p>
+              <div className="col-span-full py-12 text-center text-muted-foreground">
+                <p>No animals found matching your criteria.</p>
               </div>
             )}
           </div>
@@ -98,27 +78,26 @@ export default function Animals() {
 }
 
 function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
-  const { toast } = useToast();
-  const createMutation = useCreateAnimal();
-  
-  const form = useForm<InsertAnimal>({
+  const { mutate, isPending } = useCreateAnimal();
+  const form = useForm({
     resolver: zodResolver(insertAnimalSchema),
     defaultValues: {
-      status: "active",
+      tagId: "",
       sex: "ewe",
       breed: "Meatmaster",
+      status: "active",
+      birthDate: new Date().toISOString().split('T')[0], // Default today
+      currentWeight: "0",
     }
   });
 
-  const onSubmit = async (data: InsertAnimal) => {
-    try {
-      await createMutation.mutateAsync(data);
-      toast({ title: "Success", description: "Animal created successfully", variant: "default" });
-      onOpenChange(false);
-      form.reset();
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to create animal", variant: "destructive" });
-    }
+  const onSubmit = (data: any) => {
+    mutate(data, {
+      onSuccess: () => {
+        onOpenChange(false);
+        form.reset();
+      }
+    });
   };
 
   return (
@@ -128,21 +107,22 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
           <Plus className="w-5 h-5 mr-2" /> Add Animal
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg bg-card border-border">
+      <DialogContent className="bg-card border-border max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-display font-black text-2xl uppercase">Register New Animal</DialogTitle>
+          <DialogTitle className="font-display uppercase text-2xl">New Animal Entry</DialogTitle>
         </DialogHeader>
+        
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="tagId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tag ID *</FormLabel>
+                    <FormLabel>Tag ID</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g. 24-001" {...field} className="rugged-input" />
+                      <Input placeholder="e.g. 24-001" className="rugged-input" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -153,7 +133,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                 name="sex"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Sex *</FormLabel>
+                    <FormLabel>Sex</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger className="rugged-input">
@@ -179,7 +159,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                 <FormItem>
                   <FormLabel>Breed</FormLabel>
                   <FormControl>
-                    <Input placeholder="Meatmaster" {...field} value={field.value || ""} className="rugged-input" />
+                    <Input className="rugged-input" {...field} value={field.value || ''} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -194,55 +174,34 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                   <FormItem>
                     <FormLabel>Birth Date</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} value={field.value ? String(field.value) : ""} className="rugged-input" />
+                      <Input type="date" className="rugged-input" {...field} value={field.value ? String(field.value) : ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-               <FormField
+              <FormField
                 control={form.control}
-                name="birthWeight"
+                name="currentWeight"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Birth Weight (kg)</FormLabel>
+                    <FormLabel>Weight (kg)</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="number" 
-                        step="0.1" 
-                        {...field} 
-                        value={field.value ? String(field.value) : ""} 
-                        onChange={e => field.onChange(e.target.value)} 
-                        className="rugged-input" 
-                      />
+                      <Input type="number" step="0.1" className="rugged-input" {...field} value={field.value ? String(field.value) : ''} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             </div>
+            
+            <Button type="button" variant="outline" className="w-full rugged-btn border-dashed">
+                <Camera className="w-4 h-4 mr-2" /> Take Photo (Placeholder)
+            </Button>
 
-            <FormField
-              control={form.control}
-              name="electronicId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Electronic ID (EID)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Optional scanned ID" {...field} value={field.value || ""} className="rugged-input" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="border-border">Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending} className="rugged-btn bg-primary text-black">
-                {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Register Animal
-              </Button>
-            </div>
+            <Button type="submit" disabled={isPending} className="w-full rugged-btn bg-primary text-black">
+              {isPending ? "Creating..." : "Save Record"}
+            </Button>
           </form>
         </Form>
       </DialogContent>

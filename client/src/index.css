@@ -1,43 +1,43 @@
-@import url('https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,300..900;1,300..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;700;900&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Rugged Dark Theme Palette */
-  --background: 240 4% 5%; /* #0c0c0d Very dark grey */
-  --foreground: 0 0% 95%; /* #f2f2f2 */
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Chivo', sans-serif;
 
-  --card: 240 4% 10%; /* #18181b */
-  --card-foreground: 0 0% 95%;
+  /* Rugged Dark Theme - Black & Safety Yellow */
+  --background: 0 0% 4%; /* #0B0B0B */
+  --foreground: 0 0% 93%; /* #EDEDED */
 
-  --popover: 240 4% 10%;
-  --popover-foreground: 0 0% 95%;
+  --card: 0 0% 8%; /* #141414 */
+  --card-foreground: 0 0% 93%;
 
-  --primary: 45 100% 50%; /* #FFC300 Bright Industrial Yellow */
-  --primary-foreground: 240 4% 5%; /* Black text on yellow */
+  --popover: 0 0% 8%;
+  --popover-foreground: 0 0% 93%;
 
-  --secondary: 240 4% 16%; /* #27272a */
+  --primary: 45 100% 50%; /* #FFC300 */
+  --primary-foreground: 0 0% 0%;
+
+  --secondary: 0 0% 12%; /* #1F1F1F */
   --secondary-foreground: 0 0% 98%;
 
-  --muted: 240 4% 16%;
-  --muted-foreground: 240 5% 65%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 60%;
 
   --accent: 45 100% 50%;
-  --accent-foreground: 240 4% 5%;
+  --accent-foreground: 0 0% 0%;
 
-  --destructive: 0 84% 60%;
+  --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 240 4% 20%;
-  --input: 240 4% 20%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
   --ring: 45 100% 50%;
 
-  --radius: 0.25rem; /* Slightly boxy for rugged look */
-
-  --font-display: 'Chivo', sans-serif;
-  --font-body: 'Inter', sans-serif;
+  --radius: 0.25rem;
 }
 
 @layer base {
@@ -45,40 +45,47 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family: var(--font-body);
+    @apply bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-black;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-display);
-    @apply uppercase tracking-tight font-black;
+    @apply font-display font-black tracking-tight uppercase;
   }
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: hsl(var(--background));
-}
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
-}
-
-/* Rugged Utilities */
 @layer components {
-  .rugged-card {
-    @apply bg-card border border-border rounded-sm shadow-lg hover:border-primary/50 transition-colors duration-300;
+  .rugged-btn {
+    @apply font-bold uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] rounded-sm;
   }
+  
+  .rugged-card {
+    @apply border border-border shadow-md bg-card rounded-md relative overflow-hidden;
+  }
+  
+  .rugged-card::after {
+    content: '';
+    @apply absolute top-0 left-0 w-1 h-full bg-primary opacity-0 transition-opacity duration-300;
+  }
+
+  .rugged-card:hover::after {
+    @apply opacity-100;
+  }
+
   .rugged-input {
     @apply bg-secondary border-border focus:border-primary focus:ring-1 focus:ring-primary rounded-sm placeholder:text-muted-foreground/50;
   }
-  .rugged-btn {
-    @apply font-bold uppercase tracking-wide rounded-sm shadow-md active:translate-y-0.5 transition-all;
+
+  /* Custom Scrollbar for dark theme */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-secondary rounded-full border border-background;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary;
   }
 }
