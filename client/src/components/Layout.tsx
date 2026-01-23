@@ -50,9 +50,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Mobile Header */}
-      <header className="md:hidden h-20 bg-card border-b border-border flex flex-col items-center justify-center px-4 sticky top-0 z-40">
-        <img src={logo} alt="BreedLog" className="w-14 h-14 object-contain" data-testid="logo-mobile" />
-        <p className="text-[8px] text-muted-foreground uppercase tracking-widest font-medium">Breed Smart. Farm Better.</p>
+      <header className="md:hidden h-32 bg-card border-b border-border flex flex-col items-center justify-center px-4 sticky top-0 z-40">
+        <img src={logo} alt="BreedLog" className="w-28 h-28 object-contain" data-testid="logo-mobile" />
+        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Breed Smart. Farm Better.</p>
       </header>
 
       {/* Main Content */}
