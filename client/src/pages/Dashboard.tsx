@@ -41,7 +41,7 @@ export default function Dashboard() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <h1 className="text-xl md:text-5xl font-black uppercase text-foreground tracking-tight" data-testid="page-title">
-              {displayName ? `${displayName} - Farm Overview` : "Farm Overview"}
+              {displayName ? `${displayName} - Home` : "Home"}
             </h1>
             <p className="text-muted-foreground mt-2 text-lg">Daily digest and performance metrics.</p>
           </div>

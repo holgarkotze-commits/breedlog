@@ -9,7 +9,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { data: farmSettings } = useFarmSettings();
 
   const navItems = [
-    { href: "/", icon: LayoutDashboard, label: "Overview" },
+    { href: "/", icon: LayoutDashboard, label: "Home" },
     { href: "/animals", icon: Beef, label: "Animals" },
     { href: "/breeding", icon: Dna, label: "Breeding" },
     { href: "/records", icon: FileText, label: "Records" },
@@ -22,10 +22,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col md:flex-row pb-16 md:pb-0 font-sans">
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
-        <div className="p-6 border-b border-border flex flex-col items-center">
+        <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors">
           <img src={logo} alt="BreedLog" className="w-32 h-32 object-contain" data-testid="logo-desktop" />
           <p className="text-xs text-muted-foreground mt-2 uppercase tracking-widest font-medium">Breed Smart. Farm Better.</p>
-        </div>
+        </Link>
         
         <nav className="flex-1 p-4 space-y-2">
           {navItems.map((item) => (
@@ -51,8 +51,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Header */}
       <header className="md:hidden h-32 bg-card border-b border-border flex flex-col items-center justify-center px-4 sticky top-0 z-40">
-        <img src={logo} alt="BreedLog" className="w-28 h-28 object-contain" data-testid="logo-mobile" />
-        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Breed Smart. Farm Better.</p>
+        <Link href="/" className="flex flex-col items-center">
+          <img src={logo} alt="BreedLog" className="w-28 h-28 object-contain" data-testid="logo-mobile" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Breed Smart. Farm Better.</p>
+        </Link>
       </header>
 
       {/* Main Content */}
