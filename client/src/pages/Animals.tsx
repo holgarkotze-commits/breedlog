@@ -10,9 +10,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAnimalSchema } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X } from "lucide-react";
+import { Search, Plus, Filter, Camera, X, Image, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function Animals() {
   const [search, setSearch] = useState("");
@@ -81,8 +82,13 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
   const { mutate, isPending } = useCreateAnimal();
   const { toast } = useToast();
   const { data: allAnimals } = useAnimals({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const evalDocInputRef = useRef<HTMLInputElement>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [evalDocPreview, setEvalDocPreview] = useState<string | null>(null);
+  const [useCustomDam, setUseCustomDam] = useState(false);
+  const [useCustomSire, setUseCustomSire] = useState(false);
   
   const form = useForm({
     resolver: zodResolver(insertAnimalSchema),
@@ -95,7 +101,10 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
       currentWeight: "0",
       damId: null as number | null,
       sireId: null as number | null,
+      externalDamInfo: "" as string,
+      externalSireInfo: "" as string,
       photo: null as string | null,
+      evaluationDocument: null as string | null,
     }
   });
 
@@ -119,27 +128,57 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
     }
   };
 
+  const handleEvalDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast({ title: "File too large", description: "Please use a file under 10MB", variant: "destructive" });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setEvalDocPreview(file.name);
+        form.setValue("evaluationDocument", base64);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const clearPhoto = () => {
     setPhotoPreview(null);
     form.setValue("photo", null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
+    if (galleryInputRef.current) galleryInputRef.current.value = "";
+  };
+
+  const clearEvalDoc = () => {
+    setEvalDocPreview(null);
+    form.setValue("evaluationDocument", null);
+    if (evalDocInputRef.current) evalDocInputRef.current.value = "";
   };
 
   const onSubmit = (data: any) => {
     mutate(data, {
       onSuccess: () => {
         onOpenChange(false);
-        form.reset();
-        setPhotoPreview(null);
+        resetForm();
         toast({ title: "Animal added", description: "New animal record created successfully" });
       }
     });
   };
 
+  const resetForm = () => {
+    form.reset();
+    setPhotoPreview(null);
+    setEvalDocPreview(null);
+    setUseCustomDam(false);
+    setUseCustomSire(false);
+  };
+
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
-      form.reset();
-      setPhotoPreview(null);
+      resetForm();
     }
     onOpenChange(isOpen);
   };
@@ -239,73 +278,159 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="damId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Dam (Mother)</FormLabel>
-                    <Select 
-                      onValueChange={(val) => field.onChange(val === "none" ? null : parseInt(val))} 
-                      value={field.value ? String(field.value) : "none"}
-                    >
+            {/* Dam Section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <FormLabel>Dam (Mother)</FormLabel>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    setUseCustomDam(!useCustomDam);
+                    if (!useCustomDam) form.setValue("damId", null);
+                    else form.setValue("externalDamInfo", "");
+                  }}
+                  data-testid="button-toggle-dam-mode"
+                >
+                  {useCustomDam ? "Select from list" : "Not in system"}
+                </Button>
+              </div>
+              {useCustomDam ? (
+                <FormField
+                  control={form.control}
+                  name="externalDamInfo"
+                  render={({ field }) => (
+                    <FormItem>
                       <FormControl>
-                        <SelectTrigger className="rugged-input" data-testid="select-dam">
-                          <SelectValue placeholder="Select dam" />
-                        </SelectTrigger>
+                        <Input 
+                          placeholder="Enter dam info (Tag ID, name, breeder)" 
+                          className="rugged-input" 
+                          data-testid="input-external-dam"
+                          {...field} 
+                          value={field.value || ''}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">Unknown</SelectItem>
-                        {ewes.map(ewe => (
-                          <SelectItem key={ewe.id} value={String(ewe.id)}>
-                            {ewe.tagId} {ewe.name ? `- ${ewe.name}` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="sireId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sire (Father)</FormLabel>
-                    <Select 
-                      onValueChange={(val) => field.onChange(val === "none" ? null : parseInt(val))} 
-                      value={field.value ? String(field.value) : "none"}
-                    >
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : (
+                <FormField
+                  control={form.control}
+                  name="damId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Select 
+                        onValueChange={(val) => field.onChange(val === "none" ? null : parseInt(val))} 
+                        value={field.value ? String(field.value) : "none"}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="rugged-input" data-testid="select-dam">
+                            <SelectValue placeholder="Select dam" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">Unknown</SelectItem>
+                          {ewes.map(ewe => (
+                            <SelectItem key={ewe.id} value={String(ewe.id)}>
+                              {ewe.tagId} {ewe.name ? `- ${ewe.name}` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </div>
+
+            {/* Sire Section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <FormLabel>Sire (Father)</FormLabel>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    setUseCustomSire(!useCustomSire);
+                    if (!useCustomSire) form.setValue("sireId", null);
+                    else form.setValue("externalSireInfo", "");
+                  }}
+                  data-testid="button-toggle-sire-mode"
+                >
+                  {useCustomSire ? "Select from list" : "Not in system"}
+                </Button>
+              </div>
+              {useCustomSire ? (
+                <FormField
+                  control={form.control}
+                  name="externalSireInfo"
+                  render={({ field }) => (
+                    <FormItem>
                       <FormControl>
-                        <SelectTrigger className="rugged-input" data-testid="select-sire">
-                          <SelectValue placeholder="Select sire" />
-                        </SelectTrigger>
+                        <Input 
+                          placeholder="Enter sire info (Tag ID, name, breeder)" 
+                          className="rugged-input" 
+                          data-testid="input-external-sire"
+                          {...field} 
+                          value={field.value || ''}
+                        />
                       </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">Unknown</SelectItem>
-                        {rams.map(ram => (
-                          <SelectItem key={ram.id} value={String(ram.id)}>
-                            {ram.tagId} {ram.name ? `- ${ram.name}` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : (
+                <FormField
+                  control={form.control}
+                  name="sireId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Select 
+                        onValueChange={(val) => field.onChange(val === "none" ? null : parseInt(val))} 
+                        value={field.value ? String(field.value) : "none"}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="rugged-input" data-testid="select-sire">
+                            <SelectValue placeholder="Select sire" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">Unknown</SelectItem>
+                          {rams.map(ram => (
+                            <SelectItem key={ram.id} value={String(ram.id)}>
+                              {ram.tagId} {ram.name ? `- ${ram.name}` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
             
+            {/* Photo Section - Camera & Gallery */}
             <input
-              ref={fileInputRef}
+              ref={cameraInputRef}
               type="file"
               accept="image/*"
               capture="environment"
               onChange={handlePhotoCapture}
               className="hidden"
-              data-testid="input-photo-file"
+              data-testid="input-photo-camera"
+            />
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoCapture}
+              className="hidden"
+              data-testid="input-photo-gallery"
             />
             
             {photoPreview ? (
@@ -328,14 +453,63 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                 </Button>
               </div>
             ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  data-testid="button-take-photo" 
+                  className="rugged-btn border-dashed"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  <Camera className="w-4 h-4 mr-2" /> Camera
+                </Button>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  data-testid="button-select-gallery" 
+                  className="rugged-btn border-dashed"
+                  onClick={() => galleryInputRef.current?.click()}
+                >
+                  <Image className="w-4 h-4 mr-2" /> Gallery
+                </Button>
+              </div>
+            )}
+
+            {/* Evaluation Document Upload */}
+            <input
+              ref={evalDocInputRef}
+              type="file"
+              accept="image/*,.pdf"
+              onChange={handleEvalDocUpload}
+              className="hidden"
+              data-testid="input-eval-doc"
+            />
+            
+            {evalDocPreview ? (
+              <div className="flex items-center justify-between p-3 bg-secondary rounded-md border border-border">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-primary" />
+                  <span className="text-sm truncate max-w-[200px]">{evalDocPreview}</span>
+                </div>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={clearEvalDoc}
+                  data-testid="button-clear-eval-doc"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
               <Button 
                 type="button" 
                 variant="outline" 
-                data-testid="button-take-photo" 
+                data-testid="button-upload-eval-doc" 
                 className="w-full rugged-btn border-dashed"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => evalDocInputRef.current?.click()}
               >
-                <Camera className="w-4 h-4 mr-2" /> Take Photo
+                <FileText className="w-4 h-4 mr-2" /> Attach Evaluation Document
               </Button>
             )}
 

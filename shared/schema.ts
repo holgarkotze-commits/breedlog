@@ -54,6 +54,11 @@ export const animals = pgTable("animals", {
   birthStatus: text("birth_status"), // single, twin, triplet
   damId: integer("dam_id"), 
   sireId: integer("sire_id"),
+  externalDamInfo: text("external_dam_info"), // For dam not in system
+  externalSireInfo: text("external_sire_info"), // For sire not in system
+  
+  // Documents
+  evaluationDocument: text("evaluation_document"), // Base64 PDF/image of evaluation
   
   // Grouping & Stamboek Info
   lambingSeason: text("lambing_season"), // e.g. 24A

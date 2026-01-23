@@ -87,3 +87,34 @@ shared/           # Shared types, schemas, and route definitions
 - **csv-parse/csv-stringify**: Import/export functionality for livestock data
 - **react-markdown**: Rendering AI-generated markdown content
 - **@react-pdf/renderer**: PDF generation for reports
+
+## Recent Changes (January 2026)
+
+### Animal Record Features
+- **Dam/Sire Custom Entry**: Toggle between selecting parents from dropdown or entering external parent info as text for animals not in the system
+- **Photo Capture**: Separate "Camera" and "Gallery" buttons for mobile photo selection
+- **Evaluation Document Upload**: Attach PDF/image evaluation documents to animal records
+- **Edit Animal Dialog**: Full-featured edit dialog with all fields including photos, parentage, ownership, notes
+
+### Ewe Breeding Statistics
+- **Breeding Tab**: Comprehensive breeding stats for ewes with 12 metrics:
+  - Total Matings, Lambings, Total Lambs Born, Avg Lambs/Lambing
+  - Fertility Rate (%), Lambs Reared, Lambs Weaned, Lambs Lost
+  - Active in Flock, Sold, Inter-Lamb Days, Total Offspring
+- **Fertility Rate**: Calculated as (lambings/matings) × 100
+- **Lambs Reared**: Active + Sold offspring count
+- **Lambs Weaned**: Uses weaningStatus field to track weaning outcomes
+
+### Export Profile
+- **SA Stamboek-Compatible JSON**: Export animal profiles with complete data including:
+  - Identification (tagId, name, tattoo, electronic ID, stud prefix)
+  - Parentage (dam/sire with external parent info support)
+  - Weights (birth, current, 100-day, 270-day)
+  - Ownership details
+  - Full breeding statistics for ewes
+  - Breeding history with all events
+
+### Schema Additions
+- `externalDamInfo`: Text field for external dam information
+- `externalSireInfo`: Text field for external sire information  
+- `evaluationDocument`: Text field for evaluation document URLs

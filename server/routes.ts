@@ -37,8 +37,12 @@ export async function registerRoutes(
     const dam = animal.damId ? await storage.getAnimal(animal.damId) : null;
     const sire = animal.sireId ? await storage.getAnimal(animal.sireId) : null;
     const evaluations = await storage.getEvaluations(animal.id);
+    
+    const allAnimals = await storage.getAnimals({});
+    const offspringAsDam = animal.sex === "ewe" ? allAnimals.filter(a => a.damId === animal.id) : [];
+    const offspringAsSire = animal.sex === "ram" ? allAnimals.filter(a => a.sireId === animal.id) : [];
 
-    res.json({ ...animal, dam, sire, evaluations });
+    res.json({ ...animal, dam, sire, evaluations, offspringAsDam, offspringAsSire });
   });
 
   app.get(api.animals.familyTree.path, async (req, res) => {

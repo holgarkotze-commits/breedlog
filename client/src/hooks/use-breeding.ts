@@ -14,6 +14,16 @@ export function useBreedingEvents() {
   });
 }
 
+export function useAnimalBreedingEvents(animalId: number, sex: string) {
+  const { data: allEvents, ...rest } = useBreedingEvents();
+  
+  const filteredEvents = allEvents?.filter(event => 
+    sex === "ewe" ? event.eweId === animalId : event.ramId === animalId
+  ) || [];
+  
+  return { data: filteredEvents, ...rest };
+}
+
 export function useCreateBreedingEvent() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
