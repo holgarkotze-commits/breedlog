@@ -117,12 +117,14 @@ shared/           # Shared types, schemas, and route definitions
 ### Farm Branding & Settings
 - **Farm Settings Table**: Stores farm name, stud name, stud prefix, owner details, address, membership numbers
 - **First-Time Setup**: FarmSetupDialog modal appears when no farm settings exist, collecting farm name, stud name, and stud prefix
-- **Layout Branding**: Sidebar displays larger logo (w-20 h-20) with "BreedLog" text below, stud name shown prominently in header
+- **Layout Branding**: Sidebar displays larger standalone logo (w-32 h-32 desktop, w-12 h-12 mobile) without text
+- **Page Titles**: All pages display farm/stud name in title (e.g., "Golden Fleece - Farm Overview")
 - **Settings Page**: Full editable form for all farm details including owner information and membership numbers
 - **Export Integration**: Farm branding section included in SA Stamboek-compatible JSON exports
 
 ### Schema Additions
 - `farmSettings` table: Farm name, stud name, stud prefix, owner details, address, membership numbers
+- `animals.createdAt`: Timestamp field tracking when animal profiles were created (displayed as "Profile Entry" in detail view)
 - `externalDamInfo`: Text field for external dam information
 - `externalSireInfo`: Text field for external sire information  
 - `evaluationDocument`: Text field for evaluation document URLs
