@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -587,7 +588,7 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
     const { data: breedingEvents } = useAnimalBreedingEvents(animal.id, animal.sex);
     const { toast } = useToast();
     
-    const handleExport = () => {
+    const getProfileData = () => {
         const offspring = animal.offspringAsDam || animal.offspringAsSire || [];
         const activeOffspring = offspring.filter((o: Animal) => o.status === "active");
         const soldOffspring = offspring.filter((o: Animal) => o.status === "sold");
@@ -600,11 +601,10 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
         const totalMatings = breedingEvents?.length || 0;
         const fertilityRate = totalMatings > 0 ? ((lambedEvents.length / totalMatings) * 100).toFixed(1) : "0";
         
-        const profileData = {
+        return {
             exportDate: new Date().toISOString(),
             exportFormat: "SA Stamboek Compatible",
             generatedBy: "BreedLog",
-            
             farmBranding: farmSettings ? {
                 farmName: farmSettings.farmName,
                 studName: farmSettings.studName,
@@ -612,7 +612,6 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 ownerName: farmSettings.ownerName,
                 membershipNumber: farmSettings.membershipNumber,
             } : null,
-            
             identification: {
                 tagId: animal.tagId,
                 name: animal.name,
@@ -620,7 +619,6 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 electronicId: animal.electronicId,
                 studPrefix: animal.studPrefix,
             },
-            
             basicInfo: {
                 sex: animal.sex,
                 breed: animal.breed,
@@ -628,7 +626,6 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 birthDate: animal.birthDate,
                 birthStatus: animal.birthStatus,
             },
-            
             parentage: {
                 damId: animal.damId,
                 damTagId: animal.dam?.tagId,
@@ -639,7 +636,6 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 sireName: animal.sire?.name,
                 externalSireInfo: animal.externalSireInfo,
             },
-            
             weights: {
                 birthWeight: animal.birthWeight,
                 currentWeight: animal.currentWeight,
@@ -648,14 +644,12 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 weight270Day: animal.weight270Day,
                 weight270DayDate: animal.weight270DayDate,
             },
-            
             ownership: {
                 breederName: animal.breederName,
                 ownerName: animal.ownerName,
                 farmName: animal.farmName,
                 location: animal.location,
             },
-            
             breedingStats: animal.sex === "ewe" ? {
                 totalMatings: totalMatings,
                 totalLambings: lambedEvents.length,
@@ -668,7 +662,6 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 lambsLost: deadOffspring.length,
                 avgLambsPerLambing: lambedEvents.length > 0 ? (totalLambs / lambedEvents.length).toFixed(2) : "0",
             } : null,
-            
             breedingHistory: breedingEvents?.map(e => ({
                 matingDate: e.matingDate,
                 matingType: e.matingType,
@@ -676,27 +669,214 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 lambCount: e.lambCount,
                 notes: e.notes,
             })) || [],
-            
             notes: animal.notes,
         };
-        
-        const blob = new Blob([JSON.stringify(profileData, null, 2)], { type: "application/json" });
+    };
+    
+    const downloadFile = (content: string, filename: string, type: string) => {
+        const blob = new Blob([content], { type });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${animal.tagId}_profile_${new Date().toISOString().split('T')[0]}.json`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
-        toast({ title: "Profile Exported", description: `${animal.tagId} profile downloaded` });
+    };
+    
+    const handleExportJSON = () => {
+        const profileData = getProfileData();
+        downloadFile(JSON.stringify(profileData, null, 2), `${animal.tagId}_profile_${new Date().toISOString().split('T')[0]}.json`, "application/json");
+        toast({ title: "JSON Exported", description: `${animal.tagId} profile downloaded as JSON` });
+    };
+    
+    const handleExportCSV = () => {
+        const data = getProfileData();
+        const rows = [
+            ["Field", "Value"],
+            ["Tag ID", data.identification.tagId || ""],
+            ["Name", data.identification.name || ""],
+            ["Sex", data.basicInfo.sex || ""],
+            ["Breed", data.basicInfo.breed || ""],
+            ["Status", data.basicInfo.status || ""],
+            ["Birth Date", data.basicInfo.birthDate || ""],
+            ["Electronic ID", data.identification.electronicId || ""],
+            ["Tattoo ID", data.identification.tattooId || ""],
+            ["Dam", data.parentage.damTagId || data.parentage.externalDamInfo || ""],
+            ["Sire", data.parentage.sireTagId || data.parentage.externalSireInfo || ""],
+            ["Birth Weight", data.weights.birthWeight || ""],
+            ["Current Weight", data.weights.currentWeight || ""],
+            ["100 Day Weight", data.weights.weight100Day || ""],
+            ["270 Day Weight", data.weights.weight270Day || ""],
+            ["Breeder", data.ownership.breederName || ""],
+            ["Owner", data.ownership.ownerName || ""],
+            ["Farm", data.farmBranding?.farmName || ""],
+            ["Stud", data.farmBranding?.studName || ""],
+        ];
+        if (data.breedingStats) {
+            rows.push(["Total Matings", String(data.breedingStats.totalMatings)]);
+            rows.push(["Total Lambings", String(data.breedingStats.totalLambings)]);
+            rows.push(["Total Lambs Born", String(data.breedingStats.totalLambsBorn)]);
+            rows.push(["Fertility Rate", data.breedingStats.fertilityRate]);
+        }
+        const csvContent = rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+        downloadFile(csvContent, `${animal.tagId}_profile_${new Date().toISOString().split('T')[0]}.csv`, "text/csv");
+        toast({ title: "CSV Exported", description: `${animal.tagId} profile downloaded as CSV` });
+    };
+    
+    const handleExportWord = () => {
+        const data = getProfileData();
+        const content = `
+ANIMAL PROFILE REPORT
+Generated by BreedLog
+Export Date: ${new Date().toLocaleDateString()}
+
+═══════════════════════════════════════════
+FARM INFORMATION
+═══════════════════════════════════════════
+Farm Name: ${data.farmBranding?.farmName || "N/A"}
+Stud Name: ${data.farmBranding?.studName || "N/A"}
+Stud Prefix: ${data.farmBranding?.studPrefix || "N/A"}
+Owner: ${data.farmBranding?.ownerName || "N/A"}
+
+═══════════════════════════════════════════
+ANIMAL IDENTIFICATION
+═══════════════════════════════════════════
+Tag ID: ${data.identification.tagId || "N/A"}
+Name: ${data.identification.name || "N/A"}
+Electronic ID: ${data.identification.electronicId || "N/A"}
+Tattoo ID: ${data.identification.tattooId || "N/A"}
+
+═══════════════════════════════════════════
+BASIC INFORMATION
+═══════════════════════════════════════════
+Sex: ${data.basicInfo.sex || "N/A"}
+Breed: ${data.basicInfo.breed || "N/A"}
+Status: ${data.basicInfo.status || "N/A"}
+Birth Date: ${data.basicInfo.birthDate || "N/A"}
+
+═══════════════════════════════════════════
+PARENTAGE
+═══════════════════════════════════════════
+Dam: ${data.parentage.damTagId || data.parentage.externalDamInfo || "N/A"}
+Sire: ${data.parentage.sireTagId || data.parentage.externalSireInfo || "N/A"}
+
+═══════════════════════════════════════════
+WEIGHTS
+═══════════════════════════════════════════
+Birth Weight: ${data.weights.birthWeight ? data.weights.birthWeight + " kg" : "N/A"}
+Current Weight: ${data.weights.currentWeight ? data.weights.currentWeight + " kg" : "N/A"}
+100-Day Weight: ${data.weights.weight100Day ? data.weights.weight100Day + " kg" : "N/A"}
+270-Day Weight: ${data.weights.weight270Day ? data.weights.weight270Day + " kg" : "N/A"}
+${data.breedingStats ? `
+═══════════════════════════════════════════
+BREEDING STATISTICS
+═══════════════════════════════════════════
+Total Matings: ${data.breedingStats.totalMatings}
+Total Lambings: ${data.breedingStats.totalLambings}
+Total Lambs Born: ${data.breedingStats.totalLambsBorn}
+Fertility Rate: ${data.breedingStats.fertilityRate}
+Lambs Reared: ${data.breedingStats.lambsReared}
+Lambs Weaned: ${data.breedingStats.lambsWeaned}
+` : ""}
+═══════════════════════════════════════════
+NOTES
+═══════════════════════════════════════════
+${data.notes || "No notes recorded."}
+`;
+        downloadFile(content, `${animal.tagId}_profile_${new Date().toISOString().split('T')[0]}.doc`, "application/msword");
+        toast({ title: "Word Document Exported", description: `${animal.tagId} profile downloaded as Word document` });
+    };
+    
+    const handleExportPDF = () => {
+        const data = getProfileData();
+        const content = `
+<!DOCTYPE html>
+<html>
+<head>
+<title>${data.identification.tagId} - Animal Profile</title>
+<style>
+body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+h1 { color: #FFC300; border-bottom: 2px solid #FFC300; padding-bottom: 10px; }
+h2 { color: #555; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+.row { display: flex; padding: 8px 0; border-bottom: 1px solid #eee; }
+.label { width: 200px; font-weight: bold; color: #666; }
+.value { flex: 1; }
+.header { text-align: center; margin-bottom: 30px; }
+.footer { margin-top: 40px; text-align: center; font-size: 12px; color: #999; }
+</style>
+</head>
+<body>
+<div class="header">
+<h1>${data.farmBranding?.studName || data.farmBranding?.farmName || "BreedLog"}</h1>
+<p>Animal Profile Report - Generated ${new Date().toLocaleDateString()}</p>
+</div>
+
+<h2>Animal Identification</h2>
+<div class="row"><span class="label">Tag ID:</span><span class="value">${data.identification.tagId || "N/A"}</span></div>
+<div class="row"><span class="label">Name:</span><span class="value">${data.identification.name || "N/A"}</span></div>
+<div class="row"><span class="label">Electronic ID:</span><span class="value">${data.identification.electronicId || "N/A"}</span></div>
+<div class="row"><span class="label">Sex:</span><span class="value">${data.basicInfo.sex || "N/A"}</span></div>
+<div class="row"><span class="label">Breed:</span><span class="value">${data.basicInfo.breed || "N/A"}</span></div>
+<div class="row"><span class="label">Status:</span><span class="value">${data.basicInfo.status || "N/A"}</span></div>
+<div class="row"><span class="label">Birth Date:</span><span class="value">${data.basicInfo.birthDate || "N/A"}</span></div>
+
+<h2>Parentage</h2>
+<div class="row"><span class="label">Dam:</span><span class="value">${data.parentage.damTagId || data.parentage.externalDamInfo || "N/A"}</span></div>
+<div class="row"><span class="label">Sire:</span><span class="value">${data.parentage.sireTagId || data.parentage.externalSireInfo || "N/A"}</span></div>
+
+<h2>Weights</h2>
+<div class="row"><span class="label">Birth Weight:</span><span class="value">${data.weights.birthWeight ? data.weights.birthWeight + " kg" : "N/A"}</span></div>
+<div class="row"><span class="label">Current Weight:</span><span class="value">${data.weights.currentWeight ? data.weights.currentWeight + " kg" : "N/A"}</span></div>
+<div class="row"><span class="label">100-Day Weight:</span><span class="value">${data.weights.weight100Day ? data.weights.weight100Day + " kg" : "N/A"}</span></div>
+<div class="row"><span class="label">270-Day Weight:</span><span class="value">${data.weights.weight270Day ? data.weights.weight270Day + " kg" : "N/A"}</span></div>
+
+${data.breedingStats ? `
+<h2>Breeding Statistics</h2>
+<div class="row"><span class="label">Total Matings:</span><span class="value">${data.breedingStats.totalMatings}</span></div>
+<div class="row"><span class="label">Total Lambings:</span><span class="value">${data.breedingStats.totalLambings}</span></div>
+<div class="row"><span class="label">Total Lambs Born:</span><span class="value">${data.breedingStats.totalLambsBorn}</span></div>
+<div class="row"><span class="label">Fertility Rate:</span><span class="value">${data.breedingStats.fertilityRate}</span></div>
+<div class="row"><span class="label">Lambs Reared:</span><span class="value">${data.breedingStats.lambsReared}</span></div>
+` : ""}
+
+<div class="footer">
+Generated by BreedLog - Breed Smart. Farm Better.
+</div>
+</body>
+</html>`;
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(content);
+            printWindow.document.close();
+            printWindow.print();
+        }
+        toast({ title: "PDF Ready", description: `Print dialog opened for ${animal.tagId} profile` });
     };
     
     return (
-        <Button variant="outline" onClick={handleExport} data-testid="button-export-profile">
-            <Download className="w-4 h-4 mr-2" /> Export
-        </Button>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="outline" data-testid="button-export-profile">
+                    <Download className="w-4 h-4 mr-2" /> Export
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportPDF} data-testid="export-pdf">
+                    <FileText className="w-4 h-4 mr-2" /> Export as PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportWord} data-testid="export-word">
+                    <FileText className="w-4 h-4 mr-2" /> Export as Word
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportCSV} data-testid="export-csv">
+                    <FileText className="w-4 h-4 mr-2" /> Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportJSON} data-testid="export-json">
+                    <FileText className="w-4 h-4 mr-2" /> Export as JSON
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 }
 
