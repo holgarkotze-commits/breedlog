@@ -1,18 +1,243 @@
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
+import { useFarmSettings, useSaveFarmSettings } from "@/hooks/use-farm-settings";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { LogOut, User, Shield, Download, Upload } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { LogOut, User, Download, Upload, Building2, Save, Loader2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { insertFarmSettingsSchema, type InsertFarmSettings } from "@shared/schema";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useEffect } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Settings() {
   const { user, logout } = useAuth();
+  const { data: farmSettings, isLoading } = useFarmSettings();
+  const saveMutation = useSaveFarmSettings();
+
+  const form = useForm<InsertFarmSettings>({
+    resolver: zodResolver(insertFarmSettingsSchema),
+    defaultValues: {
+      farmName: "",
+      studName: "",
+      studPrefix: "",
+      ownerName: "",
+      ownerEmail: "",
+      ownerPhone: "",
+      farmAddress: "",
+      farmLocation: "",
+      membershipNumber: "",
+      registrationNumber: "",
+    },
+  });
+
+  useEffect(() => {
+    if (farmSettings) {
+      form.reset({
+        farmName: farmSettings.farmName || "",
+        studName: farmSettings.studName || "",
+        studPrefix: farmSettings.studPrefix || "",
+        ownerName: farmSettings.ownerName || "",
+        ownerEmail: farmSettings.ownerEmail || "",
+        ownerPhone: farmSettings.ownerPhone || "",
+        farmAddress: farmSettings.farmAddress || "",
+        farmLocation: farmSettings.farmLocation || "",
+        membershipNumber: farmSettings.membershipNumber || "",
+        registrationNumber: farmSettings.registrationNumber || "",
+      });
+    }
+  }, [farmSettings, form]);
+
+  const onSubmit = (data: InsertFarmSettings) => {
+    saveMutation.mutate(data);
+  };
 
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in duration-500">
         <h1 className="text-4xl font-black uppercase tracking-tight">Settings</h1>
+
+        <Card className="rugged-card">
+          <CardHeader>
+            <CardTitle className="uppercase flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-primary" /> Farm Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="farmName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Farm Name *</FormLabel>
+                          <FormControl>
+                            <Input {...field} className="rugged-input" placeholder="e.g. Sunny Hills Farm" data-testid="input-farm-name" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="studName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Stud Name</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} className="rugged-input" placeholder="e.g. Golden Fleece Stud" data-testid="input-stud-name" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="studPrefix"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Stud Prefix</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} className="rugged-input" placeholder="e.g. GFS" data-testid="input-stud-prefix" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="ownerName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Owner Name</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} className="rugged-input" placeholder="Your name" data-testid="input-owner-name" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="ownerEmail"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} type="email" className="rugged-input" placeholder="email@example.com" data-testid="input-owner-email" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="ownerPhone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Phone</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} className="rugged-input" placeholder="+27 82 123 4567" data-testid="input-owner-phone" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="farmAddress"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Farm Address</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} value={field.value || ""} className="rugged-input resize-none" placeholder="Physical address" rows={2} data-testid="input-farm-address" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="farmLocation"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Location / District</FormLabel>
+                        <FormControl>
+                          <Input {...field} value={field.value || ""} className="rugged-input" placeholder="e.g. Graaff-Reinet, Eastern Cape" data-testid="input-farm-location" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="membershipNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Membership Number</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} className="rugged-input" placeholder="SA Stamboek / Society No." data-testid="input-membership-number" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="registrationNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Registration Number</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} className="rugged-input" placeholder="Stud registration" data-testid="input-registration-number" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <Button 
+                    type="submit" 
+                    className="w-full rugged-btn bg-primary text-black" 
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-farm-settings"
+                  >
+                    {saveMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                    ) : (
+                      <><Save className="w-4 h-4 mr-2" /> Save Farm Details</>
+                    )}
+                  </Button>
+                </form>
+              </Form>
+            )}
+          </CardContent>
+        </Card>
 
         <Card className="rugged-card">
           <CardHeader>
@@ -74,25 +299,6 @@ export default function Settings() {
                     <Upload className="w-4 h-4 mr-2" /> Import CSV
                 </Button>
              </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rugged-card opacity-50 cursor-not-allowed">
-           <CardHeader>
-            <CardTitle className="uppercase flex items-center gap-2">
-              <Shield className="w-5 h-5" /> Farm Details
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-             <div className="space-y-2">
-               <Label>Farm Name</Label>
-               <Input className="rugged-input" placeholder="e.g. Sunny Hills Station" disabled />
-             </div>
-             <div className="space-y-2">
-               <Label>Owner Name</Label>
-               <Input className="rugged-input" placeholder="Your Name" disabled />
-             </div>
-             <p className="text-xs text-muted-foreground italic">Farm details editing coming in v1.1</p>
           </CardContent>
         </Card>
       </div>
