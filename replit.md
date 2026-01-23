@@ -114,7 +114,15 @@ shared/           # Shared types, schemas, and route definitions
   - Full breeding statistics for ewes
   - Breeding history with all events
 
+### Farm Branding & Settings
+- **Farm Settings Table**: Stores farm name, stud name, stud prefix, owner details, address, membership numbers
+- **First-Time Setup**: FarmSetupDialog modal appears when no farm settings exist, collecting farm name, stud name, and stud prefix
+- **Layout Branding**: Sidebar displays larger logo (w-20 h-20) with "BreedLog" text below, stud name shown prominently in header
+- **Settings Page**: Full editable form for all farm details including owner information and membership numbers
+- **Export Integration**: Farm branding section included in SA Stamboek-compatible JSON exports
+
 ### Schema Additions
+- `farmSettings` table: Farm name, stud name, stud prefix, owner details, address, membership numbers
 - `externalDamInfo`: Text field for external dam information
 - `externalSireInfo`: Text field for external sire information  
 - `evaluationDocument`: Text field for evaluation document URLs
