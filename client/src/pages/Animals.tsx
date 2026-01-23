@@ -1,32 +1,55 @@
 import { useState, useRef } from "react";
 import { Layout } from "@/components/Layout";
-import { useAnimals, useCreateAnimal } from "@/hooks/use-animals";
+import { useAnimals, useCreateAnimal, useDeleteAnimal } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { AnimalCard } from "@/components/AnimalCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertAnimalSchema } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X, Image, FileText } from "lucide-react";
+import { insertAnimalSchema, type Animal } from "@shared/schema";
+import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Link } from "wouter";
+import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
+import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 
 export default function Animals() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
-  const { data: animals, isLoading } = useAnimals({ search, status: statusFilter });
+  const [sexFilter, setSexFilter] = useState("all");
+  const { data: allAnimals, isLoading } = useAnimals({ search });
   const { data: farmSettings } = useFarmSettings();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const isMobile = useIsMobile();
+
+  const filteredAnimals = allAnimals?.filter(animal => {
+    if (statusFilter === "all") {
+    } else if (statusFilter === "active") {
+      if (animal.status !== "active") return false;
+    } else if (statusFilter === "archived") {
+      if (!["sold", "dead", "culled"].includes(animal.status || "")) return false;
+    } else {
+      if (animal.status !== statusFilter) return false;
+    }
+    if (sexFilter !== "all" && animal.sex?.toLowerCase() !== sexFilter) return false;
+    return true;
+  });
 
   return (
     <Layout>
-      <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h1 className="text-xl md:text-4xl font-black uppercase tracking-tight" data-testid="page-title">
             {displayName ? `${displayName} - Livestock` : "Livestock"}
@@ -35,7 +58,7 @@ export default function Animals() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col md:flex-row gap-4 bg-card p-4 rounded-md border border-border shadow-sm">
+        <div className="flex flex-col md:flex-row gap-3 bg-card p-3 md:p-4 rounded-md border border-border shadow-sm">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
@@ -43,35 +66,62 @@ export default function Animals() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 rugged-input"
+              data-testid="input-search"
             />
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px] rugged-input">
-              <Filter className="w-4 h-4 mr-2" />
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="sold">Sold</SelectItem>
-              <SelectItem value="dead">Dead</SelectItem>
-              <SelectItem value="culled">Culled</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full md:w-[140px] rugged-input" data-testid="select-status-filter">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sheep</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="archived">Archived</SelectItem>
+                <SelectItem value="sold">Sold</SelectItem>
+                <SelectItem value="dead">Dead</SelectItem>
+                <SelectItem value="culled">Culled</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sexFilter} onValueChange={setSexFilter}>
+              <SelectTrigger className="w-full md:w-[140px] rugged-input" data-testid="select-sex-filter">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="ewe">Ewes</SelectItem>
+                <SelectItem value="ram">Rams</SelectItem>
+                <SelectItem value="wether">Wethers</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        {/* Grid */}
+        {/* List/Grid View */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-6 md:space-y-0">
             {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-              <Skeleton key={i} className="aspect-[4/3] rounded-md bg-secondary" />
+              <Skeleton key={i} className="h-20 md:aspect-[4/3] rounded-md bg-secondary" />
             ))}
+          </div>
+        ) : isMobile ? (
+          <div className="space-y-2">
+            {filteredAnimals?.map(animal => (
+              <AnimalListRow key={animal.id} animal={animal} />
+            ))}
+            {filteredAnimals?.length === 0 && (
+              <div className="py-12 text-center text-muted-foreground">
+                <p>No animals found matching your criteria.</p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {animals?.map(animal => (
+            {filteredAnimals?.map(animal => (
               <AnimalCard key={animal.id} animal={animal} />
             ))}
-            {animals?.length === 0 && (
+            {filteredAnimals?.length === 0 && (
               <div className="col-span-full py-12 text-center text-muted-foreground">
                 <p>No animals found matching your criteria.</p>
               </div>
@@ -80,6 +130,92 @@ export default function Animals() {
         )}
       </div>
     </Layout>
+  );
+}
+
+function AnimalListRow({ animal }: { animal: Animal }) {
+  const { mutate: deleteAnimal, isPending } = useDeleteAnimal();
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const isRam = animal.sex?.toLowerCase() === 'ram';
+  const isEwe = animal.sex?.toLowerCase() === 'ewe';
+
+  return (
+    <>
+      <Link href={`/animals/${animal.id}`}>
+        <Card className="flex items-center p-3 gap-3 hover:border-primary transition-colors cursor-pointer">
+          <div className="w-16 h-16 rounded-md bg-secondary overflow-hidden flex-shrink-0">
+            {animal.photo ? (
+              <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center opacity-30">
+                <img src={logo} className="w-10 h-10 grayscale" />
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-lg truncate">{animal.tagId}</span>
+              <Badge variant="secondary" className={cn(
+                "text-[10px] px-1.5 py-0",
+                animal.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-red-900/80 text-red-100"
+              )}>
+                {animal.status}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground truncate">{animal.breed || "Meatmaster"}</p>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <span className={cn(
+              "text-sm font-medium capitalize",
+              isRam ? "text-blue-400" : isEwe ? "text-pink-400" : "text-muted-foreground"
+            )}>
+              {animal.sex}
+            </span>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
+              <Button size="icon" variant="ghost" className="flex-shrink-0" data-testid={`button-menu-${animal.id}`}>
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenuItem 
+                className="text-destructive focus:text-destructive"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowDeleteDialog(true);
+                }}
+                data-testid={`button-delete-${animal.id}`}
+              >
+                <Trash2 className="w-4 h-4 mr-2" /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </Card>
+      </Link>
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Animal Profile</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete <strong>{animal.tagId}</strong>
+              {animal.name ? ` (${animal.name})` : ''}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteAnimal(animal.id)}
+              disabled={isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
