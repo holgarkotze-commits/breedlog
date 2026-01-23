@@ -1,5 +1,6 @@
 import { useAnimals } from "@/hooks/use-animals";
 import { useBreedingEvents } from "@/hooks/use-breeding";
+import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
@@ -11,6 +12,8 @@ import { cn } from "@/lib/utils";
 export default function Dashboard() {
   const { data: animals, isLoading: loadingAnimals } = useAnimals();
   const { data: breeding, isLoading: loadingBreeding } = useBreedingEvents();
+  const { data: farmSettings } = useFarmSettings();
+  const displayName = farmSettings?.studName || farmSettings?.farmName;
 
   // Calculate simple stats
   const totalAnimals = animals?.length || 0;
@@ -37,7 +40,9 @@ export default function Dashboard() {
       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="text-4xl md:text-5xl font-black uppercase text-foreground tracking-tight">Farm Overview</h1>
+            <h1 className="text-4xl md:text-5xl font-black uppercase text-foreground tracking-tight" data-testid="page-title">
+              {displayName ? `${displayName} - Farm Overview` : "Farm Overview"}
+            </h1>
             <p className="text-muted-foreground mt-2 text-lg">Daily digest and performance metrics.</p>
           </div>
           <div className="bg-secondary/50 px-4 py-2 rounded border border-border font-mono text-sm text-primary">

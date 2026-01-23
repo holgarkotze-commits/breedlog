@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function Settings() {
   const { user, logout } = useAuth();
   const { data: farmSettings, isLoading } = useFarmSettings();
+  const displayName = farmSettings?.studName || farmSettings?.farmName;
   const saveMutation = useSaveFarmSettings();
 
   const form = useForm<InsertFarmSettings>({
@@ -59,7 +60,9 @@ export default function Settings() {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in duration-500">
-        <h1 className="text-4xl font-black uppercase tracking-tight">Settings</h1>
+        <h1 className="text-4xl font-black uppercase tracking-tight" data-testid="page-title">
+          {displayName ? `${displayName} - Settings` : "Settings"}
+        </h1>
 
         <Card className="rugged-card">
           <CardHeader>

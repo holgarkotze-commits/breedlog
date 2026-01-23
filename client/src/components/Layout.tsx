@@ -22,14 +22,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex flex-col md:flex-row pb-16 md:pb-0 font-sans">
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
-        <div className="p-6 border-b border-border flex flex-col items-center gap-2">
-          <img src={logo} alt="BreedLog" className="w-20 h-20 object-contain" />
-          <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">BreedLog</span>
-          {displayName && (
-            <div className="mt-2 text-center">
-              <h2 className="text-lg font-black text-primary uppercase tracking-tight" data-testid="text-stud-name">{displayName}</h2>
-            </div>
-          )}
+        <div className="p-6 border-b border-border flex flex-col items-center">
+          <img src={logo} alt="BreedLog" className="w-32 h-32 object-contain" data-testid="logo-desktop" />
         </div>
         
         <nav className="flex-1 p-4 space-y-2">
@@ -55,20 +49,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Mobile Header */}
-      <header className="md:hidden h-16 bg-card border-b border-border flex items-center justify-between px-4 sticky top-0 z-40">
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="BreedLog" className="w-10 h-10 object-contain" />
-          <div className="flex flex-col">
-            {displayName ? (
-              <>
-                <span className="font-black text-base text-primary uppercase tracking-tight leading-tight" data-testid="mobile-stud-name">{displayName}</span>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-widest">BreedLog</span>
-              </>
-            ) : (
-              <span className="font-black text-lg text-primary uppercase tracking-tight">BreedLog</span>
-            )}
-          </div>
-        </div>
+      <header className="md:hidden h-16 bg-card border-b border-border flex items-center justify-center px-4 sticky top-0 z-40">
+        <img src={logo} alt="BreedLog" className="w-12 h-12 object-contain" data-testid="logo-mobile" />
       </header>
 
       {/* Main Content */}

@@ -79,6 +79,7 @@ export default function AnimalDetail() {
                     <InfoRow label="Birth Date" value={animal.birthDate ? format(new Date(animal.birthDate), "dd MMM yyyy") : "N/A"} />
                     <InfoRow label="Current Weight" value={animal.currentWeight ? `${animal.currentWeight} kg` : "N/A"} />
                     <InfoRow label="Breeder" value={animal.breederName || "Self"} />
+                    <InfoRow label="Profile Entry" value={animal.createdAt ? format(new Date(animal.createdAt), "dd MMM yyyy") : "N/A"} testId="text-entry-date" />
                     <div className="pt-4 border-t border-border">
                         <Label className="text-muted-foreground text-xs uppercase">Notes</Label>
                         <p className="text-sm mt-1">{animal.notes || "No notes recorded."}</p>
@@ -129,11 +130,11 @@ export default function AnimalDetail() {
   );
 }
 
-function InfoRow({ label, value }: { label: string, value: string }) {
+function InfoRow({ label, value, testId }: { label: string, value: string, testId?: string }) {
     return (
         <div className="flex justify-between items-center py-2 border-b border-border/50 last:border-0">
             <span className="text-sm text-muted-foreground">{label}</span>
-            <span className="font-bold text-foreground">{value}</span>
+            <span className="font-bold text-foreground" data-testid={testId}>{value}</span>
         </div>
     )
 }

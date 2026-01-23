@@ -1,5 +1,6 @@
 import { Layout } from "@/components/Layout";
 import { useBreedingEvents, useCreateBreedingEvent } from "@/hooks/use-breeding";
+import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,13 +16,17 @@ import { useState } from "react";
 
 export default function Breeding() {
   const { data: events, isLoading } = useBreedingEvents();
+  const { data: farmSettings } = useFarmSettings();
+  const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [open, setOpen] = useState(false);
 
   return (
     <Layout>
       <div className="space-y-8 animate-in fade-in duration-500">
         <div className="flex justify-between items-center">
-          <h1 className="text-4xl font-black uppercase tracking-tight">Breeding Program</h1>
+          <h1 className="text-4xl font-black uppercase tracking-tight" data-testid="page-title">
+            {displayName ? `${displayName} - Breeding Program` : "Breeding Program"}
+          </h1>
           <RecordBreedingDialog open={open} onOpenChange={setOpen} />
         </div>
 
@@ -33,7 +38,7 @@ export default function Breeding() {
                 <CardContent>
                     <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-md">
                         No active mating groups defined.<br/>
-                        <Button variant="link" data-testid="button-create-mating-group" className="text-primary">Create Mating Group</Button>
+                        <Button variant="ghost" data-testid="button-create-mating-group" className="text-primary">Create Mating Group</Button>
                     </div>
                 </CardContent>
             </Card>

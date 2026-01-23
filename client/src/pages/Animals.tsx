@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { Layout } from "@/components/Layout";
 import { useAnimals, useCreateAnimal } from "@/hooks/use-animals";
+import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { AnimalCard } from "@/components/AnimalCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,13 +20,17 @@ export default function Animals() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
   const { data: animals, isLoading } = useAnimals({ search, status: statusFilter });
+  const { data: farmSettings } = useFarmSettings();
+  const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   return (
     <Layout>
       <div className="space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <h1 className="text-4xl font-black uppercase tracking-tight">Livestock</h1>
+          <h1 className="text-4xl font-black uppercase tracking-tight" data-testid="page-title">
+            {displayName ? `${displayName} - Livestock` : "Livestock"}
+          </h1>
           <CreateAnimalDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
         </div>
 

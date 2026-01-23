@@ -85,6 +85,9 @@ export const animals = pgTable("animals", {
   
   // Notes
   notes: text("notes"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const animalsRelations = relations(animals, ({ one, many }) => ({
@@ -108,7 +111,7 @@ export const animalsRelations = relations(animals, ({ one, many }) => ({
   evaluations: many(evaluations),
 }));
 
-export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true });
+export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, createdAt: true });
 
 
 // === BREEDING EVENTS ===
