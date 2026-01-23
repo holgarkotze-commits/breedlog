@@ -6,14 +6,12 @@ import {
   insertPerformanceRecordSchema, 
   insertHealthRecordSchema, 
   insertEvaluationSchema, 
-  insertAiValuationSchema,
   insertMatingGroupSchema,
   animals,
   breedingEvents,
   performanceRecords,
   healthRecords,
   evaluations,
-  aiValuations,
   offspring,
   matingGroups
 } from './schema';
@@ -175,18 +173,6 @@ export const api = {
       input: insertEvaluationSchema,
       responses: {
         201: z.custom<typeof evaluations.$inferSelect>(),
-      },
-    },
-  },
-  ai: {
-    generateValuation: {
-      method: 'POST' as const,
-      path: '/api/ai/valuation',
-      input: z.object({
-        animalId: z.number(),
-      }),
-      responses: {
-        200: z.custom<typeof aiValuations.$inferSelect>(),
       },
     },
   },

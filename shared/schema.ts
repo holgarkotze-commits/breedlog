@@ -101,7 +101,6 @@ export const animalsRelations = relations(animals, ({ one, many }) => ({
   performanceRecords: many(performanceRecords),
   healthRecords: many(healthRecords),
   evaluations: many(evaluations),
-  aiValuations: many(aiValuations),
 }));
 
 export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true });

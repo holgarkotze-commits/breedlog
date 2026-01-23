@@ -7,7 +7,6 @@ import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAudioRoutes } from "./replit_integrations/audio/routes";
-import { openai } from "./replit_integrations/image/client";
 import { stringify } from "csv-stringify/sync";
 import { parse } from "csv-parse/sync";
 
@@ -219,71 +218,6 @@ export async function registerRoutes(
               });
           }
           throw err;
-      }
-  });
-
-  // === AI VALUATION ===
-  app.post(api.ai.generateValuation.path, async (req, res) => {
-      // Must be authenticated for this (per requirements)
-      if (!req.isAuthenticated()) {
-          return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      try {
-          const { animalId } = api.ai.generateValuation.input.parse(req.body);
-          
-          // Fetch animal data
-          const animal = await storage.getAnimal(animalId);
-          if (!animal) return res.status(404).json({ message: "Animal not found" });
-          
-          const evaluations = await storage.getEvaluations(animalId);
-          const latestEval = evaluations[0]; // Assuming most recent is relevant
-
-          // Construct prompt
-          const prompt = `
-            Please provide a professional Meatmaster sheep valuation for the following animal:
-            Tag: ${animal.tagId}
-            Sex: ${animal.sex}
-            Breed: ${animal.breed}
-            Weight: ${animal.currentWeight}kg
-            Status: ${animal.status}
-            Environment: ${animal.environmentGroup}
-            
-            Latest Manual Scores (1-6 scale):
-            Head: ${latestEval?.headScore || 'N/A'}
-            Front: ${latestEval?.frontScore || 'N/A'}
-            Middle: ${latestEval?.middleScore || 'N/A'}
-            Rear: ${latestEval?.rearScore || 'N/A'}
-            Overall Type: ${latestEval?.overallType || 'N/A'}
-            
-            Notes: ${animal.notes || 'None'}
-            
-            Please analyze the conformation and provide a breeding recommendation in a structured, professional tone suitable for a farmer.
-          `;
-
-          const response = await openai.chat.completions.create({
-            model: "gpt-5.1",
-            messages: [{ role: "user", content: prompt }],
-          });
-
-          const valuationText = response.choices[0]?.message?.content || "No valuation generated.";
-
-          const savedValuation = await storage.createAiValuation({
-              animalId,
-              valuationText,
-          });
-
-          res.json(savedValuation);
-
-      } catch (err) {
-           if (err instanceof z.ZodError) {
-              return res.status(400).json({
-                  message: err.errors[0].message,
-                  field: err.errors[0].path.join("."),
-              });
-          }
-          console.error("AI Valuation Error:", err);
-          res.status(500).json({ message: "Failed to generate valuation" });
       }
   });
 

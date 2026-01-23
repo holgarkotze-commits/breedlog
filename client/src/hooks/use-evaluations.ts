@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertEvaluation } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 export function useEvaluations(animalId: number) {
   return useQuery({
@@ -17,6 +18,8 @@ export function useEvaluations(animalId: number) {
 
 export function useCreateEvaluation() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
   return useMutation({
     mutationFn: async (data: InsertEvaluation) => {
       const res = await fetch(api.evaluations.create.path, {
@@ -32,21 +35,10 @@ export function useCreateEvaluation() {
        const url = buildUrl(api.evaluations.list.path, { id: variables.animalId });
        queryClient.invalidateQueries({ queryKey: [url] });
        queryClient.invalidateQueries({ queryKey: [api.evaluations.list.path, variables.animalId] });
+       toast({ title: "Success", description: "Evaluation added successfully" });
     },
-  });
-}
-
-export function useGenerateAiValuation() {
-  return useMutation({
-    mutationFn: async ({ animalId }: { animalId: number }) => {
-      const res = await fetch(api.ai.generateValuation.path, {
-        method: api.ai.generateValuation.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ animalId }),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to generate AI valuation");
-      return api.ai.generateValuation.responses[200].parse(await res.json());
+    onError: (error) => {
+       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 }

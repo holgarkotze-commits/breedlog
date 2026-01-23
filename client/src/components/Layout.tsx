@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Beef, Dna, FileText, Settings, Sparkles } from "lucide-react";
+import { LayoutDashboard, Beef, Dna, FileText, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 
@@ -11,7 +11,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/animals", icon: Beef, label: "Animals" },
     { href: "/breeding", icon: Dna, label: "Breeding" },
     { href: "/records", icon: FileText, label: "Records" },
-    { href: "/ai-valuation", icon: Sparkles, label: "AI Val" },
     { href: "/settings", icon: Settings, label: "Settings" },
   ];
 

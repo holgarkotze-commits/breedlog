@@ -6,7 +6,6 @@ import {
   performanceRecords,
   healthRecords,
   evaluations,
-  aiValuations,
   matingGroups,
   type InsertAnimal,
   type InsertBreedingEvent,
@@ -14,7 +13,6 @@ import {
   type InsertPerformanceRecord,
   type InsertHealthRecord,
   type InsertEvaluation,
-  type InsertAiValuation,
   type InsertMatingGroup,
   type Animal,
   type BreedingEvent,
@@ -22,7 +20,6 @@ import {
   type PerformanceRecord,
   type HealthRecord,
   type Evaluation,
-  type AiValuation,
   type MatingGroup,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
@@ -54,10 +51,6 @@ export interface IStorage {
   // Evaluations
   getEvaluations(animalId: number): Promise<Evaluation[]>;
   createEvaluation(evaluation: InsertEvaluation): Promise<Evaluation>;
-  
-  // AI Valuations
-  getAiValuations(animalId: number): Promise<AiValuation[]>;
-  createAiValuation(valuation: InsertAiValuation): Promise<AiValuation>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -154,16 +147,6 @@ export class DatabaseStorage implements IStorage {
   async createEvaluation(evaluation: InsertEvaluation): Promise<Evaluation> {
     const [newEvaluation] = await db.insert(evaluations).values(evaluation).returning();
     return newEvaluation;
-  }
-
-  // AI Valuations
-  async getAiValuations(animalId: number): Promise<AiValuation[]> {
-      return await db.select().from(aiValuations).where(eq(aiValuations.animalId, animalId)).orderBy(desc(aiValuations.createdAt));
-  }
-
-  async createAiValuation(valuation: InsertAiValuation): Promise<AiValuation> {
-      const [newValuation] = await db.insert(aiValuations).values(valuation).returning();
-      return newValuation;
   }
 }
 
