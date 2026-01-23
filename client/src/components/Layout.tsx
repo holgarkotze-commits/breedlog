@@ -24,6 +24,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
         <div className="p-6 border-b border-border flex flex-col items-center">
           <img src={logo} alt="BreedLog" className="w-32 h-32 object-contain" data-testid="logo-desktop" />
+          <p className="text-xs text-muted-foreground mt-2 uppercase tracking-widest font-medium">Breed Smart. Farm Better.</p>
         </div>
         
         <nav className="flex-1 p-4 space-y-2">
@@ -49,8 +50,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Mobile Header */}
-      <header className="md:hidden h-16 bg-card border-b border-border flex items-center justify-center px-4 sticky top-0 z-40">
-        <img src={logo} alt="BreedLog" className="w-12 h-12 object-contain" data-testid="logo-mobile" />
+      <header className="md:hidden h-20 bg-card border-b border-border flex flex-col items-center justify-center px-4 sticky top-0 z-40">
+        <img src={logo} alt="BreedLog" className="w-14 h-14 object-contain" data-testid="logo-mobile" />
+        <p className="text-[8px] text-muted-foreground uppercase tracking-widest font-medium">Breed Smart. Farm Better.</p>
       </header>
 
       {/* Main Content */}

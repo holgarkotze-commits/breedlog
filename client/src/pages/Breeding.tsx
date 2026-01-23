@@ -24,7 +24,7 @@ export default function Breeding() {
     <Layout>
       <div className="space-y-8 animate-in fade-in duration-500">
         <div className="flex justify-between items-center">
-          <h1 className="text-4xl font-black uppercase tracking-tight" data-testid="page-title">
+          <h1 className="text-xl md:text-4xl font-black uppercase tracking-tight" data-testid="page-title">
             {displayName ? `${displayName} - Breeding Program` : "Breeding Program"}
           </h1>
           <RecordBreedingDialog open={open} onOpenChange={setOpen} />

@@ -28,7 +28,7 @@ export default function Animals() {
     <Layout>
       <div className="space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <h1 className="text-4xl font-black uppercase tracking-tight" data-testid="page-title">
+          <h1 className="text-xl md:text-4xl font-black uppercase tracking-tight" data-testid="page-title">
             {displayName ? `${displayName} - Livestock` : "Livestock"}
           </h1>
           <CreateAnimalDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />

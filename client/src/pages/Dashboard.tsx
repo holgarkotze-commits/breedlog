@@ -40,7 +40,7 @@ export default function Dashboard() {
       <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="text-4xl md:text-5xl font-black uppercase text-foreground tracking-tight" data-testid="page-title">
+            <h1 className="text-xl md:text-5xl font-black uppercase text-foreground tracking-tight" data-testid="page-title">
               {displayName ? `${displayName} - Farm Overview` : "Farm Overview"}
             </h1>
             <p className="text-muted-foreground mt-2 text-lg">Daily digest and performance metrics.</p>

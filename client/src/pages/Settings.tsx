@@ -60,7 +60,7 @@ export default function Settings() {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-8 animate-in fade-in duration-500">
-        <h1 className="text-4xl font-black uppercase tracking-tight" data-testid="page-title">
+        <h1 className="text-xl md:text-4xl font-black uppercase tracking-tight" data-testid="page-title">
           {displayName ? `${displayName} - Settings` : "Settings"}
         </h1>
 
