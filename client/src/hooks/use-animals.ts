@@ -104,3 +104,26 @@ export function useFamilyTree(id: number) {
     enabled: !!id,
   });
 }
+
+export function useDeleteAnimal() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.animals.delete.path, { id });
+      const res = await fetch(url, {
+        method: api.animals.delete.method,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete animal");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      toast({ title: "Deleted", description: "Animal record deleted permanently", variant: "default" });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+}
