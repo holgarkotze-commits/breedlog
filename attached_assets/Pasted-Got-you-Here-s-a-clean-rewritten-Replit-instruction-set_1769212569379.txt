@@ -1,0 +1,128 @@
+Got you. Here’s a **clean, rewritten Replit instruction set in English**, tightened up and very clear, **including the PDF export requirements per animal**.
+
+---
+
+## Replit Instructions: Update “New Lamb Entry” & PDF Export (Per Animal)
+
+### 1) Update the **New Lamb Entry** tab – required data fields
+
+Extend the **New Lamb Entry** form to include the following fields. These fields must be saved per lamb and remain editable later.
+
+#### A) Core Identification & Birth Data
+
+* **Lamb ID**
+
+  * Type: Text / Alphanumeric
+* **Date of Birth**
+
+  * Type: Date picker
+* **Birth Status**
+
+  * Type: Dropdown
+  * Options:
+
+    * Single
+    * Twin
+* **Sex**
+
+  * Type: Dropdown
+  * Options:
+
+    * Ram
+    * Ewe
+* **Sire (Father)**
+
+  * Type: Searchable dropdown or text (linked to ram records if available)
+* **Dam (Mother)**
+
+  * Type: Searchable dropdown or text (linked to ewe records if available)
+
+---
+
+#### B) Growth & Weaning Data
+
+* **100-Day Weigh Date**
+
+  * Type: Date picker
+* **100-Day Weight (kg)**
+
+  * Type: Number input (decimals allowed)
+* **Weaning Status – Multiple Lamb Loss**
+
+  * Type: Dropdown
+  * Purpose: indicate if a twin lamb’s sibling died before weaning
+  * Options:
+
+    * Normal
+    * Sibling died before weaning
+
+---
+
+### 2) Data model / database updates
+
+Ensure the lamb record includes and stores the following fields:
+
+* `lambId`
+* `dateOfBirth`
+* `birthStatus` (single / twin)
+* `sex`
+* `sire`
+* `dam`
+* `weight100Date`
+* `weight100Kg`
+* `weaningMultipleLossStatus` (normal / sibling_died_before_weaning)
+
+All fields must persist correctly and remain available for export.
+
+---
+
+### 3) Validation rules
+
+* **Lamb ID**, **Date of Birth**, **Sex**, **Sire**, and **Dam** are mandatory.
+* If **100-Day Weight** is entered, **100-Day Weigh Date** must also be entered (and vice versa).
+* Weight values must be numeric and greater than 0.
+* **Weaning Status – Sibling died before weaning** should only be selectable if **Birth Status = Twin**.
+
+---
+
+### 4) PDF export requirements (VERY IMPORTANT)
+
+When exporting **an individual animal (per lamb) to PDF**, the following data **must be included and clearly displayed**:
+
+* Lamb ID
+* Date of Birth
+* Birth Status (Single / Twin)
+* Sex
+* Sire (Father)
+* Dam (Mother)
+* 100-Day Weigh Date
+* 100-Day Weight (kg)
+* Weaning Status (if sibling died before weaning)
+
+**PDF layout requirements:**
+
+* One animal per PDF page
+* Clean, professional layout
+* Clear headings (Identification, Birth Information, Growth & Weaning)
+* Units shown clearly (kg, dates in consistent format)
+* No missing fields—show “Not recorded” where data is empty
+
+---
+
+### 5) General requirements
+
+* All above fields must:
+
+  * Be editable after initial capture
+  * Be available for future analytics and AI evaluation
+  * Be included in any future batch exports or reports
+
+---
+
+If you want, next we can:
+
+* Add **270-day weight** cleanly into the same structure
+* Align this export exactly with **Stamboek / SheepPro-style documents**
+* Or tighten the PDF layout to a **stud-grade certificate look**
+
+Just say the word, boet 👍

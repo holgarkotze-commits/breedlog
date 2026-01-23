@@ -142,48 +142,148 @@ function InfoRow({ label, value, testId }: { label: string, value: string, testI
 
 function PedigreeView({ animal }: { animal: any }) {
     const { data: tree } = useFamilyTree(animal.id);
-    // Simple visualization for MVP - in production use D3 or React Flow
+    
     return (
-        <Card className="bg-card rugged-card">
-            <CardHeader><CardTitle className="text-lg">Family Tree</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-                <div className="flex flex-col items-center gap-8 py-8">
-                    {/* Grandparents - simple placeholders if not fetching deep tree yet */}
-                    <div className="flex gap-16">
-                        <div className="w-24 h-24 rounded-full border-2 border-dashed border-muted-foreground flex items-center justify-center bg-secondary">GP Sire</div>
-                        <div className="w-24 h-24 rounded-full border-2 border-dashed border-muted-foreground flex items-center justify-center bg-secondary">GP Dam</div>
-                    </div>
-                    <div className="w-0.5 h-8 bg-border"></div>
-                    
-                    {/* Parents */}
-                    <div className="flex gap-24">
-                        <div className="text-center">
-                            <div className={cn("w-20 h-20 rounded-full border-2 flex items-center justify-center mb-2 mx-auto", animal.sire ? "border-primary bg-primary/10" : "border-muted bg-secondary")}>
-                                {animal.sire?.tagId || "Unknown"}
-                            </div>
-                            <span className="text-xs uppercase font-bold text-muted-foreground">Sire</span>
+        <Card className="bg-gradient-to-br from-card via-card to-secondary/20 rugged-card overflow-hidden">
+            <CardHeader className="border-b border-border/50 bg-black/20">
+                <CardTitle className="text-lg flex items-center gap-2">
+                    <Dna className="w-5 h-5 text-primary" />
+                    <span>FAMILY TREE</span>
+                    <span className="text-primary font-black ml-1">- ELITE GENETICS</span>
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 md:p-8">
+                <div className="overflow-x-auto">
+                    <div className="min-w-[600px] flex items-center gap-4 py-4">
+                        {/* Subject (left) */}
+                        <div className="flex-shrink-0">
+                            <PedigreeNode 
+                                animal={animal}
+                                isSubject={true}
+                            />
                         </div>
-                        <div className="text-center">
-                            <div className={cn("w-20 h-20 rounded-full border-2 flex items-center justify-center mb-2 mx-auto", animal.dam ? "border-primary bg-primary/10" : "border-muted bg-secondary")}>
-                                {animal.dam?.tagId || "Unknown"}
-                            </div>
-                            <span className="text-xs uppercase font-bold text-muted-foreground">Dam</span>
+                        
+                        {/* Connector line */}
+                        <div className="w-8 h-0.5 bg-gradient-to-r from-primary to-primary/50"></div>
+                        
+                        {/* Parents column */}
+                        <div className="flex flex-col gap-6 relative">
+                            {/* Vertical connector */}
+                            <div className="absolute left-0 top-1/2 -translate-x-4 w-4 h-[calc(100%-60px)] border-l-2 border-t-2 border-b-2 border-primary/50 rounded-l-lg"></div>
+                            
+                            <PedigreeNode 
+                                animal={animal.sire}
+                                label="SIRE"
+                                externalInfo={animal.externalSireInfo}
+                            />
+                            <PedigreeNode 
+                                animal={animal.dam}
+                                label="DAM"
+                                externalInfo={animal.externalDamInfo}
+                            />
                         </div>
-                    </div>
-                    
-                    <div className="w-0.5 h-8 bg-primary"></div>
-                    
-                    {/* Self */}
-                    <div className="text-center">
-                         <div className="w-28 h-28 rounded-full border-4 border-primary bg-primary text-black font-black flex items-center justify-center text-xl mx-auto shadow-lg shadow-primary/20">
-                            {animal.tagId}
+                        
+                        {/* Connector line to grandparents */}
+                        <div className="w-8 h-0.5 bg-gradient-to-r from-primary/50 to-muted-foreground/30"></div>
+                        
+                        {/* Grandparents column */}
+                        <div className="flex flex-col gap-3 relative">
+                            <div className="absolute left-0 top-[25%] -translate-x-4 w-4 h-[15%] border-l-2 border-t-2 border-b-2 border-muted-foreground/30 rounded-l-lg"></div>
+                            <div className="absolute left-0 top-[60%] -translate-x-4 w-4 h-[15%] border-l-2 border-t-2 border-b-2 border-muted-foreground/30 rounded-l-lg"></div>
+                            
+                            <PedigreeNodeSmall label="GP Sire" sublabel="Sire's Father" />
+                            <PedigreeNodeSmall label="GP Dam" sublabel="Sire's Mother" />
+                            <PedigreeNodeSmall label="GP Sire" sublabel="Dam's Father" />
+                            <PedigreeNodeSmall label="GP Dam" sublabel="Dam's Mother" />
                         </div>
-                         <span className="text-xs uppercase font-bold text-primary mt-2 block">Subject</span>
                     </div>
                 </div>
             </CardContent>
         </Card>
-    )
+    );
+}
+
+function PedigreeNode({ animal, label, isSubject, externalInfo }: { 
+    animal?: any, 
+    label?: string, 
+    isSubject?: boolean,
+    externalInfo?: string | null 
+}) {
+    const hasData = animal || externalInfo;
+    const isRam = animal?.sex?.toLowerCase() === 'ram';
+    const displayId = animal?.tagId || externalInfo || 'Unknown';
+    
+    return (
+        <div className={cn(
+            "flex items-center gap-3 p-3 rounded-xl border-2 transition-all",
+            isSubject 
+                ? "bg-gradient-to-r from-primary/20 to-primary/5 border-primary shadow-lg shadow-primary/20" 
+                : hasData 
+                    ? "bg-card/80 border-primary/50 hover:border-primary hover:shadow-md" 
+                    : "bg-secondary/50 border-dashed border-muted-foreground/30"
+        )}>
+            {/* Circular photo with ring */}
+            <div className={cn(
+                "relative flex-shrink-0 rounded-full p-1",
+                isSubject ? "bg-gradient-to-br from-primary via-yellow-500 to-primary" : hasData ? "bg-gradient-to-br from-primary/60 to-primary/30" : "bg-muted-foreground/20"
+            )}>
+                <div className={cn(
+                    "rounded-full overflow-hidden flex items-center justify-center bg-secondary",
+                    isSubject ? "w-16 h-16" : "w-12 h-12"
+                )}>
+                    {animal?.photo ? (
+                        <img src={animal.photo} alt={displayId} className="w-full h-full object-cover" />
+                    ) : (
+                        <img src={logo} alt="placeholder" className="w-8 h-8 opacity-40 grayscale" />
+                    )}
+                </div>
+            </div>
+            
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+                {/* ID Badge */}
+                <div className={cn(
+                    "inline-block px-2 py-0.5 rounded text-xs font-black mb-1",
+                    isSubject ? "bg-primary text-black" : hasData ? "bg-primary/80 text-black" : "bg-muted-foreground/20 text-muted-foreground"
+                )}>
+                    ID: {displayId}
+                </div>
+                
+                {/* Details */}
+                <div className="text-[10px] space-y-0.5 text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                        <span className={cn(
+                            "font-bold uppercase",
+                            isRam ? "text-blue-400" : "text-pink-400"
+                        )}>
+                            {animal?.sex || (label === "SIRE" ? "RAM" : label === "DAM" ? "EWE" : "—")}
+                        </span>
+                        {animal?.name && <span className="truncate">• '{animal.name}'</span>}
+                    </div>
+                    {animal?.birthDate && (
+                        <div>DOB: {format(new Date(animal.birthDate), "dd/MM/yyyy")}</div>
+                    )}
+                    {label && !isSubject && (
+                        <div className="text-primary font-bold uppercase">{label}</div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function PedigreeNodeSmall({ label, sublabel }: { label: string, sublabel: string }) {
+    return (
+        <div className="flex items-center gap-2 p-2 rounded-lg border border-dashed border-muted-foreground/20 bg-secondary/30">
+            <div className="w-8 h-8 rounded-full bg-muted-foreground/10 border border-muted-foreground/20 flex items-center justify-center">
+                <img src={logo} alt="placeholder" className="w-4 h-4 opacity-20 grayscale" />
+            </div>
+            <div className="text-[9px] text-muted-foreground">
+                <div className="font-bold">{label}</div>
+                <div className="opacity-70">{sublabel}</div>
+            </div>
+        </div>
+    );
 }
 
 function PerformanceView({ animalId }: { animalId: number }) {
