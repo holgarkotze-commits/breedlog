@@ -26,7 +26,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         
         <nav className="flex-1 p-4 space-y-2">
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href} className={cn(
+            <Link key={item.href} href={item.href} data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`} className={cn(
               "flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-200 font-medium uppercase tracking-wide text-sm",
               location === item.href 
                 ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 font-bold" 
@@ -64,7 +64,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Bottom Nav (Mobile) */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border h-16 flex items-center justify-around z-50 px-2 pb-safe">
         {navItems.map((item) => (
-          <Link key={item.href} href={item.href} className={cn(
+          <Link key={item.href} href={item.href} data-testid={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`} className={cn(
             "flex flex-col items-center justify-center p-2 rounded-md transition-colors w-full h-full",
             location === item.href 
               ? "text-primary" 

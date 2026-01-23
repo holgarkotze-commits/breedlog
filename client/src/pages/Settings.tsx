@@ -32,14 +32,14 @@ export default function Settings() {
                       <p className="text-muted-foreground">{user.email}</p>
                     </div>
                  </div>
-                 <Button onClick={() => logout()} variant="destructive" className="w-full rugged-btn">
+                 <Button onClick={() => logout()} variant="destructive" data-testid="button-logout" className="w-full rugged-btn">
                    <LogOut className="w-4 h-4 mr-2" /> Log Out
                  </Button>
               </div>
             ) : (
               <div className="text-center py-6 space-y-4">
                  <p className="text-muted-foreground">You are currently using Guest mode.</p>
-                 <Button onClick={() => window.location.href = "/api/login"} className="rugged-btn bg-primary text-black w-full">
+                 <Button onClick={() => window.location.href = "/api/login"} data-testid="button-settings-login" className="rugged-btn bg-primary text-black w-full">
                    Log In to Sync Data
                  </Button>
               </div>
@@ -60,8 +60,9 @@ export default function Settings() {
                 <Button 
                     className="w-full rugged-btn bg-secondary border border-primary text-primary hover:bg-primary hover:text-black"
                     onClick={() => window.open("/api/settings/export", "_blank")}
+                    data-testid="button-export-csv"
                 >
-                    <Download className="w-4 h-4 mr-2" /> Download CSV Pack
+                    <Download className="w-4 h-4 mr-2" /> Export CSV
                 </Button>
              </div>
              
@@ -69,8 +70,8 @@ export default function Settings() {
                 <div className="absolute inset-0 flex items-center justify-center bg-black/50 font-bold uppercase text-xs">Coming Soon</div>
                 <h4 className="font-bold text-sm uppercase mb-2">Import Data</h4>
                 <p className="text-xs text-muted-foreground mb-4">Bulk import animals from CSV.</p>
-                <Button className="w-full rugged-btn" disabled>
-                    <Upload className="w-4 h-4 mr-2" /> Upload CSV
+                <Button className="w-full rugged-btn" disabled data-testid="button-import-csv">
+                    <Upload className="w-4 h-4 mr-2" /> Import CSV
                 </Button>
              </div>
           </CardContent>

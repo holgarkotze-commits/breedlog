@@ -33,7 +33,7 @@ export default function Breeding() {
                 <CardContent>
                     <div className="text-center py-8 text-muted-foreground border-2 border-dashed border-border rounded-md">
                         No active mating groups defined.<br/>
-                        <Button variant="link" className="text-primary">Create Mating Group</Button>
+                        <Button variant="link" data-testid="button-create-mating-group" className="text-primary">Create Mating Group</Button>
                     </div>
                 </CardContent>
             </Card>
@@ -84,7 +84,7 @@ function RecordBreedingDialog({ open, onOpenChange }: { open: boolean, onOpenCha
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogTrigger asChild>
-                <Button className="rugged-btn bg-primary text-black"><Plus className="w-4 h-4 mr-2" /> Record Event</Button>
+                <Button data-testid="button-record-event" className="rugged-btn bg-primary text-black"><Plus className="w-4 h-4 mr-2" /> Record Event</Button>
             </DialogTrigger>
             <DialogContent className="bg-card border-border">
                 <DialogHeader><DialogTitle className="uppercase font-display">Record Mating</DialogTitle></DialogHeader>
@@ -113,7 +113,7 @@ function RecordBreedingDialog({ open, onOpenChange }: { open: boolean, onOpenCha
                                 </Select>
                              </FormItem>
                          )}/>
-                         <Button type="submit" disabled={isPending} className="w-full rugged-btn bg-primary text-black">{isPending ? "Saving..." : "Save Record"}</Button>
+                         <Button type="submit" disabled={isPending} data-testid="button-save-breeding" className="w-full rugged-btn bg-primary text-black">{isPending ? "Saving..." : "Save Record"}</Button>
                     </form>
                 </Form>
             </DialogContent>

@@ -30,7 +30,7 @@ export default function AnimalDetail() {
       <div className="space-y-6 animate-in fade-in duration-500">
         <div className="flex items-center gap-4">
           <Link href="/animals">
-            <Button variant="ghost" size="icon"><ArrowLeft className="w-5 h-5" /></Button>
+            <Button variant="ghost" size="icon" data-testid="button-back"><ArrowLeft className="w-5 h-5" /></Button>
           </Link>
           <div className="flex-1">
             <div className="flex items-center gap-3">
@@ -70,10 +70,10 @@ export default function AnimalDetail() {
           <div className="lg:col-span-2">
             <Tabs defaultValue="pedigree" className="w-full">
               <TabsList className="w-full bg-card border border-border h-12">
-                <TabsTrigger value="pedigree" className="flex-1 uppercase font-bold text-xs"><Dna className="w-4 h-4 mr-2" /> Pedigree</TabsTrigger>
-                <TabsTrigger value="performance" className="flex-1 uppercase font-bold text-xs"><Scale className="w-4 h-4 mr-2" /> Weights</TabsTrigger>
-                <TabsTrigger value="health" className="flex-1 uppercase font-bold text-xs"><Syringe className="w-4 h-4 mr-2" /> Health</TabsTrigger>
-                <TabsTrigger value="evaluations" className="flex-1 uppercase font-bold text-xs"><FileText className="w-4 h-4 mr-2" /> Eval</TabsTrigger>
+                <TabsTrigger value="pedigree" data-testid="tab-pedigree" className="flex-1 uppercase font-bold text-xs"><Dna className="w-4 h-4 mr-2" /> Pedigree</TabsTrigger>
+                <TabsTrigger value="performance" data-testid="tab-weights" className="flex-1 uppercase font-bold text-xs"><Scale className="w-4 h-4 mr-2" /> Weights</TabsTrigger>
+                <TabsTrigger value="health" data-testid="tab-health" className="flex-1 uppercase font-bold text-xs"><Syringe className="w-4 h-4 mr-2" /> Health</TabsTrigger>
+                <TabsTrigger value="evaluations" data-testid="tab-evaluations" className="flex-1 uppercase font-bold text-xs"><FileText className="w-4 h-4 mr-2" /> Eval</TabsTrigger>
               </TabsList>
               
               <TabsContent value="pedigree" className="mt-4">
@@ -182,7 +182,7 @@ function PerformanceView({ animalId }: { animalId: number }) {
                         value={weight}
                         onChange={e => setWeight(e.target.value)}
                     />
-                    <Button size="sm" onClick={handleAdd} className="bg-primary text-black font-bold">Add</Button>
+                    <Button size="sm" onClick={handleAdd} data-testid="button-add-weight" className="bg-primary text-black font-bold">Add</Button>
                 </div>
             </CardHeader>
             <CardContent>

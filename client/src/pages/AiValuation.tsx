@@ -27,7 +27,7 @@ export default function AiValuation() {
            </div>
            <h1 className="text-3xl font-black uppercase">Authentication Required</h1>
            <p className="text-muted-foreground max-w-md">The AI Valuation engine is a premium feature that requires a logged-in user account.</p>
-           <Button onClick={() => window.location.href = "/api/login"} className="rugged-btn bg-primary text-black">Log In via Replit</Button>
+           <Button onClick={() => window.location.href = "/api/login"} data-testid="button-login" className="rugged-btn bg-primary text-black">Log In via Replit</Button>
         </div>
       </Layout>
     );
@@ -65,6 +65,7 @@ export default function AiValuation() {
                     <Button 
                         disabled={!selectedAnimal || isPending} 
                         onClick={() => generate(parseInt(selectedAnimal))}
+                        data-testid="button-analyze"
                         className="h-12 px-8 rugged-btn bg-primary text-black text-lg"
                     >
                         {isPending ? <BrainCircuit className="w-5 h-5 animate-pulse" /> : "Analyze"}

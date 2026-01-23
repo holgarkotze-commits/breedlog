@@ -103,7 +103,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button className="rugged-btn bg-primary text-black hover:bg-primary/90">
+        <Button data-testid="button-add-animal" className="rugged-btn bg-primary text-black hover:bg-primary/90">
           <Plus className="w-5 h-5 mr-2" /> Add Animal
         </Button>
       </DialogTrigger>
@@ -195,11 +195,11 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
               />
             </div>
             
-            <Button type="button" variant="outline" className="w-full rugged-btn border-dashed">
-                <Camera className="w-4 h-4 mr-2" /> Take Photo (Placeholder)
+            <Button type="button" variant="outline" data-testid="button-take-photo" className="w-full rugged-btn border-dashed">
+                <Camera className="w-4 h-4 mr-2" /> Take Photo
             </Button>
 
-            <Button type="submit" disabled={isPending} className="w-full rugged-btn bg-primary text-black">
+            <Button type="submit" disabled={isPending} data-testid="button-save-animal" className="w-full rugged-btn bg-primary text-black">
               {isPending ? "Creating..." : "Save Record"}
             </Button>
           </form>
