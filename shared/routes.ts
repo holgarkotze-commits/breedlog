@@ -7,13 +7,15 @@ import {
   insertHealthRecordSchema, 
   insertEvaluationSchema, 
   insertMatingGroupSchema,
+  insertFarmSettingsSchema,
   animals,
   breedingEvents,
   performanceRecords,
   healthRecords,
   evaluations,
   offspring,
-  matingGroups
+  matingGroups,
+  farmSettings
 } from './schema';
 
 // Shared error schemas
@@ -203,6 +205,25 @@ export const api = {
       path: '/api/debug/test',
       responses: {
         200: z.object({ results: z.array(z.string()) }),
+      },
+    },
+  },
+  
+  farmSettings: {
+    get: {
+      method: 'GET' as const,
+      path: '/api/farm-settings',
+      responses: {
+        200: z.custom<typeof farmSettings.$inferSelect | null>(),
+      },
+    },
+    save: {
+      method: 'POST' as const,
+      path: '/api/farm-settings',
+      input: insertFarmSettingsSchema,
+      responses: {
+        200: z.custom<typeof farmSettings.$inferSelect>(),
+        400: errorSchemas.validation,
       },
     },
   },

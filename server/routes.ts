@@ -279,6 +279,26 @@ export async function registerRoutes(
     }
   });
 
+  // === FARM SETTINGS ===
+  app.get(api.farmSettings.get.path, async (req, res) => {
+    const settings = await storage.getFarmSettings();
+    res.json(settings || null);
+  });
+
+  app.post(api.farmSettings.save.path, async (req, res) => {
+    try {
+      const data = api.farmSettings.save.input.parse(req.body);
+      const settings = await storage.saveFarmSettings(data);
+      res.json(settings);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Farm settings error:", err);
+      res.status(500).json({ message: "Failed to save farm settings" });
+    }
+  });
+
   // === DEBUG ===
   app.post(api.debug.test.path, async (req, res) => {
     const results: string[] = [];
