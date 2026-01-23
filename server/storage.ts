@@ -7,6 +7,7 @@ import {
   healthRecords,
   evaluations,
   matingGroups,
+  farmSettings,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -14,6 +15,7 @@ import {
   type InsertHealthRecord,
   type InsertEvaluation,
   type InsertMatingGroup,
+  type InsertFarmSettings,
   type Animal,
   type BreedingEvent,
   type Offspring,
@@ -21,6 +23,7 @@ import {
   type HealthRecord,
   type Evaluation,
   type MatingGroup,
+  type FarmSettings,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -51,6 +54,10 @@ export interface IStorage {
   // Evaluations
   getEvaluations(animalId: number): Promise<Evaluation[]>;
   createEvaluation(evaluation: InsertEvaluation): Promise<Evaluation>;
+  
+  // Farm Settings
+  getFarmSettings(): Promise<FarmSettings | undefined>;
+  saveFarmSettings(settings: InsertFarmSettings): Promise<FarmSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -147,6 +154,27 @@ export class DatabaseStorage implements IStorage {
   async createEvaluation(evaluation: InsertEvaluation): Promise<Evaluation> {
     const [newEvaluation] = await db.insert(evaluations).values(evaluation).returning();
     return newEvaluation;
+  }
+  
+  // Farm Settings
+  async getFarmSettings(): Promise<FarmSettings | undefined> {
+    const [settings] = await db.select().from(farmSettings).limit(1);
+    return settings;
+  }
+  
+  async saveFarmSettings(settings: InsertFarmSettings): Promise<FarmSettings> {
+    const existing = await this.getFarmSettings();
+    if (existing) {
+      const [updated] = await db
+        .update(farmSettings)
+        .set({ ...settings, updatedAt: new Date() })
+        .where(eq(farmSettings.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(farmSettings).values(settings).returning();
+      return created;
+    }
   }
 }
 

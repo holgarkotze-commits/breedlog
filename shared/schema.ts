@@ -279,3 +279,25 @@ export type AnimalWithRelations = Animal & {
   offspringAsSire?: Animal[];
   evaluations?: Evaluation[];
 };
+
+// === FARM SETTINGS ===
+export const farmSettings = pgTable("farm_settings", {
+  id: serial("id").primaryKey(),
+  farmName: text("farm_name").notNull(),
+  studName: text("stud_name"),
+  studPrefix: text("stud_prefix"),
+  ownerName: text("owner_name"),
+  ownerEmail: text("owner_email"),
+  ownerPhone: text("owner_phone"),
+  farmAddress: text("farm_address"),
+  farmLocation: text("farm_location"),
+  membershipNumber: text("membership_number"),
+  registrationNumber: text("registration_number"),
+  logoUrl: text("logo_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertFarmSettingsSchema = createInsertSchema(farmSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export type FarmSettings = typeof farmSettings.$inferSelect;
+export type InsertFarmSettings = z.infer<typeof insertFarmSettingsSchema>;
