@@ -2,6 +2,7 @@ import { useRoute } from "wouter";
 import { useAnimal, useFamilyTree, useUpdateAnimal, useAnimals } from "@/hooks/use-animals";
 import { usePerformanceRecords, useHealthRecords, useCreatePerformanceRecord } from "@/hooks/use-records";
 import { useEvaluations, useCreateEvaluation } from "@/hooks/use-evaluations";
+import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { Layout } from "@/components/Layout";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,6 +28,7 @@ export default function AnimalDetail() {
   const [match, params] = useRoute("/animals/:id");
   const id = parseInt(params?.id || "0");
   const { data: animal, isLoading } = useAnimal(id);
+  const { data: farmSettings } = useFarmSettings();
   const [isEditOpen, setIsEditOpen] = useState(false);
 
   if (isLoading) return <DetailSkeleton />;
@@ -59,7 +61,7 @@ export default function AnimalDetail() {
             >
               <Edit className="w-4 h-4 mr-2" /> Edit
             </Button>
-            <ExportProfileButton animal={animal} />
+            <ExportProfileButton animal={animal} farmSettings={farmSettings} />
           </div>
         </div>
         
@@ -580,7 +582,7 @@ function BreedingStatsView({ animal }: { animal: AnimalWithRelations }) {
     );
 }
 
-function ExportProfileButton({ animal }: { animal: AnimalWithRelations }) {
+function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelations, farmSettings?: { farmName?: string | null, studName?: string | null, studPrefix?: string | null, ownerName?: string | null, membershipNumber?: string | null } | null }) {
     const { data: breedingEvents } = useAnimalBreedingEvents(animal.id, animal.sex);
     const { toast } = useToast();
     
@@ -600,6 +602,15 @@ function ExportProfileButton({ animal }: { animal: AnimalWithRelations }) {
         const profileData = {
             exportDate: new Date().toISOString(),
             exportFormat: "SA Stamboek Compatible",
+            generatedBy: "BreedLog",
+            
+            farmBranding: farmSettings ? {
+                farmName: farmSettings.farmName,
+                studName: farmSettings.studName,
+                studPrefix: farmSettings.studPrefix,
+                ownerName: farmSettings.ownerName,
+                membershipNumber: farmSettings.membershipNumber,
+            } : null,
             
             identification: {
                 tagId: animal.tagId,
