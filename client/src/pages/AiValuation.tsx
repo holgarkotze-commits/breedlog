@@ -10,7 +10,6 @@ import { Sparkles, Lock, BrainCircuit } from "lucide-react";
 import { useState } from "react";
 import ReactMarkdown from 'react-markdown';
 
-// Force rebuild
 export default function AiValuation() {
   const { user, isLoading: authLoading } = useAuth();
   const { data: animals } = useAnimals();

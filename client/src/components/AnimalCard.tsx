@@ -3,9 +3,9 @@ import { type Animal } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { MarsStroke, Venus, Weight, Calendar } from "lucide-react";
+import { User, Scale, Calendar } from "lucide-react";
 import { format } from "date-fns";
-import logo from "@assets/logo.png"; // Placeholder if no photo
+import logo from "@assets/BREEDLOG_LOGO_1768730745128.png"; // Placeholder if no photo
 
 export function AnimalCard({ animal }: { animal: Animal }) {
   const isRam = animal.sex.toLowerCase() === 'ram';
@@ -39,11 +39,11 @@ export function AnimalCard({ animal }: { animal: Animal }) {
           <div className="p-4 space-y-3 flex-1 bg-card">
             <div className="flex items-center justify-between text-sm">
                <div className="flex items-center gap-2 text-muted-foreground">
-                 {isRam ? <MarsStroke className="w-4 h-4 text-blue-400" /> : <Venus className="w-4 h-4 text-pink-400" />}
+                 <User className={cn("w-4 h-4", isRam ? "text-blue-400" : "text-pink-400")} />
                  <span className="uppercase font-bold text-foreground">{animal.sex}</span>
                </div>
                <div className="flex items-center gap-2 text-muted-foreground">
-                 <Weight className="w-4 h-4" />
+                 <Scale className="w-4 h-4" />
                  <span className="font-mono text-foreground">{animal.currentWeight || '--'} kg</span>
                </div>
             </div>

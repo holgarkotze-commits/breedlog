@@ -2,6 +2,7 @@ import { useRoute } from "wouter";
 import { useAnimal, useFamilyTree, useUpdateAnimal } from "@/hooks/use-animals";
 import { usePerformanceRecords, useHealthRecords, useCreatePerformanceRecord } from "@/hooks/use-records";
 import { Layout } from "@/components/Layout";
+import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,9 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { format } from "date-fns";
-import { ArrowLeft, Dna, Syringe, Weight, FileText } from "lucide-react";
+import { ArrowLeft, Dna, Syringe, Scale, FileText } from "lucide-react";
 import { Link } from "wouter";
-import logo from "@assets/logo.png";
+import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 
 export default function AnimalDetail() {
   const [match, params] = useRoute("/animals/:id");
@@ -70,7 +71,7 @@ export default function AnimalDetail() {
             <Tabs defaultValue="pedigree" className="w-full">
               <TabsList className="w-full bg-card border border-border h-12">
                 <TabsTrigger value="pedigree" className="flex-1 uppercase font-bold text-xs"><Dna className="w-4 h-4 mr-2" /> Pedigree</TabsTrigger>
-                <TabsTrigger value="performance" className="flex-1 uppercase font-bold text-xs"><Weight className="w-4 h-4 mr-2" /> Weights</TabsTrigger>
+                <TabsTrigger value="performance" className="flex-1 uppercase font-bold text-xs"><Scale className="w-4 h-4 mr-2" /> Weights</TabsTrigger>
                 <TabsTrigger value="health" className="flex-1 uppercase font-bold text-xs"><Syringe className="w-4 h-4 mr-2" /> Health</TabsTrigger>
                 <TabsTrigger value="evaluations" className="flex-1 uppercase font-bold text-xs"><FileText className="w-4 h-4 mr-2" /> Eval</TabsTrigger>
               </TabsList>
