@@ -12,6 +12,7 @@ export const matingGroups = pgTable("mating_groups", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   ramId: integer("ram_id").notNull(),
+  eweIds: integer("ewe_ids").array(), // Array of ewe IDs in this mating group
   dateIn: date("date_in").notNull(),
   dateOut: date("date_out"),
   lambingSeason: text("lambing_season"), // e.g. 26A

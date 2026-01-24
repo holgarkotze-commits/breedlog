@@ -34,14 +34,29 @@ export default function Breeding() {
   const activeGroups = matingGroupsList?.filter(g => g.status === 'active') || [];
   const closedGroups = matingGroupsList?.filter(g => g.status === 'closed') || [];
 
-  const getRamById = (ramId: number) => animals?.find(a => a.id === ramId);
+  const getAnimalById = (id: number) => animals?.find(a => a.id === id);
 
   const getExportData = () => {
     return matingGroupsList?.map(group => {
       const dateIn = new Date(group.dateIn);
       const dateOut = group.dateOut ? new Date(group.dateOut) : addDays(dateIn, 42);
       const expectedLambing = addMonths(dateIn, 5);
-      const ram = getRamById(group.ramId);
+      const ram = getAnimalById(group.ramId);
+      
+      // Get full ewe details
+      const eweIds = group.eweIds || [];
+      const ewes = eweIds.map(id => {
+        const ewe = getAnimalById(id);
+        return ewe ? {
+          id: ewe.id,
+          tagId: ewe.tagId,
+          name: ewe.name || "",
+          photo: ewe.photo || "",
+          electronicId: ewe.electronicId || "",
+          tattooId: ewe.tattooId || "",
+          breed: ewe.breed || "Meatmaster",
+        } : null;
+      }).filter(Boolean);
       
       return {
         name: group.name,
@@ -49,6 +64,11 @@ export default function Breeding() {
         ramTagId: ram?.tagId || String(group.ramId),
         ramName: ram?.name || "",
         ramPhoto: ram?.photo || "",
+        ramElectronicId: ram?.electronicId || "",
+        ramTattooId: ram?.tattooId || "",
+        ramBreed: ram?.breed || "Meatmaster",
+        ewes: ewes,
+        eweCount: ewes.length,
         dateIn: format(dateIn, "yyyy-MM-dd"),
         dateOut: format(dateOut, "yyyy-MM-dd"),
         matingPeriodDays: 42,
@@ -122,15 +142,34 @@ MATING GROUPS (${exportData.length} total)
       content += `
 GROUP ${i + 1}: ${g.name}
 ───────────────────────────────────────────
-Ram Tag: ${g.ramTagId}${g.ramName ? ` (${g.ramName})` : ""}
-Ram Photo: ${g.ramPhoto || "No photo available"}
-Date In: ${g.dateIn}
-Date Out: ${g.dateOut}
-Mating Period: ${g.matingPeriodDays} days
-Expected Lambing: ${g.expectedLambing}
-Season: ${g.lambingSeason || "N/A"}
-Status: ${g.status.toUpperCase()}
-${g.notes ? `Notes: ${g.notes}` : ""}
+
+RAM IDENTIFICATION
+  Tag ID: ${g.ramTagId}
+  Name: ${g.ramName || "N/A"}
+  Electronic ID: ${g.ramElectronicId || "N/A"}
+  Tattoo ID: ${g.ramTattooId || "N/A"}
+  Breed: ${g.ramBreed}
+  Photo: ${g.ramPhoto || "No photo available"}
+
+EWES IN GROUP (${g.eweCount} total)
+${g.ewes.length > 0 ? g.ewes.map((ewe: any, j: number) => `
+  Ewe ${j + 1}:
+    Tag ID: ${ewe.tagId}
+    Name: ${ewe.name || "N/A"}
+    Electronic ID: ${ewe.electronicId || "N/A"}
+    Tattoo ID: ${ewe.tattooId || "N/A"}
+    Breed: ${ewe.breed}
+    Photo: ${ewe.photo || "No photo available"}
+`).join("") : "  No ewes recorded in this group\n"}
+
+MATING DETAILS
+  Date In: ${g.dateIn}
+  Date Out: ${g.dateOut}
+  Mating Period: ${g.matingPeriodDays} days
+  Expected Lambing: ${g.expectedLambing}
+  Season: ${g.lambingSeason || "N/A"}
+  Status: ${(g.status || "active").toUpperCase()}
+${g.notes ? `  Notes: ${g.notes}` : ""}
 `;
     });
     
@@ -161,8 +200,10 @@ h2 { color: #333; margin-top: 30px; font-size: 18px; background: linear-gradient
 .group { background: #fafafa; border-radius: 8px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #FFC300; }
 .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 15px; }
 .group-left { display: flex; align-items: center; gap: 15px; }
-.ram-photo { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 2px solid #FFC300; flex-shrink: 0; }
-.ram-photo-placeholder { width: 60px; height: 60px; border-radius: 8px; background: #ddd; display: flex; align-items: center; justify-content: center; color: #999; font-size: 10px; flex-shrink: 0; border: 2px solid #ccc; }
+.animal-photo { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; border: 2px solid #FFC300; flex-shrink: 0; }
+.animal-photo-sm { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; border: 2px solid #ec4899; flex-shrink: 0; }
+.photo-placeholder { width: 50px; height: 50px; border-radius: 8px; background: #ddd; display: flex; align-items: center; justify-content: center; color: #999; font-size: 9px; flex-shrink: 0; border: 2px solid #ccc; }
+.photo-placeholder-sm { width: 40px; height: 40px; border-radius: 6px; background: #eee; display: flex; align-items: center; justify-content: center; color: #999; font-size: 8px; flex-shrink: 0; border: 1px solid #ddd; }
 .group-info { }
 .group-name { font-size: 18px; font-weight: bold; color: #222; }
 .ram-tag { font-size: 13px; color: #666; margin-top: 2px; }
@@ -174,6 +215,16 @@ h2 { color: #333; margin-top: 30px; font-size: 18px; background: linear-gradient
 .field-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
 .field-value { font-size: 14px; color: #222; font-weight: 500; margin-top: 2px; }
 .highlight { color: #FFC300; font-weight: bold; }
+.section-title { font-size: 14px; font-weight: bold; color: #333; margin: 20px 0 12px 0; padding-bottom: 6px; border-bottom: 2px solid #ec4899; }
+.ram-section { background: #fff8e1; border-radius: 6px; padding: 12px; margin-bottom: 15px; }
+.ram-details { display: grid; grid-template-columns: auto 1fr; gap: 8px 15px; font-size: 12px; }
+.ram-details-label { color: #666; }
+.ram-details-value { color: #222; font-weight: 500; }
+.ewes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.ewe-card { background: white; border: 1px solid #f0e0f0; border-radius: 8px; padding: 10px; display: flex; align-items: flex-start; gap: 10px; }
+.ewe-info { flex: 1; }
+.ewe-tag { font-weight: bold; font-size: 13px; color: #222; }
+.ewe-detail { font-size: 11px; color: #666; margin-top: 2px; }
 .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
 @media print { body { padding: 20px; } .group { break-inside: avoid; } }
 </style>
@@ -190,15 +241,44 @@ ${exportData.map((g, i) => `
 <div class="group">
 <div class="group-header">
 <div class="group-left">
-${g.ramPhoto ? `<img src="${g.ramPhoto}" class="ram-photo" alt="Ram ${g.ramTagId}" />` : `<div class="ram-photo-placeholder">No Photo</div>`}
+${g.ramPhoto ? `<img src="${g.ramPhoto}" class="animal-photo" alt="Ram ${g.ramTagId}" />` : `<div class="photo-placeholder">No Photo</div>`}
 <div class="group-info">
 <div class="group-name">${g.name}</div>
 <div class="ram-tag">Ram: ${g.ramTagId}${g.ramName ? ` (${g.ramName})` : ""}</div>
 </div>
 </div>
-<span class="status ${g.status === 'active' ? 'status-active' : 'status-closed'}">${g.status.toUpperCase()}</span>
+<span class="status ${g.status === 'active' ? 'status-active' : 'status-closed'}">${(g.status || "active").toUpperCase()}</span>
 </div>
-<div class="grid">
+
+<div class="ram-section">
+<div style="font-weight: bold; font-size: 12px; color: #b8860b; margin-bottom: 8px;">RAM IDENTIFICATION</div>
+<div class="ram-details">
+<span class="ram-details-label">Tag ID:</span><span class="ram-details-value">${g.ramTagId}</span>
+<span class="ram-details-label">Name:</span><span class="ram-details-value">${g.ramName || "N/A"}</span>
+<span class="ram-details-label">Electronic ID:</span><span class="ram-details-value">${g.ramElectronicId || "N/A"}</span>
+<span class="ram-details-label">Tattoo ID:</span><span class="ram-details-value">${g.ramTattooId || "N/A"}</span>
+<span class="ram-details-label">Breed:</span><span class="ram-details-value">${g.ramBreed}</span>
+</div>
+</div>
+
+<div class="section-title">EWES IN GROUP (${g.eweCount})</div>
+${g.ewes.length > 0 ? `
+<div class="ewes-grid">
+${g.ewes.map((ewe: any) => `
+<div class="ewe-card">
+${ewe.photo ? `<img src="${ewe.photo}" class="animal-photo-sm" alt="${ewe.tagId}" />` : `<div class="photo-placeholder-sm">No Photo</div>`}
+<div class="ewe-info">
+<div class="ewe-tag">${ewe.tagId}${ewe.name ? ` (${ewe.name})` : ""}</div>
+<div class="ewe-detail">EID: ${ewe.electronicId || "N/A"}</div>
+<div class="ewe-detail">Tattoo: ${ewe.tattooId || "N/A"}</div>
+<div class="ewe-detail">Breed: ${ewe.breed}</div>
+</div>
+</div>
+`).join("")}
+</div>
+` : `<p style="color: #999; font-size: 13px; font-style: italic;">No ewes recorded in this group</p>`}
+
+<div class="grid" style="margin-top: 15px;">
 <div class="field"><div class="field-label">Date In</div><div class="field-value">${g.dateIn}</div></div>
 <div class="field"><div class="field-label">Date Out</div><div class="field-value">${g.dateOut}</div></div>
 <div class="field"><div class="field-label">Mating Period</div><div class="field-value">${g.matingPeriodDays} days</div></div>
@@ -414,6 +494,7 @@ function CreateMatingGroupDialog({ open, onOpenChange }: { open: boolean, onOpen
     const submitData = {
       ...data,
       ramId: Number(data.ramId),
+      eweIds: selectedEwes.length > 0 ? selectedEwes : null,
       dateOut: addDays(new Date(data.dateIn), 42).toISOString().split('T')[0],
     };
     
