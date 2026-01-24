@@ -239,7 +239,12 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
       breed: "Meatmaster",
       status: "active",
       birthDate: new Date().toISOString().split('T')[0],
+      birthStatus: "single" as string,
+      birthWeight: null as string | null,
       currentWeight: "0",
+      weight100Day: null as string | null,
+      weight100DayDate: null as string | null,
+      weaningStatus: "normal" as string,
       damId: null as number | null,
       sireId: null as number | null,
       externalDamInfo: "" as string,
@@ -248,6 +253,8 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
       evaluationDocument: null as string | null,
     }
   });
+
+  const birthStatus = form.watch("birthStatus");
 
   const ewes = allAnimals?.filter(a => a.sex === "ewe") || [];
   const rams = allAnimals?.filter(a => a.sex === "ram") || [];
@@ -396,7 +403,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                 name="birthDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Birth Date</FormLabel>
+                    <FormLabel>Birth Date *</FormLabel>
                     <FormControl>
                       <Input type="date" className="rugged-input" data-testid="input-birth-date" {...field} value={field.value ? String(field.value) : ''} />
                     </FormControl>
@@ -406,13 +413,112 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
               />
               <FormField
                 control={form.control}
+                name="birthStatus"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Birth Status</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || "single"}>
+                      <FormControl>
+                        <SelectTrigger className="rugged-input" data-testid="select-birth-status">
+                          <SelectValue placeholder="Select birth status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="single">Single</SelectItem>
+                        <SelectItem value="twin">Twin</SelectItem>
+                        <SelectItem value="triplet">Triplet</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
                 name="currentWeight"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Weight (kg)</FormLabel>
+                    <FormLabel>Current Weight (kg)</FormLabel>
                     <FormControl>
                       <Input type="number" step="0.1" className="rugged-input" data-testid="input-weight" {...field} value={field.value ? String(field.value) : ''} />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="birthWeight"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Birth Weight (kg)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.1" placeholder="Optional" className="rugged-input" data-testid="input-birth-weight" {...field} value={field.value ? String(field.value) : ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* 100-Day Weight Section */}
+            <div className="p-3 bg-secondary/30 rounded-md border border-border/50 space-y-3">
+              <p className="text-xs font-bold uppercase text-muted-foreground">100-Day Weaning Data</p>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="weight100DayDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>100-Day Weigh Date</FormLabel>
+                      <FormControl>
+                        <Input type="date" className="rugged-input" data-testid="input-100day-date" {...field} value={field.value ? String(field.value) : ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="weight100Day"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>100-Day Weight (kg)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.1" className="rugged-input" data-testid="input-100day-weight" {...field} value={field.value ? String(field.value) : ''} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="weaningStatus"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Weaning Status</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      defaultValue={field.value || "normal"}
+                      disabled={birthStatus !== "twin" && birthStatus !== "triplet"}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="rugged-input" data-testid="select-weaning-status">
+                          <SelectValue placeholder="Select weaning status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="sibling_died_before_weaning">Sibling died before weaning</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {(birthStatus !== "twin" && birthStatus !== "triplet") && (
+                      <p className="text-[10px] text-muted-foreground">Only applicable for twin/triplet births</p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

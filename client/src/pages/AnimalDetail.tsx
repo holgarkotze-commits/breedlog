@@ -736,6 +736,7 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 sireName: animal.sire?.name,
                 externalSireInfo: animal.externalSireInfo,
             },
+            weaningStatus: animal.weaningStatus,
             weights: {
                 birthWeight: animal.birthWeight,
                 currentWeight: animal.currentWeight,
@@ -891,58 +892,91 @@ ${data.notes || "No notes recorded."}
     
     const handleExportPDF = () => {
         const data = getProfileData();
+        const formatDate = (dateStr: string | null | undefined) => {
+            if (!dateStr) return "Not recorded";
+            try {
+                return format(new Date(dateStr), "dd/MM/yyyy");
+            } catch {
+                return dateStr;
+            }
+        };
         const content = `
 <!DOCTYPE html>
 <html>
 <head>
 <title>${data.identification.tagId} - Animal Profile</title>
 <style>
-body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
-h1 { color: #FFC300; border-bottom: 2px solid #FFC300; padding-bottom: 10px; }
-h2 { color: #555; margin-top: 30px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-.row { display: flex; padding: 8px 0; border-bottom: 1px solid #eee; }
-.label { width: 200px; font-weight: bold; color: #666; }
-.value { flex: 1; }
-.header { text-align: center; margin-bottom: 30px; }
-.footer { margin-top: 40px; text-align: center; font-size: 12px; color: #999; }
+body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto; }
+h1 { color: #FFC300; border-bottom: 3px solid #FFC300; padding-bottom: 15px; text-align: center; font-size: 28px; }
+h2 { color: #333; margin-top: 35px; border-bottom: 2px solid #FFC300; padding-bottom: 8px; font-size: 18px; background: linear-gradient(90deg, #FFC300 0%, transparent 100%); padding-left: 10px; }
+.row { display: flex; padding: 10px 0; border-bottom: 1px solid #eee; }
+.row:nth-child(even) { background: #fafafa; }
+.label { width: 220px; font-weight: bold; color: #555; }
+.value { flex: 1; color: #222; }
+.header { text-align: center; margin-bottom: 40px; padding: 20px; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: white; border-radius: 8px; }
+.header h1 { color: #FFC300; border: none; margin: 0; }
+.header p { color: #ccc; margin: 10px 0 0 0; }
+.footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
+.section { background: white; border-radius: 8px; padding: 15px 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.highlight { background: #FFC300; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+@media print { body { padding: 20px; } .section { box-shadow: none; border: 1px solid #eee; } }
 </style>
 </head>
 <body>
 <div class="header">
 <h1>${data.farmBranding?.studName || data.farmBranding?.farmName || "BreedLog"}</h1>
-<p>Animal Profile Report - Generated ${new Date().toLocaleDateString()}</p>
+<p>Animal Profile Certificate - Generated ${formatDate(new Date().toISOString())}</p>
 </div>
 
-<h2>Animal Identification</h2>
-<div class="row"><span class="label">Tag ID:</span><span class="value">${data.identification.tagId || "N/A"}</span></div>
-<div class="row"><span class="label">Name:</span><span class="value">${data.identification.name || "N/A"}</span></div>
-<div class="row"><span class="label">Electronic ID:</span><span class="value">${data.identification.electronicId || "N/A"}</span></div>
-<div class="row"><span class="label">Sex:</span><span class="value">${data.basicInfo.sex || "N/A"}</span></div>
-<div class="row"><span class="label">Breed:</span><span class="value">${data.basicInfo.breed || "N/A"}</span></div>
-<div class="row"><span class="label">Status:</span><span class="value">${data.basicInfo.status || "N/A"}</span></div>
-<div class="row"><span class="label">Birth Date:</span><span class="value">${data.basicInfo.birthDate || "N/A"}</span></div>
+<div class="section">
+<h2>Identification</h2>
+<div class="row"><span class="label">Lamb/Animal ID:</span><span class="value"><span class="highlight">${data.identification.tagId || "Not recorded"}</span></span></div>
+<div class="row"><span class="label">Name:</span><span class="value">${data.identification.name || "Not recorded"}</span></div>
+<div class="row"><span class="label">Electronic ID:</span><span class="value">${data.identification.electronicId || "Not recorded"}</span></div>
+<div class="row"><span class="label">Tattoo ID:</span><span class="value">${data.identification.tattooId || "Not recorded"}</span></div>
+</div>
 
+<div class="section">
+<h2>Birth Information</h2>
+<div class="row"><span class="label">Date of Birth:</span><span class="value">${formatDate(data.basicInfo.birthDate)}</span></div>
+<div class="row"><span class="label">Birth Status:</span><span class="value">${data.basicInfo.birthStatus ? data.basicInfo.birthStatus.charAt(0).toUpperCase() + data.basicInfo.birthStatus.slice(1) : "Not recorded"}</span></div>
+<div class="row"><span class="label">Sex:</span><span class="value">${data.basicInfo.sex ? data.basicInfo.sex.toUpperCase() : "Not recorded"}</span></div>
+<div class="row"><span class="label">Breed:</span><span class="value">${data.basicInfo.breed || "Meatmaster"}</span></div>
+<div class="row"><span class="label">Status:</span><span class="value">${data.basicInfo.status ? data.basicInfo.status.charAt(0).toUpperCase() + data.basicInfo.status.slice(1) : "Not recorded"}</span></div>
+</div>
+
+<div class="section">
 <h2>Parentage</h2>
-<div class="row"><span class="label">Dam:</span><span class="value">${data.parentage.damTagId || data.parentage.externalDamInfo || "N/A"}</span></div>
-<div class="row"><span class="label">Sire:</span><span class="value">${data.parentage.sireTagId || data.parentage.externalSireInfo || "N/A"}</span></div>
+<div class="row"><span class="label">Sire (Father):</span><span class="value">${data.parentage.sireTagId || data.parentage.externalSireInfo || "Not recorded"}</span></div>
+<div class="row"><span class="label">Dam (Mother):</span><span class="value">${data.parentage.damTagId || data.parentage.externalDamInfo || "Not recorded"}</span></div>
+</div>
 
-<h2>Weights</h2>
-<div class="row"><span class="label">Birth Weight:</span><span class="value">${data.weights.birthWeight ? data.weights.birthWeight + " kg" : "N/A"}</span></div>
-<div class="row"><span class="label">Current Weight:</span><span class="value">${data.weights.currentWeight ? data.weights.currentWeight + " kg" : "N/A"}</span></div>
-<div class="row"><span class="label">100-Day Weight:</span><span class="value">${data.weights.weight100Day ? data.weights.weight100Day + " kg" : "N/A"}</span></div>
-<div class="row"><span class="label">270-Day Weight:</span><span class="value">${data.weights.weight270Day ? data.weights.weight270Day + " kg" : "N/A"}</span></div>
+<div class="section">
+<h2>Growth & Weaning</h2>
+<div class="row"><span class="label">Birth Weight:</span><span class="value">${data.weights.birthWeight ? data.weights.birthWeight + " kg" : "Not recorded"}</span></div>
+<div class="row"><span class="label">Current Weight:</span><span class="value">${data.weights.currentWeight ? data.weights.currentWeight + " kg" : "Not recorded"}</span></div>
+<div class="row"><span class="label">100-Day Weigh Date:</span><span class="value">${formatDate(data.weights.weight100DayDate)}</span></div>
+<div class="row"><span class="label">100-Day Weight:</span><span class="value">${data.weights.weight100Day ? data.weights.weight100Day + " kg" : "Not recorded"}</span></div>
+<div class="row"><span class="label">270-Day Weight:</span><span class="value">${data.weights.weight270Day ? data.weights.weight270Day + " kg" : "Not recorded"}</span></div>
+<div class="row"><span class="label">Weaning Status:</span><span class="value">${data.weaningStatus === "sibling_died_before_weaning" ? "Sibling died before weaning" : "Normal"}</span></div>
+</div>
 
 ${data.breedingStats ? `
+<div class="section">
 <h2>Breeding Statistics</h2>
 <div class="row"><span class="label">Total Matings:</span><span class="value">${data.breedingStats.totalMatings}</span></div>
 <div class="row"><span class="label">Total Lambings:</span><span class="value">${data.breedingStats.totalLambings}</span></div>
 <div class="row"><span class="label">Total Lambs Born:</span><span class="value">${data.breedingStats.totalLambsBorn}</span></div>
 <div class="row"><span class="label">Fertility Rate:</span><span class="value">${data.breedingStats.fertilityRate}</span></div>
 <div class="row"><span class="label">Lambs Reared:</span><span class="value">${data.breedingStats.lambsReared}</span></div>
+<div class="row"><span class="label">Lambs Weaned:</span><span class="value">${data.breedingStats.lambsWeaned}</span></div>
+</div>
 ` : ""}
 
 <div class="footer">
-Generated by BreedLog - Breed Smart. Farm Better.
+<strong>Generated by BreedLog</strong><br>
+Breed Smart. Farm Better.<br>
+${data.farmBranding?.membershipNumber ? `Membership: ${data.farmBranding.membershipNumber}` : ""}
 </div>
 </body>
 </html>`;
