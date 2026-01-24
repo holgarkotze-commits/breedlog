@@ -6,15 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { User, Scale, Calendar, Trash2 } from "lucide-react";
+import { Heart, Shield, Baby, Scale, Calendar, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useDeleteAnimal } from "@/hooks/use-animals";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 
 export function AnimalCard({ animal }: { animal: Animal }) {
   const isRam = animal.sex.toLowerCase() === 'ram';
+  const isLamb = animal.birthDate && (Date.now() - new Date(animal.birthDate).getTime()) / (1000 * 60 * 60 * 24) < 365;
   const { mutate: deleteAnimal, isPending } = useDeleteAnimal();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  
+  const SexIcon = isLamb ? Baby : (isRam ? Shield : Heart);
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -53,8 +56,8 @@ export function AnimalCard({ animal }: { animal: Animal }) {
             <div className="p-2 md:p-4 space-y-1.5 md:space-y-3 flex-1 bg-card">
               <div className="flex items-center justify-between text-[11px] md:text-sm">
                  <div className="flex items-center gap-1 md:gap-2 text-muted-foreground">
-                   <User className={cn("w-3 h-3 md:w-4 md:h-4", isRam ? "text-blue-400" : "text-pink-400")} />
-                   <span className="uppercase font-semibold text-foreground">{animal.sex}</span>
+                   <SexIcon className={cn("w-3 h-3 md:w-4 md:h-4", isLamb ? "text-yellow-400" : (isRam ? "text-blue-400" : "text-pink-400"))} />
+                   <span className="uppercase font-semibold text-foreground">{isLamb ? 'Lamb' : animal.sex}</span>
                  </div>
                  <div className="flex items-center gap-1 md:gap-2 text-muted-foreground">
                    <Scale className="w-3 h-3 md:w-4 md:h-4" />

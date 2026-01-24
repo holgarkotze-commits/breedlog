@@ -5,7 +5,7 @@ import { useRecentVisits } from "@/hooks/use-recent-visits";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
-import { Activity, Users, TrendingUp, AlertTriangle, Clock, Beef, Dna, Settings, ChevronRight } from "lucide-react";
+import { Clock, Beef, Dna, Settings, ChevronRight, Heart, Shield, Baby } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -113,14 +113,14 @@ export default function Dashboard() {
             title="Total Herd" 
             value={totalAnimals} 
             loading={loadingAnimals} 
-            icon={Users}
+            icon={Beef}
             href="/animals?status=all"
           />
           <StatCard 
             title="Ewes" 
             value={activeEwes} 
             loading={loadingAnimals} 
-            icon={Activity} 
+            icon={Heart} 
             className="border-l-2 md:border-l-4 border-l-pink-500"
             href="/animals?status=active&sex=ewe"
           />
@@ -128,7 +128,7 @@ export default function Dashboard() {
             title="Rams" 
             value={activeRams} 
             loading={loadingAnimals} 
-            icon={TrendingUp} 
+            icon={Shield} 
             className="border-l-2 md:border-l-4 border-l-blue-500"
             href="/animals?status=active&sex=ram"
           />
@@ -136,7 +136,7 @@ export default function Dashboard() {
             title="Lambs" 
             value={lambs} 
             loading={loadingAnimals} 
-            icon={AlertTriangle} 
+            icon={Baby} 
             className="border-l-2 md:border-l-4 border-l-yellow-500"
             href="/animals?status=active&age=lamb"
           />
