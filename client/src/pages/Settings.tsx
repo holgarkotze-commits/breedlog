@@ -6,12 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { LogOut, User, Download, Upload, Building2, Save, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertFarmSettingsSchema, type InsertFarmSettings } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Settings() {
@@ -19,6 +20,9 @@ export default function Settings() {
   const { data: farmSettings, isLoading } = useFarmSettings();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const saveMutation = useSaveFarmSettings();
+
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<InsertFarmSettings>({
     resolver: zodResolver(insertFarmSettingsSchema),
@@ -33,6 +37,10 @@ export default function Settings() {
       farmLocation: "",
       membershipNumber: "",
       registrationNumber: "",
+      logoUrl: "",
+      logoSize: "medium",
+      logoWidth: null,
+      logoHeight: null,
     },
   });
 
@@ -49,9 +57,52 @@ export default function Settings() {
         farmLocation: farmSettings.farmLocation || "",
         membershipNumber: farmSettings.membershipNumber || "",
         registrationNumber: farmSettings.registrationNumber || "",
+        logoUrl: farmSettings.logoUrl || "",
+        logoSize: farmSettings.logoSize || "medium",
+        logoWidth: farmSettings.logoWidth,
+        logoHeight: farmSettings.logoHeight,
       });
+      if (farmSettings.logoUrl) {
+        setLogoPreview(farmSettings.logoUrl);
+      }
     }
   }, [farmSettings, form]);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setLogoPreview(base64);
+        form.setValue("logoUrl", base64);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeLogo = () => {
+    setLogoPreview(null);
+    form.setValue("logoUrl", "");
+    if (logoInputRef.current) {
+      logoInputRef.current.value = "";
+    }
+  };
+
+  const logoSize = form.watch("logoSize");
+  
+  const getLogoSizePixels = (size: string) => {
+    switch (size) {
+      case "small": return { width: 80, height: 80 };
+      case "medium": return { width: 120, height: 120 };
+      case "large": return { width: 180, height: 180 };
+      case "custom": return { 
+        width: form.watch("logoWidth") || 120, 
+        height: form.watch("logoHeight") || 120 
+      };
+      default: return { width: 120, height: 120 };
+    }
+  };
 
   const onSubmit = (data: InsertFarmSettings) => {
     saveMutation.mutate(data);
@@ -239,6 +290,154 @@ export default function Settings() {
                 </form>
               </Form>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="rugged-card">
+          <CardHeader>
+            <CardTitle className="uppercase flex items-center gap-2">
+              <Image className="w-5 h-5 text-primary" /> Farm Logo
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <p className="text-sm text-muted-foreground">
+              Upload your farm or stud logo to include on exported documents. This creates a professional branded footer on all your PDF, Word, and other exports.
+            </p>
+            
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-4 items-start">
+                <div 
+                  className="w-32 h-32 border-2 border-dashed border-border rounded-lg flex items-center justify-center bg-secondary/30 relative overflow-hidden"
+                  style={logoPreview ? { 
+                    width: getLogoSizePixels(logoSize || "medium").width, 
+                    height: getLogoSizePixels(logoSize || "medium").height 
+                  } : undefined}
+                >
+                  {logoPreview ? (
+                    <>
+                      <img 
+                        src={logoPreview} 
+                        alt="Farm logo preview" 
+                        className="w-full h-full object-contain"
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="destructive"
+                        className="absolute top-1 right-1 h-6 w-6"
+                        onClick={removeLogo}
+                        data-testid="button-remove-logo"
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="text-center p-2">
+                      <Image className="w-8 h-8 mx-auto text-muted-foreground mb-1" />
+                      <span className="text-xs text-muted-foreground">No logo</span>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <Label htmlFor="logo-upload" className="text-sm font-medium mb-2 block">Upload Logo</Label>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      id="logo-upload"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                      data-testid="input-logo-upload"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => logoInputRef.current?.click()}
+                      className="w-full sm:w-auto"
+                      data-testid="button-upload-logo"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      {logoPreview ? "Change Logo" : "Select Image"}
+                    </Button>
+                  </div>
+                  
+                  <p className="text-xs text-muted-foreground">
+                    Recommended: PNG or JPG, transparent background for best results
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-3 pt-4 border-t border-border">
+                <Label className="text-sm font-medium">Logo Size in Exports</Label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { value: "small", label: "Small", desc: "80×80px" },
+                    { value: "medium", label: "Medium", desc: "120×120px" },
+                    { value: "large", label: "Large", desc: "180×180px" },
+                    { value: "custom", label: "Custom", desc: "Set size" },
+                  ].map((size) => (
+                    <Button
+                      key={size.value}
+                      type="button"
+                      variant={logoSize === size.value ? "default" : "outline"}
+                      className={`flex flex-col h-auto py-2 ${logoSize === size.value ? "bg-primary text-black" : ""}`}
+                      onClick={() => form.setValue("logoSize", size.value)}
+                      data-testid={`button-logo-size-${size.value}`}
+                    >
+                      <span className="font-medium text-xs">{size.label}</span>
+                      <span className="text-[10px] opacity-70">{size.desc}</span>
+                    </Button>
+                  ))}
+                </div>
+                
+                {logoSize === "custom" && (
+                  <div className="grid grid-cols-2 gap-4 mt-3 p-3 bg-secondary/30 rounded border border-border">
+                    <div>
+                      <Label className="text-xs mb-1 block">Width (px)</Label>
+                      <Input
+                        type="number"
+                        min="40"
+                        max="400"
+                        className="rugged-input"
+                        value={form.watch("logoWidth") || ""}
+                        onChange={(e) => form.setValue("logoWidth", parseInt(e.target.value) || null)}
+                        placeholder="120"
+                        data-testid="input-logo-width"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs mb-1 block">Height (px)</Label>
+                      <Input
+                        type="number"
+                        min="40"
+                        max="400"
+                        className="rugged-input"
+                        value={form.watch("logoHeight") || ""}
+                        onChange={(e) => form.setValue("logoHeight", parseInt(e.target.value) || null)}
+                        placeholder="120"
+                        data-testid="input-logo-height"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <Button 
+                type="button"
+                onClick={form.handleSubmit(onSubmit)}
+                className="w-full rugged-btn bg-primary text-black" 
+                disabled={saveMutation.isPending}
+                data-testid="button-save-logo-settings"
+              >
+                {saveMutation.isPending ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                ) : (
+                  <><Save className="w-4 h-4 mr-2" /> Save Logo Settings</>
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

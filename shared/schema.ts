@@ -298,6 +298,9 @@ export const farmSettings = pgTable("farm_settings", {
   membershipNumber: text("membership_number"),
   registrationNumber: text("registration_number"),
   logoUrl: text("logo_url"),
+  logoSize: text("logo_size").default("medium"), // small, medium, large, custom
+  logoWidth: integer("logo_width"), // custom width in pixels
+  logoHeight: integer("logo_height"), // custom height in pixels
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

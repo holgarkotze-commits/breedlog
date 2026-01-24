@@ -698,7 +698,7 @@ function BreedingStatsView({ animal }: { animal: AnimalWithRelations }) {
     );
 }
 
-function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelations, farmSettings?: { farmName?: string | null, studName?: string | null, studPrefix?: string | null, ownerName?: string | null, membershipNumber?: string | null } | null }) {
+function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelations, farmSettings?: { farmName?: string | null, studName?: string | null, studPrefix?: string | null, ownerName?: string | null, ownerEmail?: string | null, ownerPhone?: string | null, farmLocation?: string | null, farmAddress?: string | null, membershipNumber?: string | null, registrationNumber?: string | null, logoUrl?: string | null, logoSize?: string | null, logoWidth?: number | null, logoHeight?: number | null } | null }) {
     const { data: breedingEvents } = useAnimalBreedingEvents(animal.id, animal.sex);
     const { toast } = useToast();
     
@@ -724,7 +724,16 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 studName: farmSettings.studName,
                 studPrefix: farmSettings.studPrefix,
                 ownerName: farmSettings.ownerName,
+                ownerEmail: farmSettings.ownerEmail,
+                ownerPhone: farmSettings.ownerPhone,
+                farmLocation: farmSettings.farmLocation,
+                farmAddress: farmSettings.farmAddress,
                 membershipNumber: farmSettings.membershipNumber,
+                registrationNumber: farmSettings.registrationNumber,
+                logoUrl: farmSettings.logoUrl,
+                logoSize: farmSettings.logoSize,
+                logoWidth: farmSettings.logoWidth,
+                logoHeight: farmSettings.logoHeight,
             } : null,
             identification: {
                 tagId: animal.tagId,
@@ -808,7 +817,23 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
     
     const handleExportCSV = () => {
         const data = getProfileData();
+        
+        const farmHeader = data.farmBranding ? [
+            ["=== FARM/STUD BRANDING ===", ""],
+            ["Farm Name", data.farmBranding.farmName || ""],
+            ["Stud Name", data.farmBranding.studName || ""],
+            ["Owner", data.farmBranding.ownerName || ""],
+            ["Phone", data.farmBranding.ownerPhone || ""],
+            ["Email", data.farmBranding.ownerEmail || ""],
+            ["Location", data.farmBranding.farmLocation || ""],
+            ["Membership No", data.farmBranding.membershipNumber || ""],
+            ["Registration No", data.farmBranding.registrationNumber || ""],
+            ["", ""],
+            ["=== ANIMAL PROFILE ===", ""],
+        ] : [];
+        
         const rows = [
+            ...farmHeader,
             ["Field", "Value"],
             ["Tag ID", data.identification.tagId || ""],
             ["Name", data.identification.name || ""],
@@ -826,10 +851,10 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
             ["270 Day Weight", data.weights.weight270Day || ""],
             ["Breeder", data.ownership.breederName || ""],
             ["Owner", data.ownership.ownerName || ""],
-            ["Farm", data.farmBranding?.farmName || ""],
-            ["Stud", data.farmBranding?.studName || ""],
         ];
         if (data.breedingStats) {
+            rows.push(["", ""]);
+            rows.push(["=== BREEDING STATISTICS ===", ""]);
             rows.push(["Total Matings", String(data.breedingStats.totalMatings)]);
             rows.push(["Total Lambings", String(data.breedingStats.totalLambings)]);
             rows.push(["Total Lambs Born", String(data.breedingStats.totalLambsBorn)]);
@@ -854,6 +879,12 @@ Farm Name: ${data.farmBranding?.farmName || "N/A"}
 Stud Name: ${data.farmBranding?.studName || "N/A"}
 Stud Prefix: ${data.farmBranding?.studPrefix || "N/A"}
 Owner: ${data.farmBranding?.ownerName || "N/A"}
+Phone: ${data.farmBranding?.ownerPhone || "N/A"}
+Email: ${data.farmBranding?.ownerEmail || "N/A"}
+Location: ${data.farmBranding?.farmLocation || "N/A"}
+Membership No: ${data.farmBranding?.membershipNumber || "N/A"}
+Registration No: ${data.farmBranding?.registrationNumber || "N/A"}
+Logo: ${data.farmBranding?.logoUrl ? "[Embedded in document]" : "N/A"}
 
 ═══════════════════════════════════════════
 ANIMAL IDENTIFICATION
@@ -987,10 +1018,29 @@ ${data.breedingStats ? `
 </div>
 ` : ""}
 
+${data.farmBranding?.logoUrl || data.farmBranding?.farmName ? `
+<div class="farm-branding" style="margin-top: 40px; padding: 25px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); border-radius: 12px; color: white;">
+<div style="display: flex; align-items: center; gap: 20px; justify-content: center; flex-wrap: wrap;">
+${data.farmBranding?.logoUrl ? `<img src="${data.farmBranding.logoUrl}" style="width: ${data.farmBranding?.logoSize === 'small' ? '80' : data.farmBranding?.logoSize === 'large' ? '180' : data.farmBranding?.logoWidth || '120'}px; height: ${data.farmBranding?.logoSize === 'small' ? '80' : data.farmBranding?.logoSize === 'large' ? '180' : data.farmBranding?.logoHeight || '120'}px; object-fit: contain; border-radius: 8px;" alt="Farm Logo" />` : ''}
+<div style="text-align: ${data.farmBranding?.logoUrl ? 'left' : 'center'};">
+${data.farmBranding?.studName ? `<div style="font-size: 20px; font-weight: bold; color: #FFC300; margin-bottom: 3px;">${data.farmBranding.studName}</div>` : ''}
+${data.farmBranding?.farmName && data.farmBranding?.farmName !== data.farmBranding?.studName ? `<div style="font-size: 14px; color: #ccc;">${data.farmBranding.farmName}</div>` : ''}
+${data.farmBranding?.ownerName ? `<div style="font-size: 13px; color: #aaa; margin-top: 6px;">${data.farmBranding.ownerName}</div>` : ''}
+<div style="font-size: 11px; color: #888; margin-top: 4px;">
+${data.farmBranding?.ownerPhone ? `<span>Tel: ${data.farmBranding.ownerPhone}</span>` : ''}
+${data.farmBranding?.ownerPhone && data.farmBranding?.ownerEmail ? ` | ` : ''}
+${data.farmBranding?.ownerEmail ? `<span>${data.farmBranding.ownerEmail}</span>` : ''}
+</div>
+${data.farmBranding?.farmLocation ? `<div style="font-size: 11px; color: #888; margin-top: 3px;">${data.farmBranding.farmLocation}</div>` : ''}
+${data.farmBranding?.membershipNumber ? `<div style="font-size: 10px; color: #666; margin-top: 6px;">Membership: ${data.farmBranding.membershipNumber}</div>` : ''}
+</div>
+</div>
+</div>
+` : ''}
+
 <div class="footer">
 <strong>Generated by BreedLog</strong><br>
-Breed Smart. Farm Better.<br>
-${data.farmBranding?.membershipNumber ? `Membership: ${data.farmBranding.membershipNumber}` : ""}
+Breed Smart. Farm Better.
 </div>
 </body>
 </html>`;

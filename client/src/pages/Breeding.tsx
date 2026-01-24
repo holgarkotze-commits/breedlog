@@ -20,7 +20,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { format, addDays, addMonths } from "date-fns";
 import { useState } from "react";
 import { z } from "zod";
-import type { MatingGroup } from "@shared/schema";
 
 export default function Breeding() {
   const { data: events, isLoading } = useBreedingEvents();
@@ -102,6 +101,19 @@ export default function Breeding() {
     const content = JSON.stringify({
       exportDate: new Date().toISOString(),
       farm: displayName || "BreedLog Export",
+      farmBranding: farmSettings ? {
+        studName: farmSettings.studName || null,
+        farmName: farmSettings.farmName || null,
+        ownerName: farmSettings.ownerName || null,
+        ownerEmail: farmSettings.ownerEmail || null,
+        ownerPhone: farmSettings.ownerPhone || null,
+        farmLocation: farmSettings.farmLocation || null,
+        farmAddress: farmSettings.farmAddress || null,
+        membershipNumber: farmSettings.membershipNumber || null,
+        registrationNumber: farmSettings.registrationNumber || null,
+        logoUrl: farmSettings.logoUrl || null,
+        logoSize: farmSettings.logoSize || "medium",
+      } : null,
       matingGroups: exportData,
     }, null, 2);
     downloadFile(content, `mating-groups-${format(new Date(), "yyyy-MM-dd")}.json`, "application/json");
@@ -111,12 +123,24 @@ export default function Breeding() {
     const exportData = getExportData();
     if (exportData.length === 0) return;
     
+    const farmInfo = farmSettings ? [
+      `"Farm/Stud","${farmSettings.studName || farmSettings.farmName || ''}"`,
+      `"Owner","${farmSettings.ownerName || ''}"`,
+      `"Phone","${farmSettings.ownerPhone || ''}"`,
+      `"Email","${farmSettings.ownerEmail || ''}"`,
+      `"Location","${farmSettings.farmLocation || ''}"`,
+      `"Membership","${farmSettings.membershipNumber || ''}"`,
+      `"Export Date","${format(new Date(), "dd/MM/yyyy")}"`,
+      "",
+    ].join("\n") : "";
+    
     const headers = ["Ram Photo", "Ram Tag", "Ram Name", "Group Name", "Date In", "Date Out", "Mating Days", "Expected Lambing", "Season", "Status", "Notes"];
     const rows = exportData.map(g => [
       g.ramPhoto, g.ramTagId, g.ramName, g.name, g.dateIn, g.dateOut, g.matingPeriodDays, 
       g.expectedLambing, g.lambingSeason, g.status, g.notes
     ]);
-    const content = [headers.join(","), ...rows.map(r => r.map(v => `"${v}"`).join(","))].join("\n");
+    const dataContent = [headers.join(","), ...rows.map(r => r.map(v => `"${v}"`).join(","))].join("\n");
+    const content = farmInfo + dataContent;
     downloadFile(content, `mating-groups-${format(new Date(), "yyyy-MM-dd")}.csv`, "text/csv");
   };
 
@@ -173,6 +197,24 @@ MATING DETAILS
 ${g.notes ? `  Notes: ${g.notes}` : ""}
 `;
     });
+    
+    if (farmSettings?.farmName || farmSettings?.studName) {
+      content += `
+═══════════════════════════════════════════
+FARM/STUD BRANDING
+═══════════════════════════════════════════
+${farmSettings?.studName ? `Stud Name: ${farmSettings.studName}` : ''}
+${farmSettings?.farmName && farmSettings.farmName !== farmSettings?.studName ? `Farm Name: ${farmSettings.farmName}` : ''}
+${farmSettings?.ownerName ? `Owner: ${farmSettings.ownerName}` : ''}
+${farmSettings?.ownerPhone ? `Phone: ${farmSettings.ownerPhone}` : ''}
+${farmSettings?.ownerEmail ? `Email: ${farmSettings.ownerEmail}` : ''}
+${farmSettings?.farmLocation ? `Location: ${farmSettings.farmLocation}` : ''}
+${farmSettings?.farmAddress ? `Address: ${farmSettings.farmAddress}` : ''}
+${farmSettings?.membershipNumber ? `Membership No: ${farmSettings.membershipNumber}` : ''}
+${farmSettings?.registrationNumber ? `Registration No: ${farmSettings.registrationNumber}` : ''}
+${farmSettings?.logoUrl ? `Logo: [Embedded in document]` : ''}
+`;
+    }
     
     content += `
 ═══════════════════════════════════════════
@@ -289,6 +331,26 @@ ${ewe.photo ? `<img src="${ewe.photo}" class="animal-photo-sm" alt="${ewe.tagId}
 ${g.notes ? `<p style="margin-top: 12px; font-size: 13px; color: #555;"><strong>Notes:</strong> ${g.notes}</p>` : ""}
 </div>
 `).join("")}
+
+${farmSettings?.logoUrl || farmSettings?.farmName ? `
+<div class="farm-branding" style="margin-top: 60px; padding: 30px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); border-radius: 12px; color: white;">
+<div style="display: flex; align-items: center; gap: 25px; justify-content: center; flex-wrap: wrap;">
+${farmSettings?.logoUrl ? `<img src="${farmSettings.logoUrl}" style="width: ${farmSettings?.logoSize === 'small' ? '80' : farmSettings?.logoSize === 'large' ? '180' : farmSettings?.logoWidth || '120'}px; height: ${farmSettings?.logoSize === 'small' ? '80' : farmSettings?.logoSize === 'large' ? '180' : farmSettings?.logoHeight || '120'}px; object-fit: contain; border-radius: 8px;" alt="Farm Logo" />` : ''}
+<div style="text-align: ${farmSettings?.logoUrl ? 'left' : 'center'};">
+${farmSettings?.studName ? `<div style="font-size: 22px; font-weight: bold; color: #FFC300; margin-bottom: 4px;">${farmSettings.studName}</div>` : ''}
+${farmSettings?.farmName && farmSettings?.farmName !== farmSettings?.studName ? `<div style="font-size: 16px; color: #ccc;">${farmSettings.farmName}</div>` : ''}
+${farmSettings?.ownerName ? `<div style="font-size: 14px; color: #aaa; margin-top: 8px;">${farmSettings.ownerName}</div>` : ''}
+<div style="font-size: 12px; color: #888; margin-top: 6px;">
+${farmSettings?.ownerPhone ? `<span>Tel: ${farmSettings.ownerPhone}</span>` : ''}
+${farmSettings?.ownerPhone && farmSettings?.ownerEmail ? ` | ` : ''}
+${farmSettings?.ownerEmail ? `<span>${farmSettings.ownerEmail}</span>` : ''}
+</div>
+${farmSettings?.farmLocation ? `<div style="font-size: 12px; color: #888; margin-top: 4px;">${farmSettings.farmLocation}</div>` : ''}
+${farmSettings?.membershipNumber ? `<div style="font-size: 11px; color: #666; margin-top: 8px;">Membership: ${farmSettings.membershipNumber}</div>` : ''}
+</div>
+</div>
+</div>
+` : ''}
 
 <div class="footer">
 <strong>Generated by BreedLog</strong><br>
