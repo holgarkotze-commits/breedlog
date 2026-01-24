@@ -155,8 +155,8 @@ function PedigreeView({ animal }: { animal: any }) {
             <CardHeader className="border-b border-border/50 bg-secondary/50">
                 <CardTitle className="text-lg flex items-center gap-2">
                     <Dna className="w-5 h-5 text-primary" />
-                    <span>FAMILY TREE</span>
-                    <span className="text-primary font-black ml-1">- ELITE GENETICS</span>
+                    <span>BLOODLINE</span>
+                    <span className="text-primary font-black ml-1">- ELITE PEDIGREE</span>
                 </CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">Pinch to zoom • Swipe to pan</p>
             </CardHeader>
