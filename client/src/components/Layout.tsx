@@ -1,9 +1,43 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Beef, Dna, FileText, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
+
+function ScrambleText({ text, className }: { text: string; className?: string }) {
+  const [displayText, setDisplayText] = useState("");
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*";
+  
+  const scramble = useCallback(() => {
+    let iteration = 0;
+    const interval = setInterval(() => {
+      setDisplayText(
+        text
+          .split("")
+          .map((char, index) => {
+            if (char === " " || char === ".") return char;
+            if (index < iteration) return text[index];
+            return chars[Math.floor(Math.random() * chars.length)];
+          })
+          .join("")
+      );
+      iteration += 1 / 2;
+      if (iteration >= text.length) {
+        clearInterval(interval);
+        setDisplayText(text);
+      }
+    }, 40);
+    return () => clearInterval(interval);
+  }, [text]);
+
+  useEffect(() => {
+    const timer = setTimeout(scramble, 300);
+    return () => clearTimeout(timer);
+  }, [scramble]);
+
+  return <span className={className}>{displayText || text}</span>;
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -95,9 +129,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-primary via-yellow-300 to-primary bg-clip-text text-transparent drop-shadow-sm mb-1">
               BREEDLOG
             </span>
-            <span className="text-[11px] uppercase tracking-[0.2em] font-semibold text-primary/90 drop-shadow-[0_0_8px_rgba(255,195,0,0.5)]">
-              Breed Smart. Farm Better.
-            </span>
+            <ScrambleText 
+              text="Breed Smart. Farm Better." 
+              className="text-[11px] uppercase tracking-[0.2em] font-semibold text-primary/90 drop-shadow-[0_0_8px_rgba(255,195,0,0.5)]"
+            />
           </div>
         </Link>
       </header>
