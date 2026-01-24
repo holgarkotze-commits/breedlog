@@ -10,13 +10,13 @@
 
   /* Modern Soft Dark Theme - Lighter charcoal with warmth */
   --background: 220 12% 14%; /* Lighter soft blue-gray */
-  --foreground: 0 0% 95%; /* Brighter text */
+  --foreground: 220 5% 85%; /* Softer off-white text */
 
   --card: 220 10% 18%; /* Lighter card */
-  --card-foreground: 0 0% 95%;
+  --card-foreground: 220 5% 85%;
 
   --popover: 220 10% 16%;
-  --popover-foreground: 0 0% 95%;
+  --popover-foreground: 220 5% 85%;
 
   --primary: 45 100% 50%; /* #FFC300 */
   --primary-foreground: 0 0% 0%;
