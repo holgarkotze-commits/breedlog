@@ -218,7 +218,7 @@ export default function Settings() {
       tablesHtml += `
         <div style="page-break-after: always;">
           <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-            <tr style="background:#FFC300;height:10mm;">
+            <tr style="background:#FFC300;height:30pt;">
               <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:8%;">#</th>
               <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:15%;">Tag ID</th>
               <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:17%;">Name</th>
@@ -229,7 +229,7 @@ export default function Settings() {
               <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:15%;">Weight</th>
             </tr>
             ${pageAnimals.map((a: any, i: number) => `
-              <tr style="height:10mm;${i % 2 === 1 ? 'background:#f5f5f5;' : ''}">
+              <tr style="height:30pt;${i % 2 === 1 ? 'background:#f5f5f5;' : ''}">
                 <td style="border:1px solid #ddd;padding:2mm;">${startIdx + i + 1}</td>
                 <td style="border:1px solid #ddd;padding:2mm;font-weight:bold;">${a.tagId}</td>
                 <td style="border:1px solid #ddd;padding:2mm;">${a.name || "-"}</td>
@@ -381,9 +381,9 @@ export default function Settings() {
     .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 2px; }
     .header-right { text-align: right; font-size: 8pt; color: #666; }
     .animals-table { width: 100%; border-collapse: collapse; flex: 1; table-layout: fixed; }
-    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 2mm 2mm; text-align: left; text-transform: uppercase; height: 8mm; }
-    .animals-table td { padding: 0 2mm; border-bottom: 1px solid #ddd; font-size: 8pt; vertical-align: middle; height: 10mm; line-height: 10mm; }
-    .animals-table tbody tr { height: 10mm; }
+    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 2mm 2mm; text-align: left; text-transform: uppercase; height: 30pt; line-height: 30pt; }
+    .animals-table td { padding: 0 2mm; border-bottom: 1px solid #ddd; font-size: 8pt; vertical-align: middle; height: 30pt; line-height: 30pt; }
+    .animals-table tbody tr { height: 30pt; }
     .animals-table tr:nth-child(even) { background: #f9f9f9; }
     .status { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; }
     .status-active { background: #22c55e20; color: #16a34a; }
