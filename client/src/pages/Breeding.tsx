@@ -15,10 +15,12 @@ import { Badge } from "@/components/ui/badge";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertBreedingEventSchema, insertMatingGroupSchema } from "@shared/schema";
-import { Plus, Calendar, Shield, Heart, Users } from "lucide-react";
+import { Plus, Calendar, Shield, Heart, Users, Download } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format, addDays, addMonths } from "date-fns";
 import { useState } from "react";
 import { z } from "zod";
+import type { MatingGroup } from "@shared/schema";
 
 export default function Breeding() {
   const { data: events, isLoading } = useBreedingEvents();
@@ -30,6 +32,62 @@ export default function Breeding() {
 
   const activeGroups = matingGroupsList?.filter(g => g.status === 'active') || [];
   const closedGroups = matingGroupsList?.filter(g => g.status === 'closed') || [];
+
+  const exportMatingGroups = (formatType: 'json' | 'csv') => {
+    if (!matingGroupsList || matingGroupsList.length === 0) return;
+    
+    const exportData = matingGroupsList.map(group => {
+      const dateIn = new Date(group.dateIn);
+      const dateOut = group.dateOut ? new Date(group.dateOut) : addDays(dateIn, 42);
+      const expectedLambing = addMonths(dateIn, 5);
+      
+      return {
+        name: group.name,
+        ramId: group.ramId,
+        dateIn: format(dateIn, "yyyy-MM-dd"),
+        dateOut: format(dateOut, "yyyy-MM-dd"),
+        matingPeriodDays: 42,
+        expectedLambing: format(expectedLambing, "yyyy-MM-dd"),
+        lambingSeason: group.lambingSeason || "",
+        environmentGroup: group.environmentGroup || "",
+        managementGroup: group.managementGroup || "",
+        status: group.status,
+        notes: group.notes || "",
+      };
+    });
+
+    let content: string;
+    let filename: string;
+    let mimeType: string;
+
+    if (formatType === 'json') {
+      content = JSON.stringify({
+        exportDate: new Date().toISOString(),
+        farm: displayName || "BreedLog Export",
+        matingGroups: exportData,
+      }, null, 2);
+      filename = `mating-groups-${format(new Date(), "yyyy-MM-dd")}.json`;
+      mimeType = "application/json";
+    } else {
+      const headers = ["Name", "Ram ID", "Date In", "Date Out", "Mating Days", "Expected Lambing", "Season", "Environment", "Management", "Status", "Notes"];
+      const rows = exportData.map(g => [
+        g.name, g.ramId, g.dateIn, g.dateOut, g.matingPeriodDays, 
+        g.expectedLambing, g.lambingSeason, g.environmentGroup, 
+        g.managementGroup, g.status, g.notes
+      ]);
+      content = [headers.join(","), ...rows.map(r => r.map(v => `"${v}"`).join(","))].join("\n");
+      filename = `mating-groups-${format(new Date(), "yyyy-MM-dd")}.csv`;
+      mimeType = "text/csv";
+    }
+
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <Layout>
@@ -46,9 +104,28 @@ export default function Breeding() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
           <Card className="rugged-card">
             <CardHeader className="p-3 md:p-6 pb-2">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center gap-2 flex-wrap">
                 <CardTitle className="uppercase text-sm md:text-lg">Mating Groups</CardTitle>
-                <CreateMatingGroupDialog open={openMatingGroup} onOpenChange={setOpenMatingGroup} />
+                <div className="flex gap-2">
+                  {matingGroupsList && matingGroupsList.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="outline" data-testid="button-export-mating-groups">
+                          <Download className="w-4 h-4 mr-1" /> Export
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => exportMatingGroups('json')} data-testid="menu-export-json">
+                          Export as JSON
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => exportMatingGroups('csv')} data-testid="menu-export-csv">
+                          Export as CSV
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  <CreateMatingGroupDialog open={openMatingGroup} onOpenChange={setOpenMatingGroup} />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-3 md:p-6 pt-0">
