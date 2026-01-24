@@ -19,7 +19,6 @@ import { useBreedingEvents } from "@/hooks/use-breeding";
 import { useMatingGroups } from "@/hooks/use-mating-groups";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import breedlogLogo from "@/assets/logo.png";
 
 export default function Settings() {
   const { user, logout } = useAuth();
@@ -276,7 +275,7 @@ export default function Settings() {
       ${fb?.membershipNumber ? `<p style="font-size:9pt;color:white;margin:2px 0 0 0;">Membership: ${fb.membershipNumber}</p>` : ""}
     </div>
     <div style="text-align:right;">
-      <img src="${breedlogLogo}" style="width:32px;height:32px;object-fit:contain;" />
+      <p style="font-size:12pt;font-weight:bold;color:white;margin:0;">BREEDLOG</p>
       <p style="font-size:8pt;font-style:italic;color:#FFC300;margin:2px 0 0 0;">Professional Livestock Management</p>
     </div>
   </div>
@@ -355,7 +354,7 @@ export default function Settings() {
               ${fb?.membershipNumber ? `<p>Membership: ${fb.membershipNumber}</p>` : ""}
             </div>
             <div class="footer-branding">
-              <img src="${breedlogLogo}" style="width:32px;height:32px;object-fit:contain;margin-bottom:2px;" />
+              <p class="breedlog-text">BREEDLOG</p>
               <p class="tagline">Professional Livestock Management</p>
             </div>
           </div>
@@ -396,6 +395,7 @@ export default function Settings() {
     .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
     .footer-info p { font-size: 7pt; margin-top: 1px; }
     .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
     .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
     @media print { .page { page-break-after: always; height: 277mm; } .page:last-child { page-break-after: avoid; } }
   </style>
