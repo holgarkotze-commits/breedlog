@@ -95,41 +95,45 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Header - Collapses to icon on scroll */}
       <header className={cn(
-        "md:hidden bg-card border-b border-border/50 sticky top-0 z-40 transition-all duration-300",
-        isScrolled ? "py-2" : "py-4"
+        "md:hidden bg-background sticky top-0 z-40 transition-all duration-300",
+        isScrolled ? "py-2" : "py-5"
       )}>
         <Link href="/" className="flex flex-col items-center px-4">
-          {/* Logo - always visible, smaller when scrolled */}
+          {/* Elegant oval ring container */}
           <div className={cn(
-            "relative transition-all duration-300",
-            isScrolled ? "mb-0" : "mb-2"
+            "relative flex flex-col items-center justify-center transition-all duration-300",
+            isScrolled 
+              ? "px-3 py-1" 
+              : "px-8 py-4 border-2 border-primary/60 rounded-[50%] bg-gradient-to-br from-primary/10 via-transparent to-primary/5 shadow-[0_0_30px_rgba(255,195,0,0.2),inset_0_0_20px_rgba(255,195,0,0.1)]"
           )}>
-            <div className={cn(
-              "absolute inset-0 bg-primary/20 rounded-full blur-2xl transition-all duration-300",
-              isScrolled ? "scale-100 opacity-50" : "scale-150 opacity-100"
-            )} />
+            {/* Shiny ring highlight */}
+            {!isScrolled && (
+              <div className="absolute inset-0 rounded-[50%] bg-gradient-to-tr from-primary/30 via-transparent to-primary/20 opacity-50" />
+            )}
+            
+            {/* Logo */}
             <div className={cn(
               "relative flex items-center justify-center transition-all duration-300",
-              isScrolled ? "w-12 h-12" : "w-40 h-40"
+              isScrolled ? "w-12 h-12" : "w-32 h-32"
             )}>
               <img 
                 src={logo} 
                 alt="BreedLog" 
-                className="w-full h-full object-contain drop-shadow-[0_0_20px_rgba(255,195,0,0.5)]" 
+                className="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(255,195,0,0.4)]" 
                 data-testid="logo-mobile" 
               />
             </div>
-          </div>
           
-          {/* Tagline - hidden when scrolled */}
-          <div className={cn(
-            "flex flex-col items-center overflow-hidden transition-all duration-300",
-            isScrolled ? "max-h-0 opacity-0" : "max-h-12 opacity-100"
-          )}>
-            <ScrambleText 
-              text="Breed Smart. Farm Better." 
-              className="text-[11px] uppercase tracking-[0.2em] font-semibold text-primary/90 drop-shadow-[0_0_8px_rgba(255,195,0,0.5)]"
-            />
+            {/* Tagline - hidden when scrolled */}
+            <div className={cn(
+              "flex flex-col items-center overflow-hidden transition-all duration-300",
+              isScrolled ? "max-h-0 opacity-0 mt-0" : "max-h-12 opacity-100 mt-2"
+            )}>
+              <ScrambleText 
+                text="Breed Smart. Farm Better." 
+                className="text-[11px] uppercase tracking-[0.2em] font-semibold text-primary drop-shadow-[0_0_8px_rgba(255,195,0,0.6)]"
+              />
+            </div>
           </div>
         </Link>
       </header>
