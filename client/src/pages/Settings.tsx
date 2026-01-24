@@ -19,6 +19,7 @@ import { useBreedingEvents } from "@/hooks/use-breeding";
 import { useMatingGroups } from "@/hooks/use-mating-groups";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import breedlogLogo from "@/assets/logo.png";
 
 export default function Settings() {
   const { user, logout } = useAuth();
@@ -268,9 +269,16 @@ export default function Settings() {
     <p><strong>Total Animals:</strong> ${data.animals.length}</p>
   </div>
   ${tablesHtml}
-  <div style="border-top:2px solid #FFC300;padding-top:10px;margin-top:20px;text-align:center;">
-    <p style="font-weight:bold;color:#FFC300;">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-    <p style="font-size:9pt;">Professional Livestock Management | ${fb?.ownerPhone || ""} | ${fb?.ownerEmail || ""}</p>
+  <div style="border-top:2px solid #FFC300;padding:10px 15px;margin-top:20px;background:linear-gradient(135deg,#1a1a1a,#2d2d2d);border-radius:4px;display:flex;align-items:center;">
+    <div style="flex:1;">
+      <p style="font-weight:bold;color:#FFC300;margin:0;">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+      <p style="font-size:9pt;color:white;margin:2px 0 0 0;">${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""} ${fb?.ownerEmail ? "| " + fb.ownerEmail : ""}</p>
+      ${fb?.membershipNumber ? `<p style="font-size:9pt;color:white;margin:2px 0 0 0;">Membership: ${fb.membershipNumber}</p>` : ""}
+    </div>
+    <div style="text-align:right;">
+      <img src="${breedlogLogo}" style="width:32px;height:32px;object-fit:contain;" />
+      <p style="font-size:8pt;font-style:italic;color:#FFC300;margin:2px 0 0 0;">Professional Livestock Management</p>
+    </div>
   </div>
 </body>
 </html>
@@ -346,8 +354,9 @@ export default function Settings() {
               <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""} ${fb?.ownerEmail ? "| " + fb.ownerEmail : ""}</p>
               ${fb?.membershipNumber ? `<p>Membership: ${fb.membershipNumber}</p>` : ""}
             </div>
-            <div class="footer-tagline">
-              <p>Professional Livestock Management</p>
+            <div class="footer-branding">
+              <img src="${breedlogLogo}" style="width:32px;height:32px;object-fit:contain;margin-bottom:2px;" />
+              <p class="tagline">Professional Livestock Management</p>
             </div>
           </div>
         </div>
@@ -386,7 +395,8 @@ export default function Settings() {
     .footer-info { flex: 1; }
     .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
     .footer-info p { font-size: 7pt; margin-top: 1px; }
-    .footer-tagline { text-align: right; font-size: 7pt; font-style: italic; color: #FFC300; }
+    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
     @media print { .page { page-break-after: always; height: 277mm; } .page:last-child { page-break-after: avoid; } }
   </style>
 </head>
