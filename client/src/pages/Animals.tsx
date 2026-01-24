@@ -150,7 +150,7 @@ export default function Animals() {
 
         {/* Encouraging message */}
         <div className="text-center py-6 px-4 border-t border-border/30 mt-4">
-          <p className="text-sm text-muted-foreground italic max-w-md mx-auto">
+          <p className="text-sm text-primary italic max-w-md mx-auto">
             Your flock is your legacy. Track every animal to unlock the full potential of your <span className="text-primary font-medium">genetics</span>.
           </p>
         </div>
