@@ -1068,20 +1068,49 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
     const ewes = allAnimals?.filter(a => a.sex === "ewe" && a.id !== animal.id) || [];
     const rams = allAnimals?.filter(a => a.sex === "ram" && a.id !== animal.id) || [];
 
-    const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const compressImage = (file: File, maxWidth: number = 1200, quality: number = 0.8): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = document.createElement('img') as HTMLImageElement;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let { width, height } = img;
+                    if (width > maxWidth) {
+                        height = (height * maxWidth) / width;
+                        width = maxWidth;
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) { reject(new Error('Could not get canvas context')); return; }
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+                img.onerror = () => reject(new Error('Failed to load image'));
+                img.src = e.target?.result as string;
+            };
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(file);
+        });
+    };
+
+    const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast({ title: "Photo too large", description: "Please use a photo under 5MB", variant: "destructive" });
+            if (file.size > 20 * 1024 * 1024) {
+                toast({ title: "Photo too large", description: "Please use a photo under 20MB", variant: "destructive" });
                 return;
             }
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64 = reader.result as string;
-                setPhotoPreview(base64);
-                setFormData(prev => ({ ...prev, photo: base64 }));
-            };
-            reader.readAsDataURL(file);
+            try {
+                toast({ title: "Processing...", description: "Compressing image" });
+                const compressedBase64 = await compressImage(file, 1200, 0.8);
+                setPhotoPreview(compressedBase64);
+                setFormData(prev => ({ ...prev, photo: compressedBase64 }));
+                toast({ title: "Photo ready", description: "Image compressed" });
+            } catch {
+                toast({ title: "Error", description: "Failed to process image", variant: "destructive" });
+            }
         }
     };
 

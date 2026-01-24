@@ -6,22 +6,30 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+// Increase payload size limits for image uploads
+httpServer.maxHeadersCount = 0;
+httpServer.headersTimeout = 120000;
+httpServer.requestTimeout = 120000;
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
 
+// Configure body parsers with large limits for base64 image data
 app.use(
   express.json({
-    limit: '50mb',
+    limit: '100mb',
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb', parameterLimit: 50000 }));
+app.use(express.text({ limit: '100mb' }));
+app.use(express.raw({ limit: '100mb' }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
