@@ -4,6 +4,7 @@ import { LayoutDashboard, Beef, Dna, FileText, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
+import { useRecentVisits } from "@/hooks/use-recent-visits";
 
 function ScrambleText({ text, className }: { text: string; className?: string }) {
   const [displayText, setDisplayText] = useState("");
@@ -43,6 +44,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data: farmSettings } = useFarmSettings();
   const [isScrolled, setIsScrolled] = useState(false);
+  const { addVisit } = useRecentVisits();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -51,6 +53,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Track page visits
+  useEffect(() => {
+    const pageLabels: Record<string, string> = {
+      "/animals": "Animals",
+      "/breeding": "Breeding",
+      "/settings": "Settings",
+    };
+    // Also track animal detail pages
+    if (location.startsWith("/animals/")) {
+      addVisit(location, `Animal ${location.split("/")[2]}`);
+    } else if (pageLabels[location]) {
+      addVisit(location, pageLabels[location]);
+    }
+  }, [location, addVisit]);
 
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Home" },

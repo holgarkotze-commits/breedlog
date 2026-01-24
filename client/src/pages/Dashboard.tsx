@@ -1,19 +1,31 @@
 import { useAnimals } from "@/hooks/use-animals";
 import { useBreedingEvents } from "@/hooks/use-breeding";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
+import { useRecentVisits } from "@/hooks/use-recent-visits";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
-import { Activity, Users, TrendingUp, AlertTriangle } from "lucide-react";
+import { Activity, Users, TrendingUp, AlertTriangle, Clock, Beef, Dna, Settings, ChevronRight } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
+import { format } from "date-fns";
 
 export default function Dashboard() {
   const { data: animals, isLoading: loadingAnimals } = useAnimals();
   const { data: breeding, isLoading: loadingBreeding } = useBreedingEvents();
   const { data: farmSettings } = useFarmSettings();
+  const { getRecentVisits } = useRecentVisits();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
+  const recentVisits = getRecentVisits(4);
+
+  const getIconForPath = (path: string) => {
+    if (path.startsWith("/animals")) return Beef;
+    if (path === "/breeding") return Dna;
+    if (path === "/settings") return Settings;
+    return Clock;
+  };
 
   // Calculate simple stats
   const totalAnimals = animals?.length || 0;
@@ -80,6 +92,38 @@ export default function Dashboard() {
             className="border-l-2 md:border-l-4 border-l-yellow-500"
           />
         </div>
+
+        {/* Recently Visited */}
+        {recentVisits.length > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-xs md:text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5" /> Recently Visited
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {recentVisits.map((visit, index) => {
+                const Icon = getIconForPath(visit.path);
+                return (
+                  <Link key={index} href={visit.path}>
+                    <Card className="rugged-card hover:border-primary/50 transition-colors cursor-pointer p-2 md:p-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                          <Icon className="w-4 h-4 text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs md:text-sm font-medium truncate">{visit.label}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {format(new Date(visit.timestamp), "HH:mm")}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      </div>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Charts & Activity Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-8">
