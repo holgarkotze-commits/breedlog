@@ -6,7 +6,7 @@ import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
 import { Activity, Users, TrendingUp, AlertTriangle, Clock, Beef, Dna, Settings, ChevronRight } from "lucide-react";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
@@ -46,6 +46,51 @@ export default function Dashboard() {
     { month: 'May', avg: 58 },
     { month: 'Jun', avg: 62 },
   ];
+
+  // Calculate 12-month herd growth/decline data
+  const getHerdGrowthData = () => {
+    const months = [];
+    const now = new Date();
+    
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+      const monthName = format(date, 'MMM');
+      
+      // Count births (animals born in this month)
+      const births = animals?.filter(a => {
+        if (!a.birthDate) return false;
+        const birthDate = new Date(a.birthDate);
+        return birthDate >= date && birthDate <= monthEnd;
+      }).length || 0;
+      
+      // Count additions (animals created/added in this month, excluding births)
+      const additions = animals?.filter(a => {
+        if (!a.createdAt) return false;
+        const createdDate = new Date(a.createdAt);
+        const hasBirthInMonth = a.birthDate && new Date(a.birthDate) >= date && new Date(a.birthDate) <= monthEnd;
+        return createdDate >= date && createdDate <= monthEnd && !hasBirthInMonth;
+      }).length || 0;
+      
+      // For decline, we'd need status change dates which we don't track
+      // So we'll estimate based on non-active animals with createdAt in this period
+      const declined = animals?.filter(a => {
+        if (!a.createdAt || a.status === 'active') return false;
+        const createdDate = new Date(a.createdAt);
+        return createdDate >= date && createdDate <= monthEnd && ['sold', 'dead', 'culled'].includes(a.status || '');
+      }).length || 0;
+      
+      months.push({
+        month: monthName,
+        growth: births + additions,
+        decline: -declined,
+      });
+    }
+    
+    return months;
+  };
+  
+  const herdGrowthData = getHerdGrowthData();
 
   return (
     <Layout>
@@ -128,6 +173,33 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Herd Growth Chart - Full Width */}
+        <Card className="rugged-card bg-card">
+          <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
+            <CardTitle className="text-sm md:text-base font-semibold">12-Month Herd Growth & Decline</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[200px] md:h-[280px] w-full p-2 md:p-6 pt-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={herdGrowthData} stackOffset="sign">
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                <XAxis dataKey="month" stroke="#666" fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} width={30} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
+                  itemStyle={{ color: '#fff' }}
+                  formatter={(value: number, name: string) => [Math.abs(value), name === 'growth' ? 'Added' : 'Removed']}
+                />
+                <Legend 
+                  wrapperStyle={{ fontSize: '10px' }}
+                  formatter={(value) => value === 'growth' ? 'Added' : 'Removed'}
+                />
+                <Bar dataKey="growth" fill="#22c55e" stackId="stack" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="decline" fill="#ef4444" stackId="stack" radius={[0, 0, 2, 2]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
 
         {/* Charts & Activity Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-8">
