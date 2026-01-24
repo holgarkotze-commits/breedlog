@@ -102,33 +102,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {/* Logo - always visible, smaller when scrolled */}
           <div className={cn(
             "relative transition-all duration-300",
-            isScrolled ? "mb-0" : "mb-3"
+            isScrolled ? "mb-0" : "mb-2"
           )}>
             <div className={cn(
-              "absolute inset-0 bg-primary/20 rounded-full blur-xl transition-all duration-300",
+              "absolute inset-0 bg-primary/20 rounded-full blur-2xl transition-all duration-300",
               isScrolled ? "scale-100 opacity-50" : "scale-150 opacity-100"
             )} />
             <div className={cn(
               "relative flex items-center justify-center transition-all duration-300",
-              isScrolled ? "w-10 h-10" : "w-20 h-20"
+              isScrolled ? "w-12 h-12" : "w-40 h-40"
             )}>
               <img 
                 src={logo} 
                 alt="BreedLog" 
-                className="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(255,195,0,0.4)]" 
+                className="w-full h-full object-contain drop-shadow-[0_0_20px_rgba(255,195,0,0.5)]" 
                 data-testid="logo-mobile" 
               />
             </div>
           </div>
           
-          {/* App Name & Tagline - hidden when scrolled */}
+          {/* Tagline - hidden when scrolled */}
           <div className={cn(
             "flex flex-col items-center overflow-hidden transition-all duration-300",
-            isScrolled ? "max-h-0 opacity-0" : "max-h-20 opacity-100"
+            isScrolled ? "max-h-0 opacity-0" : "max-h-12 opacity-100"
           )}>
-            <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-primary via-yellow-300 to-primary bg-clip-text text-transparent drop-shadow-sm mb-1">
-              BREEDLOG
-            </span>
             <ScrambleText 
               text="Breed Smart. Farm Better." 
               className="text-[11px] uppercase tracking-[0.2em] font-semibold text-primary/90 drop-shadow-[0_0_8px_rgba(255,195,0,0.5)]"
