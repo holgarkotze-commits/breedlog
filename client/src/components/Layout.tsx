@@ -159,7 +159,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               : "text-muted-foreground hover:text-primary"
           )}>
             <item.icon className={cn("w-5 h-5 text-primary", location === item.href && "fill-current")} />
-            <span className={cn("text-[10px] font-semibold uppercase mt-0.5", location === item.href ? "text-primary" : "text-muted-foreground")}>{item.label}</span>
+            <span className="text-[10px] font-semibold uppercase mt-0.5 text-primary">{item.label}</span>
           </Link>
         ))}
       </nav>
