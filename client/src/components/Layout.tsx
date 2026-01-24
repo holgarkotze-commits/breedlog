@@ -49,18 +49,31 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile Header - Clean modern design */}
-      <header className="md:hidden bg-card border-b border-border sticky top-0 z-40">
-        <Link href="/" className="flex items-center gap-3 px-4 py-2">
-          <img src={logo} alt="BreedLog" className="w-12 h-12 object-contain" data-testid="logo-mobile" />
-          <div className="flex flex-col">
-            <span className="text-xl font-black tracking-tight bg-gradient-to-r from-primary via-yellow-400 to-primary bg-clip-text text-transparent">
-              BREEDLOG
-            </span>
-            <span className="text-[10px] text-muted-foreground/70 uppercase tracking-widest">
-              Breed Smart. Farm Better.
-            </span>
+      {/* Mobile Header - Elegant centered design */}
+      <header className="md:hidden bg-gradient-to-b from-card via-card to-background border-b border-border/50 sticky top-0 z-40">
+        <Link href="/" className="flex flex-col items-center py-4 px-4">
+          {/* Premium Logo Container with elegant glow */}
+          <div className="relative mb-3">
+            <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl scale-150" />
+            <div className="relative w-20 h-20 flex items-center justify-center">
+              <img 
+                src={logo} 
+                alt="BreedLog" 
+                className="w-full h-full object-contain drop-shadow-[0_0_15px_rgba(255,195,0,0.4)]" 
+                data-testid="logo-mobile" 
+              />
+            </div>
           </div>
+          
+          {/* App Name with premium gradient */}
+          <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-primary via-yellow-300 to-primary bg-clip-text text-transparent drop-shadow-sm mb-1">
+            BREEDLOG
+          </span>
+          
+          {/* Tagline with elegant styling */}
+          <span className="text-[11px] text-muted-foreground uppercase tracking-[0.2em] font-medium">
+            Breed Smart. Farm Better.
+          </span>
         </Link>
       </header>
 
