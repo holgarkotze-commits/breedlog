@@ -102,6 +102,7 @@ export default function AnimalDetail() {
                 <TabsTrigger value="performance" data-testid="tab-weights" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Scale className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Weights</span><span className="xs:hidden">Wt</span></TabsTrigger>
                 <TabsTrigger value="health" data-testid="tab-health" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Syringe className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Health</span><span className="xs:hidden">Hlth</span></TabsTrigger>
                 <TabsTrigger value="evaluations" data-testid="tab-evaluations" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><FileText className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> Eval</TabsTrigger>
+                <TabsTrigger value="documents" data-testid="tab-documents" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Image className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> Docs</TabsTrigger>
               </TabsList>
               
               <TabsContent value="pedigree" className="mt-4">
@@ -124,6 +125,10 @@ export default function AnimalDetail() {
 
               <TabsContent value="evaluations" className="mt-4">
                  <EvaluationView animalId={animal.id} initialEvaluations={animal.evaluations || []} />
+              </TabsContent>
+
+              <TabsContent value="documents" className="mt-4">
+                 <DocumentsView animalId={animal.id} />
               </TabsContent>
             </Tabs>
           </div>
@@ -1368,5 +1373,110 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                 </div>
             </DialogContent>
         </Dialog>
+    );
+}
+
+function DocumentsView({ animalId }: { animalId: number }) {
+    const [documents, setDocuments] = useState<{id: string, name: string, url: string, date: string}[]>([]);
+    const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const newDoc = {
+                    id: Date.now().toString(),
+                    name: file.name,
+                    url: reader.result as string,
+                    date: new Date().toLocaleDateString()
+                };
+                setDocuments(prev => [...prev, newDoc]);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleDelete = (id: string) => {
+        setDocuments(prev => prev.filter(d => d.id !== id));
+    };
+
+    return (
+        <Card className="bg-gradient-to-br from-card via-card to-secondary/20 rugged-card">
+            <CardHeader className="border-b border-border/50 bg-black/20">
+                <CardTitle className="text-lg flex items-center gap-2">
+                    <Image className="w-5 h-5 text-primary" />
+                    <span>MY DOCUMENTS</span>
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">Upload photos, screenshots, or documents for this animal</p>
+            </CardHeader>
+            <CardContent className="p-4">
+                <input 
+                    ref={fileInputRef} 
+                    type="file" 
+                    accept="image/*,.pdf" 
+                    onChange={handleUpload} 
+                    className="hidden" 
+                    data-testid="input-upload-document"
+                />
+                
+                <Button 
+                    variant="outline" 
+                    className="w-full mb-4 border-dashed"
+                    onClick={() => fileInputRef.current?.click()}
+                    data-testid="button-add-document"
+                >
+                    <Upload className="w-4 h-4 mr-2" /> Add Document or Screenshot
+                </Button>
+
+                {documents.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                        <Image className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">No documents uploaded yet</p>
+                        <p className="text-xs mt-1">Tap the button above to add photos or files</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {documents.map((doc) => (
+                            <div key={doc.id} className="relative group">
+                                <div 
+                                    className="aspect-square rounded-lg overflow-hidden border border-border bg-secondary cursor-pointer hover:border-primary transition-colors"
+                                    onClick={() => setSelectedDoc(doc.url)}
+                                >
+                                    {doc.url.startsWith('data:image') ? (
+                                        <img src={doc.url} alt={doc.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <div className="w-full h-full flex flex-col items-center justify-center p-2">
+                                            <FileText className="w-8 h-8 text-primary mb-1" />
+                                            <span className="text-[10px] text-center truncate w-full">{doc.name}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <Button
+                                    variant="destructive"
+                                    size="icon"
+                                    className="absolute -top-2 -right-2 scale-75"
+                                    onClick={() => handleDelete(doc.id)}
+                                    data-testid={`button-delete-doc-${doc.id}`}
+                                >
+                                    <X className="w-4 h-4" />
+                                </Button>
+                                <p className="text-[10px] text-muted-foreground mt-1 truncate">{doc.date}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Lightbox for viewing documents */}
+                <Dialog open={!!selectedDoc} onOpenChange={() => setSelectedDoc(null)}>
+                    <DialogContent className="max-w-2xl p-2 bg-black/95 border border-primary/50">
+                        {selectedDoc && (
+                            <img src={selectedDoc} alt="Document preview" className="w-full h-auto max-h-[80vh] object-contain rounded" />
+                        )}
+                    </DialogContent>
+                </Dialog>
+            </CardContent>
+        </Card>
     );
 }

@@ -8,24 +8,24 @@
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Chivo', sans-serif;
 
-  /* Rugged Dark Theme - Black & Safety Yellow */
-  --background: 0 0% 4%; /* #0B0B0B */
+  /* Modern Soft Dark Theme - Deep charcoal with warmth */
+  --background: 220 15% 8%; /* Soft deep blue-gray */
   --foreground: 0 0% 93%; /* #EDEDED */
 
-  --card: 0 0% 8%; /* #141414 */
+  --card: 220 12% 12%; /* Slightly warmer card */
   --card-foreground: 0 0% 93%;
 
-  --popover: 0 0% 8%;
+  --popover: 220 12% 10%;
   --popover-foreground: 0 0% 93%;
 
   --primary: 45 100% 50%; /* #FFC300 */
   --primary-foreground: 0 0% 0%;
 
-  --secondary: 0 0% 12%; /* #1F1F1F */
+  --secondary: 220 10% 15%; /* Softer secondary */
   --secondary-foreground: 0 0% 98%;
 
-  --muted: 0 0% 12%;
-  --muted-foreground: 0 0% 60%;
+  --muted: 220 10% 15%;
+  --muted-foreground: 220 5% 55%;
 
   --accent: 45 100% 50%;
   --accent-foreground: 0 0% 0%;
@@ -33,11 +33,11 @@
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 0 0% 20%;
-  --input: 0 0% 20%;
+  --border: 220 10% 20%;
+  --input: 220 10% 18%;
   --ring: 45 100% 50%;
 
-  --radius: 0.25rem;
+  --radius: 0.5rem;
 }
 
 @layer base {
