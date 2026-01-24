@@ -25,6 +25,7 @@ import type { MatingGroup } from "@shared/schema";
 export default function Breeding() {
   const { data: events, isLoading } = useBreedingEvents();
   const { data: matingGroupsList, isLoading: loadingGroups } = useMatingGroups();
+  const { data: animals } = useAnimals({});
   const { data: farmSettings } = useFarmSettings();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [openRecord, setOpenRecord] = useState(false);
@@ -33,15 +34,21 @@ export default function Breeding() {
   const activeGroups = matingGroupsList?.filter(g => g.status === 'active') || [];
   const closedGroups = matingGroupsList?.filter(g => g.status === 'closed') || [];
 
+  const getRamById = (ramId: number) => animals?.find(a => a.id === ramId);
+
   const getExportData = () => {
     return matingGroupsList?.map(group => {
       const dateIn = new Date(group.dateIn);
       const dateOut = group.dateOut ? new Date(group.dateOut) : addDays(dateIn, 42);
       const expectedLambing = addMonths(dateIn, 5);
+      const ram = getRamById(group.ramId);
       
       return {
         name: group.name,
         ramId: group.ramId,
+        ramTagId: ram?.tagId || String(group.ramId),
+        ramName: ram?.name || "",
+        ramPhoto: ram?.photo || "",
         dateIn: format(dateIn, "yyyy-MM-dd"),
         dateOut: format(dateOut, "yyyy-MM-dd"),
         matingPeriodDays: 42,
@@ -83,11 +90,10 @@ export default function Breeding() {
     const exportData = getExportData();
     if (exportData.length === 0) return;
     
-    const headers = ["Name", "Ram ID", "Date In", "Date Out", "Mating Days", "Expected Lambing", "Season", "Environment", "Management", "Status", "Notes"];
+    const headers = ["Ram Photo", "Ram Tag", "Ram Name", "Group Name", "Date In", "Date Out", "Mating Days", "Expected Lambing", "Season", "Status", "Notes"];
     const rows = exportData.map(g => [
-      g.name, g.ramId, g.dateIn, g.dateOut, g.matingPeriodDays, 
-      g.expectedLambing, g.lambingSeason, g.environmentGroup, 
-      g.managementGroup, g.status, g.notes
+      g.ramPhoto, g.ramTagId, g.ramName, g.name, g.dateIn, g.dateOut, g.matingPeriodDays, 
+      g.expectedLambing, g.lambingSeason, g.status, g.notes
     ]);
     const content = [headers.join(","), ...rows.map(r => r.map(v => `"${v}"`).join(","))].join("\n");
     downloadFile(content, `mating-groups-${format(new Date(), "yyyy-MM-dd")}.csv`, "text/csv");
@@ -116,7 +122,8 @@ MATING GROUPS (${exportData.length} total)
       content += `
 GROUP ${i + 1}: ${g.name}
 ───────────────────────────────────────────
-Ram ID: ${g.ramId}
+Ram Tag: ${g.ramTagId}${g.ramName ? ` (${g.ramName})` : ""}
+Ram Photo: ${g.ramPhoto || "No photo available"}
 Date In: ${g.dateIn}
 Date Out: ${g.dateOut}
 Mating Period: ${g.matingPeriodDays} days
@@ -152,8 +159,13 @@ h2 { color: #333; margin-top: 30px; font-size: 18px; background: linear-gradient
 .header h1 { color: #FFC300; border: none; margin: 0; }
 .header p { color: #ccc; margin: 10px 0 0 0; }
 .group { background: #fafafa; border-radius: 8px; padding: 20px; margin-bottom: 20px; border-left: 4px solid #FFC300; }
-.group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 15px; }
+.group-left { display: flex; align-items: center; gap: 15px; }
+.ram-photo { width: 60px; height: 60px; border-radius: 8px; object-fit: cover; border: 2px solid #FFC300; flex-shrink: 0; }
+.ram-photo-placeholder { width: 60px; height: 60px; border-radius: 8px; background: #ddd; display: flex; align-items: center; justify-content: center; color: #999; font-size: 10px; flex-shrink: 0; border: 2px solid #ccc; }
+.group-info { }
 .group-name { font-size: 18px; font-weight: bold; color: #222; }
+.ram-tag { font-size: 13px; color: #666; margin-top: 2px; }
 .status { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
 .status-active { background: #22c55e20; color: #16a34a; }
 .status-closed { background: #64748b20; color: #475569; }
@@ -177,11 +189,16 @@ h2 { color: #333; margin-top: 30px; font-size: 18px; background: linear-gradient
 ${exportData.map((g, i) => `
 <div class="group">
 <div class="group-header">
-<span class="group-name">${g.name}</span>
+<div class="group-left">
+${g.ramPhoto ? `<img src="${g.ramPhoto}" class="ram-photo" alt="Ram ${g.ramTagId}" />` : `<div class="ram-photo-placeholder">No Photo</div>`}
+<div class="group-info">
+<div class="group-name">${g.name}</div>
+<div class="ram-tag">Ram: ${g.ramTagId}${g.ramName ? ` (${g.ramName})` : ""}</div>
+</div>
+</div>
 <span class="status ${g.status === 'active' ? 'status-active' : 'status-closed'}">${g.status.toUpperCase()}</span>
 </div>
 <div class="grid">
-<div class="field"><div class="field-label">Ram ID</div><div class="field-value">${g.ramId}</div></div>
 <div class="field"><div class="field-label">Date In</div><div class="field-value">${g.dateIn}</div></div>
 <div class="field"><div class="field-label">Date Out</div><div class="field-value">${g.dateOut}</div></div>
 <div class="field"><div class="field-label">Mating Period</div><div class="field-value">${g.matingPeriodDays} days</div></div>
