@@ -7,17 +7,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X } from "lucide-react";
+import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertFarmSettingsSchema, type InsertFarmSettings } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useEffect, useState, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAnimals } from "@/hooks/use-animals";
+import { useBreedingEvents } from "@/hooks/use-breeding";
+import { useMatingGroups } from "@/hooks/use-mating-groups";
+import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
 
 export default function Settings() {
   const { user, logout } = useAuth();
   const { data: farmSettings, isLoading } = useFarmSettings();
+  const { data: animals } = useAnimals();
+  const { data: breedingEvents } = useBreedingEvents();
+  const { data: matingGroups } = useMatingGroups();
+  const { toast } = useToast();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const saveMutation = useSaveFarmSettings();
 
@@ -131,6 +140,230 @@ export default function Settings() {
 
   const onSubmit = (data: InsertFarmSettings) => {
     saveMutation.mutate(data);
+  };
+
+  const downloadFile = (content: string, filename: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const getExportData = () => {
+    return {
+      exportDate: format(new Date(), "dd/MM/yyyy HH:mm"),
+      farmBranding: farmSettings ? {
+        farmName: farmSettings.farmName,
+        studName: farmSettings.studName,
+        studPrefix: farmSettings.studPrefix,
+        ownerName: farmSettings.ownerName,
+        ownerPhone: farmSettings.ownerPhone,
+        ownerEmail: farmSettings.ownerEmail,
+        farmLocation: farmSettings.farmLocation,
+        membershipNumber: farmSettings.membershipNumber,
+        registrationNumber: farmSettings.registrationNumber,
+        logoUrl: farmSettings.logoUrl,
+        logoSize: (farmSettings as any).logoSize || "medium",
+        logoWidth: (farmSettings as any).logoWidth,
+        logoHeight: (farmSettings as any).logoHeight
+      } : null,
+      animals: animals || [],
+      breedingEvents: breedingEvents || [],
+      matingGroups: matingGroups || []
+    };
+  };
+
+  const exportJSON = () => {
+    const data = getExportData();
+    downloadFile(JSON.stringify(data, null, 2), `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.json`, "application/json");
+    toast({ title: "Export Complete", description: "Full database exported as JSON" });
+  };
+
+  const exportCSV = () => {
+    const data = getExportData();
+    const farmHeader = data.farmBranding ? [
+      `"Farm/Stud","${data.farmBranding.studName || data.farmBranding.farmName || ''}"`,
+      `"Owner","${data.farmBranding.ownerName || ''}"`,
+      `"Phone","${data.farmBranding.ownerPhone || ''}"`,
+      `"Email","${data.farmBranding.ownerEmail || ''}"`,
+      `"Export Date","${data.exportDate}"`,
+      "",
+    ].join("\n") : "";
+    
+    const animalHeaders = ["Tag ID", "Name", "Sex", "Breed", "Status", "Birth Date", "Dam", "Sire", "Birth Weight", "Current Weight"];
+    const animalRows = data.animals.map((a: any) => [
+      a.tagId, a.name || "", a.sex, a.breed, a.status, a.birthDate || "",
+      a.damId || "", a.sireId || "", a.birthWeight || "", a.currentWeight || ""
+    ].map(v => `"${v}"`).join(","));
+    
+    const content = farmHeader + "ANIMALS\n" + animalHeaders.join(",") + "\n" + animalRows.join("\n");
+    downloadFile(content, `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.csv`, "text/csv");
+    toast({ title: "Export Complete", description: "Full database exported as CSV" });
+  };
+
+  const exportWord = () => {
+    const data = getExportData();
+    const fb = data.farmBranding;
+    const content = `
+BREEDLOG HERD DATABASE EXPORT
+Generated: ${data.exportDate}
+${"═".repeat(50)}
+
+FARM INFORMATION
+${"─".repeat(30)}
+Farm: ${fb?.farmName || "N/A"}
+Stud: ${fb?.studName || "N/A"}
+Owner: ${fb?.ownerName || "N/A"}
+Phone: ${fb?.ownerPhone || "N/A"}
+Email: ${fb?.ownerEmail || "N/A"}
+Location: ${fb?.farmLocation || "N/A"}
+Membership: ${fb?.membershipNumber || "N/A"}
+
+${"═".repeat(50)}
+ANIMALS (${data.animals.length} records)
+${"═".repeat(50)}
+${data.animals.map((a: any, i: number) => `
+${i + 1}. ${a.tagId} - ${a.name || "Unnamed"}
+   Sex: ${a.sex} | Breed: ${a.breed} | Status: ${a.status}
+   Birth: ${a.birthDate || "N/A"} | Weight: ${a.currentWeight ? a.currentWeight + "kg" : "N/A"}
+`).join("")}
+
+${"═".repeat(50)}
+Exported by BreedLog - Professional Livestock Management
+${fb?.studName || fb?.farmName || ""}
+${fb?.ownerPhone || ""} | ${fb?.ownerEmail || ""}
+    `;
+    downloadFile(content, `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.doc`, "application/msword");
+    toast({ title: "Export Complete", description: "Full database exported as Word document" });
+  };
+
+  const exportPDF = () => {
+    const data = getExportData();
+    const fb = data.farmBranding;
+    const logoSize = getLogoSizePixels(fb?.logoSize || "medium");
+    
+    const animalsPerPage = 20;
+    const totalPages = Math.ceil(data.animals.length / animalsPerPage);
+    
+    let pagesHtml = "";
+    for (let page = 0; page < Math.max(1, totalPages); page++) {
+      const startIdx = page * animalsPerPage;
+      const pageAnimals = data.animals.slice(startIdx, startIdx + animalsPerPage);
+      
+      pagesHtml += `
+        <div class="page">
+          <div class="header">
+            <div class="header-left">
+              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:${logoSize.width}px;height:${logoSize.height}px;object-fit:contain;" />` : ""}
+            </div>
+            <div class="header-center">
+              <h1>${fb?.studName || fb?.farmName || "BREEDLOG"}</h1>
+              <p class="subtitle">Livestock Database Export</p>
+            </div>
+            <div class="header-right">
+              <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
+              <p>${data.exportDate}</p>
+            </div>
+          </div>
+          
+          <table class="animals-table">
+            <thead>
+              <tr>
+                <th style="width:8%">#</th>
+                <th style="width:15%">Tag ID</th>
+                <th style="width:17%">Name</th>
+                <th style="width:8%">Sex</th>
+                <th style="width:12%">Breed</th>
+                <th style="width:10%">Status</th>
+                <th style="width:15%">Birth Date</th>
+                <th style="width:15%">Weight</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pageAnimals.map((a: any, i: number) => `
+                <tr>
+                  <td>${startIdx + i + 1}</td>
+                  <td><strong>${a.tagId}</strong></td>
+                  <td>${a.name || "-"}</td>
+                  <td>${a.sex === "male" ? "M" : a.sex === "female" ? "F" : a.sex}</td>
+                  <td>${a.breed || "-"}</td>
+                  <td><span class="status status-${a.status}">${a.status}</span></td>
+                  <td>${a.birthDate || "-"}</td>
+                  <td>${a.currentWeight ? a.currentWeight + " kg" : "-"}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+          
+          <div class="footer">
+            <div class="footer-logo">
+              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:40px;height:40px;object-fit:contain;" />` : ""}
+            </div>
+            <div class="footer-info">
+              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+              <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""} ${fb?.ownerEmail ? "| " + fb.ownerEmail : ""}</p>
+              ${fb?.membershipNumber ? `<p>Membership: ${fb.membershipNumber}</p>` : ""}
+            </div>
+            <div class="footer-tagline">
+              <p>Professional Livestock Management</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${fb?.studName || fb?.farmName || "BreedLog"} - Herd Export</title>
+  <style>
+    @page { size: A4; margin: 10mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
+    .page { width: 190mm; min-height: 267mm; padding: 5mm; margin: 0 auto; page-break-after: always; display: flex; flex-direction: column; }
+    .page:last-child { page-break-after: avoid; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 4mm; border-bottom: 2px solid #FFC300; margin-bottom: 4mm; }
+    .header-left { width: 60px; }
+    .header-center { flex: 1; text-align: center; }
+    .header-center h1 { font-size: 16pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
+    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 2px; }
+    .header-right { text-align: right; font-size: 8pt; color: #666; }
+    .animals-table { width: 100%; border-collapse: collapse; flex: 1; }
+    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 3mm 2mm; text-align: left; text-transform: uppercase; }
+    .animals-table td { padding: 2.5mm 2mm; border-bottom: 1px solid #e5e5e5; font-size: 8pt; vertical-align: middle; }
+    .animals-table tr:nth-child(even) { background: #fafafa; }
+    .animals-table tr:hover { background: #fff9e6; }
+    .status { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; }
+    .status-active { background: #22c55e20; color: #16a34a; }
+    .status-sold { background: #f59e0b20; color: #d97706; }
+    .status-deceased { background: #ef444420; color: #dc2626; }
+    .footer { display: flex; align-items: center; gap: 4mm; padding-top: 4mm; border-top: 2px solid #FFC300; margin-top: auto; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm; border-radius: 2mm; }
+    .footer-logo { width: 40px; }
+    .footer-info { flex: 1; }
+    .footer-title { font-size: 10pt; font-weight: 700; color: #FFC300; }
+    .footer-info p { font-size: 7pt; margin-top: 1px; }
+    .footer-tagline { text-align: right; font-size: 7pt; font-style: italic; color: #FFC300; }
+    @media print { .page { page-break-after: always; } .page:last-child { page-break-after: avoid; } }
+  </style>
+</head>
+<body>
+  ${pagesHtml}
+</body>
+</html>
+    `;
+    
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 500);
+    }
+    toast({ title: "PDF Ready", description: "Print dialog opened for PDF export" });
   };
 
   return (
@@ -507,15 +740,46 @@ export default function Settings() {
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="p-4 bg-secondary rounded border border-border">
-                <h4 className="font-bold text-sm uppercase mb-2">Export Data</h4>
-                <p className="text-xs text-muted-foreground mb-4">Download your full herd database as CSV format suitable for Stamboek submission.</p>
-                <Button 
-                    className="w-full bg-primary text-black font-bold hover:bg-primary/90"
-                    onClick={() => window.open("/api/settings/export", "_blank")}
-                    data-testid="button-export-csv"
-                >
-                    <Download className="w-4 h-4 mr-2" /> EXPORT CSV
-                </Button>
+                <h4 className="font-bold text-sm uppercase mb-2">Export Herd Database</h4>
+                <p className="text-xs text-muted-foreground mb-4">Download your complete herd database in multiple formats. All exports include farm branding and are SA Stamboek compatible.</p>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                      className="bg-primary text-black font-bold hover:bg-primary/90"
+                      onClick={exportPDF}
+                      data-testid="button-export-pdf"
+                  >
+                      <FileText className="w-4 h-4 mr-2" /> PDF
+                  </Button>
+                  <Button 
+                      variant="outline"
+                      className="font-bold"
+                      onClick={exportWord}
+                      data-testid="button-export-word"
+                  >
+                      <FileText className="w-4 h-4 mr-2" /> WORD
+                  </Button>
+                  <Button 
+                      variant="outline"
+                      className="font-bold"
+                      onClick={exportCSV}
+                      data-testid="button-export-csv"
+                  >
+                      <FileSpreadsheet className="w-4 h-4 mr-2" /> CSV
+                  </Button>
+                  <Button 
+                      variant="outline"
+                      className="font-bold"
+                      onClick={exportJSON}
+                      data-testid="button-export-json"
+                  >
+                      <FileJson className="w-4 h-4 mr-2" /> JSON
+                  </Button>
+                </div>
+                
+                <p className="text-[10px] text-muted-foreground mt-3 text-center">
+                  {animals?.length || 0} animals | {breedingEvents?.length || 0} breeding events | {matingGroups?.length || 0} mating groups
+                </p>
              </div>
              
              <div className="p-4 bg-secondary rounded border border-border opacity-50 cursor-not-allowed relative">
