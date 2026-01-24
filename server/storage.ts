@@ -126,6 +126,16 @@ export class DatabaseStorage implements IStorage {
       const [newGroup] = await db.insert(matingGroups).values(group).returning();
       return newGroup;
   }
+  
+  async updateMatingGroup(id: number, updates: Partial<InsertMatingGroup>): Promise<MatingGroup | null> {
+      const [updated] = await db.update(matingGroups).set(updates).where(eq(matingGroups.id, id)).returning();
+      return updated || null;
+  }
+  
+  async deleteMatingGroup(id: number): Promise<boolean> {
+      const result = await db.delete(matingGroups).where(eq(matingGroups.id, id));
+      return true;
+  }
 
   // Records
   async getPerformanceRecords(animalId: number): Promise<PerformanceRecord[]> {

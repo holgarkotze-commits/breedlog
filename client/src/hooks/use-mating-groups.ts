@@ -19,3 +19,26 @@ export function useCreateMatingGroup() {
     },
   });
 }
+
+export function useUpdateMatingGroup() {
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<InsertMatingGroup> }) => {
+      const res = await apiRequest("PATCH", `/api/mating-groups/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/mating-groups"] });
+    },
+  });
+}
+
+export function useDeleteMatingGroup() {
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/mating-groups/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/mating-groups"] });
+    },
+  });
+}

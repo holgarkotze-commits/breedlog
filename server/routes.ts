@@ -159,6 +159,29 @@ export async function registerRoutes(
           throw err;
       }
   });
+  
+  app.patch("/api/mating-groups/:id", async (req, res) => {
+      try {
+          const id = Number(req.params.id);
+          const updated = await storage.updateMatingGroup(id, req.body);
+          if (!updated) {
+              return res.status(404).json({ message: "Mating group not found" });
+          }
+          res.json(updated);
+      } catch (err) {
+          throw err;
+      }
+  });
+  
+  app.delete("/api/mating-groups/:id", async (req, res) => {
+      try {
+          const id = Number(req.params.id);
+          await storage.deleteMatingGroup(id);
+          res.status(204).send();
+      } catch (err) {
+          throw err;
+      }
+  });
 
   // === RECORDS ===
   app.get(api.records.performance.list.path, async (req, res) => {

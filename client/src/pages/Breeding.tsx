@@ -1,6 +1,6 @@
 import { Layout } from "@/components/Layout";
 import { useBreedingEvents, useCreateBreedingEvent } from "@/hooks/use-breeding";
-import { useMatingGroups, useCreateMatingGroup } from "@/hooks/use-mating-groups";
+import { useMatingGroups, useCreateMatingGroup, useUpdateMatingGroup, useDeleteMatingGroup } from "@/hooks/use-mating-groups";
 import { useAnimals } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,8 +14,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertBreedingEventSchema, insertMatingGroupSchema } from "@shared/schema";
-import { Plus, Calendar, Shield, Heart, Users, Download } from "lucide-react";
+import { insertBreedingEventSchema, insertMatingGroupSchema, type MatingGroup } from "@shared/schema";
+import { Plus, Calendar, Shield, Heart, Users, Download, Pencil, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format, addDays, addMonths } from "date-fns";
 import { useState } from "react";
@@ -30,6 +30,7 @@ export default function Breeding() {
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [openRecord, setOpenRecord] = useState(false);
   const [openMatingGroup, setOpenMatingGroup] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<MatingGroup | null>(null);
 
   const activeGroups = matingGroupsList?.filter(g => g.status === 'active') || [];
   const closedGroups = matingGroupsList?.filter(g => g.status === 'closed') || [];
@@ -372,16 +373,33 @@ Breed Smart. Farm Better.
                     const dateOut = group.dateOut ? new Date(group.dateOut) : addDays(dateIn, 42);
                     const expectedLambing = addMonths(dateIn, 5);
                     
+                    const ram = getAnimalById(group.ramId);
                     return (
                       <div key={group.id} className="p-3 bg-secondary rounded border border-border">
                         <div className="flex justify-between items-start mb-2">
                           <div>
                             <p className="font-bold text-sm md:text-base">{group.name}</p>
-                            <p className="text-xs text-muted-foreground">Ram ID: {group.ramId}</p>
+                            <p className="text-xs text-muted-foreground">
+                              Ram: {ram?.tagId || group.ramId} {ram?.name && `(${ram.name})`}
+                            </p>
+                            {group.eweIds && group.eweIds.length > 0 && (
+                              <p className="text-xs text-muted-foreground">{group.eweIds.length} ewes in group</p>
+                            )}
                           </div>
-                          <Badge variant="outline" className="bg-green-900/30 text-green-400 border-green-700">
-                            Active
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              onClick={() => setEditingGroup(group)}
+                              data-testid={`button-edit-group-${group.id}`}
+                              className="h-7 w-7"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Badge variant="outline" className="bg-green-900/30 text-green-400 border-green-700">
+                              Active
+                            </Badge>
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs mt-2">
                           <div>
@@ -447,6 +465,14 @@ Breed Smart. Farm Better.
           </p>
         </div>
       </div>
+      
+      {editingGroup && (
+        <EditMatingGroupDialog 
+          group={editingGroup} 
+          open={!!editingGroup} 
+          onOpenChange={(open) => !open && setEditingGroup(null)} 
+        />
+      )}
     </Layout>
   );
 }
@@ -755,6 +781,228 @@ function RecordBreedingDialog({ open, onOpenChange }: { open: boolean, onOpenCha
             >
               {isPending ? "Saving..." : "Save Record"}
             </Button>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditMatingGroupDialog({ group, open, onOpenChange }: { group: MatingGroup, open: boolean, onOpenChange: (open: boolean) => void }) {
+  const { mutate: updateGroup, isPending } = useUpdateMatingGroup();
+  const { mutate: deleteGroup, isPending: isDeleting } = useDeleteMatingGroup();
+  const { data: animals } = useAnimals({});
+  const [selectedEwes, setSelectedEwes] = useState<number[]>(group.eweIds || []);
+  
+  const rams = animals?.filter(a => a.sex === 'ram' && a.status === 'active') || [];
+  const ewes = animals?.filter(a => a.sex === 'ewe' && a.status === 'active') || [];
+  
+  const matingGroupFormSchema = insertMatingGroupSchema.extend({
+    dateIn: z.string().min(1, "Start date is required"),
+  });
+  
+  const form = useForm({
+    resolver: zodResolver(matingGroupFormSchema),
+    defaultValues: {
+      name: group.name,
+      ramId: group.ramId,
+      dateIn: group.dateIn,
+      dateOut: group.dateOut || addDays(new Date(group.dateIn), 42).toISOString().split('T')[0],
+      lambingSeason: group.lambingSeason || "",
+      environmentGroup: group.environmentGroup || "",
+      managementGroup: group.managementGroup || "",
+      status: group.status || "active",
+      notes: group.notes || "",
+    }
+  });
+
+  const dateIn = form.watch("dateIn");
+  const expectedLambing = dateIn ? format(addMonths(new Date(dateIn), 5), "dd MMM yyyy") : "--";
+  const matingEndDate = dateIn ? format(addDays(new Date(dateIn), 42), "dd MMM yyyy") : "--";
+
+  const toggleEwe = (eweId: number) => {
+    setSelectedEwes(prev => 
+      prev.includes(eweId) 
+        ? prev.filter(id => id !== eweId)
+        : [...prev, eweId]
+    );
+  };
+
+  const onSubmit = (data: any) => {
+    const submitData = {
+      ...data,
+      ramId: Number(data.ramId),
+      eweIds: selectedEwes.length > 0 ? selectedEwes : null,
+      dateOut: addDays(new Date(data.dateIn), 42).toISOString().split('T')[0],
+    };
+    
+    updateGroup({ id: group.id, data: submitData }, { 
+      onSuccess: () => {
+        onOpenChange(false);
+      }
+    });
+  };
+
+  const handleDelete = () => {
+    if (confirm("Are you sure you want to delete this mating group?")) {
+      deleteGroup(group.id, {
+        onSuccess: () => {
+          onOpenChange(false);
+        }
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="uppercase font-bold">Edit Mating Group</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField name="name" control={form.control} render={({ field }) => (
+              <FormItem>
+                <FormLabel>Group Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., Spring 2026 Group A" className="rugged-input" {...field} />
+                </FormControl>
+                <FormMessage/>
+              </FormItem>
+            )}/>
+            
+            <FormField name="ramId" control={form.control} render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-blue-400" /> Select Ram
+                </FormLabel>
+                <Select onValueChange={(v) => field.onChange(Number(v))} value={String(field.value || "")}>
+                  <FormControl>
+                    <SelectTrigger className="rugged-input">
+                      <SelectValue placeholder="Choose a ram..." />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {rams.map(ram => (
+                      <SelectItem key={ram.id} value={String(ram.id)}>
+                        {ram.tagId} {ram.name ? `(${ram.name})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage/>
+              </FormItem>
+            )}/>
+
+            <div className="space-y-2">
+              <FormLabel className="flex items-center gap-2">
+                <Heart className="w-4 h-4 text-pink-400" /> Select Ewes ({selectedEwes.length} selected)
+              </FormLabel>
+              <div className="max-h-40 overflow-y-auto border border-border rounded-md p-2 space-y-1">
+                {ewes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-2">No active ewes available</p>
+                ) : (
+                  ewes.map(ewe => (
+                    <label 
+                      key={ewe.id} 
+                      className="flex items-center gap-2 p-1.5 rounded hover:bg-secondary cursor-pointer text-sm"
+                    >
+                      <Checkbox 
+                        checked={selectedEwes.includes(ewe.id)}
+                        onCheckedChange={() => toggleEwe(ewe.id)}
+                      />
+                      <span>{ewe.tagId}</span>
+                      {ewe.name && <span className="text-muted-foreground">({ewe.name})</span>}
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField name="dateIn" control={form.control} render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1">
+                    <Calendar className="w-3 h-3" /> Start Date
+                  </FormLabel>
+                  <FormControl>
+                    <Input type="date" className="rugged-input" {...field} />
+                  </FormControl>
+                  <FormMessage/>
+                </FormItem>
+              )}/>
+              
+              <div>
+                <FormLabel className="text-muted-foreground">Mating Period</FormLabel>
+                <p className="text-sm font-medium mt-2">42 days</p>
+                <p className="text-xs text-muted-foreground">Ends: {matingEndDate}</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-primary/10 rounded-md border border-primary/30">
+              <p className="text-xs text-muted-foreground">Expected Lambing (5 months)</p>
+              <p className="font-bold text-primary">{expectedLambing}</p>
+            </div>
+
+            <FormField name="lambingSeason" control={form.control} render={({ field }) => (
+              <FormItem>
+                <FormLabel>Lambing Season Code</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., 26A" className="rugged-input" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage/>
+              </FormItem>
+            )}/>
+            
+            <FormField name="status" control={form.control} render={({ field }) => (
+              <FormItem>
+                <FormLabel>Status</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || "active"}>
+                  <FormControl>
+                    <SelectTrigger className="rugged-input">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage/>
+              </FormItem>
+            )}/>
+
+            <FormField name="notes" control={form.control} render={({ field }) => (
+              <FormItem>
+                <FormLabel>Notes</FormLabel>
+                <FormControl>
+                  <Textarea placeholder="Optional notes..." className="rugged-input" {...field} value={field.value || ""} />
+                </FormControl>
+                <FormMessage/>
+              </FormItem>
+            )}/>
+
+            <div className="flex gap-2">
+              <Button 
+                type="button"
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                data-testid="button-delete-mating-group"
+                className="flex-1"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                {isDeleting ? "Deleting..." : "Delete"}
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={isPending} 
+                data-testid="button-update-mating-group" 
+                className="flex-1 rugged-btn bg-primary text-black"
+              >
+                {isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
           </form>
         </Form>
       </DialogContent>
