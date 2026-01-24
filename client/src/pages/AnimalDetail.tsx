@@ -1044,7 +1044,11 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
         status: animal.status || "active",
         birthDate: animal.birthDate || "",
         birthStatus: animal.birthStatus || "",
+        birthWeight: animal.birthWeight || "",
         currentWeight: animal.currentWeight || "",
+        weight100Day: animal.weight100Day || "",
+        weight100DayDate: animal.weight100DayDate || "",
+        weaningStatus: animal.weaningStatus || "",
         electronicId: animal.electronicId || "",
         tattooId: animal.tattooId || "",
         studPrefix: animal.studPrefix || "",
@@ -1132,12 +1136,25 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
     };
 
     const handleSubmit = () => {
-        mutate({ id: animal.id, ...formData }, {
+        // Clean up empty strings for date fields to avoid database errors
+        const cleanedData = {
+            ...formData,
+            birthDate: formData.birthDate || null,
+            weight100DayDate: formData.weight100DayDate || null,
+            birthWeight: formData.birthWeight || null,
+            currentWeight: formData.currentWeight || null,
+            weight100Day: formData.weight100Day || null,
+            birthStatus: formData.birthStatus || null,
+            weaningStatus: formData.weaningStatus || null,
+        };
+        
+        mutate({ id: animal.id, ...cleanedData }, {
             onSuccess: () => {
                 onOpenChange(false);
                 toast({ title: "Animal updated", description: "Changes saved successfully" });
             },
-            onError: () => {
+            onError: (error) => {
+                console.error("Update error:", error);
                 toast({ title: "Error", description: "Failed to save changes", variant: "destructive" });
             }
         });
