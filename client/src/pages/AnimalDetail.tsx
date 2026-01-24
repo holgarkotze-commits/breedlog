@@ -37,34 +37,40 @@ export default function AnimalDetail() {
 
   return (
     <Layout>
-      <div className="space-y-3 md:space-y-6 animate-in fade-in duration-500">
-        {/* Compact Mobile Header */}
-        <div className="flex items-start gap-2 md:gap-4">
-          <Link href="/animals">
-            <Button variant="ghost" size="icon" data-testid="button-back"><ArrowLeft className="w-4 h-4" /></Button>
-          </Link>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 md:gap-3 flex-wrap">
-              <h1 className="text-lg md:text-2xl font-bold truncate">{animal.tagId}</h1>
-              <Badge variant="outline" className="text-xs uppercase font-medium text-primary border-primary">
-                {animal.sex}
-              </Badge>
-              <Badge variant={animal.status === 'active' ? 'default' : 'destructive'} className="text-xs uppercase">
-                {animal.status}
-              </Badge>
+      <div className="space-y-3 md:space-y-6 animate-in fade-in duration-500 abstract-bg">
+        {/* Clean Modern Header */}
+        <div className="space-y-3">
+          {/* Top row: Back + Title + Inline Buttons */}
+          <div className="flex items-center gap-3">
+            <Link href="/animals">
+              <Button variant="ghost" size="icon" className="shrink-0" data-testid="button-back">
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+            </Link>
+            <h1 className="text-xl md:text-2xl font-bold flex-1 truncate">{animal.tagId}</h1>
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="h-8 px-3 text-xs font-semibold"
+                onClick={() => setIsEditOpen(true)}
+                data-testid="button-edit-animal"
+              >
+                <Edit className="w-3.5 h-3.5 mr-1.5" /> Edit
+              </Button>
+              <ExportProfileButton animal={animal} farmSettings={farmSettings} />
             </div>
-            <p className="text-xs md:text-sm text-muted-foreground truncate">{animal.name || "Unnamed"} • {animal.breed}</p>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setIsEditOpen(true)}
-              data-testid="button-edit-animal"
-            >
-              <Edit className="w-4 h-4 mr-1" /> Edit
-            </Button>
-            <ExportProfileButton animal={animal} farmSettings={farmSettings} />
+          
+          {/* Badges row */}
+          <div className="flex items-center gap-2 flex-wrap pl-11">
+            <Badge className="text-[10px] uppercase font-bold bg-primary/20 text-primary border border-primary/40">
+              {animal.sex}
+            </Badge>
+            <Badge variant={animal.status === 'active' ? 'default' : 'destructive'} className="text-[10px] uppercase font-bold">
+              {animal.status}
+            </Badge>
+            <span className="text-xs text-muted-foreground">{animal.name || "Unnamed"} • {animal.breed}</span>
           </div>
         </div>
         
@@ -1000,8 +1006,8 @@ ${data.farmBranding?.membershipNumber ? `Membership: ${data.farmBranding.members
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" data-testid="button-export-profile">
-                    <Download className="w-4 h-4 mr-1" /> Export
+                <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-semibold" data-testid="button-export-profile">
+                    <Download className="w-3.5 h-3.5 mr-1.5" /> Export
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

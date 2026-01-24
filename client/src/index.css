@@ -8,24 +8,24 @@
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Chivo', sans-serif;
 
-  /* Modern Soft Dark Theme - Deep charcoal with warmth */
-  --background: 220 15% 8%; /* Soft deep blue-gray */
-  --foreground: 0 0% 93%; /* #EDEDED */
+  /* Modern Soft Dark Theme - Lighter charcoal with warmth */
+  --background: 220 12% 14%; /* Lighter soft blue-gray */
+  --foreground: 0 0% 95%; /* Brighter text */
 
-  --card: 220 12% 12%; /* Slightly warmer card */
-  --card-foreground: 0 0% 93%;
+  --card: 220 10% 18%; /* Lighter card */
+  --card-foreground: 0 0% 95%;
 
-  --popover: 220 12% 10%;
-  --popover-foreground: 0 0% 93%;
+  --popover: 220 10% 16%;
+  --popover-foreground: 0 0% 95%;
 
   --primary: 45 100% 50%; /* #FFC300 */
   --primary-foreground: 0 0% 0%;
 
-  --secondary: 220 10% 15%; /* Softer secondary */
+  --secondary: 220 8% 22%; /* Lighter secondary */
   --secondary-foreground: 0 0% 98%;
 
-  --muted: 220 10% 15%;
-  --muted-foreground: 220 5% 55%;
+  --muted: 220 8% 20%;
+  --muted-foreground: 220 5% 65%;
 
   --accent: 45 100% 50%;
   --accent-foreground: 0 0% 0%;
@@ -33,8 +33,8 @@
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 220 10% 20%;
-  --input: 220 10% 18%;
+  --border: 220 8% 28%;
+  --input: 220 8% 24%;
   --ring: 45 100% 50%;
 
   --radius: 0.5rem;
@@ -104,5 +104,30 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-primary;
+  }
+  
+  /* Abstract background flashes */
+  .abstract-bg {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .abstract-bg::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at 20% 30%, hsl(45 100% 50% / 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, hsl(220 50% 60% / 0.04) 0%, transparent 40%),
+                radial-gradient(ellipse at 60% 20%, hsl(45 80% 60% / 0.03) 0%, transparent 35%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  
+  .abstract-bg > * {
+    position: relative;
+    z-index: 1;
   }
 }
