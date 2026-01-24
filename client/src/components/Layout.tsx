@@ -49,15 +49,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile Header - Compact */}
-      <header className="md:hidden h-14 bg-card border-b border-border flex items-center justify-center px-3 sticky top-0 z-40">
-        <Link href="/" className="flex items-center gap-2">
-          <img src={logo} alt="BreedLog" className="w-9 h-9 object-contain" data-testid="logo-mobile" />
-          <div className="flex flex-col">
-            <span className="text-sm font-bold text-primary tracking-wide">BREEDLOG</span>
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider leading-none">Breed Smart. Farm Better.</span>
-          </div>
+      {/* Mobile Header - Elegant with pop */}
+      <header className="md:hidden h-16 bg-card border-b border-border flex items-center justify-between px-4 sticky top-0 z-40">
+        <Link href="/" className="flex items-center gap-3">
+          <img src={logo} alt="BreedLog" className="w-14 h-14 object-contain drop-shadow-lg" data-testid="logo-mobile" />
+          <span className="text-lg font-bold text-primary tracking-wide drop-shadow-sm">BREEDLOG</span>
         </Link>
+        <span className="text-[11px] text-primary/90 uppercase tracking-widest font-semibold pr-1">Breed Smart. Farm Better.</span>
       </header>
 
       {/* Main Content - Compact padding on mobile */}
