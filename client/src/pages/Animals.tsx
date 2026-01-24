@@ -136,22 +136,33 @@ export default function Animals() {
 function AnimalListRow({ animal }: { animal: Animal }) {
   const { mutate: deleteAnimal, isPending } = useDeleteAnimal();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showImageDialog, setShowImageDialog] = useState(false);
   const isRam = animal.sex?.toLowerCase() === 'ram';
   const isEwe = animal.sex?.toLowerCase() === 'ewe';
 
   return (
     <>
-      <Link href={`/animals/${animal.id}`}>
-        <Card className="flex items-center p-2.5 gap-2.5 hover:border-primary transition-colors cursor-pointer">
-          <div className="w-12 h-12 rounded-md bg-secondary overflow-hidden flex-shrink-0">
-            {animal.photo ? (
-              <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center opacity-30">
-                <img src={logo} className="w-7 h-7 grayscale" />
-              </div>
-            )}
-          </div>
+      <Card className="flex items-center p-2.5 gap-2.5 hover:border-primary transition-colors cursor-pointer">
+        {/* Clickable image thumbnail */}
+        <div 
+          className="w-12 h-12 rounded-md bg-secondary overflow-hidden flex-shrink-0 cursor-pointer ring-2 ring-transparent hover:ring-primary/50 transition-all"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (animal.photo) setShowImageDialog(true);
+          }}
+          data-testid={`image-${animal.id}`}
+        >
+          {animal.photo ? (
+            <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center opacity-30">
+              <img src={logo} className="w-7 h-7 grayscale" />
+            </div>
+          )}
+        </div>
+        
+        {/* Rest of row - links to detail page */}
+        <Link href={`/animals/${animal.id}`} className="flex-1 flex items-center gap-2.5 min-w-0">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-semibold text-sm truncate">{animal.tagId}</span>
@@ -172,28 +183,54 @@ function AnimalListRow({ animal }: { animal: Animal }) {
               {animal.sex}
             </span>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
-              <Button size="icon" variant="ghost" className="flex-shrink-0" data-testid={`button-menu-${animal.id}`}>
-                <MoreVertical className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenuItem 
-                className="text-destructive focus:text-destructive"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setShowDeleteDialog(true);
-                }}
-                data-testid={`button-delete-${animal.id}`}
-              >
-                <Trash2 className="w-4 h-4 mr-2" /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </Card>
-      </Link>
+        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
+            <Button size="icon" variant="ghost" className="flex-shrink-0" data-testid={`button-menu-${animal.id}`}>
+              <MoreVertical className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem 
+              className="text-destructive focus:text-destructive"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowDeleteDialog(true);
+              }}
+              data-testid={`button-delete-${animal.id}`}
+            >
+              <Trash2 className="w-4 h-4 mr-2" /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </Card>
+      
+      {/* Image Lightbox Dialog */}
+      <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
+        <DialogContent className="p-0 bg-black/95 border-2 border-primary/50 max-w-md overflow-hidden">
+          <div className="relative">
+            {animal.photo && (
+              <img 
+                src={animal.photo} 
+                alt={animal.tagId} 
+                className="w-full aspect-square object-cover"
+              />
+            )}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4">
+              <div className="flex items-center justify-center gap-2">
+                <Badge className="text-sm font-bold bg-primary text-black px-3 py-1">
+                  ID: {animal.tagId}
+                </Badge>
+                {animal.name && (
+                  <span className="text-white/80 text-sm">"{animal.name}"</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>

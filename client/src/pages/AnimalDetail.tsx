@@ -153,10 +153,11 @@ function PedigreeView({ animal }: { animal: any }) {
                     <span>FAMILY TREE</span>
                     <span className="text-primary font-black ml-1">- ELITE GENETICS</span>
                 </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">Pinch to zoom • Swipe to pan</p>
             </CardHeader>
-            <CardContent className="p-4 md:p-8">
-                <div className="overflow-x-auto">
-                    <div className="min-w-[600px] flex items-center gap-4 py-4">
+            <CardContent className="p-2 md:p-4">
+                <div className="overflow-auto touch-pan-x touch-pan-y" style={{ maxHeight: '400px' }}>
+                    <div className="min-w-[500px] flex items-center gap-3 py-3 px-2 origin-top-left" style={{ transform: 'scale(0.85)', transformOrigin: 'top left' }}>
                         {/* Subject (left) */}
                         <div className="flex-shrink-0">
                             <PedigreeNode 
