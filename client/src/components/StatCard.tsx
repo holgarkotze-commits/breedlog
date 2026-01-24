@@ -2,6 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LucideIcon, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
 interface StatCardProps {
   title: string;
@@ -10,11 +11,12 @@ interface StatCardProps {
   trend?: string;
   loading?: boolean;
   className?: string;
+  href?: string;
 }
 
-export function StatCard({ title, value, icon: Icon, trend, loading, className }: StatCardProps) {
-  return (
-    <Card className={cn("rugged-card bg-card hover:-translate-y-0.5 md:hover:-translate-y-1 transition-transform", className)}>
+export function StatCard({ title, value, icon: Icon, trend, loading, className, href }: StatCardProps) {
+  const cardContent = (
+    <Card className={cn("rugged-card bg-card hover:-translate-y-0.5 md:hover:-translate-y-1 transition-transform", href && "cursor-pointer hover:border-primary/50", className)}>
       <CardContent className="p-3 md:p-6">
         <div className="flex justify-between items-start">
           <div>
@@ -37,4 +39,10 @@ export function StatCard({ title, value, icon: Icon, trend, loading, className }
       </CardContent>
     </Card>
   );
+
+  if (href) {
+    return <Link href={href}>{cardContent}</Link>;
+  }
+
+  return cardContent;
 }

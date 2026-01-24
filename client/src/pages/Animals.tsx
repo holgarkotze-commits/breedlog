@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { useAnimals, useCreateAnimal, useDeleteAnimal } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -19,20 +19,32 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 
 export default function Animals() {
+  const searchParams = useSearch();
+  const urlParams = new URLSearchParams(searchParams);
+  
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("active");
-  const [sexFilter, setSexFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(urlParams.get("status") || "active");
+  const [sexFilter, setSexFilter] = useState(urlParams.get("sex") || "all");
+  const [ageFilter, setAgeFilter] = useState(urlParams.get("age") || "all");
   const { data: allAnimals, isLoading } = useAnimals({ search });
   const { data: farmSettings } = useFarmSettings();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const isMobile = useIsMobile();
+
+  // Update filters when URL changes
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams);
+    if (params.get("status")) setStatusFilter(params.get("status") || "active");
+    if (params.get("sex")) setSexFilter(params.get("sex") || "all");
+    if (params.get("age")) setAgeFilter(params.get("age") || "all");
+  }, [searchParams]);
 
   const filteredAnimals = allAnimals?.filter(animal => {
     if (statusFilter === "all") {
@@ -44,6 +56,13 @@ export default function Animals() {
       if (animal.status !== statusFilter) return false;
     }
     if (sexFilter !== "all" && animal.sex?.toLowerCase() !== sexFilter) return false;
+    
+    // Age filter for lambs (under 1 year old)
+    if (ageFilter === "lamb" && animal.birthDate) {
+      const birthDate = new Date(animal.birthDate);
+      const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
+      if (ageInDays > 365) return false;
+    }
     return true;
   });
 

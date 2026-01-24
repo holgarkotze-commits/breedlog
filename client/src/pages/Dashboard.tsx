@@ -68,7 +68,8 @@ export default function Dashboard() {
             title="Total Herd" 
             value={totalAnimals} 
             loading={loadingAnimals} 
-            icon={Users} 
+            icon={Users}
+            href="/animals?status=all"
           />
           <StatCard 
             title="Ewes" 
@@ -76,6 +77,7 @@ export default function Dashboard() {
             loading={loadingAnimals} 
             icon={Activity} 
             className="border-l-2 md:border-l-4 border-l-pink-500"
+            href="/animals?status=active&sex=ewe"
           />
           <StatCard 
             title="Rams" 
@@ -83,6 +85,7 @@ export default function Dashboard() {
             loading={loadingAnimals} 
             icon={TrendingUp} 
             className="border-l-2 md:border-l-4 border-l-blue-500"
+            href="/animals?status=active&sex=ram"
           />
           <StatCard 
             title="Lambs" 
@@ -90,6 +93,7 @@ export default function Dashboard() {
             loading={loadingAnimals} 
             icon={AlertTriangle} 
             className="border-l-2 md:border-l-4 border-l-yellow-500"
+            href="/animals?status=active&age=lamb"
           />
         </div>
 
