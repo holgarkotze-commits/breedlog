@@ -308,3 +308,20 @@ export const farmSettings = pgTable("farm_settings", {
 export const insertFarmSettingsSchema = createInsertSchema(farmSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export type FarmSettings = typeof farmSettings.$inferSelect;
 export type InsertFarmSettings = z.infer<typeof insertFarmSettingsSchema>;
+
+// Documents table for uploaded files
+export const documents = pgTable("documents", {
+  id: serial("id").primaryKey(),
+  fileName: text("file_name").notNull(),
+  fileType: text("file_type").notNull(), // pdf, image, csv, etc.
+  fileUrl: text("file_url").notNull(), // base64 data URL
+  fileSize: integer("file_size"), // size in bytes
+  category: text("category").default("general"), // general, animal, breeding, health
+  description: text("description"),
+  animalId: integer("animal_id").references(() => animals.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true });
+export type Document = typeof documents.$inferSelect;
+export type InsertDocument = z.infer<typeof insertDocumentSchema>;

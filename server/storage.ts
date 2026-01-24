@@ -8,6 +8,7 @@ import {
   evaluations,
   matingGroups,
   farmSettings,
+  documents,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -16,6 +17,7 @@ import {
   type InsertEvaluation,
   type InsertMatingGroup,
   type InsertFarmSettings,
+  type InsertDocument,
   type Animal,
   type BreedingEvent,
   type Offspring,
@@ -24,6 +26,7 @@ import {
   type Evaluation,
   type MatingGroup,
   type FarmSettings,
+  type Document,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -58,6 +61,14 @@ export interface IStorage {
   // Farm Settings
   getFarmSettings(): Promise<FarmSettings | undefined>;
   saveFarmSettings(settings: InsertFarmSettings): Promise<FarmSettings>;
+  
+  // Documents
+  getDocuments(): Promise<Document[]>;
+  createDocument(doc: InsertDocument): Promise<Document>;
+  deleteDocument(id: number): Promise<void>;
+  
+  // Bulk import
+  bulkCreateAnimals(animalsList: InsertAnimal[]): Promise<Animal[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -185,6 +196,27 @@ export class DatabaseStorage implements IStorage {
       const [created] = await db.insert(farmSettings).values(settings).returning();
       return created;
     }
+  }
+  
+  // Documents
+  async getDocuments(): Promise<Document[]> {
+    return await db.select().from(documents).orderBy(desc(documents.createdAt));
+  }
+  
+  async createDocument(doc: InsertDocument): Promise<Document> {
+    const [newDoc] = await db.insert(documents).values(doc).returning();
+    return newDoc;
+  }
+  
+  async deleteDocument(id: number): Promise<void> {
+    await db.delete(documents).where(eq(documents.id, id));
+  }
+  
+  // Bulk import
+  async bulkCreateAnimals(animalsList: InsertAnimal[]): Promise<Animal[]> {
+    if (animalsList.length === 0) return [];
+    const created = await db.insert(animals).values(animalsList).returning();
+    return created;
   }
 }
 
