@@ -158,7 +158,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               ? "text-primary" 
               : "text-muted-foreground hover:text-primary"
           )}>
-            <item.icon className={cn("w-5 h-5 text-primary", location === item.href && "fill-current")} />
+            <item.icon className={cn("w-5 h-5 text-white", location === item.href && "fill-current")} />
             <span className="text-[10px] font-semibold uppercase mt-0.5 text-primary">{item.label}</span>
           </Link>
         ))}
