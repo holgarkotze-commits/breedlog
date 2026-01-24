@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet } from "lucide-react";
+import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertFarmSettingsSchema, type InsertFarmSettings } from "@shared/schema";
@@ -19,6 +19,8 @@ import { useBreedingEvents } from "@/hooks/use-breeding";
 import { useMatingGroups } from "@/hooks/use-mating-groups";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Settings() {
   const { user, logout } = useAuth();
@@ -32,6 +34,91 @@ export default function Settings() {
 
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: documents, isLoading: docsLoading } = useQuery<any[]>({
+    queryKey: ['/api/documents'],
+  });
+
+  const uploadDocMutation = useMutation({
+    mutationFn: async (doc: { name: string; category: string; fileData: string; fileType: string }) => {
+      return apiRequest('POST', '/api/documents', doc);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+      toast({ title: "Document Uploaded", description: "File saved successfully" });
+    },
+    onError: () => {
+      toast({ title: "Upload Failed", description: "Could not save document", variant: "destructive" });
+    }
+  });
+
+  const deleteDocMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest('DELETE', `/api/documents/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
+      toast({ title: "Document Deleted" });
+    }
+  });
+
+  const importCsvMutation = useMutation({
+    mutationFn: async (csvData: string) => {
+      const res = await apiRequest('POST', '/api/import/csv', { csvData });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setImportResult(data);
+      queryClient.invalidateQueries({ queryKey: ['/api/animals'] });
+      if (data.errors.length === 0) {
+        toast({ title: "Import Complete", description: `${data.imported} animals imported successfully` });
+      } else {
+        toast({ title: "Import Completed with Warnings", description: `${data.imported} imported, ${data.errors.length} errors`, variant: "destructive" });
+      }
+    },
+    onError: (err: any) => {
+      toast({ title: "Import Failed", description: err.message || "Could not import CSV", variant: "destructive" });
+    }
+  });
+
+  const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCsvFile(file);
+      setImportResult(null);
+    }
+  };
+
+  const processCsvImport = () => {
+    if (!csvFile) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const csvData = e.target?.result as string;
+      importCsvMutation.mutate(csvData);
+    };
+    reader.readAsText(csvFile);
+  };
+
+  const handleDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        uploadDocMutation.mutate({
+          name: file.name,
+          category: 'general',
+          fileData: reader.result as string,
+          fileType: file.type
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const form = useForm<InsertFarmSettings>({
     resolver: zodResolver(insertFarmSettingsSchema),
@@ -845,14 +932,163 @@ export default function Settings() {
                 </p>
              </div>
              
-             <div className="p-4 bg-secondary rounded border border-border opacity-50 cursor-not-allowed relative">
-                <div className="absolute inset-0 flex items-center justify-center bg-background/80 font-bold uppercase text-xs text-foreground">Coming Soon</div>
-                <h4 className="font-bold text-sm uppercase mb-2">Import Data</h4>
-                <p className="text-xs text-muted-foreground mb-4">Bulk import animals from CSV.</p>
-                <Button className="w-full rugged-btn" disabled data-testid="button-import-csv">
-                    <Upload className="w-4 h-4 mr-2" /> Import CSV
-                </Button>
+             <div className="p-4 bg-secondary rounded border border-border">
+                <h4 className="font-bold text-sm uppercase mb-2">Import Animals from CSV</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Bulk import animals from a CSV file. Required columns: tagId, sex (ram/ewe/wether). 
+                  Optional: name, breed, status, birthDate, birthWeight, currentWeight, notes, tattoo, electronicId.
+                </p>
+                
+                <input
+                  ref={csvInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={handleCsvUpload}
+                  className="hidden"
+                  data-testid="input-csv-file"
+                />
+                
+                <div className="space-y-3">
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => csvInputRef.current?.click()}
+                    data-testid="button-select-csv"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    {csvFile ? csvFile.name : "Select CSV File"}
+                  </Button>
+                  
+                  {csvFile && (
+                    <Button 
+                      className="w-full bg-primary text-black font-bold"
+                      onClick={processCsvImport}
+                      disabled={importCsvMutation.isPending}
+                      data-testid="button-process-import"
+                    >
+                      {importCsvMutation.isPending ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Importing...</>
+                      ) : (
+                        <><Upload className="w-4 h-4 mr-2" /> Import {csvFile.name}</>
+                      )}
+                    </Button>
+                  )}
+                  
+                  {importResult && (
+                    <div className={`p-3 rounded text-sm ${importResult.errors.length > 0 ? 'bg-destructive/20 border border-destructive/50' : 'bg-green-500/20 border border-green-500/50'}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {importResult.errors.length > 0 ? (
+                          <AlertCircle className="w-4 h-4 text-destructive" />
+                        ) : (
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                        )}
+                        <span className="font-bold">{importResult.imported} animals imported</span>
+                      </div>
+                      {importResult.errors.length > 0 && (
+                        <ul className="text-xs text-muted-foreground list-disc list-inside">
+                          {importResult.errors.slice(0, 5).map((err, i) => (
+                            <li key={i}>{err}</li>
+                          ))}
+                          {importResult.errors.length > 5 && (
+                            <li>...and {importResult.errors.length - 5} more errors</li>
+                          )}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </div>
              </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rugged-card">
+          <CardHeader>
+            <CardTitle className="uppercase flex items-center gap-2">
+              <Folder className="w-5 h-5 text-primary" /> Documents
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Upload and manage documents like evaluation certificates, pedigrees, and other records.
+            </p>
+            
+            <input
+              ref={docInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              onChange={handleDocUpload}
+              className="hidden"
+              data-testid="input-doc-file"
+            />
+            
+            <Button 
+              variant="outline"
+              className="w-full"
+              onClick={() => docInputRef.current?.click()}
+              disabled={uploadDocMutation.isPending}
+              data-testid="button-upload-doc"
+            >
+              {uploadDocMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading...</>
+              ) : (
+                <><Upload className="w-4 h-4 mr-2" /> Upload Document</>
+              )}
+            </Button>
+            
+            {docsLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : documents && documents.length > 0 ? (
+              <div className="space-y-2">
+                {documents.map((doc: any) => (
+                  <div 
+                    key={doc.id} 
+                    className="flex items-center justify-between p-3 bg-secondary/50 rounded border border-border"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{doc.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {doc.category} {doc.uploadedAt && `• ${format(new Date(doc.uploadedAt), "dd MMM yyyy")}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {doc.fileData && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            const link = document.createElement('a');
+                            link.href = doc.fileData;
+                            link.download = doc.name;
+                            link.click();
+                          }}
+                          data-testid={`button-download-doc-${doc.id}`}
+                        >
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => deleteDocMutation.mutate(doc.id)}
+                        disabled={deleteDocMutation.isPending}
+                        data-testid={`button-delete-doc-${doc.id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Folder className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No documents uploaded yet</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

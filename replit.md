@@ -122,7 +122,21 @@ shared/           # Shared types, schemas, and route definitions
 - **Settings Page**: Full editable form for all farm details including owner information and membership numbers
 - **Export Integration**: Farm branding section included in SA Stamboek-compatible JSON exports
 
+### Documents Management
+- **Documents Table**: Stores uploaded documents with base64 file data, categorization, and optional animal linking
+- **Document Upload**: Upload PDF, images, Word docs through Settings page with automatic base64 encoding
+- **Document List**: View and manage uploaded documents with download and delete functionality
+- **API Routes**: `/api/documents` GET/POST/DELETE endpoints for document management
+
+### CSV Import
+- **Bulk Animal Import**: Import animals from CSV files with flexible column mapping
+- **Column Flexibility**: Accepts various column name formats (tagId, tag_id, TagID, "Tag ID")
+- **Validation**: Validates required fields (tagId, sex) and provides row-by-row error reporting
+- **Import Results**: Shows success count and error details after import completes
+- **API Route**: `/api/import/csv` POST endpoint for CSV data processing
+
 ### Schema Additions
+- `documents` table: id, name, category, animalId (optional), fileData (base64), fileType, uploadedAt
 - `farmSettings` table: Farm name, stud name, stud prefix, owner details, address, membership numbers
 - `animals.createdAt`: Timestamp field tracking when animal profiles were created (displayed as "Profile Entry" in detail view)
 - `externalDamInfo`: Text field for external dam information
