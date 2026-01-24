@@ -8,6 +8,7 @@ import {
   insertEvaluationSchema, 
   insertMatingGroupSchema,
   insertFarmSettingsSchema,
+  insertDocumentSchema,
   animals,
   breedingEvents,
   performanceRecords,
@@ -15,7 +16,8 @@ import {
   evaluations,
   offspring,
   matingGroups,
-  farmSettings
+  farmSettings,
+  documents
 } from './schema';
 
 // Shared error schemas
@@ -223,6 +225,44 @@ export const api = {
       input: insertFarmSettingsSchema,
       responses: {
         200: z.custom<typeof farmSettings.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+  },
+  
+  documents: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/documents',
+      responses: {
+        200: z.array(z.custom<typeof documents.$inferSelect>()),
+      },
+    },
+    upload: {
+      method: 'POST' as const,
+      path: '/api/documents',
+      input: insertDocumentSchema,
+      responses: {
+        201: z.custom<typeof documents.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/documents/:id',
+      responses: {
+        204: z.void(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+  
+  import: {
+    csv: {
+      method: 'POST' as const,
+      path: '/api/import/csv',
+      responses: {
+        200: z.object({ imported: z.number(), errors: z.array(z.string()) }),
         400: errorSchemas.validation,
       },
     },

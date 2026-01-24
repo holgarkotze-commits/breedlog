@@ -276,20 +276,16 @@ export async function registerRoutes(
       const records = parse(csvData, {
         columns: true,
         skip_empty_lines: true
-      });
+      }) as Record<string, string>[];
 
-      // Simple bulk insert logic
       let count = 0;
       if (table === 'animals') {
         for (const record of records) {
-          // Naive mapping - assumes CSV columns match schema
-          // In production, would need robust validation and mapping
           await storage.createAnimal({
             tagId: record.tagId || record.tag_id,
-            sex: record.sex,
+            sex: record.sex || 'ewe',
             breed: record.breed || "Meatmaster",
             status: record.status || "active",
-            ...record
           });
           count++;
         }
@@ -319,6 +315,97 @@ export async function registerRoutes(
       }
       console.error("Farm settings error:", err);
       res.status(500).json({ message: "Failed to save farm settings" });
+    }
+  });
+
+  // === DOCUMENTS ===
+  app.get(api.documents.list.path, async (req, res) => {
+    const docs = await storage.getDocuments();
+    res.json(docs);
+  });
+
+  app.post(api.documents.upload.path, async (req, res) => {
+    try {
+      const data = api.documents.upload.input.parse(req.body);
+      const doc = await storage.createDocument(data);
+      res.status(201).json(doc);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message });
+      }
+      console.error("Document upload error:", err);
+      res.status(500).json({ message: "Failed to upload document" });
+    }
+  });
+
+  app.delete(api.documents.delete.path, async (req, res) => {
+    try {
+      await storage.deleteDocument(Number(req.params.id));
+      res.status(204).send();
+    } catch (err) {
+      console.error("Document delete error:", err);
+      res.status(500).json({ message: "Failed to delete document" });
+    }
+  });
+
+  // === CSV IMPORT ===
+  app.post(api.import.csv.path, async (req, res) => {
+    try {
+      const { csvData } = req.body;
+      if (!csvData) {
+        return res.status(400).json({ message: "No CSV data provided" });
+      }
+
+      const records = parse(csvData, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true
+      }) as Record<string, string>[];
+
+      const errors: string[] = [];
+      const animalsToCreate: any[] = [];
+
+      for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+        const rowNum = i + 2;
+        
+        const tagId = record.tagId || record.tag_id || record.TagID || record['Tag ID'];
+        if (!tagId) {
+          errors.push(`Row ${rowNum}: Missing required field tagId`);
+          continue;
+        }
+
+        const sex = (record.sex || record.Sex || 'ewe').toLowerCase();
+        if (!['ram', 'ewe', 'wether'].includes(sex)) {
+          errors.push(`Row ${rowNum}: Invalid sex value "${sex}"`);
+          continue;
+        }
+
+        animalsToCreate.push({
+          tagId,
+          sex,
+          breed: record.breed || record.Breed || 'Meatmaster',
+          name: record.name || record.Name || null,
+          status: record.status || record.Status || 'active',
+          birthDate: record.birthDate || record.birth_date || record['Birth Date'] || null,
+          birthWeight: record.birthWeight || record.birth_weight || record['Birth Weight'] || null,
+          currentWeight: record.currentWeight || record.current_weight || record['Current Weight'] || null,
+          notes: record.notes || record.Notes || null,
+          tattoo: record.tattoo || record.Tattoo || null,
+          electronicId: record.electronicId || record.electronic_id || record['Electronic ID'] || null,
+        });
+      }
+
+      // Bulk create animals
+      const created = await storage.bulkCreateAnimals(animalsToCreate);
+
+      res.json({ 
+        imported: created.length, 
+        errors 
+      });
+    } catch (err: any) {
+      console.error("CSV Import error:", err);
+      res.status(500).json({ message: err.message || "Failed to import CSV" });
     }
   });
 
