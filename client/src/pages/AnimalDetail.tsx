@@ -152,7 +152,7 @@ function PedigreeView({ animal }: { animal: any }) {
     
     return (
         <Card className="bg-gradient-to-br from-card via-card to-secondary/20 rugged-card overflow-hidden">
-            <CardHeader className="border-b border-border/50 bg-black/20">
+            <CardHeader className="border-b border-border/50 bg-secondary/50">
                 <CardTitle className="text-lg flex items-center gap-2">
                     <Dna className="w-5 h-5 text-primary" />
                     <span>FAMILY TREE</span>
@@ -1404,7 +1404,7 @@ function DocumentsView({ animalId }: { animalId: number }) {
 
     return (
         <Card className="bg-gradient-to-br from-card via-card to-secondary/20 rugged-card">
-            <CardHeader className="border-b border-border/50 bg-black/20">
+            <CardHeader className="border-b border-border/50 bg-secondary/50">
                 <CardTitle className="text-lg flex items-center gap-2">
                     <Image className="w-5 h-5 text-primary" />
                     <span>MY DOCUMENTS</span>
@@ -1470,7 +1470,7 @@ function DocumentsView({ animalId }: { animalId: number }) {
 
                 {/* Lightbox for viewing documents */}
                 <Dialog open={!!selectedDoc} onOpenChange={() => setSelectedDoc(null)}>
-                    <DialogContent className="max-w-2xl p-2 bg-black/95 border border-primary/50">
+                    <DialogContent className="max-w-2xl p-2 bg-card/98 border border-primary/50">
                         {selectedDoc && (
                             <img src={selectedDoc} alt="Document preview" className="w-full h-auto max-h-[80vh] object-contain rounded" />
                         )}

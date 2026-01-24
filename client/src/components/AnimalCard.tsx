@@ -44,9 +44,9 @@ export function AnimalCard({ animal }: { animal: Animal }) {
                   {animal.status}
                 </Badge>
               </div>
-              <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 to-transparent p-2 md:p-4 pt-6 md:pt-12">
-                 <h3 className="text-sm md:text-2xl font-bold text-white">{animal.tagId}</h3>
-                 {animal.name && <p className="text-[10px] md:text-sm text-gray-300 font-medium truncate">{animal.name}</p>}
+              <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-background/95 to-transparent p-2 md:p-4 pt-6 md:pt-12">
+                 <h3 className="text-sm md:text-2xl font-bold text-foreground">{animal.tagId}</h3>
+                 {animal.name && <p className="text-[10px] md:text-sm text-muted-foreground font-medium truncate">{animal.name}</p>}
               </div>
             </div>
             

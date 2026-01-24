@@ -208,7 +208,7 @@ function AnimalListRow({ animal }: { animal: Animal }) {
       
       {/* Image Lightbox Dialog */}
       <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
-        <DialogContent className="p-0 bg-black/95 border-2 border-primary/50 max-w-md overflow-hidden">
+        <DialogContent className="p-0 bg-card border-2 border-primary/50 max-w-md overflow-hidden">
           <div className="relative">
             {animal.photo && (
               <img 
@@ -217,7 +217,7 @@ function AnimalListRow({ animal }: { animal: Animal }) {
                 className="w-full aspect-square object-cover"
               />
             )}
-            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4">
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background/95 via-background/70 to-transparent p-4">
               <div className="flex items-center justify-center gap-2">
                 <Badge className="text-sm font-bold bg-primary text-black px-3 py-1">
                   ID: {animal.tagId}

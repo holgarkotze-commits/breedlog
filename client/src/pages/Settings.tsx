@@ -295,7 +295,7 @@ export default function Settings() {
              </div>
              
              <div className="p-4 bg-secondary rounded border border-border opacity-50 cursor-not-allowed relative">
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 font-bold uppercase text-xs">Coming Soon</div>
+                <div className="absolute inset-0 flex items-center justify-center bg-background/80 font-bold uppercase text-xs text-foreground">Coming Soon</div>
                 <h4 className="font-bold text-sm uppercase mb-2">Import Data</h4>
                 <p className="text-xs text-muted-foreground mb-4">Bulk import animals from CSV.</p>
                 <Button className="w-full rugged-btn" disabled data-testid="button-import-csv">
