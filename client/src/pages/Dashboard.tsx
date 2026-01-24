@@ -29,12 +29,16 @@ export default function Dashboard() {
 
   // Calculate simple stats
   const totalAnimals = animals?.length || 0;
+  const activeAnimals = animals?.filter(a => a.status === 'active').length || 0;
+  const soldAnimals = animals?.filter(a => a.status === 'sold').length || 0;
+  const deadAnimals = animals?.filter(a => a.status === 'dead').length || 0;
+  const culledAnimals = animals?.filter(a => a.status === 'culled').length || 0;
   const activeEwes = animals?.filter(a => a.sex === 'ewe' && a.status === 'active').length || 0;
   const activeRams = animals?.filter(a => a.sex === 'ram' && a.status === 'active').length || 0;
   const lambs = animals?.filter(a => {
     if (!a.birthDate) return false;
     const ageInDays = (new Date().getTime() - new Date(a.birthDate).getTime()) / (1000 * 3600 * 24);
-    return ageInDays < 365;
+    return ageInDays < 365 && a.status === 'active';
   }).length || 0;
 
   // Mock weight data for chart (in real app, use aggregated performance records)
@@ -109,13 +113,50 @@ export default function Dashboard() {
 
         {/* Key Metrics Grid - 2x2 on mobile */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
-          <StatCard 
-            title="Total Herd" 
-            value={totalAnimals} 
-            loading={loadingAnimals} 
-            icon={Beef}
-            href="/animals?status=all"
-          />
+          {/* Total Herd with itemized status */}
+          <Link href="/animals?status=all">
+            <Card className="rugged-card bg-card hover:-translate-y-0.5 md:hover:-translate-y-1 transition-transform cursor-pointer hover:border-primary/50">
+              <CardContent className="p-3 md:p-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total Herd</p>
+                    {loadingAnimals ? (
+                      <Skeleton className="h-6 md:h-10 w-12 md:w-20 mt-1 md:mt-2 bg-secondary" />
+                    ) : (
+                      <h3 className="text-xl md:text-3xl font-bold mt-0.5 md:mt-2 text-foreground">{totalAnimals}</h3>
+                    )}
+                  </div>
+                  <div className="p-1.5 md:p-3 bg-secondary rounded-sm text-primary border border-border">
+                    <Beef className="w-4 h-4 md:w-5 md:h-5" />
+                  </div>
+                </div>
+                {!loadingAnimals && (
+                  <div className="mt-2 md:mt-3 pt-2 border-t border-border/50 grid grid-cols-2 gap-1 text-[9px] md:text-xs">
+                    <div className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                      <span className="text-muted-foreground">Active:</span>
+                      <span className="font-semibold text-foreground">{activeAnimals}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                      <span className="text-muted-foreground">Sold:</span>
+                      <span className="font-semibold text-foreground">{soldAnimals}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                      <span className="text-muted-foreground">Dead:</span>
+                      <span className="font-semibold text-foreground">{deadAnimals}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                      <span className="text-muted-foreground">Culled:</span>
+                      <span className="font-semibold text-foreground">{culledAnimals}</span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </Link>
           <StatCard 
             title="Ewes" 
             value={activeEwes} 
