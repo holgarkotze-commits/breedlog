@@ -41,9 +41,9 @@ export default function Animals() {
   // Update filters when URL changes
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
-    if (params.get("status")) setStatusFilter(params.get("status") || "active");
-    if (params.get("sex")) setSexFilter(params.get("sex") || "all");
-    if (params.get("age")) setAgeFilter(params.get("age") || "all");
+    setStatusFilter(params.get("status") || "active");
+    setSexFilter(params.get("sex") || "all");
+    setAgeFilter(params.get("age") || "all");
   }, [searchParams]);
 
   const filteredAnimals = allAnimals?.filter(animal => {
