@@ -71,11 +71,36 @@ export default function Settings() {
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const img = document.createElement('img');
       const reader = new FileReader();
       reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setLogoPreview(base64);
-        form.setValue("logoUrl", base64);
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxSize = 300;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > height) {
+            if (width > maxSize) {
+              height = Math.round((height * maxSize) / width);
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = Math.round((width * maxSize) / height);
+              height = maxSize;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+          setLogoPreview(compressedBase64);
+          form.setValue("logoUrl", compressedBase64);
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -485,11 +510,11 @@ export default function Settings() {
                 <h4 className="font-bold text-sm uppercase mb-2">Export Data</h4>
                 <p className="text-xs text-muted-foreground mb-4">Download your full herd database as CSV format suitable for Stamboek submission.</p>
                 <Button 
-                    className="w-full rugged-btn bg-secondary border border-primary text-primary hover:bg-primary hover:text-black"
+                    className="w-full bg-primary text-black font-bold hover:bg-primary/90"
                     onClick={() => window.open("/api/settings/export", "_blank")}
                     data-testid="button-export-csv"
                 >
-                    <Download className="w-4 h-4 mr-2" /> Export CSV
+                    <Download className="w-4 h-4 mr-2" /> EXPORT CSV
                 </Button>
              </div>
              
