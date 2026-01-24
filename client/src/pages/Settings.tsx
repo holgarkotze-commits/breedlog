@@ -789,6 +789,20 @@ export default function Settings() {
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="p-4 bg-secondary rounded border border-border">
+                <h4 className="font-bold text-sm uppercase mb-2">Save Settings</h4>
+                <p className="text-xs text-muted-foreground mb-4">Save all your farm details, branding, and preferences.</p>
+                <Button 
+                    className="w-full bg-primary text-black font-bold hover:bg-primary/90"
+                    onClick={form.handleSubmit(onSubmit)}
+                    disabled={saveMutation.isPending}
+                    data-testid="button-save-settings-data"
+                >
+                    {saveMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                    Save All Settings
+                </Button>
+             </div>
+             
+             <div className="p-4 bg-secondary rounded border border-border">
                 <h4 className="font-bold text-sm uppercase mb-2">Export Herd Database</h4>
                 <p className="text-xs text-muted-foreground mb-4">Download your complete herd database in multiple formats. All exports include farm branding and are SA Stamboek compatible.</p>
                 
