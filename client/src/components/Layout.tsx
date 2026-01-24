@@ -139,10 +139,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
             "flex flex-col items-center justify-center p-1 rounded-md transition-colors w-full h-full",
             location === item.href 
               ? "text-primary" 
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground hover:text-primary"
           )}>
-            <item.icon className={cn("w-5 h-5", location === item.href && "fill-current")} />
-            <span className="text-[10px] font-semibold uppercase mt-0.5">{item.label}</span>
+            <item.icon className={cn("w-5 h-5 text-primary", location === item.href && "fill-current")} />
+            <span className={cn("text-[10px] font-semibold uppercase mt-0.5", location === item.href ? "text-primary" : "text-muted-foreground")}>{item.label}</span>
           </Link>
         ))}
       </nav>
