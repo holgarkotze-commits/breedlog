@@ -46,9 +46,26 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-black;
+    font-size: 14px;
   }
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display font-black tracking-tight uppercase;
+    @apply font-display font-bold tracking-tight;
+  }
+  
+  /* Mobile-first elegant typography */
+  @media (max-width: 768px) {
+    body {
+      font-size: 13px;
+    }
+    h1 {
+      @apply text-xl;
+    }
+    h2 {
+      @apply text-lg;
+    }
+    h3, h4, h5, h6 {
+      @apply text-base;
+    }
   }
 }
 

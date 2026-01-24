@@ -19,7 +19,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const displayName = farmSettings?.studName || farmSettings?.farmName || null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row pb-16 md:pb-0 font-sans">
+    <div className="min-h-screen bg-background flex flex-col md:flex-row pb-14 md:pb-0 font-sans">
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
         <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors">
@@ -49,32 +49,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile Header */}
-      <header className="md:hidden h-32 bg-card border-b border-border flex flex-col items-center justify-center px-4 sticky top-0 z-40">
-        <Link href="/" className="flex flex-col items-center">
-          <img src={logo} alt="BreedLog" className="w-28 h-28 object-contain" data-testid="logo-mobile" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">Breed Smart. Farm Better.</p>
+      {/* Mobile Header - Compact */}
+      <header className="md:hidden h-14 bg-card border-b border-border flex items-center justify-center px-3 sticky top-0 z-40">
+        <Link href="/" className="flex items-center gap-2">
+          <img src={logo} alt="BreedLog" className="w-9 h-9 object-contain" data-testid="logo-mobile" />
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-primary tracking-wide">BREEDLOG</span>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-wider leading-none">Breed Smart. Farm Better.</span>
+          </div>
         </Link>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 md:ml-64 p-4 md:p-8 overflow-y-auto min-h-[calc(100vh-4rem)] md:min-h-screen">
+      {/* Main Content - Compact padding on mobile */}
+      <main className="flex-1 md:ml-64 p-2.5 md:p-8 overflow-y-auto min-h-[calc(100vh-4rem)] md:min-h-screen">
         <div className="max-w-7xl mx-auto">
           {children}
         </div>
       </main>
 
-      {/* Bottom Nav (Mobile) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border h-16 flex items-center justify-around z-50 px-2 pb-safe">
+      {/* Bottom Nav (Mobile) - Compact but readable */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border h-14 flex items-center justify-around z-50 px-1 pb-safe">
         {navItems.map((item) => (
           <Link key={item.href} href={item.href} data-testid={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`} className={cn(
-            "flex flex-col items-center justify-center p-2 rounded-md transition-colors w-full h-full",
+            "flex flex-col items-center justify-center p-1 rounded-md transition-colors w-full h-full",
             location === item.href 
               ? "text-primary" 
               : "text-muted-foreground hover:text-foreground"
           )}>
-            <item.icon className={cn("w-5 h-5 mb-1", location === item.href && "fill-current")} />
-            <span className="text-[10px] font-bold uppercase">{item.label}</span>
+            <item.icon className={cn("w-5 h-5", location === item.href && "fill-current")} />
+            <span className="text-[10px] font-semibold uppercase mt-0.5">{item.label}</span>
           </Link>
         ))}
       </nav>

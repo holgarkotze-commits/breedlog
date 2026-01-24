@@ -49,34 +49,34 @@ export default function Animals() {
 
   return (
     <Layout>
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <h1 className="text-xl md:text-4xl font-black uppercase tracking-tight" data-testid="page-title">
-            {displayName ? `${displayName} - Livestock` : "Livestock"}
+      <div className="space-y-2.5 md:space-y-6 animate-in fade-in duration-500">
+        <div className="flex flex-row justify-between items-center gap-2">
+          <h1 className="text-base md:text-3xl font-bold tracking-tight" data-testid="page-title">
+            {displayName ? `${displayName}` : "Livestock"}
           </h1>
           <CreateAnimalDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col md:flex-row gap-3 bg-card p-3 md:p-4 rounded-md border border-border shadow-sm">
+        {/* Filters - Compact on mobile */}
+        <div className="flex flex-col md:flex-row gap-2 bg-card p-2.5 md:p-4 rounded-md border border-border shadow-sm">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
-              placeholder="Search by Tag ID..." 
+              placeholder="Search Tag ID..." 
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 rugged-input"
+              className="pl-9 text-sm rugged-input"
               data-testid="input-search"
             />
           </div>
           <div className="flex gap-2">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full md:w-[140px] rugged-input" data-testid="select-status-filter">
-                <Filter className="w-4 h-4 mr-2" />
+              <SelectTrigger className="flex-1 md:w-[120px] text-sm rugged-input" data-testid="select-status-filter">
+                <Filter className="w-4 h-4 mr-1" />
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Sheep</SelectItem>
+                <SelectItem value="all">All</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="archived">Archived</SelectItem>
                 <SelectItem value="sold">Sold</SelectItem>
@@ -85,11 +85,11 @@ export default function Animals() {
               </SelectContent>
             </Select>
             <Select value={sexFilter} onValueChange={setSexFilter}>
-              <SelectTrigger className="w-full md:w-[140px] rugged-input" data-testid="select-sex-filter">
+              <SelectTrigger className="flex-1 md:w-[120px] text-sm rugged-input" data-testid="select-sex-filter">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="all">All</SelectItem>
                 <SelectItem value="ewe">Ewes</SelectItem>
                 <SelectItem value="ram">Rams</SelectItem>
                 <SelectItem value="wether">Wethers</SelectItem>
@@ -100,24 +100,24 @@ export default function Animals() {
 
         {/* List/Grid View */}
         {isLoading ? (
-          <div className="space-y-3 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-6 md:space-y-0">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-              <Skeleton key={i} className="h-20 md:aspect-[4/3] rounded-md bg-secondary" />
+          <div className="space-y-1.5 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-4 md:space-y-0">
+            {[1, 2, 3, 4, 5, 6].map(i => (
+              <Skeleton key={i} className="h-14 md:aspect-[4/3] rounded-md bg-secondary" />
             ))}
           </div>
         ) : isMobile ? (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {filteredAnimals?.map(animal => (
               <AnimalListRow key={animal.id} animal={animal} />
             ))}
             {filteredAnimals?.length === 0 && (
-              <div className="py-12 text-center text-muted-foreground">
-                <p>No animals found matching your criteria.</p>
+              <div className="py-8 text-center text-muted-foreground text-xs">
+                <p>No animals found.</p>
               </div>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {filteredAnimals?.map(animal => (
               <AnimalCard key={animal.id} animal={animal} />
             ))}
@@ -142,31 +142,31 @@ function AnimalListRow({ animal }: { animal: Animal }) {
   return (
     <>
       <Link href={`/animals/${animal.id}`}>
-        <Card className="flex items-center p-3 gap-3 hover:border-primary transition-colors cursor-pointer">
-          <div className="w-16 h-16 rounded-md bg-secondary overflow-hidden flex-shrink-0">
+        <Card className="flex items-center p-2.5 gap-2.5 hover:border-primary transition-colors cursor-pointer">
+          <div className="w-12 h-12 rounded-md bg-secondary overflow-hidden flex-shrink-0">
             {animal.photo ? (
               <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center opacity-30">
-                <img src={logo} className="w-10 h-10 grayscale" />
+                <img src={logo} className="w-7 h-7 grayscale" />
               </div>
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-lg truncate">{animal.tagId}</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-sm truncate">{animal.tagId}</span>
               <Badge variant="secondary" className={cn(
-                "text-[10px] px-1.5 py-0",
+                "text-[10px] px-1.5",
                 animal.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-red-900/80 text-red-100"
               )}>
                 {animal.status}
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground truncate">{animal.breed || "Meatmaster"}</p>
+            <p className="text-xs text-muted-foreground truncate">{animal.breed || "Meatmaster"}</p>
           </div>
           <div className="text-right flex-shrink-0">
             <span className={cn(
-              "text-sm font-medium capitalize",
+              "text-xs font-medium capitalize",
               isRam ? "text-blue-400" : isEwe ? "text-pink-400" : "text-muted-foreground"
             )}>
               {animal.sex}

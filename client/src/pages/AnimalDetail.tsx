@@ -37,30 +37,32 @@ export default function AnimalDetail() {
 
   return (
     <Layout>
-      <div className="space-y-6 animate-in fade-in duration-500">
-        <div className="flex items-center gap-4">
+      <div className="space-y-3 md:space-y-6 animate-in fade-in duration-500">
+        {/* Compact Mobile Header */}
+        <div className="flex items-start gap-2 md:gap-4">
           <Link href="/animals">
-            <Button variant="ghost" size="icon" data-testid="button-back"><ArrowLeft className="w-5 h-5" /></Button>
+            <Button variant="ghost" size="icon" data-testid="button-back"><ArrowLeft className="w-4 h-4" /></Button>
           </Link>
-          <div className="flex-1">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-3xl font-black">{animal.tagId}</h1>
-              <Badge variant="outline" className="uppercase font-bold text-primary border-primary">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+              <h1 className="text-lg md:text-2xl font-bold truncate">{animal.tagId}</h1>
+              <Badge variant="outline" className="text-xs uppercase font-medium text-primary border-primary">
                 {animal.sex}
               </Badge>
-              <Badge variant={animal.status === 'active' ? 'default' : 'destructive'} className="uppercase">
+              <Badge variant={animal.status === 'active' ? 'default' : 'destructive'} className="text-xs uppercase">
                 {animal.status}
               </Badge>
             </div>
-            <p className="text-muted-foreground">{animal.name || "Unnamed"} • {animal.breed}</p>
+            <p className="text-xs md:text-sm text-muted-foreground truncate">{animal.name || "Unnamed"} • {animal.breed}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             <Button 
               variant="outline" 
+              size="sm"
               onClick={() => setIsEditOpen(true)}
               data-testid="button-edit-animal"
             >
-              <Edit className="w-4 h-4 mr-2" /> Edit
+              <Edit className="w-4 h-4 mr-1" /> Edit
             </Button>
             <ExportProfileButton animal={animal} farmSettings={farmSettings} />
           </div>
@@ -68,22 +70,22 @@ export default function AnimalDetail() {
         
         <EditAnimalDialog animal={animal} open={isEditOpen} onOpenChange={setIsEditOpen} />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Info Card */}
-          <div className="lg:col-span-1 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
+          {/* Main Info Card - Compact on Mobile */}
+          <div className="lg:col-span-1 space-y-3 md:space-y-6">
             <Card className="rugged-card overflow-hidden">
-                <div className="aspect-square bg-secondary relative">
-                    <img src={animal.photo || logo} className={animal.photo ? "w-full h-full object-cover" : "w-1/2 h-1/2 absolute top-1/4 left-1/4 opacity-20 grayscale"} />
+                <div className="aspect-video md:aspect-square bg-secondary relative">
+                    <img src={animal.photo || logo} className={animal.photo ? "w-full h-full object-cover" : "w-1/3 md:w-1/2 h-1/3 md:h-1/2 absolute top-1/3 md:top-1/4 left-1/3 md:left-1/4 opacity-20 grayscale"} />
                 </div>
-                <CardContent className="p-6 space-y-4">
+                <CardContent className="p-3 md:p-6 space-y-1 md:space-y-3">
                     <InfoRow label="Electronic ID" value={animal.electronicId || "N/A"} />
                     <InfoRow label="Birth Date" value={animal.birthDate ? format(new Date(animal.birthDate), "dd MMM yyyy") : "N/A"} />
                     <InfoRow label="Current Weight" value={animal.currentWeight ? `${animal.currentWeight} kg` : "N/A"} />
                     <InfoRow label="Breeder" value={animal.breederName || "Self"} />
                     <InfoRow label="Profile Entry" value={animal.createdAt ? format(new Date(animal.createdAt), "dd MMM yyyy") : "N/A"} testId="text-entry-date" />
-                    <div className="pt-4 border-t border-border">
-                        <Label className="text-muted-foreground text-xs uppercase">Notes</Label>
-                        <p className="text-sm mt-1">{animal.notes || "No notes recorded."}</p>
+                    <div className="pt-2 md:pt-4 border-t border-border">
+                        <Label className="text-muted-foreground text-[10px] md:text-xs uppercase">Notes</Label>
+                        <p className="text-xs md:text-sm mt-1">{animal.notes || "No notes recorded."}</p>
                     </div>
                 </CardContent>
             </Card>
@@ -92,14 +94,14 @@ export default function AnimalDetail() {
           {/* Tabs Section */}
           <div className="lg:col-span-2">
             <Tabs defaultValue="pedigree" className="w-full">
-              <TabsList className="w-full bg-card border border-border h-12 flex-wrap">
-                <TabsTrigger value="pedigree" data-testid="tab-pedigree" className="flex-1 uppercase font-bold text-xs"><Dna className="w-4 h-4 mr-1" /> Pedigree</TabsTrigger>
+              <TabsList className="w-full bg-card border border-border h-9 md:h-12 flex-wrap">
+                <TabsTrigger value="pedigree" data-testid="tab-pedigree" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Dna className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Pedigree</span><span className="xs:hidden">Ped</span></TabsTrigger>
                 {animal.sex === "ewe" && (
-                  <TabsTrigger value="breeding" data-testid="tab-breeding" className="flex-1 uppercase font-bold text-xs"><Heart className="w-4 h-4 mr-1" /> Breeding</TabsTrigger>
+                  <TabsTrigger value="breeding" data-testid="tab-breeding" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Heart className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Breeding</span><span className="xs:hidden">Bred</span></TabsTrigger>
                 )}
-                <TabsTrigger value="performance" data-testid="tab-weights" className="flex-1 uppercase font-bold text-xs"><Scale className="w-4 h-4 mr-1" /> Weights</TabsTrigger>
-                <TabsTrigger value="health" data-testid="tab-health" className="flex-1 uppercase font-bold text-xs"><Syringe className="w-4 h-4 mr-1" /> Health</TabsTrigger>
-                <TabsTrigger value="evaluations" data-testid="tab-evaluations" className="flex-1 uppercase font-bold text-xs"><FileText className="w-4 h-4 mr-1" /> Eval</TabsTrigger>
+                <TabsTrigger value="performance" data-testid="tab-weights" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Scale className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Weights</span><span className="xs:hidden">Wt</span></TabsTrigger>
+                <TabsTrigger value="health" data-testid="tab-health" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Syringe className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Health</span><span className="xs:hidden">Hlth</span></TabsTrigger>
+                <TabsTrigger value="evaluations" data-testid="tab-evaluations" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><FileText className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> Eval</TabsTrigger>
               </TabsList>
               
               <TabsContent value="pedigree" className="mt-4">
@@ -133,9 +135,9 @@ export default function AnimalDetail() {
 
 function InfoRow({ label, value, testId }: { label: string, value: string, testId?: string }) {
     return (
-        <div className="flex justify-between items-center py-2 border-b border-border/50 last:border-0">
-            <span className="text-sm text-muted-foreground">{label}</span>
-            <span className="font-bold text-foreground" data-testid={testId}>{value}</span>
+        <div className="flex justify-between items-center py-1.5 md:py-2 border-b border-border/50 last:border-0">
+            <span className="text-xs md:text-sm text-muted-foreground">{label}</span>
+            <span className="text-xs md:text-sm font-semibold text-foreground" data-testid={testId}>{value}</span>
         </div>
     )
 }
@@ -992,22 +994,22 @@ ${data.farmBranding?.membershipNumber ? `Membership: ${data.farmBranding.members
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="outline" data-testid="button-export-profile">
-                    <Download className="w-4 h-4 mr-2" /> Export
+                <Button variant="outline" size="sm" data-testid="button-export-profile">
+                    <Download className="w-4 h-4 mr-1" /> Export
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={handleExportPDF} data-testid="export-pdf">
-                    <FileText className="w-4 h-4 mr-2" /> Export as PDF
+                    <FileText className="w-4 h-4 mr-2" /> PDF
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportWord} data-testid="export-word">
-                    <FileText className="w-4 h-4 mr-2" /> Export as Word
+                    <FileText className="w-4 h-4 mr-2" /> Word
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportCSV} data-testid="export-csv">
-                    <FileText className="w-4 h-4 mr-2" /> Export as CSV
+                    <FileText className="w-4 h-4 mr-2" /> CSV
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportJSON} data-testid="export-json">
-                    <FileText className="w-4 h-4 mr-2" /> Export as JSON
+                    <FileText className="w-4 h-4 mr-2" /> JSON
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
@@ -1162,52 +1164,52 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle className="font-display uppercase text-2xl">Edit Animal</DialogTitle>
+            <DialogContent className="bg-card border-border max-w-lg max-h-[85vh] overflow-y-auto p-3 md:p-6">
+                <DialogHeader className="pb-2">
+                    <DialogTitle className="text-base md:text-lg font-semibold">Edit Animal</DialogTitle>
                 </DialogHeader>
                 
-                <div className="space-y-4">
-                    {/* Photo Section */}
+                <div className="space-y-2.5 md:space-y-4">
+                    {/* Photo Section - Compact */}
                     <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoCapture} className="hidden" />
                     <input ref={galleryInputRef} type="file" accept="image/*" onChange={handlePhotoCapture} className="hidden" />
                     
                     {photoPreview ? (
                         <div className="relative">
-                            <img src={photoPreview} alt="Animal" className="w-full h-48 object-cover rounded-md border border-border" />
-                            <div className="absolute top-2 right-2 flex gap-1">
-                                <Button type="button" variant="secondary" size="icon" onClick={() => galleryInputRef.current?.click()} data-testid="button-change-photo">
-                                    <Image className="w-4 h-4" />
+                            <img src={photoPreview} alt="Animal" className="w-full h-28 md:h-40 object-cover rounded-md border border-border" />
+                            <div className="absolute top-1 right-1 flex gap-1">
+                                <Button type="button" variant="secondary" size="icon" className="h-7 w-7" onClick={() => galleryInputRef.current?.click()} data-testid="button-change-photo">
+                                    <Image className="w-3 h-3" />
                                 </Button>
-                                <Button type="button" variant="destructive" size="icon" onClick={() => { setPhotoPreview(null); setFormData(prev => ({...prev, photo: null})); }} data-testid="button-clear-photo">
-                                    <X className="w-4 h-4" />
+                                <Button type="button" variant="destructive" size="icon" className="h-7 w-7" onClick={() => { setPhotoPreview(null); setFormData(prev => ({...prev, photo: null})); }} data-testid="button-clear-photo">
+                                    <X className="w-3 h-3" />
                                 </Button>
                             </div>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 gap-2">
-                            <Button type="button" variant="outline" className="border-dashed" onClick={() => cameraInputRef.current?.click()} data-testid="button-take-photo"><Camera className="w-4 h-4 mr-2" /> Camera</Button>
-                            <Button type="button" variant="outline" className="border-dashed" onClick={() => galleryInputRef.current?.click()} data-testid="button-select-gallery"><Image className="w-4 h-4 mr-2" /> Gallery</Button>
+                        <div className="grid grid-cols-2 gap-1.5">
+                            <Button type="button" variant="outline" size="sm" className="border-dashed h-8 text-xs" onClick={() => cameraInputRef.current?.click()} data-testid="button-take-photo"><Camera className="w-3 h-3 mr-1" /> Camera</Button>
+                            <Button type="button" variant="outline" size="sm" className="border-dashed h-8 text-xs" onClick={() => galleryInputRef.current?.click()} data-testid="button-select-gallery"><Image className="w-3 h-3 mr-1" /> Gallery</Button>
                         </div>
                     )}
 
-                    {/* Basic Info */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Basic Info - Compact */}
+                    <div className="grid grid-cols-2 gap-2">
                         <div>
-                            <Label>Tag ID</Label>
-                            <Input value={formData.tagId} onChange={(e) => setFormData(prev => ({...prev, tagId: e.target.value}))} className="rugged-input" data-testid="input-edit-tag-id" />
+                            <Label className="text-[11px] md:text-xs">Tag ID</Label>
+                            <Input value={formData.tagId} onChange={(e) => setFormData(prev => ({...prev, tagId: e.target.value}))} className="rugged-input h-8 text-sm" data-testid="input-edit-tag-id" />
                         </div>
                         <div>
-                            <Label>Name</Label>
-                            <Input value={formData.name} onChange={(e) => setFormData(prev => ({...prev, name: e.target.value}))} className="rugged-input" data-testid="input-edit-name" />
+                            <Label className="text-[11px] md:text-xs">Name</Label>
+                            <Input value={formData.name} onChange={(e) => setFormData(prev => ({...prev, name: e.target.value}))} className="rugged-input h-8 text-sm" data-testid="input-edit-name" />
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-3 gap-1.5 md:gap-2">
                         <div>
-                            <Label>Sex</Label>
+                            <Label className="text-[11px] md:text-xs">Sex</Label>
                             <Select value={formData.sex} onValueChange={(val) => setFormData(prev => ({...prev, sex: val}))}>
-                                <SelectTrigger className="rugged-input" data-testid="select-edit-sex"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-sex"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="ram">Ram</SelectItem>
                                     <SelectItem value="ewe">Ewe</SelectItem>
@@ -1216,9 +1218,9 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                             </Select>
                         </div>
                         <div>
-                            <Label>Status</Label>
+                            <Label className="text-[11px] md:text-xs">Status</Label>
                             <Select value={formData.status} onValueChange={(val) => setFormData(prev => ({...prev, status: val}))}>
-                                <SelectTrigger className="rugged-input" data-testid="select-edit-status"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-status"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="active">Active</SelectItem>
                                     <SelectItem value="sold">Sold</SelectItem>
@@ -1228,9 +1230,9 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                             </Select>
                         </div>
                         <div>
-                            <Label>Birth Status</Label>
+                            <Label className="text-[11px] md:text-xs">Birth</Label>
                             <Select value={formData.birthStatus || "unknown"} onValueChange={(val) => setFormData(prev => ({...prev, birthStatus: val === "unknown" ? "" : val}))}>
-                                <SelectTrigger className="rugged-input" data-testid="select-edit-birth-status"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-birth-status"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="unknown">Unknown</SelectItem>
                                     <SelectItem value="single">Single</SelectItem>
@@ -1241,46 +1243,46 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-2">
                         <div>
-                            <Label>Birth Date</Label>
-                            <Input type="date" value={formData.birthDate || ""} onChange={(e) => setFormData(prev => ({...prev, birthDate: e.target.value}))} className="rugged-input" data-testid="input-edit-birth-date" />
+                            <Label className="text-[11px] md:text-xs">Birth Date</Label>
+                            <Input type="date" value={formData.birthDate || ""} onChange={(e) => setFormData(prev => ({...prev, birthDate: e.target.value}))} className="rugged-input h-8 text-xs" data-testid="input-edit-birth-date" />
                         </div>
                         <div>
-                            <Label>Current Weight (kg)</Label>
-                            <Input type="number" step="0.1" value={formData.currentWeight} onChange={(e) => setFormData(prev => ({...prev, currentWeight: e.target.value}))} className="rugged-input" data-testid="input-edit-weight" />
-                        </div>
-                    </div>
-
-                    {/* IDs */}
-                    <div className="grid grid-cols-3 gap-4">
-                        <div>
-                            <Label>Electronic ID</Label>
-                            <Input value={formData.electronicId} onChange={(e) => setFormData(prev => ({...prev, electronicId: e.target.value}))} className="rugged-input" placeholder="RFID" data-testid="input-edit-electronic-id" />
-                        </div>
-                        <div>
-                            <Label>Tattoo ID</Label>
-                            <Input value={formData.tattooId} onChange={(e) => setFormData(prev => ({...prev, tattooId: e.target.value}))} className="rugged-input" data-testid="input-edit-tattoo-id" />
-                        </div>
-                        <div>
-                            <Label>Stud Prefix</Label>
-                            <Input value={formData.studPrefix} onChange={(e) => setFormData(prev => ({...prev, studPrefix: e.target.value}))} className="rugged-input" data-testid="input-edit-stud-prefix" />
+                            <Label className="text-[11px] md:text-xs">Weight (kg)</Label>
+                            <Input type="number" step="0.1" value={formData.currentWeight} onChange={(e) => setFormData(prev => ({...prev, currentWeight: e.target.value}))} className="rugged-input h-8 text-sm" data-testid="input-edit-weight" />
                         </div>
                     </div>
 
-                    {/* Dam */}
-                    <div className="space-y-2">
+                    {/* IDs - Compact */}
+                    <div className="grid grid-cols-3 gap-1.5 md:gap-2">
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Electronic ID</Label>
+                            <Input value={formData.electronicId} onChange={(e) => setFormData(prev => ({...prev, electronicId: e.target.value}))} className="rugged-input h-8 text-xs" placeholder="RFID" data-testid="input-edit-electronic-id" />
+                        </div>
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Tattoo ID</Label>
+                            <Input value={formData.tattooId} onChange={(e) => setFormData(prev => ({...prev, tattooId: e.target.value}))} className="rugged-input h-8 text-xs" data-testid="input-edit-tattoo-id" />
+                        </div>
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Stud Prefix</Label>
+                            <Input value={formData.studPrefix} onChange={(e) => setFormData(prev => ({...prev, studPrefix: e.target.value}))} className="rugged-input h-8 text-xs" data-testid="input-edit-stud-prefix" />
+                        </div>
+                    </div>
+
+                    {/* Dam - Compact */}
+                    <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                            <Label>Dam (Mother)</Label>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => { setUseCustomDam(!useCustomDam); if (!useCustomDam) setFormData(prev => ({...prev, damId: null})); else setFormData(prev => ({...prev, externalDamInfo: ""})); }} data-testid="button-toggle-dam-mode">
-                                {useCustomDam ? "Select from list" : "Not in system"}
+                            <Label className="text-[11px] md:text-xs">Dam (Mother)</Label>
+                            <Button type="button" variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => { setUseCustomDam(!useCustomDam); if (!useCustomDam) setFormData(prev => ({...prev, damId: null})); else setFormData(prev => ({...prev, externalDamInfo: ""})); }} data-testid="button-toggle-dam-mode">
+                                {useCustomDam ? "Select" : "External"}
                             </Button>
                         </div>
                         {useCustomDam ? (
-                            <Input value={formData.externalDamInfo} onChange={(e) => setFormData(prev => ({...prev, externalDamInfo: e.target.value}))} placeholder="Enter dam info" className="rugged-input" data-testid="input-edit-external-dam" />
+                            <Input value={formData.externalDamInfo} onChange={(e) => setFormData(prev => ({...prev, externalDamInfo: e.target.value}))} placeholder="Enter dam info" className="rugged-input h-8 text-xs" data-testid="input-edit-external-dam" />
                         ) : (
                             <Select value={formData.damId ? String(formData.damId) : "none"} onValueChange={(val) => setFormData(prev => ({...prev, damId: val === "none" ? null : parseInt(val)}))}>
-                                <SelectTrigger className="rugged-input" data-testid="select-edit-dam"><SelectValue placeholder="Select dam" /></SelectTrigger>
+                                <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-dam"><SelectValue placeholder="Select dam" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">Unknown</SelectItem>
                                     {ewes.map(ewe => <SelectItem key={ewe.id} value={String(ewe.id)}>{ewe.tagId} {ewe.name ? `- ${ewe.name}` : ''}</SelectItem>)}
@@ -1289,19 +1291,19 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                         )}
                     </div>
 
-                    {/* Sire */}
-                    <div className="space-y-2">
+                    {/* Sire - Compact */}
+                    <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                            <Label>Sire (Father)</Label>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => { setUseCustomSire(!useCustomSire); if (!useCustomSire) setFormData(prev => ({...prev, sireId: null})); else setFormData(prev => ({...prev, externalSireInfo: ""})); }} data-testid="button-toggle-sire-mode">
-                                {useCustomSire ? "Select from list" : "Not in system"}
+                            <Label className="text-[11px] md:text-xs">Sire (Father)</Label>
+                            <Button type="button" variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={() => { setUseCustomSire(!useCustomSire); if (!useCustomSire) setFormData(prev => ({...prev, sireId: null})); else setFormData(prev => ({...prev, externalSireInfo: ""})); }} data-testid="button-toggle-sire-mode">
+                                {useCustomSire ? "Select" : "External"}
                             </Button>
                         </div>
                         {useCustomSire ? (
-                            <Input value={formData.externalSireInfo} onChange={(e) => setFormData(prev => ({...prev, externalSireInfo: e.target.value}))} placeholder="Enter sire info" className="rugged-input" data-testid="input-edit-external-sire" />
+                            <Input value={formData.externalSireInfo} onChange={(e) => setFormData(prev => ({...prev, externalSireInfo: e.target.value}))} placeholder="Enter sire info" className="rugged-input h-8 text-xs" data-testid="input-edit-external-sire" />
                         ) : (
                             <Select value={formData.sireId ? String(formData.sireId) : "none"} onValueChange={(val) => setFormData(prev => ({...prev, sireId: val === "none" ? null : parseInt(val)}))}>
-                                <SelectTrigger className="rugged-input" data-testid="select-edit-sire"><SelectValue placeholder="Select sire" /></SelectTrigger>
+                                <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-sire"><SelectValue placeholder="Select sire" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">Unknown</SelectItem>
                                     {rams.map(ram => <SelectItem key={ram.id} value={String(ram.id)}>{ram.tagId} {ram.name ? `- ${ram.name}` : ''}</SelectItem>)}
@@ -1310,56 +1312,56 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                         )}
                     </div>
 
-                    {/* Ownership */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Ownership - Compact */}
+                    <div className="grid grid-cols-2 gap-2">
                         <div>
-                            <Label>Breeder</Label>
-                            <Input value={formData.breederName} onChange={(e) => setFormData(prev => ({...prev, breederName: e.target.value}))} className="rugged-input" data-testid="input-edit-breeder" />
+                            <Label className="text-[11px] md:text-xs">Breeder</Label>
+                            <Input value={formData.breederName} onChange={(e) => setFormData(prev => ({...prev, breederName: e.target.value}))} className="rugged-input h-8 text-xs" data-testid="input-edit-breeder" />
                         </div>
                         <div>
-                            <Label>Owner</Label>
-                            <Input value={formData.ownerName} onChange={(e) => setFormData(prev => ({...prev, ownerName: e.target.value}))} className="rugged-input" data-testid="input-edit-owner" />
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label>Farm Name</Label>
-                            <Input value={formData.farmName} onChange={(e) => setFormData(prev => ({...prev, farmName: e.target.value}))} className="rugged-input" data-testid="input-edit-farm" />
-                        </div>
-                        <div>
-                            <Label>Location/Camp</Label>
-                            <Input value={formData.location} onChange={(e) => setFormData(prev => ({...prev, location: e.target.value}))} className="rugged-input" data-testid="input-edit-location" />
+                            <Label className="text-[11px] md:text-xs">Owner</Label>
+                            <Input value={formData.ownerName} onChange={(e) => setFormData(prev => ({...prev, ownerName: e.target.value}))} className="rugged-input h-8 text-xs" data-testid="input-edit-owner" />
                         </div>
                     </div>
 
-                    {/* Notes */}
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Farm Name</Label>
+                            <Input value={formData.farmName} onChange={(e) => setFormData(prev => ({...prev, farmName: e.target.value}))} className="rugged-input h-8 text-xs" data-testid="input-edit-farm" />
+                        </div>
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Location</Label>
+                            <Input value={formData.location} onChange={(e) => setFormData(prev => ({...prev, location: e.target.value}))} className="rugged-input h-8 text-xs" data-testid="input-edit-location" />
+                        </div>
+                    </div>
+
+                    {/* Notes - Compact */}
                     <div>
-                        <Label>Notes</Label>
-                        <Textarea value={formData.notes} onChange={(e) => setFormData(prev => ({...prev, notes: e.target.value}))} className="rugged-input min-h-[80px]" data-testid="input-edit-notes" />
+                        <Label className="text-[11px] md:text-xs">Notes</Label>
+                        <Textarea value={formData.notes} onChange={(e) => setFormData(prev => ({...prev, notes: e.target.value}))} className="rugged-input min-h-[50px] md:min-h-[70px] text-xs" data-testid="input-edit-notes" />
                     </div>
 
-                    {/* Evaluation Document */}
+                    {/* Evaluation Document - Compact */}
                     <input ref={evalDocInputRef} type="file" accept="image/*,.pdf" onChange={handleEvalDocUpload} className="hidden" />
                     
                     {evalDocName ? (
-                        <div className="flex items-center justify-between p-3 bg-secondary rounded-md border border-border">
-                            <div className="flex items-center gap-2">
-                                <FileText className="w-5 h-5 text-primary" />
-                                <span className="text-sm truncate max-w-[200px]">{evalDocName}</span>
+                        <div className="flex items-center justify-between p-2 bg-secondary rounded-md border border-border">
+                            <div className="flex items-center gap-1.5">
+                                <FileText className="w-4 h-4 text-primary" />
+                                <span className="text-[11px] truncate max-w-[140px]">{evalDocName}</span>
                             </div>
                             <div className="flex gap-1">
-                                <Button type="button" variant="ghost" size="icon" onClick={() => evalDocInputRef.current?.click()} data-testid="button-change-eval-doc"><Upload className="w-4 h-4" /></Button>
-                                <Button type="button" variant="ghost" size="icon" onClick={() => { setEvalDocName(null); setFormData(prev => ({...prev, evaluationDocument: null})); }} data-testid="button-clear-eval-doc"><X className="w-4 h-4" /></Button>
+                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => evalDocInputRef.current?.click()} data-testid="button-change-eval-doc"><Upload className="w-3 h-3" /></Button>
+                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setEvalDocName(null); setFormData(prev => ({...prev, evaluationDocument: null})); }} data-testid="button-clear-eval-doc"><X className="w-3 h-3" /></Button>
                             </div>
                         </div>
                     ) : (
-                        <Button type="button" variant="outline" className="w-full border-dashed" onClick={() => evalDocInputRef.current?.click()} data-testid="button-upload-eval-doc">
-                            <FileText className="w-4 h-4 mr-2" /> Attach Evaluation Document
+                        <Button type="button" variant="outline" size="sm" className="w-full border-dashed h-8 text-xs" onClick={() => evalDocInputRef.current?.click()} data-testid="button-upload-eval-doc">
+                            <FileText className="w-3 h-3 mr-1" /> Attach Eval Document
                         </Button>
                     )}
 
-                    <Button onClick={handleSubmit} disabled={isPending} className="w-full rugged-btn bg-primary text-black" data-testid="button-save-edit">
+                    <Button onClick={handleSubmit} disabled={isPending} size="sm" className="w-full bg-primary text-black h-9 font-semibold" data-testid="button-save-edit">
                         {isPending ? "Saving..." : "Save Changes"}
                     </Button>
                 </div>
