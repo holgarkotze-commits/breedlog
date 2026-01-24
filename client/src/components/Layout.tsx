@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Beef, Dna, FileText, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -7,6 +8,15 @@ import { useFarmSettings } from "@/hooks/use-farm-settings";
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data: farmSettings } = useFarmSettings();
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Home" },
@@ -49,13 +59,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile Header - Elegant centered design */}
-      <header className="md:hidden bg-gradient-to-b from-card via-card to-background border-b border-border/50 sticky top-0 z-40">
-        <Link href="/" className="flex flex-col items-center py-4 px-4">
-          {/* Premium Logo Container with elegant glow */}
-          <div className="relative mb-3">
-            <div className="absolute inset-0 bg-primary/20 rounded-full blur-xl scale-150" />
-            <div className="relative w-20 h-20 flex items-center justify-center">
+      {/* Mobile Header - Collapses to icon on scroll */}
+      <header className={cn(
+        "md:hidden bg-card border-b border-border/50 sticky top-0 z-40 transition-all duration-300",
+        isScrolled ? "py-2" : "py-4"
+      )}>
+        <Link href="/" className="flex flex-col items-center px-4">
+          {/* Logo - always visible, smaller when scrolled */}
+          <div className={cn(
+            "relative transition-all duration-300",
+            isScrolled ? "mb-0" : "mb-3"
+          )}>
+            <div className={cn(
+              "absolute inset-0 bg-primary/20 rounded-full blur-xl transition-all duration-300",
+              isScrolled ? "scale-100 opacity-50" : "scale-150 opacity-100"
+            )} />
+            <div className={cn(
+              "relative flex items-center justify-center transition-all duration-300",
+              isScrolled ? "w-10 h-10" : "w-20 h-20"
+            )}>
               <img 
                 src={logo} 
                 alt="BreedLog" 
@@ -65,15 +87,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           
-          {/* App Name with premium gradient */}
-          <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-primary via-yellow-300 to-primary bg-clip-text text-transparent drop-shadow-sm mb-1">
-            BREEDLOG
-          </span>
-          
-          {/* Tagline with elegant styling */}
-          <span className="text-[11px] text-muted-foreground uppercase tracking-[0.2em] font-medium">
-            Breed Smart. Farm Better.
-          </span>
+          {/* App Name & Tagline - hidden when scrolled */}
+          <div className={cn(
+            "flex flex-col items-center overflow-hidden transition-all duration-300",
+            isScrolled ? "max-h-0 opacity-0" : "max-h-20 opacity-100"
+          )}>
+            <span className="text-2xl font-black tracking-tight bg-gradient-to-r from-primary via-yellow-300 to-primary bg-clip-text text-transparent drop-shadow-sm mb-1">
+              BREEDLOG
+            </span>
+            <span className="text-[11px] text-muted-foreground uppercase tracking-[0.2em] font-medium">
+              Breed Smart. Farm Better.
+            </span>
+          </div>
         </Link>
       </header>
 
