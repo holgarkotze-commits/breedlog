@@ -207,34 +207,73 @@ export default function Settings() {
   const exportWord = () => {
     const data = getExportData();
     const fb = data.farmBranding;
+    const animalsPerPage = 20;
+    const totalPages = Math.ceil(data.animals.length / animalsPerPage);
+    
+    let tablesHtml = "";
+    for (let page = 0; page < Math.max(1, totalPages); page++) {
+      const startIdx = page * animalsPerPage;
+      const pageAnimals = data.animals.slice(startIdx, startIdx + animalsPerPage);
+      
+      tablesHtml += `
+        <div style="page-break-after: always;">
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+            <tr style="background:#FFC300;height:10mm;">
+              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:8%;">#</th>
+              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:15%;">Tag ID</th>
+              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:17%;">Name</th>
+              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:8%;">Sex</th>
+              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:12%;">Breed</th>
+              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:10%;">Status</th>
+              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:15%;">Birth Date</th>
+              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:15%;">Weight</th>
+            </tr>
+            ${pageAnimals.map((a: any, i: number) => `
+              <tr style="height:10mm;${i % 2 === 1 ? 'background:#f5f5f5;' : ''}">
+                <td style="border:1px solid #ddd;padding:2mm;">${startIdx + i + 1}</td>
+                <td style="border:1px solid #ddd;padding:2mm;font-weight:bold;">${a.tagId}</td>
+                <td style="border:1px solid #ddd;padding:2mm;">${a.name || "-"}</td>
+                <td style="border:1px solid #ddd;padding:2mm;">${a.sex === "male" ? "M" : a.sex === "female" ? "F" : a.sex}</td>
+                <td style="border:1px solid #ddd;padding:2mm;">${a.breed || "-"}</td>
+                <td style="border:1px solid #ddd;padding:2mm;">${a.status}</td>
+                <td style="border:1px solid #ddd;padding:2mm;">${a.birthDate || "-"}</td>
+                <td style="border:1px solid #ddd;padding:2mm;">${a.currentWeight ? a.currentWeight + " kg" : "-"}</td>
+              </tr>
+            `).join("")}
+          </table>
+          <p style="text-align:right;font-size:10pt;color:#666;">Page ${page + 1} of ${Math.max(1, totalPages)}</p>
+        </div>
+      `;
+    }
+    
     const content = `
-BREEDLOG HERD DATABASE EXPORT
-Generated: ${data.exportDate}
-${"═".repeat(50)}
-
-FARM INFORMATION
-${"─".repeat(30)}
-Farm: ${fb?.farmName || "N/A"}
-Stud: ${fb?.studName || "N/A"}
-Owner: ${fb?.ownerName || "N/A"}
-Phone: ${fb?.ownerPhone || "N/A"}
-Email: ${fb?.ownerEmail || "N/A"}
-Location: ${fb?.farmLocation || "N/A"}
-Membership: ${fb?.membershipNumber || "N/A"}
-
-${"═".repeat(50)}
-ANIMALS (${data.animals.length} records)
-${"═".repeat(50)}
-${data.animals.map((a: any, i: number) => `
-${i + 1}. ${a.tagId} - ${a.name || "Unnamed"}
-   Sex: ${a.sex} | Breed: ${a.breed} | Status: ${a.status}
-   Birth: ${a.birthDate || "N/A"} | Weight: ${a.currentWeight ? a.currentWeight + "kg" : "N/A"}
-`).join("")}
-
-${"═".repeat(50)}
-Exported by BreedLog - Professional Livestock Management
-${fb?.studName || fb?.farmName || ""}
-${fb?.ownerPhone || ""} | ${fb?.ownerEmail || ""}
+<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page { size: A4; margin: 15mm; }
+    body { font-family: 'Calibri', Arial, sans-serif; font-size: 11pt; }
+    h1 { font-size: 18pt; text-align: center; border-bottom: 2px solid #FFC300; padding-bottom: 10px; }
+    .header-info { margin-bottom: 20px; }
+    .header-info p { margin: 2mm 0; }
+  </style>
+</head>
+<body>
+  <h1>${fb?.studName || fb?.farmName || "BREEDLOG"} - Herd Export</h1>
+  <div class="header-info">
+    <p><strong>Farm:</strong> ${fb?.farmName || "N/A"} | <strong>Stud:</strong> ${fb?.studName || "N/A"}</p>
+    <p><strong>Owner:</strong> ${fb?.ownerName || "N/A"} | <strong>Phone:</strong> ${fb?.ownerPhone || "N/A"} | <strong>Email:</strong> ${fb?.ownerEmail || "N/A"}</p>
+    <p><strong>Membership:</strong> ${fb?.membershipNumber || "N/A"} | <strong>Export Date:</strong> ${data.exportDate}</p>
+    <p><strong>Total Animals:</strong> ${data.animals.length}</p>
+  </div>
+  ${tablesHtml}
+  <div style="border-top:2px solid #FFC300;padding-top:10px;margin-top:20px;text-align:center;">
+    <p style="font-weight:bold;color:#FFC300;">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+    <p style="font-size:9pt;">Professional Livestock Management | ${fb?.ownerPhone || ""} | ${fb?.ownerEmail || ""}</p>
+  </div>
+</body>
+</html>
     `;
     downloadFile(content, `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.doc`, "application/msword");
     toast({ title: "Export Complete", description: "Full database exported as Word document" });
@@ -325,30 +364,30 @@ ${fb?.ownerPhone || ""} | ${fb?.ownerEmail || ""}
     @page { size: A4; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 190mm; min-height: 267mm; padding: 5mm; margin: 0 auto; page-break-after: always; display: flex; flex-direction: column; }
+    .page { width: 190mm; height: 277mm; padding: 5mm; margin: 0 auto; page-break-after: always; display: flex; flex-direction: column; }
     .page:last-child { page-break-after: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 4mm; border-bottom: 2px solid #FFC300; margin-bottom: 4mm; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; border-bottom: 2px solid #FFC300; margin-bottom: 3mm; height: 20mm; }
     .header-left { width: 60px; }
     .header-center { flex: 1; text-align: center; }
-    .header-center h1 { font-size: 16pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
+    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
     .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 2px; }
     .header-right { text-align: right; font-size: 8pt; color: #666; }
-    .animals-table { width: 100%; border-collapse: collapse; flex: 1; }
-    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 3mm 2mm; text-align: left; text-transform: uppercase; }
-    .animals-table td { padding: 2.5mm 2mm; border-bottom: 1px solid #e5e5e5; font-size: 8pt; vertical-align: middle; }
-    .animals-table tr:nth-child(even) { background: #fafafa; }
-    .animals-table tr:hover { background: #fff9e6; }
+    .animals-table { width: 100%; border-collapse: collapse; flex: 1; table-layout: fixed; }
+    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 2mm 2mm; text-align: left; text-transform: uppercase; height: 8mm; }
+    .animals-table td { padding: 0 2mm; border-bottom: 1px solid #ddd; font-size: 8pt; vertical-align: middle; height: 10mm; line-height: 10mm; }
+    .animals-table tbody tr { height: 10mm; }
+    .animals-table tr:nth-child(even) { background: #f9f9f9; }
     .status { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; }
     .status-active { background: #22c55e20; color: #16a34a; }
     .status-sold { background: #f59e0b20; color: #d97706; }
     .status-deceased { background: #ef444420; color: #dc2626; }
-    .footer { display: flex; align-items: center; gap: 4mm; padding-top: 4mm; border-top: 2px solid #FFC300; margin-top: auto; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm; border-radius: 2mm; }
-    .footer-logo { width: 40px; }
+    .footer { display: flex; align-items: center; gap: 4mm; border-top: 2px solid #FFC300; margin-top: auto; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 3mm 4mm; border-radius: 2mm; height: 18mm; }
+    .footer-logo { width: 36px; }
     .footer-info { flex: 1; }
-    .footer-title { font-size: 10pt; font-weight: 700; color: #FFC300; }
+    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
     .footer-info p { font-size: 7pt; margin-top: 1px; }
     .footer-tagline { text-align: right; font-size: 7pt; font-style: italic; color: #FFC300; }
-    @media print { .page { page-break-after: always; } .page:last-child { page-break-after: avoid; } }
+    @media print { .page { page-break-after: always; height: 277mm; } .page:last-child { page-break-after: avoid; } }
   </style>
 </head>
 <body>
