@@ -378,7 +378,7 @@ export default function Settings() {
     const fb = data.farmBranding;
     const logoSize = getLogoSizePixels(fb?.logoSize || "medium");
     
-    const animalsPerPage = 20;
+    const animalsPerPage = 18;
     const totalPages = Math.ceil(data.animals.length / animalsPerPage);
     
     let pagesHtml = "";
@@ -405,20 +405,20 @@ export default function Settings() {
           <table class="animals-table">
             <thead>
               <tr>
-                <th style="width:8%">#</th>
-                <th style="width:15%">Tag ID</th>
-                <th style="width:17%">Name</th>
+                <th style="width:32px"></th>
+                <th style="width:14%">Tag ID</th>
+                <th style="width:16%">Name</th>
                 <th style="width:8%">Sex</th>
                 <th style="width:12%">Breed</th>
                 <th style="width:10%">Status</th>
-                <th style="width:15%">Birth Date</th>
-                <th style="width:15%">Weight</th>
+                <th style="width:14%">Birth Date</th>
+                <th style="width:12%">Weight</th>
               </tr>
             </thead>
             <tbody>
               ${pageAnimals.map((a: any, i: number) => `
-                <tr>
-                  <td>${startIdx + i + 1}</td>
+                <tr style="height:30pt;">
+                  <td style="width:32px;padding:1mm;"><div style="width:28px;height:28px;border-radius:3px;overflow:hidden;background:#f0f0f0;">${a.photo ? `<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover;"/>` : ''}</div></td>
                   <td><strong>${a.tagId}</strong></td>
                   <td>${a.name || "-"}</td>
                   <td>${a.sex === "male" ? "M" : a.sex === "female" ? "F" : a.sex}</td>

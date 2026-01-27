@@ -135,6 +135,17 @@ shared/           # Shared types, schemas, and route definitions
 - **Import Results**: Shows success count and error details after import completes
 - **API Route**: `/api/import/csv` POST endpoint for CSV data processing
 
+### My Herd & PDF Exports (January 2026)
+- **My Herd Branding**: Animals tab renamed to "My Herd" throughout navigation and page titles
+- **Professional PDF Export**: Herd list export with:
+  - 30pt row sizing with 28px photo thumbnails on far left
+  - Ewe breeding statistics when ewes present: Tag ID, DOB, # Lambs, First Lamb Date, ILP, Lambs Weaned, Avg Wean Weight
+  - Standard animal data for non-ewes: Tag ID, Name, Sex, Breed, DOB, Weight, Status
+  - Golden yellow (#FFC300) header and footer styling
+  - Footer ribbon with "BREEDLOG" text and "Professional Livestock Management" tagline
+- **Settings Export Updated**: PDF export now includes photo thumbnails with 30pt row sizing
+- **Ewe Stats Calculation**: Uses breedingEvents with lambingDate, weaningStatus for weaned count, weight100Day for average wean weight
+
 ### Schema Additions
 - `documents` table: id, name, category, animalId (optional), fileData (base64), fileType, uploadedAt
 - `farmSettings` table: Farm name, stud name, stud prefix, owner details, address, membership numbers

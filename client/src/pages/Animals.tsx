@@ -49,14 +49,14 @@ function calculateEweBreedingStats(eweId: number, breedingEvents: BreedingEvent[
   
   const offspring = allAnimals.filter(a => a.damId === eweId);
   const weanedLambs = offspring.filter(a => 
-    a.weaningStatus === 'normal' || a.weaningStatus === 'early' || a.status === 'sold' || a.status === 'active'
+    a.weaningStatus === 'normal' || a.weaningStatus === 'early'
   ).length;
   
   const weanedWithWeight = offspring.filter(a => 
-    (a.weaningStatus === 'normal' || a.weaningStatus === 'early') && a.currentWeight
+    (a.weaningStatus === 'normal' || a.weaningStatus === 'early') && a.weight100Day
   );
   const avgWeanWeight = weanedWithWeight.length > 0
-    ? Math.round((weanedWithWeight.reduce((sum, a) => sum + parseFloat(a.currentWeight || '0'), 0) / weanedWithWeight.length) * 10) / 10
+    ? Math.round((weanedWithWeight.reduce((sum, a) => sum + parseFloat(a.weight100Day || '0'), 0) / weanedWithWeight.length) * 10) / 10
     : 0;
   
   return {
@@ -88,7 +88,7 @@ export default function Animals() {
     if (!filteredAnimals) return;
     const fb = farmSettings;
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    const isEweFilter = sexFilter === 'ewe';
+    const hasEwes = filteredAnimals.some(a => a.sex?.toLowerCase() === 'ewe');
     
     const animalsPerPage = 18;
     const totalPages = Math.ceil(filteredAnimals.length / animalsPerPage);
@@ -98,16 +98,17 @@ export default function Animals() {
       const startIdx = page * animalsPerPage;
       const pageAnimals = filteredAnimals.slice(startIdx, startIdx + animalsPerPage);
       
-      const tableHeaders = isEweFilter 
+      const tableHeaders = hasEwes 
         ? `<th style="width:32px"></th>
-           <th style="width:12%">Tag ID</th>
-           <th style="width:14%">DOB</th>
-           <th style="width:8%">Lambs</th>
-           <th style="width:14%">1st Lamb</th>
-           <th style="width:10%">ILP</th>
-           <th style="width:10%">Weaned</th>
-           <th style="width:12%">Avg Wean</th>
-           <th style="width:12%">Status</th>`
+           <th style="width:10%">Tag ID</th>
+           <th style="width:8%">Sex</th>
+           <th style="width:12%">DOB</th>
+           <th style="width:7%">Lambs</th>
+           <th style="width:12%">1st Lamb</th>
+           <th style="width:8%">ILP</th>
+           <th style="width:8%">Weaned</th>
+           <th style="width:10%">Avg Wean</th>
+           <th style="width:10%">Status</th>`
         : `<th style="width:32px"></th>
            <th style="width:15%">Tag ID</th>
            <th style="width:18%">Name</th>
@@ -118,22 +119,24 @@ export default function Animals() {
            <th style="width:12%">Status</th>`;
       
       const tableRows = pageAnimals.map((a: Animal, i: number) => {
-        const stats = isEweFilter && breedingEvents && allAnimals 
+        const isEwe = a.sex?.toLowerCase() === 'ewe';
+        const stats = isEwe && breedingEvents && allAnimals 
           ? calculateEweBreedingStats(a.id, breedingEvents, allAnimals) 
           : null;
         
         const photoCell = `<td style="width:32px;padding:1mm;"><div style="width:28px;height:28px;border-radius:3px;overflow:hidden;background:#f0f0f0;">${a.photo ? `<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover;"/>` : ''}</div></td>`;
         
-        if (isEweFilter && stats) {
+        if (hasEwes) {
           return `<tr style="height:30pt;">
             ${photoCell}
             <td style="font-weight:bold;">${a.tagId}</td>
+            <td>${a.sex || '-'}</td>
             <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yy") : '-'}</td>
-            <td style="text-align:center;font-weight:bold;">${stats.totalLambs}</td>
-            <td>${stats.firstLambDate ? format(stats.firstLambDate, "dd/MM/yy") : '-'}</td>
-            <td style="text-align:center;">${stats.avgILP > 0 ? stats.avgILP + 'd' : '-'}</td>
-            <td style="text-align:center;">${stats.lambsWeaned}</td>
-            <td style="text-align:center;">${stats.avgWeanWeight > 0 ? stats.avgWeanWeight + 'kg' : '-'}</td>
+            <td style="text-align:center;font-weight:bold;">${isEwe && stats ? stats.totalLambs : '-'}</td>
+            <td>${isEwe && stats && stats.firstLambDate ? format(stats.firstLambDate, "dd/MM/yy") : '-'}</td>
+            <td style="text-align:center;">${isEwe && stats && stats.avgILP > 0 ? stats.avgILP + 'd' : '-'}</td>
+            <td style="text-align:center;">${isEwe && stats ? stats.lambsWeaned : '-'}</td>
+            <td style="text-align:center;">${isEwe && stats && stats.avgWeanWeight > 0 ? stats.avgWeanWeight + 'kg' : '-'}</td>
             <td><span class="status status-${a.status}">${a.status}</span></td>
           </tr>`;
         } else {
@@ -158,7 +161,7 @@ export default function Animals() {
             </div>
             <div class="header-center">
               <h1>${fb?.studName || fb?.farmName || "MY HERD"}</h1>
-              <p class="subtitle">${isEweFilter ? 'Ewe Breeding Register' : 'Livestock Register'}</p>
+              <p class="subtitle">${hasEwes ? 'Ewe Breeding Register' : 'Livestock Register'}</p>
             </div>
             <div class="header-right">
               <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
