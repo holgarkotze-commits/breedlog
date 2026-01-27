@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { useAnimals, useCreateAnimal, useDeleteAnimal } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
+import { useBreedingEvents } from "@/hooks/use-breeding";
 import { AnimalCard } from "@/components/AnimalCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,8 +12,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertAnimalSchema, type Animal } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical } from "lucide-react";
+import { insertAnimalSchema, type Animal, type BreedingEvent } from "@shared/schema";
+import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +23,50 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Link, useSearch } from "wouter";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { format } from "date-fns";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
+
+function calculateEweBreedingStats(eweId: number, breedingEvents: BreedingEvent[], allAnimals: Animal[]) {
+  const eweEvents = breedingEvents.filter(e => e.eweId === eweId && e.lambingDate);
+  
+  const totalLambs = eweEvents.reduce((sum, e) => sum + (e.lambCount || 0), 0);
+  
+  const lambingDates = eweEvents
+    .map(e => new Date(e.lambingDate!))
+    .sort((a, b) => a.getTime() - b.getTime());
+  
+  const firstLambDate = lambingDates.length > 0 ? lambingDates[0] : null;
+  
+  let avgILP = 0;
+  if (lambingDates.length > 1) {
+    const intervals: number[] = [];
+    for (let i = 1; i < lambingDates.length; i++) {
+      const days = (lambingDates[i].getTime() - lambingDates[i-1].getTime()) / (1000 * 60 * 60 * 24);
+      intervals.push(days);
+    }
+    avgILP = Math.round(intervals.reduce((a, b) => a + b, 0) / intervals.length);
+  }
+  
+  const offspring = allAnimals.filter(a => a.damId === eweId);
+  const weanedLambs = offspring.filter(a => 
+    a.weaningStatus === 'normal' || a.weaningStatus === 'early' || a.status === 'sold' || a.status === 'active'
+  ).length;
+  
+  const weanedWithWeight = offspring.filter(a => 
+    (a.weaningStatus === 'normal' || a.weaningStatus === 'early') && a.currentWeight
+  );
+  const avgWeanWeight = weanedWithWeight.length > 0
+    ? Math.round((weanedWithWeight.reduce((sum, a) => sum + parseFloat(a.currentWeight || '0'), 0) / weanedWithWeight.length) * 10) / 10
+    : 0;
+  
+  return {
+    totalLambs,
+    firstLambDate,
+    avgILP,
+    lambsWeaned: weanedLambs,
+    avgWeanWeight
+  };
+}
 
 export default function Animals() {
   const searchParams = useSearch();
@@ -33,10 +77,165 @@ export default function Animals() {
   const [sexFilter, setSexFilter] = useState(urlParams.get("sex") || "all");
   const [ageFilter, setAgeFilter] = useState(urlParams.get("age") || "all");
   const { data: allAnimals, isLoading } = useAnimals({ search });
+  const { data: breedingEvents } = useBreedingEvents();
   const { data: farmSettings } = useFarmSettings();
+  const { toast } = useToast();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const isMobile = useIsMobile();
+
+  const exportHerdPDF = () => {
+    if (!filteredAnimals) return;
+    const fb = farmSettings;
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    const isEweFilter = sexFilter === 'ewe';
+    
+    const animalsPerPage = 18;
+    const totalPages = Math.ceil(filteredAnimals.length / animalsPerPage);
+    
+    let pagesHtml = "";
+    for (let page = 0; page < Math.max(1, totalPages); page++) {
+      const startIdx = page * animalsPerPage;
+      const pageAnimals = filteredAnimals.slice(startIdx, startIdx + animalsPerPage);
+      
+      const tableHeaders = isEweFilter 
+        ? `<th style="width:32px"></th>
+           <th style="width:12%">Tag ID</th>
+           <th style="width:14%">DOB</th>
+           <th style="width:8%">Lambs</th>
+           <th style="width:14%">1st Lamb</th>
+           <th style="width:10%">ILP</th>
+           <th style="width:10%">Weaned</th>
+           <th style="width:12%">Avg Wean</th>
+           <th style="width:12%">Status</th>`
+        : `<th style="width:32px"></th>
+           <th style="width:15%">Tag ID</th>
+           <th style="width:18%">Name</th>
+           <th style="width:10%">Sex</th>
+           <th style="width:14%">Breed</th>
+           <th style="width:12%">DOB</th>
+           <th style="width:12%">Weight</th>
+           <th style="width:12%">Status</th>`;
+      
+      const tableRows = pageAnimals.map((a: Animal, i: number) => {
+        const stats = isEweFilter && breedingEvents && allAnimals 
+          ? calculateEweBreedingStats(a.id, breedingEvents, allAnimals) 
+          : null;
+        
+        const photoCell = `<td style="width:32px;padding:1mm;"><div style="width:28px;height:28px;border-radius:3px;overflow:hidden;background:#f0f0f0;">${a.photo ? `<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover;"/>` : ''}</div></td>`;
+        
+        if (isEweFilter && stats) {
+          return `<tr style="height:30pt;">
+            ${photoCell}
+            <td style="font-weight:bold;">${a.tagId}</td>
+            <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yy") : '-'}</td>
+            <td style="text-align:center;font-weight:bold;">${stats.totalLambs}</td>
+            <td>${stats.firstLambDate ? format(stats.firstLambDate, "dd/MM/yy") : '-'}</td>
+            <td style="text-align:center;">${stats.avgILP > 0 ? stats.avgILP + 'd' : '-'}</td>
+            <td style="text-align:center;">${stats.lambsWeaned}</td>
+            <td style="text-align:center;">${stats.avgWeanWeight > 0 ? stats.avgWeanWeight + 'kg' : '-'}</td>
+            <td><span class="status status-${a.status}">${a.status}</span></td>
+          </tr>`;
+        } else {
+          return `<tr style="height:30pt;">
+            ${photoCell}
+            <td style="font-weight:bold;">${a.tagId}</td>
+            <td>${a.name || '-'}</td>
+            <td>${a.sex}</td>
+            <td>${a.breed || '-'}</td>
+            <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yy") : '-'}</td>
+            <td>${a.currentWeight ? a.currentWeight + 'kg' : '-'}</td>
+            <td><span class="status status-${a.status}">${a.status}</span></td>
+          </tr>`;
+        }
+      }).join('');
+      
+      pagesHtml += `
+        <div class="page">
+          <div class="header">
+            <div class="header-left">
+              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+            </div>
+            <div class="header-center">
+              <h1>${fb?.studName || fb?.farmName || "MY HERD"}</h1>
+              <p class="subtitle">${isEweFilter ? 'Ewe Breeding Register' : 'Livestock Register'}</p>
+            </div>
+            <div class="header-right">
+              <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
+              <p>${exportDate}</p>
+            </div>
+          </div>
+          
+          <table class="animals-table">
+            <thead><tr>${tableHeaders}</tr></thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+          
+          <div class="footer">
+            <div class="footer-info">
+              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+              <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
+            </div>
+            <div class="footer-branding">
+              <p class="breedlog-text">BREEDLOG</p>
+              <p class="tagline">Professional Livestock Management</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${fb?.studName || fb?.farmName || "BreedLog"} - Herd Export</title>
+  <style>
+    @page { size: A4; margin: 8mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8pt; color: #1a1a1a; background: white; }
+    .page { width: 194mm; height: 279mm; padding: 4mm; margin: 0 auto; page-break-after: always; display: flex; flex-direction: column; }
+    .page:last-child { page-break-after: avoid; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 2mm; height: 16mm; }
+    .header-left { width: 60px; }
+    .header-center { flex: 1; text-align: center; }
+    .header-center h1 { font-size: 12pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
+    .header-center .subtitle { font-size: 7pt; color: #666; margin-top: 1px; }
+    .header-right { text-align: right; font-size: 7pt; color: #666; }
+    .animals-table { width: 100%; border-collapse: collapse; flex: 1; table-layout: fixed; }
+    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 1mm; text-align: left; text-transform: uppercase; height: 30pt; line-height: 1.2; vertical-align: middle; }
+    .animals-table td { padding: 0 1mm; border-bottom: 1px solid #ddd; font-size: 7pt; vertical-align: middle; height: 30pt; line-height: 1.2; }
+    .animals-table tbody tr { height: 30pt; }
+    .animals-table tr:nth-child(even) { background: #f9f9f9; }
+    .status { display: inline-block; padding: 1px 4px; border-radius: 2px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
+    .status-active { background: #22c55e20; color: #16a34a; }
+    .status-sold { background: #f59e0b20; color: #d97706; }
+    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
+    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; margin-top: auto; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 2mm 3mm; border-radius: 2mm; height: 14mm; }
+    .footer-info { flex: 1; }
+    .footer-title { font-size: 8pt; font-weight: 700; color: #FFC300; }
+    .footer-info p { font-size: 6pt; margin-top: 1px; }
+    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+    .footer-branding .breedlog-text { font-size: 10pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
+    .footer-branding .tagline { font-size: 6pt; font-style: italic; color: #FFC300; margin-top: 1px; }
+    @media print { .page { page-break-after: always; height: 279mm; } .page:last-child { page-break-after: avoid; } }
+  </style>
+</head>
+<body>
+  ${pagesHtml}
+</body>
+</html>
+    `;
+    
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 500);
+    }
+    toast({ title: "PDF Ready", description: "Print dialog opened for PDF export" });
+  };
 
   // Update filters when URL changes
   useEffect(() => {
@@ -71,9 +270,21 @@ export default function Animals() {
       <div className="space-y-2.5 md:space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-row justify-between items-center gap-2">
           <h1 className="text-base md:text-3xl font-bold tracking-tight" data-testid="page-title">
-            {displayName ? `${displayName}` : "Livestock"}
+            {displayName ? `${displayName} - My Herd` : "My Herd"}
           </h1>
-          <CreateAnimalDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="icon"
+              onClick={exportHerdPDF}
+              disabled={!filteredAnimals || filteredAnimals.length === 0}
+              data-testid="button-export-herd"
+              title="Export to PDF"
+            >
+              <Printer className="w-4 h-4" />
+            </Button>
+            <CreateAnimalDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
+          </div>
         </div>
 
         {/* Filters - Compact on mobile */}
