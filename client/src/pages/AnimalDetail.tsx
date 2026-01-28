@@ -1048,9 +1048,13 @@ ${data.notes || "No notes recorded."}
   
   <div class="pedigree-container">
     <div class="pedigree-tree">
-      <!-- Subject (Center Left) -->
+      <!-- Subject (Center Left) with Photo -->
       <div class="pedigree-subject">
         <div class="pedigree-box subject-box">
+          ${animal.photo 
+            ? `<img src="${animal.photo}" class="subject-thumbnail" alt="${data.identification.tagId}" />`
+            : ''
+          }
           <div class="box-label">SUBJECT</div>
           <div class="box-id">${data.identification.tagId}</div>
           <div class="box-details">${data.basicInfo.sex?.toUpperCase() || ""} | ${data.basicInfo.breed || "Meatmaster"}</div>
@@ -1130,8 +1134,9 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1
 .pedigree-container { padding: 10mm; }
 .pedigree-tree { display: flex; align-items: center; justify-content: center; gap: 30mm; }
 .pedigree-subject, .pedigree-parents { display: flex; flex-direction: column; gap: 8mm; }
-.pedigree-box { border: 2px solid #FFC300; border-radius: 6px; padding: 8px 12px; min-width: 80mm; background: white; }
+.pedigree-box { border: 2px solid #FFC300; border-radius: 6px; padding: 8px 12px; min-width: 80mm; background: white; text-align: center; }
 .subject-box { background: linear-gradient(135deg, #FFC300 0%, #ffdb4d 100%); }
+.subject-thumbnail { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-bottom: 6px; }
 .sire-box { border-color: #3b82f6; }
 .dam-box { border-color: #ec4899; }
 .box-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; color: #666; margin-bottom: 3px; }
