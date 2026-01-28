@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 export interface RecentVisit {
   path: string;
@@ -23,7 +23,7 @@ export function useRecentVisits() {
     }
   }, []);
 
-  const addVisit = (path: string, label: string) => {
+  const addVisit = useCallback((path: string, label: string) => {
     if (path === "/") return;
     
     const newVisit: RecentVisit = {
@@ -38,11 +38,11 @@ export function useRecentVisits() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       return updated;
     });
-  };
+  }, []);
 
-  const getRecentVisits = (count: number = 4): RecentVisit[] => {
+  const getRecentVisits = useCallback((count: number = 4): RecentVisit[] => {
     return visits.slice(0, count);
-  };
+  }, [visits]);
 
   return { visits, addVisit, getRecentVisits };
 }

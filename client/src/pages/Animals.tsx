@@ -68,6 +68,55 @@ function calculateEweBreedingStats(eweId: number, breedingEvents: BreedingEvent[
   };
 }
 
+function calculateRamBreedingStats(ramId: number, breedingEvents: BreedingEvent[], allAnimals: Animal[]) {
+  // Get all lambing events where this ram was the sire
+  const ramEvents = breedingEvents.filter(e => e.ramId === ramId && e.lambingDate);
+  
+  // Total lambs sired
+  const totalLambs = ramEvents.reduce((sum, e) => sum + (e.lambCount || 0), 0);
+  
+  // Count twins (lambings with 2+ lambs)
+  const twinCount = ramEvents.filter(e => (e.lambCount || 0) >= 2).length;
+  
+  // Get offspring for weight calculations
+  const offspring = allAnimals.filter(a => a.sireId === ramId);
+  
+  // Calculate average birth weight
+  const birthWeights = offspring.filter(a => a.birthWeight).map(a => parseFloat(a.birthWeight || '0'));
+  const avgBirthWeight = birthWeights.length > 0 
+    ? Math.round((birthWeights.reduce((a, b) => a + b, 0) / birthWeights.length) * 10) / 10 
+    : 0;
+  
+  // Calculate average 100-day weight
+  const weight100Days = offspring.filter(a => a.weight100Day).map(a => parseFloat(a.weight100Day || '0'));
+  const avgWeight100Day = weight100Days.length > 0 
+    ? Math.round((weight100Days.reduce((a, b) => a + b, 0) / weight100Days.length) * 10) / 10 
+    : 0;
+  
+  // Calculate average 270-day weight
+  const weight270Days = offspring.filter(a => a.weight270Day).map(a => parseFloat(a.weight270Day || '0'));
+  const avgWeight270Day = weight270Days.length > 0 
+    ? Math.round((weight270Days.reduce((a, b) => a + b, 0) / weight270Days.length) * 10) / 10 
+    : 0;
+  
+  // Calculate average wean weight (using weight100Day as wean weight)
+  const weanedWithWeight = offspring.filter(a => 
+    (a.weaningStatus === 'normal' || a.weaningStatus === 'early') && a.weight100Day
+  );
+  const avgWeanWeight = weanedWithWeight.length > 0
+    ? Math.round((weanedWithWeight.reduce((sum, a) => sum + parseFloat(a.weight100Day || '0'), 0) / weanedWithWeight.length) * 10) / 10
+    : 0;
+  
+  return {
+    totalLambs,
+    twinCount,
+    avgBirthWeight,
+    avgWeight100Day,
+    avgWeight270Day,
+    avgWeanWeight
+  };
+}
+
 export default function Animals() {
   const searchParams = useSearch();
   const urlParams = new URLSearchParams(searchParams);
@@ -247,6 +296,161 @@ export default function Animals() {
       setTimeout(() => printWindow.print(), 500);
     }
     toast({ title: "PDF Ready", description: `${exportTitle} export opened for printing` });
+  };
+
+  // Dedicated Ram Export PDF with images
+  const exportRamsPDF = () => {
+    if (!allAnimals || !breedingEvents) return;
+    const fb = farmSettings;
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    
+    const rams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram");
+    
+    if (rams.length === 0) {
+      toast({ title: "No Rams", description: "No rams found to export", variant: "destructive" });
+      return;
+    }
+    
+    // Calculate stats for each ram
+    const ramsWithStats = rams.map(ram => {
+      const stats = calculateRamBreedingStats(ram.id, breedingEvents, allAnimals);
+      return { ...ram, stats };
+    });
+    
+    const ramsPerPage = 8; // Fewer per page due to images
+    const totalPages = Math.ceil(ramsWithStats.length / ramsPerPage);
+    
+    let pagesHtml = "";
+    for (let page = 0; page < Math.max(1, totalPages); page++) {
+      const startIdx = page * ramsPerPage;
+      const pageRams = ramsWithStats.slice(startIdx, startIdx + ramsPerPage);
+      
+      const tableRows = pageRams.map((ram) => {
+        return `<tr>
+          <td class="photo-cell">
+            ${ram.photo 
+              ? `<img src="${ram.photo}" class="ram-photo" alt="${ram.tagId}" />`
+              : `<div class="no-photo"></div>`
+            }
+          </td>
+          <td><strong>${ram.tagId}</strong></td>
+          <td>${ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : '-'}</td>
+          <td>${ram.stats.totalLambs || 0}</td>
+          <td>${ram.stats.avgBirthWeight || '-'}</td>
+          <td>${ram.stats.avgWeight100Day || '-'}</td>
+          <td>${ram.stats.avgWeight270Day || '-'}</td>
+          <td>${ram.stats.twinCount || 0}</td>
+          <td>${ram.stats.avgWeanWeight || '-'}</td>
+          <td><span class="status status-${ram.status}">${ram.status}</span></td>
+        </tr>`;
+      }).join('');
+      
+      pagesHtml += `
+        <div class="page">
+          <div class="header">
+            <div class="header-left">
+              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+            </div>
+            <div class="header-center">
+              <h1>${fb?.studName || fb?.farmName || "Rams Register"}</h1>
+              <p class="subtitle">Breeding Ram Performance Report</p>
+            </div>
+            <div class="header-right">
+              <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
+              <p>${exportDate}</p>
+            </div>
+          </div>
+          
+          <table class="rams-table">
+            <thead>
+              <tr>
+                <th class="photo-header">Photo</th>
+                <th>Ram ID</th>
+                <th>DOB</th>
+                <th>Total Lambs</th>
+                <th>Avg Birth (kg)</th>
+                <th>Avg 100-Day (kg)</th>
+                <th>Avg 270-Day (kg)</th>
+                <th>Twin Count</th>
+                <th>Avg Wean (kg)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+          
+          <div class="footer">
+            <div class="footer-info">
+              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+              <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
+            </div>
+            <div class="footer-branding">
+              <p class="breedlog-text">BREEDLOG</p>
+              <p class="tagline">Professional Livestock Management</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${fb?.studName || fb?.farmName || "BreedLog"} - Rams Register</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
+    .page { width: 190mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    .page:last-child { page-break-after: avoid; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
+    .header-left { width: 60px; flex-shrink: 0; }
+    .header-center { flex: 1; text-align: center; }
+    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
+    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
+    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
+    .rams-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .rams-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
+    .rams-table td { padding: 8px 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
+    .rams-table tbody tr { height: auto; }
+    .rams-table tr:nth-child(even) { background: #fafafa; }
+    .photo-header { width: 50px; }
+    .photo-cell { width: 50px; padding: 4px !important; }
+    .ram-photo { width: 42px; height: 42px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
+    .no-photo { width: 42px; height: 42px; background: #f0f0f0; border-radius: 4px; border: 1px solid #ddd; }
+    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
+    .status-active { background: #22c55e20; color: #16a34a; }
+    .status-sold { background: #f59e0b20; color: #d97706; }
+    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
+    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
+    .footer-info { flex: 1; }
+    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
+    .footer-info p { font-size: 7pt; margin-top: 2px; }
+    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
+    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
+    @media print { 
+      .page { page-break-after: always; } 
+      .page:last-child { page-break-after: avoid; }
+      thead { display: table-header-group; }
+    }
+  </style>
+</head>
+<body>
+  ${pagesHtml}
+</body>
+</html>
+    `;
+    
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 500);
+    }
+    toast({ title: "PDF Ready", description: "Rams Register export opened for printing" });
   };
 
   // Update filters when URL changes
@@ -484,6 +688,14 @@ export default function Animals() {
           </div>
         )}
 
+        {/* Dedicated RAMS Section */}
+        <RamsSection 
+          allAnimals={allAnimals || []} 
+          breedingEvents={breedingEvents || []} 
+          onExport={exportRamsPDF}
+          isLoading={isLoading}
+        />
+
         {/* Encouraging message */}
         <div className="text-center py-6 px-4 border-t border-border/30 mt-4">
           <p className="text-sm text-muted-foreground italic max-w-md mx-auto">
@@ -492,6 +704,125 @@ export default function Animals() {
         </div>
       </div>
     </Layout>
+  );
+}
+
+function RamsSection({ 
+  allAnimals, 
+  breedingEvents, 
+  onExport,
+  isLoading 
+}: { 
+  allAnimals: Animal[]; 
+  breedingEvents: BreedingEvent[];
+  onExport: () => void;
+  isLoading: boolean;
+}) {
+  const [, setLocation] = useLocation();
+  const rams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram");
+  
+  if (isLoading) {
+    return (
+      <div className="mt-8 space-y-4">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-40 w-full rounded-md" />
+      </div>
+    );
+  }
+  
+  // Calculate stats for each ram
+  const ramsWithStats = rams.map(ram => {
+    const stats = calculateRamBreedingStats(ram.id, breedingEvents, allAnimals);
+    return { ...ram, stats };
+  });
+
+  return (
+    <div className="mt-8 space-y-4" data-testid="rams-section">
+      {/* Section Header */}
+      <div className="flex items-center justify-between border-b border-border pb-3">
+        <h2 className="text-lg md:text-xl font-bold text-primary uppercase tracking-wide" data-testid="rams-section-title">
+          Rams
+        </h2>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={onExport}
+          disabled={rams.length === 0}
+          data-testid="button-export-rams-section"
+        >
+          <Download className="w-4 h-4 mr-2" />
+          Export Rams PDF
+        </Button>
+      </div>
+
+      {rams.length === 0 ? (
+        <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
+          <p>No rams in your herd yet.</p>
+        </div>
+      ) : (
+        <div className="border border-border rounded-md overflow-x-auto">
+          <table className="w-full text-sm min-w-[800px]">
+            <thead className="bg-primary text-primary-foreground">
+              <tr>
+                <th className="text-left p-2.5 font-semibold w-14">Photo</th>
+                <th className="text-left p-2.5 font-semibold">Ram ID</th>
+                <th className="text-left p-2.5 font-semibold">DOB</th>
+                <th className="text-left p-2.5 font-semibold">Total Lambs</th>
+                <th className="text-left p-2.5 font-semibold">Avg Birth (kg)</th>
+                <th className="text-left p-2.5 font-semibold">Avg 100-Day (kg)</th>
+                <th className="text-left p-2.5 font-semibold">Avg 270-Day (kg)</th>
+                <th className="text-left p-2.5 font-semibold">Twin Count</th>
+                <th className="text-left p-2.5 font-semibold">Avg Wean (kg)</th>
+                <th className="text-left p-2.5 font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ramsWithStats.map((ram, idx) => (
+                <tr 
+                  key={ram.id}
+                  className={cn(
+                    "hover:bg-secondary/50 cursor-pointer transition-colors",
+                    idx % 2 === 0 ? "bg-card" : "bg-secondary/20"
+                  )}
+                  onClick={() => setLocation(`/animals/${ram.id}`)}
+                  data-testid={`ram-row-${ram.id}`}
+                >
+                  <td className="p-2">
+                    <div className="w-10 h-10 rounded-md bg-secondary overflow-hidden">
+                      {ram.photo ? (
+                        <img src={ram.photo} alt={ram.tagId} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center opacity-30">
+                          <img src={logo} className="w-6 h-6 grayscale" />
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="p-2.5 font-semibold">{ram.tagId}</td>
+                  <td className="p-2.5">
+                    {ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : "—"}
+                  </td>
+                  <td className="p-2.5 text-center">{ram.stats.totalLambs}</td>
+                  <td className="p-2.5 text-center">{ram.stats.avgBirthWeight || "—"}</td>
+                  <td className="p-2.5 text-center">{ram.stats.avgWeight100Day || "—"}</td>
+                  <td className="p-2.5 text-center">{ram.stats.avgWeight270Day || "—"}</td>
+                  <td className="p-2.5 text-center">{ram.stats.twinCount}</td>
+                  <td className="p-2.5 text-center">{ram.stats.avgWeanWeight || "—"}</td>
+                  <td className="p-2.5">
+                    <Badge variant="secondary" className={cn(
+                      "text-[10px] px-1.5",
+                      ram.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-red-900/80 text-red-100"
+                    )}>
+                      {ram.status}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
