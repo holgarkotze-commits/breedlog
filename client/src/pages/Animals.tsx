@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Layout } from "@/components/Layout";
-import { useAnimals, useCreateAnimal, useDeleteAnimal, useRemoveFromHerd } from "@/hooks/use-animals";
+import { useAnimals, useCreateAnimal, useDeleteAnimal, useRemoveFromHerd, useClassifyRamLamb, useConfirmCull, useMoveToEwes, useMoveToRams, useUpdateAnimal } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useBreedingEvents } from "@/hooks/use-breeding";
 import { AnimalCard } from "@/components/AnimalCard";
@@ -13,7 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAnimalSchema, type Animal, type BreedingEvent } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3, LogOut } from "lucide-react";
+import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3, LogOut, Scale, Tag, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,7 +23,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Link, useSearch, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
+import { Label } from "@/components/ui/label";
+import { DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 
 function calculateEweBreedingStats(eweId: number, breedingEvents: BreedingEvent[], allAnimals: Animal[]) {
@@ -139,6 +141,12 @@ export default function Animals() {
   const [removeReason, setRemoveReason] = useState<"sold" | "deceased" | "transferred">("sold");
   const [removeNotes, setRemoveNotes] = useState("");
   const removeFromHerdMutation = useRemoveFromHerd();
+  
+  const classifyMutation = useClassifyRamLamb();
+  const confirmCullMutation = useConfirmCull();
+  const moveToEwesMutation = useMoveToEwes();
+  const moveToRamsMutation = useMoveToRams();
+  const updateAnimalMutation = useUpdateAnimal();
   
   const handleRemoveFromHerd = () => {
     if (!animalToRemove) return;
@@ -910,6 +918,142 @@ export default function Animals() {
     toast({ title: "PDF Ready", description: "Rams Register export opened for printing" });
   };
 
+  const exportEwesPDF = () => {
+    if (!allAnimals || !breedingEvents) return;
+    const fb = farmSettings;
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    
+    const ewes = allAnimals.filter(a => 
+      a.sex?.toLowerCase() === "ewe" && 
+      a.status !== 'culled' && 
+      a.status !== 'sold' &&
+      a.status !== 'dead'
+    );
+    
+    if (ewes.length === 0) {
+      toast({ title: "No Ewes", description: "No ewes found to export", variant: "destructive" });
+      return;
+    }
+    
+    const ewesWithStats = ewes.map(ewe => {
+      const stats = calculateEweBreedingStats(ewe.id, breedingEvents, allAnimals);
+      return { ...ewe, stats };
+    });
+    
+    const ewesPerPage = 10;
+    const totalPages = Math.ceil(ewesWithStats.length / ewesPerPage);
+    
+    let pagesHtml = "";
+    for (let page = 0; page < Math.max(1, totalPages); page++) {
+      const startIdx = page * ewesPerPage;
+      const pageEwes = ewesWithStats.slice(startIdx, startIdx + ewesPerPage);
+      
+      const tableRows = pageEwes.map((ewe) => {
+        return `<tr>
+          <td><strong>${ewe.tagId}</strong></td>
+          <td>${ewe.birthDate ? format(new Date(ewe.birthDate), "dd/MM/yyyy") : '-'}</td>
+          <td>${ewe.stats.totalLambs || 0}</td>
+          <td>${ewe.stats.firstLambDate ? format(ewe.stats.firstLambDate, "dd/MM/yyyy") : '-'}</td>
+          <td>${ewe.stats.avgILP || '-'}</td>
+          <td>${ewe.stats.lambsWeaned || 0}</td>
+          <td>${ewe.stats.avgWeanWeight || '-'}</td>
+          <td><span class="status status-${ewe.status}">${ewe.status}</span></td>
+        </tr>`;
+      }).join('');
+      
+      pagesHtml += `
+        <div class="page">
+          <div class="header">
+            <div class="header-left">
+              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+            </div>
+            <div class="header-center">
+              <h1>${fb?.studName || fb?.farmName || "Ewes Register"}</h1>
+              <p class="subtitle">Breeding Ewe Performance Report</p>
+            </div>
+            <div class="header-right">
+              <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
+              <p>${exportDate}</p>
+            </div>
+          </div>
+          
+          <table class="ewes-table">
+            <thead>
+              <tr>
+                <th>Ewe ID</th>
+                <th>DOB</th>
+                <th># Lambs</th>
+                <th>First Lamb</th>
+                <th>Avg ILP</th>
+                <th>Lambs Weaned</th>
+                <th>Avg Wean (kg)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+          
+          <div class="footer">
+            <div class="footer-info">
+              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+              <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
+            </div>
+            <div class="footer-branding">
+              <p class="breedlog-text">BREEDLOG</p>
+              <p class="tagline">Professional Livestock Management</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Ewes Register - ${fb?.studName || fb?.farmName || "BreedLog"}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #fff; color: #222; }
+    .page { width: 210mm; min-height: 297mm; padding: 10mm; position: relative; }
+    .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 2px solid #FFC300; margin-bottom: 15px; }
+    .header-center h1 { font-size: 20px; color: #333; }
+    .header-center .subtitle { font-size: 11px; color: #666; }
+    .header-right { text-align: right; font-size: 10px; color: #666; }
+    .ewes-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .ewes-table th { background: #FFC300; color: #000; padding: 8px; text-align: left; font-weight: bold; }
+    .ewes-table td { padding: 8px; border-bottom: 1px solid #ddd; }
+    .ewes-table tr:nth-child(even) { background: #f9f9f9; }
+    .status { padding: 2px 6px; border-radius: 3px; font-size: 9px; text-transform: uppercase; }
+    .status-active { background: #166534; color: #fff; }
+    .footer { position: absolute; bottom: 10mm; left: 10mm; right: 10mm; display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid #ddd; }
+    .footer-info { font-size: 10px; color: #666; }
+    .footer-title { font-weight: bold; color: #333; }
+    .footer-branding { text-align: right; }
+    .breedlog-text { font-size: 14px; font-weight: bold; color: #FFC300; letter-spacing: 2px; }
+    .tagline { font-size: 8px; color: #999; }
+    @media print {
+      .page { page-break-after: always; } 
+      .page:last-child { page-break-after: avoid; }
+      thead { display: table-header-group; }
+    }
+  </style>
+</head>
+<body>
+  ${pagesHtml}
+</body>
+</html>
+    `;
+    
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 500);
+    }
+    toast({ title: "PDF Ready", description: "Ewes Register export opened for printing" });
+  };
+
   // Update filters when URL changes
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -1153,6 +1297,26 @@ export default function Animals() {
           isLoading={isLoading}
         />
 
+        {/* Dedicated EWES Section */}
+        <EwesSection 
+          allAnimals={allAnimals || []} 
+          breedingEvents={breedingEvents || []} 
+          onExport={exportEwesPDF}
+          isLoading={isLoading}
+        />
+
+        {/* Dedicated LAMBS Section */}
+        <LambsSection 
+          allAnimals={allAnimals || []} 
+          breedingEvents={breedingEvents || []}
+          isLoading={isLoading}
+          classifyMutation={classifyMutation}
+          confirmCullMutation={confirmCullMutation}
+          moveToEwesMutation={moveToEwesMutation}
+          moveToRamsMutation={moveToRamsMutation}
+          updateAnimalMutation={updateAnimalMutation}
+        />
+
         {/* Encouraging message */}
         <div className="text-center py-6 px-4 border-t border-border/30 mt-4">
           <p className="text-sm text-muted-foreground italic max-w-md mx-auto">
@@ -1379,6 +1543,579 @@ function RamsSection({
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function getAgeDays(birthDate: string | null): number {
+  if (!birthDate) return 0;
+  return differenceInDays(new Date(), new Date(birthDate));
+}
+
+function EwesSection({ 
+  allAnimals, 
+  breedingEvents, 
+  onExport,
+  isLoading 
+}: { 
+  allAnimals: Animal[]; 
+  breedingEvents: BreedingEvent[];
+  onExport: () => void;
+  isLoading: boolean;
+}) {
+  const [, setLocation] = useLocation();
+  
+  const allEwes = allAnimals.filter(a => 
+    a.sex?.toLowerCase() === "ewe" && 
+    a.status !== 'culled' && 
+    a.lambStatus !== 'culled' &&
+    a.status !== 'sold' &&
+    a.status !== 'dead'
+  );
+  
+  if (isLoading) {
+    return (
+      <div className="mt-8 space-y-4">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-40 w-full rounded-md" />
+      </div>
+    );
+  }
+  
+  const ewesWithStats = allEwes.map(ewe => {
+    const stats = calculateEweBreedingStats(ewe.id, breedingEvents, allAnimals);
+    return { ...ewe, stats };
+  });
+
+  return (
+    <div className="mt-8 space-y-4" data-testid="ewes-section">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-3">
+        <h2 className="text-lg md:text-xl font-bold text-primary uppercase tracking-wide" data-testid="ewes-section-title">
+          Ewes ({allEwes.length})
+        </h2>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={onExport}
+          disabled={allEwes.length === 0}
+          data-testid="button-export-ewes-section"
+        >
+          <Download className="w-4 h-4 mr-2" />
+          Export Ewes PDF
+        </Button>
+      </div>
+
+      {allEwes.length === 0 ? (
+        <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
+          <p>No ewes in your herd yet.</p>
+        </div>
+      ) : (
+        <div className="border border-border rounded-md overflow-x-auto">
+          <table className="w-full text-sm min-w-[800px]">
+            <thead className="bg-primary text-primary-foreground">
+              <tr>
+                <th className="text-left p-2.5 font-semibold w-14">Photo</th>
+                <th className="text-left p-2.5 font-semibold">Ewe ID</th>
+                <th className="text-left p-2.5 font-semibold">DOB</th>
+                <th className="text-left p-2.5 font-semibold"># Lambs</th>
+                <th className="text-left p-2.5 font-semibold">First Lamb</th>
+                <th className="text-left p-2.5 font-semibold">Avg ILP</th>
+                <th className="text-left p-2.5 font-semibold">Lambs Weaned</th>
+                <th className="text-left p-2.5 font-semibold">Avg Wean (kg)</th>
+                <th className="text-left p-2.5 font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ewesWithStats.map((ewe, idx) => (
+                <tr 
+                  key={ewe.id}
+                  className={cn(
+                    "hover:bg-secondary/50 cursor-pointer transition-colors",
+                    idx % 2 === 0 ? "bg-card" : "bg-secondary/20"
+                  )}
+                  onClick={() => setLocation(`/animals/${ewe.id}`)}
+                  data-testid={`ewe-row-${ewe.id}`}
+                >
+                  <td className="p-2">
+                    <div className="w-10 h-10 rounded-md bg-secondary overflow-hidden">
+                      {ewe.photo ? (
+                        <img src={ewe.photo} alt={ewe.tagId} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center opacity-30">
+                          <img src={logo} className="w-6 h-6 grayscale" />
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="p-2.5 font-semibold" data-testid={`text-ewe-tagid-${ewe.id}`}>{ewe.tagId}</td>
+                  <td className="p-2.5" data-testid={`text-ewe-dob-${ewe.id}`}>
+                    {ewe.birthDate ? format(new Date(ewe.birthDate), "dd/MM/yyyy") : "—"}
+                  </td>
+                  <td className="p-2.5 text-center" data-testid={`text-ewe-lambs-${ewe.id}`}>{ewe.stats.totalLambs}</td>
+                  <td className="p-2.5" data-testid={`text-ewe-firstlamb-${ewe.id}`}>
+                    {ewe.stats.firstLambDate ? format(ewe.stats.firstLambDate, "dd/MM/yyyy") : "—"}
+                  </td>
+                  <td className="p-2.5 text-center" data-testid={`text-ewe-ilp-${ewe.id}`}>{ewe.stats.avgILP || "—"}</td>
+                  <td className="p-2.5 text-center" data-testid={`text-ewe-weaned-${ewe.id}`}>{ewe.stats.lambsWeaned}</td>
+                  <td className="p-2.5 text-center" data-testid={`text-ewe-weanweight-${ewe.id}`}>{ewe.stats.avgWeanWeight || "—"}</td>
+                  <td className="p-2.5">
+                    <Badge 
+                      variant={ewe.status === 'active' ? "default" : "secondary"}
+                      className="text-[10px] px-1.5"
+                      data-testid={`badge-ewe-status-${ewe.id}`}
+                    >
+                      {ewe.status}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LambsSection({ 
+  allAnimals, 
+  breedingEvents,
+  isLoading,
+  classifyMutation,
+  confirmCullMutation,
+  moveToEwesMutation,
+  moveToRamsMutation,
+  updateAnimalMutation
+}: { 
+  allAnimals: Animal[]; 
+  breedingEvents: BreedingEvent[];
+  isLoading: boolean;
+  classifyMutation: ReturnType<typeof useClassifyRamLamb>;
+  confirmCullMutation: ReturnType<typeof useConfirmCull>;
+  moveToEwesMutation: ReturnType<typeof useMoveToEwes>;
+  moveToRamsMutation: ReturnType<typeof useMoveToRams>;
+  updateAnimalMutation: ReturnType<typeof useUpdateAnimal>;
+}) {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [sexFilter, setSexFilter] = useState("all");
+  const [classFilter, setClassFilter] = useState("all");
+  
+  const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+  const [showCullConfirm, setShowCullConfirm] = useState(false);
+  const [showWeightDialog, setShowWeightDialog] = useState(false);
+  const [showPromoteDialog, setShowPromoteDialog] = useState(false);
+  const [cullReason, setCullReason] = useState("");
+  const [weightValue, setWeightValue] = useState("");
+  const [weightType, setWeightType] = useState<"100" | "270">("100");
+  const [selectedRamType, setSelectedRamType] = useState<"breeding_ram" | "stud_ram" | "commercial_ram">("breeding_ram");
+  
+  const lambs = allAnimals.filter(animal => {
+    if (!animal.birthDate) return false;
+    const ageDays = getAgeDays(animal.birthDate);
+    if (ageDays > 365) return false;
+    
+    if (animal.lambStatus === 'moved_to_ewes' || animal.lambStatus === 'moved_to_rams') return false;
+    if (animal.status === 'culled' || animal.lambStatus === 'culled') return false;
+    if (animal.status === 'sold' || animal.status === 'dead') return false;
+    
+    if (sexFilter !== "all" && animal.sex !== sexFilter) return false;
+    
+    if (classFilter === "stud" && animal.ramLambClass !== "stud") return false;
+    if (classFilter === "commercial" && animal.ramLambClass !== "commercial") return false;
+    if (classFilter === "cull" && animal.ramLambClass !== "cull") return false;
+    
+    return true;
+  });
+  
+  const ramLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 365 && a.sex === 'ram' && a.lambStatus !== 'moved_to_rams' && a.status !== 'culled');
+  const eweLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 365 && a.sex === 'ewe' && a.lambStatus !== 'moved_to_ewes' && a.status !== 'culled');
+  
+  if (isLoading) {
+    return (
+      <div className="mt-8 space-y-4">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-40 w-full rounded-md" />
+      </div>
+    );
+  }
+
+  const handleClassify = (animal: Animal, classification: string) => {
+    classifyMutation.mutate({ id: animal.id, ramLambClass: classification });
+  };
+
+  const handleConfirmCull = () => {
+    if (!selectedAnimal) return;
+    confirmCullMutation.mutate({ id: selectedAnimal.id, cullReason }, {
+      onSuccess: () => {
+        setShowCullConfirm(false);
+        setSelectedAnimal(null);
+        setCullReason("");
+        toast({ title: "Animal Culled", description: `${selectedAnimal.tagId} moved to Culled archive` });
+      }
+    });
+  };
+
+  const handleSaveWeight = () => {
+    if (!selectedAnimal || !weightValue) return;
+    const today = format(new Date(), "yyyy-MM-dd");
+    const updates = weightType === "100" 
+      ? { weight100Day: weightValue, weight100DayDate: today }
+      : { weight270Day: weightValue, weight270DayDate: today };
+    
+    updateAnimalMutation.mutate({ id: selectedAnimal.id, ...updates }, {
+      onSuccess: (updatedAnimal) => {
+        setShowWeightDialog(false);
+        setSelectedAnimal(null);
+        setWeightValue("");
+        
+        if (weightType === "100" && updatedAnimal.sex === "ewe") {
+          moveToEwesMutation.mutate(updatedAnimal.id);
+          toast({ title: "Ewe Moved", description: `${updatedAnimal.tagId} moved to Ewes section` });
+        }
+        
+        if (weightType === "270" && updatedAnimal.sex === "ram" && updatedAnimal.ramLambClass === "stud") {
+          setSelectedAnimal(updatedAnimal);
+          setShowPromoteDialog(true);
+        }
+      }
+    });
+  };
+
+  const handlePromoteToRam = () => {
+    if (!selectedAnimal) return;
+    moveToRamsMutation.mutate({ id: selectedAnimal.id, ramType: selectedRamType }, {
+      onSuccess: () => {
+        toast({ title: "Ram Promoted", description: `${selectedAnimal.tagId} moved to Rams section as ${selectedRamType.replace('_', ' ')}` });
+        setShowPromoteDialog(false);
+        setSelectedAnimal(null);
+        setSelectedRamType("breeding_ram");
+      }
+    });
+  };
+
+  const getLambStatusBadge = (animal: Animal): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } => {
+    if (animal.ramLambClass === 'cull') return { label: "CULL PENDING", variant: "destructive" };
+    if (animal.ramLambClass === 'stud') return { label: "STUD", variant: "default" };
+    if (animal.ramLambClass === 'commercial') return { label: "COMMERCIAL", variant: "secondary" };
+    return { label: "ACTIVE", variant: "default" };
+  };
+
+  return (
+    <div className="mt-8 space-y-4" data-testid="lambs-section">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-3">
+        <h2 className="text-lg md:text-xl font-bold text-primary uppercase tracking-wide" data-testid="lambs-section-title">
+          Lambs ({lambs.length})
+        </h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1">
+            <Button 
+              variant={sexFilter === "all" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setSexFilter("all")}
+              className="h-7 text-xs"
+              data-testid="filter-lambs-all"
+            >
+              All ({ramLambs.length + eweLambs.length})
+            </Button>
+            <Button 
+              variant={sexFilter === "ram" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setSexFilter("ram")}
+              className="h-7 text-xs"
+              data-testid="filter-lambs-ram"
+            >
+              Ram ({ramLambs.length})
+            </Button>
+            <Button 
+              variant={sexFilter === "ewe" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setSexFilter("ewe")}
+              className="h-7 text-xs"
+              data-testid="filter-lambs-ewe"
+            >
+              Ewe ({eweLambs.length})
+            </Button>
+          </div>
+          <Select value={classFilter} onValueChange={setClassFilter}>
+            <SelectTrigger className="w-[130px] h-7 text-xs" data-testid="select-class-filter">
+              <SelectValue placeholder="Classification" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Classes</SelectItem>
+              <SelectItem value="stud">Stud</SelectItem>
+              <SelectItem value="commercial">Commercial</SelectItem>
+              <SelectItem value="cull">Cull</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {lambs.length === 0 ? (
+        <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
+          <p>No lambs in your herd yet.</p>
+        </div>
+      ) : (
+        <div className="border border-border rounded-md overflow-x-auto">
+          <table className="w-full text-sm min-w-[900px]">
+            <thead className="bg-primary text-primary-foreground">
+              <tr>
+                <th className="text-left p-2.5 font-semibold w-14">Photo</th>
+                <th className="text-left p-2.5 font-semibold">Lamb ID</th>
+                <th className="text-left p-2.5 font-semibold">Sex</th>
+                <th className="text-left p-2.5 font-semibold">DOB</th>
+                <th className="text-left p-2.5 font-semibold">Age</th>
+                <th className="text-left p-2.5 font-semibold">Birth Wt</th>
+                <th className="text-left p-2.5 font-semibold">100-Day</th>
+                <th className="text-left p-2.5 font-semibold">270-Day</th>
+                <th className="text-left p-2.5 font-semibold">Status</th>
+                <th className="text-left p-2.5 font-semibold">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lambs.map((lamb, idx) => {
+                const ageDays = getAgeDays(lamb.birthDate);
+                const statusBadge = getLambStatusBadge(lamb);
+                const needs100Day = ageDays >= 100 && !lamb.weight100Day;
+                const needs270Day = ageDays >= 270 && !lamb.weight270Day && lamb.sex === 'ram' && lamb.ramLambClass === 'stud';
+                
+                return (
+                  <tr 
+                    key={lamb.id}
+                    className={cn(
+                      "hover:bg-secondary/50 cursor-pointer transition-colors",
+                      idx % 2 === 0 ? "bg-card" : "bg-secondary/20"
+                    )}
+                    onClick={() => setLocation(`/animals/${lamb.id}`)}
+                    data-testid={`lamb-row-${lamb.id}`}
+                  >
+                    <td className="p-2">
+                      <div className="w-10 h-10 rounded-md bg-secondary overflow-hidden">
+                        {lamb.photo ? (
+                          <img src={lamb.photo} alt={lamb.tagId} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center opacity-30">
+                            <img src={logo} className="w-6 h-6 grayscale" />
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-2.5 font-semibold" data-testid={`text-lamb-tagid-${lamb.id}`}>{lamb.tagId}</td>
+                    <td className="p-2.5" data-testid={`text-lamb-sex-${lamb.id}`}>
+                      <span className={cn(
+                        "capitalize",
+                        lamb.sex === "ram" ? "text-blue-400" : "text-pink-400"
+                      )}>
+                        {lamb.sex}
+                      </span>
+                    </td>
+                    <td className="p-2.5" data-testid={`text-lamb-dob-${lamb.id}`}>
+                      {lamb.birthDate ? format(new Date(lamb.birthDate), "dd/MM/yyyy") : "—"}
+                    </td>
+                    <td className="p-2.5" data-testid={`text-lamb-age-${lamb.id}`}>{ageDays} days</td>
+                    <td className="p-2.5" data-testid={`text-lamb-birthweight-${lamb.id}`}>{lamb.birthWeight ? `${lamb.birthWeight} kg` : "—"}</td>
+                    <td className="p-2.5" data-testid={`text-lamb-100day-${lamb.id}`}>
+                      {lamb.weight100Day ? (
+                        `${lamb.weight100Day} kg`
+                      ) : needs100Day ? (
+                        <Badge variant="outline" className="text-[10px]" data-testid={`badge-100day-due-${lamb.id}`}>
+                          Due
+                        </Badge>
+                      ) : "—"}
+                    </td>
+                    <td className="p-2.5" data-testid={`text-lamb-270day-${lamb.id}`}>
+                      {lamb.weight270Day ? (
+                        `${lamb.weight270Day} kg`
+                      ) : needs270Day ? (
+                        <Badge variant="outline" className="text-[10px]" data-testid={`badge-270day-due-${lamb.id}`}>
+                          Due
+                        </Badge>
+                      ) : "—"}
+                    </td>
+                    <td className="p-2.5">
+                      <Badge 
+                        variant={statusBadge.variant}
+                        className="text-[10px] px-1.5"
+                        data-testid={`badge-lamb-status-${lamb.id}`}
+                      >
+                        {statusBadge.label}
+                      </Badge>
+                    </td>
+                    <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`lamb-actions-${lamb.id}`}>
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              setSelectedAnimal(lamb);
+                              setWeightType(needs270Day ? "270" : "100");
+                              setShowWeightDialog(true);
+                            }}
+                            data-testid={`action-weight-${lamb.id}`}
+                          >
+                            <Scale className="w-4 h-4 mr-2" />
+                            Record Weight
+                          </DropdownMenuItem>
+                          {lamb.sex === 'ram' && (
+                            <>
+                              <DropdownMenuItem onClick={() => handleClassify(lamb, 'stud')} data-testid={`action-stud-${lamb.id}`}>
+                                <Tag className="w-4 h-4 mr-2" />
+                                Mark as Stud
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleClassify(lamb, 'commercial')} data-testid={`action-commercial-${lamb.id}`}>
+                                <Tag className="w-4 h-4 mr-2" />
+                                Mark as Commercial
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleClassify(lamb, 'cull')}
+                                className="text-destructive"
+                                data-testid={`action-cull-class-${lamb.id}`}
+                              >
+                                <Tag className="w-4 h-4 mr-2" />
+                                Mark for Cull
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          {lamb.ramLambClass === 'cull' && (
+                            <DropdownMenuItem 
+                              onClick={() => {
+                                setSelectedAnimal(lamb);
+                                setShowCullConfirm(true);
+                              }}
+                              className="text-destructive"
+                              data-testid={`action-confirm-cull-${lamb.id}`}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Confirm Cull
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Weight Dialog */}
+      <Dialog open={showWeightDialog} onOpenChange={setShowWeightDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Weight - {selectedAnimal?.tagId}</DialogTitle>
+            <DialogDescription>
+              Enter the {weightType === "100" ? "100-day" : "270-day"} weight for this lamb.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Weight Type</Label>
+              <Select value={weightType} onValueChange={(v) => setWeightType(v as "100" | "270")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="100">100-Day Weight</SelectItem>
+                  <SelectItem value="270">270-Day Weight</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Weight (kg)</Label>
+              <Input 
+                type="number" 
+                step="0.1"
+                value={weightValue}
+                onChange={(e) => setWeightValue(e.target.value)}
+                placeholder="Enter weight in kg"
+                data-testid="input-weight"
+              />
+            </div>
+            {weightType === "100" && selectedAnimal?.sex === "ewe" && (
+              <p className="text-sm text-muted-foreground">
+                This ewe lamb will be moved to the Ewes section after recording.
+              </p>
+            )}
+            {weightType === "270" && selectedAnimal?.sex === "ram" && selectedAnimal?.ramLambClass === "stud" && (
+              <p className="text-sm text-muted-foreground">
+                This stud ram will be promoted to the Rams section after recording.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowWeightDialog(false)}>Cancel</Button>
+            <Button onClick={handleSaveWeight} disabled={!weightValue}>Save Weight</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cull Confirmation Dialog */}
+      <AlertDialog open={showCullConfirm} onOpenChange={setShowCullConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Cull - {selectedAnimal?.tagId}</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will move the animal to the Culled archive. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <Label>Cull Reason (optional)</Label>
+            <Textarea 
+              value={cullReason}
+              onChange={(e) => setCullReason(e.target.value)}
+              placeholder="Enter reason for culling..."
+              className="mt-2"
+              data-testid="input-cull-reason"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmCull} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Confirm Cull
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Promote to Ram Dialog */}
+      <Dialog open={showPromoteDialog} onOpenChange={setShowPromoteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Promote to Rams - {selectedAnimal?.tagId}</DialogTitle>
+            <DialogDescription>
+              Select the ram type for this animal before moving to the Rams section.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Ram Type</Label>
+              <Select value={selectedRamType} onValueChange={(v) => setSelectedRamType(v as typeof selectedRamType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
+                  <SelectItem value="stud_ram">Stud Ram</SelectItem>
+                  <SelectItem value="commercial_ram">Commercial Ram</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPromoteDialog(false)}>Cancel</Button>
+            <Button onClick={handlePromoteToRam}>
+              <ChevronRight className="w-4 h-4 mr-2" />
+              Promote to Rams
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

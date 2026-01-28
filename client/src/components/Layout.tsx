@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Beef, Dna, FileText, Settings, Baby, Archive } from "lucide-react";
+import { LayoutDashboard, Beef, Dna, FileText, Settings, Archive } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -72,7 +72,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Home" },
     { href: "/animals", icon: Beef, label: "My Herd" },
-    { href: "/lambs", icon: Baby, label: "Lambs" },
     { href: "/culled", icon: Archive, label: "Culled" },
     { href: "/breeding", icon: Dna, label: "Breeding" },
     { href: "/records", icon: FileText, label: "Records" },
