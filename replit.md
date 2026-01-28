@@ -163,7 +163,26 @@ shared/           # Shared types, schemas, and route definitions
 - **Mating Groups PDF**: Report uses table-based layout for RAM identification and mating dates
 - **Ewe Stats Calculation**: Uses breedingEvents with lambingDate, weaningStatus for weaned count, weight100Day for average wean weight
 
+### Animal Images Feature (January 2026)
+- **Images Tab**: Dedicated "Images" tab in individual animal profiles for photo management
+- **Multiple Image Storage**: Store multiple photos per animal in dedicated `animalImages` database table
+- **Image Operations**: Upload, view, and delete photos within animal profiles
+- **API Endpoints**: `/api/animals/:id/images` GET/POST/DELETE for image management
+
+### Individual Animal PDF Export
+- **Professional Layout**: Large centered animal photo at top, followed by comprehensive detail table
+- **Detail Table Sections**: 
+  - IDENTIFICATION: Animal ID, Name, Electronic ID, Tattoo ID, Stud Prefix
+  - BASIC INFORMATION: Sex, Breed, DOB, Birth Status, Current Status
+  - PARENTAGE: Sire (Father), Dam (Mother)
+  - GROWTH DATA: Birth/Current/100-Day/270-Day weights, Weaning Status
+  - OWNERSHIP: Breeder, Owner, Farm, Location
+- **Section Headers**: Golden (#FFC300) background styling matching brand
+- **Family Tree Export**: Optional second page in landscape A4 format with pedigree diagram
+- **Export Dropdown Options**: Export Individual (PDF), Export + Family Tree (PDF), Word Document, CSV, JSON (SA Stamboek)
+
 ### Schema Additions
+- `animalImages` table: id, animalId, imageUrl (base64), caption, createdAt
 - `documents` table: id, name, category, animalId (optional), fileData (base64), fileType, uploadedAt
 - `farmSettings` table: Farm name, stud name, stud prefix, owner details, address, membership numbers
 - `animals.createdAt`: Timestamp field tracking when animal profiles were created (displayed as "Profile Entry" in detail view)
