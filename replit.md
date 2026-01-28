@@ -141,6 +141,12 @@ shared/           # Shared types, schemas, and route definitions
   - Detailed View: Card-based layout with photos (default)
   - List View: Table without photos showing Tag ID, Name, Sex, Breed, DOB, Status
   - Thumbnail View: Small photo grid with tag IDs below
+- **Herd Export Dropdown**: Single "Export" button with dropdown options:
+  - Export Full Herd (PDF) - all animals
+  - Export Rams Only (PDF) - male animals only
+  - Export Ewes Only (PDF) - female animals only
+  - Export Lambs Only (PDF) - animals under 1 year old
+- **Export PDF Format**: Tables only, no animal images, clean spacing, portrait A4 orientation
 - **Professional PDF Export**: All exports follow consistent body layout rules:
   - A4 portrait format with 10mm margins
   - Left-aligned text throughout tables (no center alignment in table bodies)

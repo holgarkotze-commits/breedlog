@@ -13,7 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAnimalSchema, type Animal, type BreedingEvent } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Printer, LayoutGrid, List, Grid3X3 } from "lucide-react";
+import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -85,73 +85,77 @@ export default function Animals() {
   const [viewMode, setViewMode] = useState<"detailed" | "list" | "thumbnail">("detailed");
   const isMobile = useIsMobile();
 
-  const exportHerdPDF = () => {
-    if (!filteredAnimals) return;
+  const exportHerdPDF = (exportType: "all" | "rams" | "ewes" | "lambs") => {
+    if (!allAnimals) return;
     const fb = farmSettings;
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    const hasEwes = filteredAnimals.some(a => a.sex?.toLowerCase() === 'ewe');
     
-    const animalsPerPage = 18;
-    const totalPages = Math.ceil(filteredAnimals.length / animalsPerPage);
+    // Filter animals based on export type
+    let exportAnimals: Animal[] = [];
+    let exportTitle = "Full Herd";
+    let exportSubtitle = "Livestock Register";
+    
+    switch (exportType) {
+      case "rams":
+        exportAnimals = allAnimals.filter(a => a.sex?.toLowerCase() === "ram");
+        exportTitle = "Rams Register";
+        exportSubtitle = "Male Livestock";
+        break;
+      case "ewes":
+        exportAnimals = allAnimals.filter(a => a.sex?.toLowerCase() === "ewe");
+        exportTitle = "Ewes Register";
+        exportSubtitle = "Breeding Female Livestock";
+        break;
+      case "lambs":
+        exportAnimals = allAnimals.filter(a => {
+          if (!a.birthDate) return false;
+          const birthDate = new Date(a.birthDate);
+          const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
+          return ageInDays <= 365;
+        });
+        exportTitle = "Lambs Register";
+        exportSubtitle = "Animals Under 1 Year";
+        break;
+      default:
+        exportAnimals = allAnimals;
+        exportTitle = "Full Herd";
+        exportSubtitle = "Complete Livestock Register";
+    }
+    
+    if (exportAnimals.length === 0) {
+      const typeLabel = exportType === "all" ? "animals" : exportType;
+      toast({ title: "No Animals", description: `No ${typeLabel} found to export`, variant: "destructive" });
+      return;
+    }
+    
+    const animalsPerPage = 22;
+    const totalPages = Math.ceil(exportAnimals.length / animalsPerPage);
+    
+    // Table headers - no photo column
+    const tableHeaders = `
+      <th style="width:15%">Tag ID</th>
+      <th style="width:18%">Name</th>
+      <th style="width:10%">Sex</th>
+      <th style="width:16%">Breed</th>
+      <th style="width:14%">DOB</th>
+      <th style="width:12%">Weight</th>
+      <th style="width:15%">Status</th>`;
     
     let pagesHtml = "";
     for (let page = 0; page < Math.max(1, totalPages); page++) {
       const startIdx = page * animalsPerPage;
-      const pageAnimals = filteredAnimals.slice(startIdx, startIdx + animalsPerPage);
+      const pageAnimals = exportAnimals.slice(startIdx, startIdx + animalsPerPage);
       
-      const tableHeaders = hasEwes 
-        ? `<th style="width:32px"></th>
-           <th style="width:10%">Tag ID</th>
-           <th style="width:8%">Sex</th>
-           <th style="width:12%">DOB</th>
-           <th style="width:7%">Lambs</th>
-           <th style="width:12%">1st Lamb</th>
-           <th style="width:8%">ILP</th>
-           <th style="width:8%">Weaned</th>
-           <th style="width:10%">Avg Wean</th>
-           <th style="width:10%">Status</th>`
-        : `<th style="width:32px"></th>
-           <th style="width:15%">Tag ID</th>
-           <th style="width:18%">Name</th>
-           <th style="width:10%">Sex</th>
-           <th style="width:14%">Breed</th>
-           <th style="width:12%">DOB</th>
-           <th style="width:12%">Weight</th>
-           <th style="width:12%">Status</th>`;
-      
-      const tableRows = pageAnimals.map((a: Animal, i: number) => {
-        const isEwe = a.sex?.toLowerCase() === 'ewe';
-        const stats = isEwe && breedingEvents && allAnimals 
-          ? calculateEweBreedingStats(a.id, breedingEvents, allAnimals) 
-          : null;
-        
-        const photoCell = `<td style="width:36px;"><div style="width:28px;height:28px;border-radius:3px;overflow:hidden;background:#f0f0f0;">${a.photo ? `<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover;"/>` : ''}</div></td>`;
-        
-        if (hasEwes) {
-          return `<tr>
-            ${photoCell}
-            <td><strong>${a.tagId}</strong></td>
-            <td>${a.sex || '-'}</td>
-            <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yy") : '-'}</td>
-            <td><strong>${isEwe && stats ? stats.totalLambs : '-'}</strong></td>
-            <td>${isEwe && stats && stats.firstLambDate ? format(stats.firstLambDate, "dd/MM/yy") : '-'}</td>
-            <td>${isEwe && stats && stats.avgILP > 0 ? stats.avgILP + 'd' : '-'}</td>
-            <td>${isEwe && stats ? stats.lambsWeaned : '-'}</td>
-            <td>${isEwe && stats && stats.avgWeanWeight > 0 ? stats.avgWeanWeight + 'kg' : '-'}</td>
-            <td><span class="status status-${a.status}">${a.status}</span></td>
-          </tr>`;
-        } else {
-          return `<tr>
-            ${photoCell}
-            <td><strong>${a.tagId}</strong></td>
-            <td>${a.name || '-'}</td>
-            <td>${a.sex}</td>
-            <td>${a.breed || '-'}</td>
-            <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yy") : '-'}</td>
-            <td>${a.currentWeight ? a.currentWeight + 'kg' : '-'}</td>
-            <td><span class="status status-${a.status}">${a.status}</span></td>
-          </tr>`;
-        }
+      const tableRows = pageAnimals.map((a: Animal) => {
+        return `<tr>
+          <td><strong>${a.tagId}</strong></td>
+          <td>${a.name || '-'}</td>
+          <td>${a.sex || '-'}</td>
+          <td>${a.breed || 'Meatmaster'}</td>
+          <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : '-'}</td>
+          <td>${a.currentWeight ? a.currentWeight + ' kg' : '-'}</td>
+          <td><span class="status status-${a.status}">${a.status}</span></td>
+        </tr>`;
       }).join('');
       
       pagesHtml += `
@@ -161,8 +165,8 @@ export default function Animals() {
               ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
             </div>
             <div class="header-center">
-              <h1>${fb?.studName || fb?.farmName || "MY HERD"}</h1>
-              <p class="subtitle">${hasEwes ? 'Ewe Breeding Register' : 'Livestock Register'}</p>
+              <h1>${fb?.studName || fb?.farmName || exportTitle}</h1>
+              <p class="subtitle">${exportSubtitle}</p>
             </div>
             <div class="header-right">
               <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
@@ -194,32 +198,32 @@ export default function Animals() {
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>${fb?.studName || fb?.farmName || "BreedLog"} - Herd Export</title>
+  <title>${fb?.studName || fb?.farmName || "BreedLog"} - ${exportTitle}</title>
   <style>
     @page { size: A4 portrait; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 190mm; min-height: 277mm; padding: 5mm; padding-bottom: 25mm; margin: 0 auto; page-break-after: always; position: relative; }
+    .page { width: 190mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 3mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 4mm; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
     .header-center { flex: 1; text-align: center; }
     .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
-    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 2px; }
+    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
     .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
     .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 8px 10px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-    .animals-table td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
-    .animals-table tbody tr { height: 30pt; }
+    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 10px 12px; text-align: left; text-transform: uppercase; vertical-align: middle; }
+    .animals-table td { padding: 10px 12px; border-bottom: 1px solid #e0e0e0; font-size: 9pt; vertical-align: middle; text-align: left; }
+    .animals-table tbody tr { height: 32pt; }
     .animals-table tr:nth-child(even) { background: #fafafa; }
-    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; }
+    .status { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; }
     .status-active { background: #22c55e20; color: #16a34a; }
     .status-sold { background: #f59e0b20; color: #d97706; }
     .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
-    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 3mm 4mm; border-radius: 2mm; margin-top: 6mm; position: absolute; bottom: 5mm; left: 5mm; right: 5mm; }
+    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
     .footer-info { flex: 1; }
     .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
-    .footer-info p { font-size: 7pt; margin-top: 1px; }
+    .footer-info p { font-size: 7pt; margin-top: 2px; }
     .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
     .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
     .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
@@ -242,7 +246,7 @@ export default function Animals() {
       printWindow.document.close();
       setTimeout(() => printWindow.print(), 500);
     }
-    toast({ title: "PDF Ready", description: "Print dialog opened for PDF export" });
+    toast({ title: "PDF Ready", description: `${exportTitle} export opened for printing` });
   };
 
   // Update filters when URL changes
@@ -281,16 +285,44 @@ export default function Animals() {
             {displayName ? `${displayName} - My Herd` : "My Herd"}
           </h1>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="icon"
-              onClick={exportHerdPDF}
-              disabled={!filteredAnimals || filteredAnimals.length === 0}
-              data-testid="button-export-herd"
-              title="Export to PDF"
-            >
-              <Printer className="w-4 h-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  disabled={!allAnimals || allAnimals.length === 0}
+                  data-testid="button-export-herd"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
+                  onClick={() => exportHerdPDF("all")}
+                  data-testid="export-full-herd"
+                >
+                  Export Full Herd (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => exportHerdPDF("rams")}
+                  data-testid="export-rams"
+                >
+                  Export Rams Only (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => exportHerdPDF("ewes")}
+                  data-testid="export-ewes"
+                >
+                  Export Ewes Only (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => exportHerdPDF("lambs")}
+                  data-testid="export-lambs"
+                >
+                  Export Lambs Only (PDF)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <CreateAnimalDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
           </div>
         </div>
