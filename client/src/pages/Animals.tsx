@@ -13,14 +13,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAnimalSchema, type Animal, type BreedingEvent } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Printer } from "lucide-react";
+import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Printer, LayoutGrid, List, Grid3X3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Link, useSearch } from "wouter";
+import { Link, useSearch, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { format } from "date-fns";
@@ -82,6 +82,7 @@ export default function Animals() {
   const { toast } = useToast();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"detailed" | "list" | "thumbnail">("detailed");
   const isMobile = useIsMobile();
 
   const exportHerdPDF = () => {
@@ -332,6 +333,39 @@ export default function Animals() {
                 <SelectItem value="wether">Wethers</SelectItem>
               </SelectContent>
             </Select>
+            {/* View Mode Toggle */}
+            <div className="flex gap-1 border border-border rounded-md p-0.5">
+              <Button
+                size="icon"
+                variant={viewMode === "detailed" ? "default" : "ghost"}
+                className="h-8 w-8"
+                onClick={() => setViewMode("detailed")}
+                data-testid="button-view-detailed"
+                title="Detailed View"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant={viewMode === "list" ? "default" : "ghost"}
+                className="h-8 w-8"
+                onClick={() => setViewMode("list")}
+                data-testid="button-view-list"
+                title="List View (No Photos)"
+              >
+                <List className="w-4 h-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant={viewMode === "thumbnail" ? "default" : "ghost"}
+                className="h-8 w-8"
+                onClick={() => setViewMode("thumbnail")}
+                data-testid="button-view-thumbnail"
+                title="Thumbnail Grid"
+              >
+                <Grid3X3 className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -341,6 +375,58 @@ export default function Animals() {
             {[1, 2, 3, 4, 5, 6].map(i => (
               <Skeleton key={i} className="h-14 md:aspect-[4/3] rounded-md bg-secondary" />
             ))}
+          </div>
+        ) : viewMode === "thumbnail" ? (
+          /* Thumbnail Grid View */
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+            {filteredAnimals?.map(animal => (
+              <Link key={animal.id} href={`/animals/${animal.id}`}>
+                <div 
+                  className="aspect-square rounded-md bg-secondary overflow-hidden border-2 border-transparent hover:border-primary transition-all cursor-pointer"
+                  data-testid={`thumbnail-${animal.id}`}
+                >
+                  {animal.photo ? (
+                    <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-secondary">
+                      <img src={logo} className="w-8 h-8 grayscale opacity-30" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
+              </Link>
+            ))}
+            {filteredAnimals?.length === 0 && (
+              <div className="col-span-full py-12 text-center text-muted-foreground">
+                <p>No animals found matching your criteria.</p>
+              </div>
+            )}
+          </div>
+        ) : viewMode === "list" ? (
+          /* List View (No Photos) */
+          <div className="border border-border rounded-md overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-primary text-primary-foreground">
+                <tr>
+                  <th className="text-left p-2.5 font-semibold">Tag ID</th>
+                  <th className="text-left p-2.5 font-semibold hidden sm:table-cell">Name</th>
+                  <th className="text-left p-2.5 font-semibold">Sex</th>
+                  <th className="text-left p-2.5 font-semibold hidden md:table-cell">Breed</th>
+                  <th className="text-left p-2.5 font-semibold hidden lg:table-cell">DOB</th>
+                  <th className="text-left p-2.5 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredAnimals?.map((animal, idx) => (
+                  <ListRow key={animal.id} animal={animal} idx={idx} />
+                ))}
+              </tbody>
+            </table>
+            {filteredAnimals?.length === 0 && (
+              <div className="py-12 text-center text-muted-foreground">
+                <p>No animals found matching your criteria.</p>
+              </div>
+            )}
           </div>
         ) : isMobile ? (
           <div className="space-y-1.5">
@@ -374,6 +460,44 @@ export default function Animals() {
         </div>
       </div>
     </Layout>
+  );
+}
+
+function ListRow({ animal, idx }: { animal: Animal; idx: number }) {
+  const [, setLocation] = useLocation();
+  
+  return (
+    <tr 
+      className={cn(
+        "hover:bg-secondary/50 cursor-pointer transition-colors",
+        idx % 2 === 0 ? "bg-card" : "bg-secondary/20"
+      )}
+      onClick={() => setLocation(`/animals/${animal.id}`)}
+      data-testid={`list-row-${animal.id}`}
+    >
+      <td className="p-2.5 font-semibold">{animal.tagId}</td>
+      <td className="p-2.5 hidden sm:table-cell">{animal.name || "—"}</td>
+      <td className="p-2.5">
+        <span className={cn(
+          "capitalize",
+          animal.sex === "ram" ? "text-blue-400" : animal.sex === "ewe" ? "text-pink-400" : ""
+        )}>
+          {animal.sex}
+        </span>
+      </td>
+      <td className="p-2.5 hidden md:table-cell">{animal.breed || "Meatmaster"}</td>
+      <td className="p-2.5 hidden lg:table-cell">
+        {animal.birthDate ? format(new Date(animal.birthDate), "dd/MM/yyyy") : "—"}
+      </td>
+      <td className="p-2.5">
+        <Badge variant="secondary" className={cn(
+          "text-[10px] px-1.5",
+          animal.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-red-900/80 text-red-100"
+        )}>
+          {animal.status}
+        </Badge>
+      </td>
+    </tr>
   );
 }
 
