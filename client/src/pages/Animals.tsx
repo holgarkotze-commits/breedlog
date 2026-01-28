@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Layout } from "@/components/Layout";
-import { useAnimals, useCreateAnimal, useDeleteAnimal } from "@/hooks/use-animals";
+import { useAnimals, useCreateAnimal, useDeleteAnimal, useRemoveFromHerd } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useBreedingEvents } from "@/hooks/use-breeding";
 import { AnimalCard } from "@/components/AnimalCard";
@@ -13,7 +13,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAnimalSchema, type Animal, type BreedingEvent } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3 } from "lucide-react";
+import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -133,6 +133,28 @@ export default function Animals() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"detailed" | "list" | "thumbnail">("detailed");
   const isMobile = useIsMobile();
+  
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [animalToRemove, setAnimalToRemove] = useState<Animal | null>(null);
+  const [removeReason, setRemoveReason] = useState<"sold" | "deceased" | "transferred">("sold");
+  const [removeNotes, setRemoveNotes] = useState("");
+  const removeFromHerdMutation = useRemoveFromHerd();
+  
+  const handleRemoveFromHerd = () => {
+    if (!animalToRemove) return;
+    removeFromHerdMutation.mutate(
+      { id: animalToRemove.id, reason: removeReason, notes: removeNotes },
+      {
+        onSuccess: () => {
+          setRemoveDialogOpen(false);
+          setAnimalToRemove(null);
+          setRemoveReason("sold");
+          setRemoveNotes("");
+          toast({ title: "Success", description: `${animalToRemove.tagId} removed from herd` });
+        },
+      }
+    );
+  };
 
   // Full Herd Export PDF with Rams, Ewes, Lambs sections
   const exportFullHerdPDF = () => {
@@ -1138,6 +1160,47 @@ export default function Animals() {
           </p>
         </div>
       </div>
+
+      {/* Remove from Herd Dialog */}
+      <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from Herd</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove <strong>{animalToRemove?.tagId}</strong> from your active herd. Select the reason below.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3 py-2">
+            <Select value={removeReason} onValueChange={(v: "sold" | "deceased" | "transferred") => setRemoveReason(v)}>
+              <SelectTrigger data-testid="select-remove-reason">
+                <SelectValue placeholder="Select reason" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sold">Sold</SelectItem>
+                <SelectItem value="deceased">Deceased</SelectItem>
+                <SelectItem value="transferred">Transferred</SelectItem>
+              </SelectContent>
+            </Select>
+            <Textarea 
+              placeholder="Optional notes..." 
+              value={removeNotes}
+              onChange={(e) => setRemoveNotes(e.target.value)}
+              className="h-16"
+              data-testid="input-remove-notes"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveFromHerd}
+              disabled={removeFromHerdMutation.isPending}
+              data-testid="btn-confirm-remove"
+            >
+              {removeFromHerdMutation.isPending ? "Removing..." : "Remove from Herd"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }
@@ -1154,7 +1217,13 @@ function RamsSection({
   isLoading: boolean;
 }) {
   const [, setLocation] = useLocation();
-  const rams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram");
+  const [ramTypeFilter, setRamTypeFilter] = useState<"all" | "breeding_ram" | "stud_ram" | "commercial_ram">("all");
+  
+  const allRams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram");
+  
+  const rams = ramTypeFilter === "all" 
+    ? allRams 
+    : allRams.filter(r => r.ramType === ramTypeFilter);
   
   if (isLoading) {
     return (
@@ -1171,23 +1240,68 @@ function RamsSection({
     return { ...ram, stats };
   });
 
+  // Count rams by type
+  const breedingCount = allRams.filter(r => r.ramType === 'breeding_ram').length;
+  const studCount = allRams.filter(r => r.ramType === 'stud_ram').length;
+  const commercialCount = allRams.filter(r => r.ramType === 'commercial_ram').length;
+
   return (
     <div className="mt-8 space-y-4" data-testid="rams-section">
       {/* Section Header */}
-      <div className="flex items-center justify-between border-b border-border pb-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-3">
         <h2 className="text-lg md:text-xl font-bold text-primary uppercase tracking-wide" data-testid="rams-section-title">
-          Rams
+          Rams ({allRams.length})
         </h2>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={onExport}
-          disabled={rams.length === 0}
-          data-testid="button-export-rams-section"
-        >
-          <Download className="w-4 h-4 mr-2" />
-          Export Rams PDF
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1">
+            <Button 
+              variant={ramTypeFilter === "all" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setRamTypeFilter("all")}
+              className="h-7 text-xs"
+              data-testid="filter-rams-all"
+            >
+              All ({allRams.length})
+            </Button>
+            <Button 
+              variant={ramTypeFilter === "breeding_ram" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setRamTypeFilter("breeding_ram")}
+              className="h-7 text-xs"
+              data-testid="filter-rams-breeding"
+            >
+              Breeding ({breedingCount})
+            </Button>
+            <Button 
+              variant={ramTypeFilter === "stud_ram" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setRamTypeFilter("stud_ram")}
+              className="h-7 text-xs"
+              data-testid="filter-rams-stud"
+            >
+              Stud ({studCount})
+            </Button>
+            <Button 
+              variant={ramTypeFilter === "commercial_ram" ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setRamTypeFilter("commercial_ram")}
+              className="h-7 text-xs"
+              data-testid="filter-rams-commercial"
+            >
+              Commercial ({commercialCount})
+            </Button>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={onExport}
+            disabled={rams.length === 0}
+            data-testid="button-export-rams-section"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export Rams PDF
+          </Button>
+        </div>
       </div>
 
       {rams.length === 0 ? (
@@ -1201,6 +1315,7 @@ function RamsSection({
               <tr>
                 <th className="text-left p-2.5 font-semibold w-14">Photo</th>
                 <th className="text-left p-2.5 font-semibold">Ram ID</th>
+                <th className="text-left p-2.5 font-semibold">Type</th>
                 <th className="text-left p-2.5 font-semibold">DOB</th>
                 <th className="text-left p-2.5 font-semibold">Total Lambs</th>
                 <th className="text-left p-2.5 font-semibold">Avg Birth (kg)</th>
@@ -1234,6 +1349,13 @@ function RamsSection({
                     </div>
                   </td>
                   <td className="p-2.5 font-semibold">{ram.tagId}</td>
+                  <td className="p-2.5">
+                    <Badge variant="outline" className="text-[10px]">
+                      {ram.ramType === 'breeding_ram' ? 'Breeding' : 
+                       ram.ramType === 'stud_ram' ? 'Stud' : 
+                       ram.ramType === 'commercial_ram' ? 'Commercial' : '—'}
+                    </Badge>
+                  </td>
                   <td className="p-2.5">
                     {ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : "—"}
                   </td>

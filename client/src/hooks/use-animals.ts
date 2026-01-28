@@ -187,3 +187,133 @@ export function useDeleteAnimalImage() {
     },
   });
 }
+
+// === LAMB MANAGEMENT HOOKS ===
+
+export function useClassifyRamLamb() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, ramLambClass }: { id: number; ramLambClass: string }) => {
+      const res = await fetch(`/api/animals/${id}/classify-ram-lamb`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ramLambClass }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to classify ram lamb");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
+      toast({ title: "Ram Lamb Classified", description: `Classification set to ${data.ramLambClass}` });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
+export function useMoveToEwes() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/animals/${id}/move-to-ewes`, {
+        method: "PATCH",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to move ewe lamb to ewes");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
+      toast({ title: "Ewe Lamb Moved", description: "Ewe lamb moved to Ewes section" });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
+export function useMoveToRams() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, ramType }: { id: number; ramType: string }) => {
+      const res = await fetch(`/api/animals/${id}/move-to-rams`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ramType }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to move ram lamb to rams");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
+      toast({ title: "Ram Lamb Promoted", description: `Ram lamb moved to Rams section as ${data.ramType}` });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
+export function useConfirmCull() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, cullReason }: { id: number; cullReason?: string }) => {
+      const res = await fetch(`/api/animals/${id}/confirm-cull`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cullReason }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to confirm cull");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
+      toast({ title: "Cull Confirmed", description: "Animal removed from active herd and archived" });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
+export function useRemoveFromHerd() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, reason, notes }: { id: number; reason: string; notes?: string }) => {
+      const res = await fetch(`/api/animals/${id}/remove-from-herd`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason, notes }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to remove from herd");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
+      toast({ title: "Removed from Herd", description: `Animal archived as ${data.removalReason}` });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+}

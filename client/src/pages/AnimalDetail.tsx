@@ -1,5 +1,5 @@
 import { useRoute } from "wouter";
-import { useAnimal, useFamilyTree, useUpdateAnimal, useAnimals, useAnimalImages, useUploadAnimalImage, useDeleteAnimalImage } from "@/hooks/use-animals";
+import { useAnimal, useFamilyTree, useUpdateAnimal, useAnimals, useAnimalImages, useUploadAnimalImage, useDeleteAnimalImage, useRemoveFromHerd } from "@/hooks/use-animals";
 import { usePerformanceRecords, useHealthRecords, useCreatePerformanceRecord } from "@/hooks/use-records";
 import { useEvaluations, useCreateEvaluation } from "@/hooks/use-evaluations";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useRef } from "react";
 import { format } from "date-fns";
-import { ArrowLeft, Dna, Syringe, Scale, FileText, Plus, Upload, Edit, Camera, Image, X, Download, Heart } from "lucide-react";
+import { ArrowLeft, Dna, Syringe, Scale, FileText, Plus, Upload, Edit, Camera, Image, X, Download, Heart, LogOut } from "lucide-react";
 import { useAnimalBreedingEvents } from "@/hooks/use-breeding";
 import { Link } from "wouter";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
@@ -31,6 +32,26 @@ export default function AnimalDetail() {
   const { data: animal, isLoading } = useAnimal(id);
   const { data: farmSettings } = useFarmSettings();
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [removeReason, setRemoveReason] = useState<"sold" | "deceased" | "transferred">("sold");
+  const [removeNotes, setRemoveNotes] = useState("");
+  const removeFromHerdMutation = useRemoveFromHerd();
+  const { toast } = useToast();
+  
+  const handleRemoveFromHerd = () => {
+    if (!animal) return;
+    removeFromHerdMutation.mutate(
+      { id: animal.id, reason: removeReason, notes: removeNotes },
+      {
+        onSuccess: () => {
+          setRemoveDialogOpen(false);
+          setRemoveReason("sold");
+          setRemoveNotes("");
+          toast({ title: "Success", description: `${animal.tagId} removed from herd` });
+        },
+      }
+    );
+  };
 
   if (isLoading) return <DetailSkeleton />;
   if (!animal) return <div className="p-8 text-center">Animal not found</div>;
@@ -58,6 +79,17 @@ export default function AnimalDetail() {
               >
                 <Edit className="w-3.5 h-3.5 mr-1.5" /> Edit
               </Button>
+              {animal.status === 'active' && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="h-8 px-3 text-xs font-semibold text-destructive border-destructive/50 hover:bg-destructive/10"
+                  onClick={() => setRemoveDialogOpen(true)}
+                  data-testid="button-remove-from-herd"
+                >
+                  <LogOut className="w-3.5 h-3.5 mr-1.5" /> Remove
+                </Button>
+              )}
               <ExportProfileButton animal={animal} farmSettings={farmSettings} />
             </div>
           </div>
@@ -75,6 +107,47 @@ export default function AnimalDetail() {
         </div>
         
         <EditAnimalDialog animal={animal} open={isEditOpen} onOpenChange={setIsEditOpen} />
+
+        {/* Remove from Herd Dialog */}
+        <AlertDialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove from Herd</AlertDialogTitle>
+              <AlertDialogDescription>
+                Remove <strong>{animal.tagId}</strong> from your active herd. Select the reason below.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-3 py-2">
+              <Select value={removeReason} onValueChange={(v: "sold" | "deceased" | "transferred") => setRemoveReason(v)}>
+                <SelectTrigger data-testid="select-remove-reason">
+                  <SelectValue placeholder="Select reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sold">Sold</SelectItem>
+                  <SelectItem value="deceased">Deceased</SelectItem>
+                  <SelectItem value="transferred">Transferred</SelectItem>
+                </SelectContent>
+              </Select>
+              <Textarea 
+                placeholder="Optional notes..." 
+                value={removeNotes}
+                onChange={(e) => setRemoveNotes(e.target.value)}
+                className="h-16"
+                data-testid="input-remove-notes"
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleRemoveFromHerd}
+                disabled={removeFromHerdMutation.isPending}
+                data-testid="btn-confirm-remove"
+              >
+                {removeFromHerdMutation.isPending ? "Removing..." : "Remove from Herd"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
           {/* Main Info Card - Compact on Mobile */}

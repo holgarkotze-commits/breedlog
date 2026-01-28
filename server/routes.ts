@@ -157,6 +157,154 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  // === LAMB MANAGEMENT ===
+  
+  // Classify ram lamb (stud/commercial/cull)
+  app.patch("/api/animals/:id/classify-ram-lamb", async (req, res) => {
+    try {
+      const animalId = Number(req.params.id);
+      const { ramLambClass } = req.body;
+      
+      if (!['stud', 'commercial', 'cull', 'unclassified'].includes(ramLambClass)) {
+        return res.status(400).json({ message: "Invalid ramLambClass. Must be: stud, commercial, cull, or unclassified" });
+      }
+      
+      const animal = await storage.getAnimal(animalId);
+      if (!animal) {
+        return res.status(404).json({ message: "Animal not found" });
+      }
+      if (animal.sex !== 'ram') {
+        return res.status(400).json({ message: "Only ram lambs can be classified" });
+      }
+      
+      const updated = await storage.updateAnimal(animalId, { ramLambClass });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to classify ram lamb" });
+    }
+  });
+  
+  // Move ewe lamb to ewes (100-day transition)
+  app.patch("/api/animals/:id/move-to-ewes", async (req, res) => {
+    try {
+      const animalId = Number(req.params.id);
+      const animal = await storage.getAnimal(animalId);
+      
+      if (!animal) {
+        return res.status(404).json({ message: "Animal not found" });
+      }
+      if (animal.sex !== 'ewe') {
+        return res.status(400).json({ message: "Only ewe lambs can be moved to ewes" });
+      }
+      
+      const updated = await storage.updateAnimal(animalId, { 
+        lambStatus: 'moved_to_ewes'
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to move ewe lamb to ewes" });
+    }
+  });
+  
+  // Move ram lamb to rams (270-day transition for stud rams)
+  app.patch("/api/animals/:id/move-to-rams", async (req, res) => {
+    try {
+      const animalId = Number(req.params.id);
+      const { ramType } = req.body;
+      
+      if (!['breeding_ram', 'stud_ram', 'commercial_ram'].includes(ramType)) {
+        return res.status(400).json({ message: "Invalid ramType. Must be: breeding_ram, stud_ram, or commercial_ram" });
+      }
+      
+      const animal = await storage.getAnimal(animalId);
+      if (!animal) {
+        return res.status(404).json({ message: "Animal not found" });
+      }
+      if (animal.sex !== 'ram') {
+        return res.status(400).json({ message: "Only ram lambs can be moved to rams" });
+      }
+      
+      const updated = await storage.updateAnimal(animalId, { 
+        lambStatus: 'moved_to_rams',
+        ramType
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to move ram lamb to rams" });
+    }
+  });
+  
+  // Confirm cull (step 2 of cull process)
+  app.patch("/api/animals/:id/confirm-cull", async (req, res) => {
+    try {
+      const animalId = Number(req.params.id);
+      const { cullReason } = req.body;
+      
+      const animal = await storage.getAnimal(animalId);
+      if (!animal) {
+        return res.status(404).json({ message: "Animal not found" });
+      }
+      
+      const today = new Date().toISOString().split('T')[0];
+      const updated = await storage.updateAnimal(animalId, { 
+        lambStatus: 'culled',
+        status: 'culled',
+        cullConfirmed: true,
+        cullDate: today,
+        cullReason: cullReason || null,
+        removalReason: 'culled'
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to confirm cull" });
+    }
+  });
+  
+  // Remove from herd (sold/deceased/transferred)
+  app.patch("/api/animals/:id/remove-from-herd", async (req, res) => {
+    try {
+      const animalId = Number(req.params.id);
+      const { reason, notes } = req.body;
+      
+      if (!['sold', 'deceased', 'transferred'].includes(reason)) {
+        return res.status(400).json({ message: "Invalid reason. Must be: sold, deceased, or transferred" });
+      }
+      
+      const animal = await storage.getAnimal(animalId);
+      if (!animal) {
+        return res.status(404).json({ message: "Animal not found" });
+      }
+      
+      const statusMap: Record<string, string> = {
+        sold: 'sold',
+        deceased: 'dead',
+        transferred: 'sold' // transferred treated similar to sold
+      };
+      
+      const lambStatusMap: Record<string, string> = {
+        sold: 'sold',
+        deceased: 'deceased',
+        transferred: 'sold'
+      };
+      
+      const updated = await storage.updateAnimal(animalId, { 
+        status: statusMap[reason],
+        lambStatus: lambStatusMap[reason],
+        removalReason: reason,
+        notes: notes ? (animal.notes ? `${animal.notes}\n${notes}` : notes) : animal.notes
+      });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to remove from herd" });
+    }
+  });
+  
+  // Get culled animals
+  app.get("/api/animals/culled", async (req, res) => {
+    const animals = await storage.getAnimals({ status: 'culled' });
+    res.json(animals);
+  });
+
   // === BREEDING ===
   app.get(api.breeding.list.path, async (req, res) => {
     const events = await storage.getBreedingEvents();

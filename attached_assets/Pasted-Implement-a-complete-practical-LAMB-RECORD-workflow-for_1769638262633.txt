@@ -1,0 +1,188 @@
+Implement a complete, practical LAMB RECORD workflow for a small Meatmaster stud operation. The system must support stud selection, commercial selection, and culling, with clean movement of animals between Lambs, Ewes, Rams, and Culled lists. Optimize the flow for fast farm use and ensure everything is tested.
+
+========================================
+A) DATA MODEL / FIELDS (CRITICAL)
+========================================
+
+1) Lamb record must include:
+- lambId (Tag ID)
+- dob (Date of Birth)
+- sex (ram / ewe)
+- birthStatus (single / twin)
+- sireId
+- damId
+- weight100Date, weight100Kg
+- weight270Date, weight270Kg
+- lambStatus (active / moved_to_ewes / moved_to_rams / culled / sold / deceased)
+- ramLambClass (only if sex=ram): stud / commercial / cull / unclassified
+- ramType (only when moved to rams): breeding_ram / stud_ram / commercial_ram
+- cullConfirmed (boolean)
+- cullDate (date)
+- cullReason (optional text)
+
+2) Ewe record must include:
+- eweId, dob, firstLambDate, totalLambCount, ILP, weanedCount, avgWeanKg, status
+
+3) Ram record must include:
+- ramId, dob, totalLambCount (if used), avgBirthWeightKg, avg100DayKg, avg270DayKg, twinCount, avgWeanKg, status
+- ramType (breeding_ram / stud_ram / commercial_ram)
+
+========================================
+B) WORKFLOW / MOVEMENT RULES
+========================================
+
+1) LAMBS SECTION (My Herd → Lambs)
+- Lambs stay in Lambs section by default.
+- Lambs are considered ACTIVE until at least 100 days.
+
+2) 100 DAYS RULE (AUTO / ASSISTED FLOW)
+When 100-day data is captured (weight100Date + weight100Kg):
+- If sex = EWE:
+  - Automatically move the ewe lamb to the EWE section (Breeding Ewes category)
+  - Update lambStatus = moved_to_ewes
+  - This must be automatic (no extra clicks), but show a confirmation toast: “Ewe lamb moved to Ewes.”
+
+- If sex = RAM:
+  - Ram lamb remains in the LAMBS section.
+  - Require ram lamb classification dropdown:
+    - stud / commercial / cull
+  - Default value = unclassified until user selects.
+
+3) RAM LAMB CLASSIFICATION (STUD / COMMERCIAL / CULL)
+Inside each ram lamb profile + in lambs table row actions:
+- Provide dropdown: “Ram Lamb Class” = stud / commercial / cull
+- Filters in Lambs list:
+  - All Ram Lambs
+  - Stud Candidates
+  - Commercial
+  - Cull
+
+4) CULL FLOW (CONFIRMATION + REMOVAL + ARCHIVE)
+Culling must be a 2-step process to prevent mistakes:
+- Step 1: Mark as “Cull” (ramLambClass = cull) or user selects “Cull animal” action
+- Step 2: Confirm Cull (required confirmation button)
+
+On Confirm Cull:
+- set lambStatus = culled
+- set cullConfirmed = true
+- set cullDate = today (editable)
+- Remove the animal from all active herd lists (Lambs/Ewes/Rams)
+- Animal must appear only in the Culled list / archive
+
+Create a dedicated “Culled Animals” area accessible from:
+- My Profile → Documents → “Culls” folder
+and also accessible in-app as:
+- My Herd → Culled (Archive)
+
+Culled records remain searchable and exportable but are not part of active herd.
+
+5) 270 DAYS RULE (RAM PROMOTION TO RAMS)
+Ram lambs classified as “stud” (stud candidates) must be weighed again at 270 days.
+When weight270Date + weight270Kg is captured AND sex=ram AND ramLambClass=stud:
+- Move the animal from Lambs section to Rams section
+- set lambStatus = moved_to_rams
+- In Rams section, require “Ram Type” dropdown:
+  - breeding_ram / stud_ram / commercial_ram
+- Allow filtering in Rams by Ram Type:
+  - All Rams
+  - Breeding Rams
+  - Stud Rams
+  - Commercial Rams
+
+IMPORTANT:
+- Ram lambs NOT classified as stud must NOT automatically move to Rams at 270 days.
+- Commercial ram lambs can remain in Lambs until sold/removed, unless user manually promotes them.
+
+========================================
+C) REMOVE FROM HERD (ALL SECTIONS)
+========================================
+
+For ALL animals in:
+- Rams
+- Ewes
+- Lambs
+Add an action: “Remove from Herd”
+
+Removal must require selecting a reason:
+- sold
+- deceased
+- culled (should route to Cull flow if selected)
+- transferred
+
+Rules:
+- Sold / Deceased / Transferred removes from active lists and stores in archive.
+- Culled must use the Cull confirmation workflow.
+- Removed animals remain exportable from the archive and visible under My Profile → Documents.
+
+========================================
+D) EXPORTS / PDF REQUIREMENTS
+========================================
+
+1) Herd Export PDFs must NOT include animal images.
+
+2) Lambs Export (Herd Export PDF → Lambs section)
+Create a dedicated LAMBS section in the Herd Export PDF.
+
+LAMBS TABLE COLUMNS:
+1. Lamb ID
+2. Date of Birth
+3. Sex
+4. Birth Status (Single / Twin)
+5. Sire ID
+6. Dam ID
+7. 100-Day Weight (kg)
+8. Status (Active / Moved to Ewes / Stud Candidate / Commercial / Cull Pending)
+
+Rules:
+- One lamb per row
+- No images
+- Same table styling as Rams and Ewes
+
+3) Culled Export PDF (separate document)
+Create a “Culled Animals Export” PDF stored under:
+My Profile → Documents → Culls
+
+CULL TABLE COLUMNS:
+- Animal ID
+- Sex
+- DOB
+- Cull Date
+- Cull Reason
+- Last Known Category (Lamb/Ewe/Ram)
+- Notes
+
+========================================
+E) UI FLOW REQUIREMENTS (FAST FARM USE)
+========================================
+
+- Lambs list must show quick actions per row:
+  - Enter 100-day weight
+  - Classify ram lamb (stud/commercial/cull)
+  - Confirm cull (only if marked cull)
+  - Remove from herd
+
+- Use clear badges:
+  - ACTIVE
+  - EWE MOVED
+  - STUD CANDIDATE
+  - COMMERCIAL
+  - CULL PENDING
+  - CULLED
+
+- Prevent accidental removal:
+  - Confirm modals for Cull and Remove-from-herd actions
+
+========================================
+F) TESTING (MANDATORY)
+========================================
+
+Create test data and verify:
+1) Ewe lamb at 100 days → auto moves to Ewes
+2) Ram lamb at 100 days → remains in Lambs + classification required
+3) Mark ram lamb as cull → requires confirm → removed from active lists → appears in Culled archive + export works
+4) Stud ram lamb at 270 days + weight recorded → moves to Rams + ramType required
+5) Filters work in Lambs (stud/commercial/cull) and Rams (breeding/stud/commercial)
+6) Herd exports show correct lists without images and correct statuses
+7) Culled export generates correctly and is stored under My Profile → Documents → Culls
+
+Deliver clean UI + correct logic + no broken states.

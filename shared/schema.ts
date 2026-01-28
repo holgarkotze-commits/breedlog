@@ -50,6 +50,15 @@ export const animals = pgTable("animals", {
   status: text("status").default("active"), // active, sold, dead, culled, lost
   photo: text("photo"), // URL/Path to photo
   
+  // Lamb Management Fields
+  lambStatus: text("lamb_status").default("active"), // active, moved_to_ewes, moved_to_rams, culled, sold, deceased
+  ramLambClass: text("ram_lamb_class"), // stud, commercial, cull, unclassified (only for ram lambs)
+  ramType: text("ram_type"), // breeding_ram, stud_ram, commercial_ram (only when moved to rams)
+  cullConfirmed: boolean("cull_confirmed").default(false),
+  cullDate: date("cull_date"),
+  cullReason: text("cull_reason"),
+  removalReason: text("removal_reason"), // sold, deceased, culled, transferred
+  
   // Birth & Parentage
   birthDate: date("birth_date"),
   birthStatus: text("birth_status"), // single, twin, triplet
