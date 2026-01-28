@@ -137,6 +137,10 @@ shared/           # Shared types, schemas, and route definitions
 
 ### My Herd & PDF Exports (January 2026)
 - **My Herd Branding**: Animals tab renamed to "My Herd" throughout navigation and page titles
+- **View Options**: Three view modes with toggle buttons in filter bar:
+  - Detailed View: Card-based layout with photos (default)
+  - List View: Table without photos showing Tag ID, Name, Sex, Breed, DOB, Status
+  - Thumbnail View: Small photo grid with tag IDs below
 - **Professional PDF Export**: All exports follow consistent body layout rules:
   - A4 portrait format with 10mm margins
   - Left-aligned text throughout tables (no center alignment in table bodies)
