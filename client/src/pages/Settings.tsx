@@ -417,8 +417,8 @@ export default function Settings() {
             </thead>
             <tbody>
               ${pageAnimals.map((a: any, i: number) => `
-                <tr style="height:30pt;">
-                  <td style="width:32px;padding:1mm;"><div style="width:28px;height:28px;border-radius:3px;overflow:hidden;background:#f0f0f0;">${a.photo ? `<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover;"/>` : ''}</div></td>
+                <tr>
+                  <td style="width:32px;"><div style="width:28px;height:28px;border-radius:3px;overflow:hidden;background:#f0f0f0;">${a.photo ? `<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover;"/>` : ''}</div></td>
                   <td><strong>${a.tagId}</strong></td>
                   <td>${a.name || "-"}</td>
                   <td>${a.sex === "male" ? "M" : a.sex === "female" ? "F" : a.sex}</td>
@@ -456,27 +456,27 @@ export default function Settings() {
   <meta charset="UTF-8">
   <title>${fb?.studName || fb?.farmName || "BreedLog"} - Herd Export</title>
   <style>
-    @page { size: A4; margin: 10mm; }
+    @page { size: A4 portrait; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 190mm; height: 277mm; padding: 5mm; margin: 0 auto; page-break-after: always; display: flex; flex-direction: column; }
+    .page { width: 190mm; min-height: 277mm; padding: 5mm; padding-bottom: 30mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; border-bottom: 2px solid #FFC300; margin-bottom: 3mm; height: 20mm; }
-    .header-left { width: 60px; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 3mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 4mm; }
+    .header-left { width: 60px; flex-shrink: 0; }
     .header-center { flex: 1; text-align: center; }
     .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
     .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 2px; }
-    .header-right { text-align: right; font-size: 8pt; color: #666; }
-    .animals-table { width: 100%; border-collapse: collapse; flex: 1; table-layout: fixed; }
-    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 2mm 2mm; text-align: left; text-transform: uppercase; height: 30pt; line-height: 30pt; }
-    .animals-table td { padding: 0 2mm; border-bottom: 1px solid #ddd; font-size: 8pt; vertical-align: middle; height: 30pt; line-height: 30pt; }
+    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
+    .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 8px 10px; text-align: left; text-transform: uppercase; vertical-align: middle; }
+    .animals-table td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
     .animals-table tbody tr { height: 30pt; }
-    .animals-table tr:nth-child(even) { background: #f9f9f9; }
-    .status { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; }
+    .animals-table tr:nth-child(even) { background: #fafafa; }
+    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; }
     .status-active { background: #22c55e20; color: #16a34a; }
     .status-sold { background: #f59e0b20; color: #d97706; }
     .status-deceased { background: #ef444420; color: #dc2626; }
-    .footer { display: flex; align-items: center; gap: 4mm; border-top: 2px solid #FFC300; margin-top: auto; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 3mm 4mm; border-radius: 2mm; height: 18mm; }
+    .footer { display: flex; align-items: center; gap: 4mm; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 3mm 4mm; border-radius: 2mm; margin-top: 6mm; position: absolute; bottom: 5mm; left: 5mm; right: 5mm; }
     .footer-logo { width: 36px; }
     .footer-info { flex: 1; }
     .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
@@ -484,7 +484,11 @@ export default function Settings() {
     .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
     .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
     .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-    @media print { .page { page-break-after: always; height: 277mm; } .page:last-child { page-break-after: avoid; } }
+    @media print { 
+      .page { page-break-after: always; } 
+      .page:last-child { page-break-after: avoid; }
+      thead { display: table-header-group; }
+    }
   </style>
 </head>
 <body>

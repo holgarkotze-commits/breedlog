@@ -951,20 +951,23 @@ ${data.notes || "No notes recorded."}
 <head>
 <title>${data.identification.tagId} - Animal Profile</title>
 <style>
-body { font-family: 'Segoe UI', Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto; }
-h1 { color: #FFC300; border-bottom: 3px solid #FFC300; padding-bottom: 15px; text-align: center; font-size: 28px; }
-h2 { color: #333; margin-top: 35px; border-bottom: 2px solid #FFC300; padding-bottom: 8px; font-size: 18px; background: linear-gradient(90deg, #FFC300 0%, transparent 100%); padding-left: 10px; }
-.row { display: flex; padding: 10px 0; border-bottom: 1px solid #eee; }
-.row:nth-child(even) { background: #fafafa; }
-.label { width: 220px; font-weight: bold; color: #555; }
-.value { flex: 1; color: #222; }
-.header { text-align: center; margin-bottom: 40px; padding: 20px; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: white; border-radius: 8px; }
-.header h1 { color: #FFC300; border: none; margin: 0; }
-.header p { color: #ccc; margin: 10px 0 0 0; }
-.footer { margin-top: 50px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; padding-top: 20px; }
-.section { background: white; border-radius: 8px; padding: 15px 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+@page { size: A4 portrait; margin: 10mm; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; color: #333; max-width: 190mm; margin: 0 auto; padding: 5mm; }
+h1 { color: #FFC300; font-size: 20pt; }
+h2 { color: #333; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #FFC300; padding-bottom: 6px; font-size: 12pt; font-weight: 700; text-align: left; }
+.data-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+.data-table td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 10pt; text-align: left; vertical-align: middle; }
+.data-table tr:nth-child(even) { background: #fafafa; }
+.data-table .label { width: 200px; font-weight: 600; color: #555; }
+.data-table .value { color: #222; }
+.header { text-align: center; margin-bottom: 25px; padding: 15px 20px; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: white; border-radius: 6px; }
+.header h1 { color: #FFC300; border: none; margin: 0; font-size: 18pt; }
+.header p { color: #ccc; margin: 8px 0 0 0; font-size: 9pt; }
+.footer { margin-top: 40px; text-align: center; font-size: 9pt; color: #999; border-top: 2px solid #FFC300; padding-top: 15px; }
+.section { background: white; border-radius: 6px; padding: 10px 0; margin-bottom: 15px; }
 .highlight { background: #FFC300; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
-@media print { body { padding: 20px; } .section { box-shadow: none; border: 1px solid #eee; } }
+@media print { body { padding: 5mm; } .section { box-shadow: none; } }
 </style>
 </head>
 <body>
@@ -975,46 +978,56 @@ h2 { color: #333; margin-top: 35px; border-bottom: 2px solid #FFC300; padding-bo
 
 <div class="section">
 <h2>Identification</h2>
-<div class="row"><span class="label">Lamb/Animal ID:</span><span class="value"><span class="highlight">${data.identification.tagId || "Not recorded"}</span></span></div>
-<div class="row"><span class="label">Name:</span><span class="value">${data.identification.name || "Not recorded"}</span></div>
-<div class="row"><span class="label">Electronic ID:</span><span class="value">${data.identification.electronicId || "Not recorded"}</span></div>
-<div class="row"><span class="label">Tattoo ID:</span><span class="value">${data.identification.tattooId || "Not recorded"}</span></div>
+<table class="data-table">
+<tr><td class="label">Lamb/Animal ID</td><td class="value"><span class="highlight">${data.identification.tagId || "Not recorded"}</span></td></tr>
+<tr><td class="label">Name</td><td class="value">${data.identification.name || "Not recorded"}</td></tr>
+<tr><td class="label">Electronic ID</td><td class="value">${data.identification.electronicId || "Not recorded"}</td></tr>
+<tr><td class="label">Tattoo ID</td><td class="value">${data.identification.tattooId || "Not recorded"}</td></tr>
+</table>
 </div>
 
 <div class="section">
 <h2>Birth Information</h2>
-<div class="row"><span class="label">Date of Birth:</span><span class="value">${formatDate(data.basicInfo.birthDate)}</span></div>
-<div class="row"><span class="label">Birth Status:</span><span class="value">${data.basicInfo.birthStatus ? data.basicInfo.birthStatus.charAt(0).toUpperCase() + data.basicInfo.birthStatus.slice(1) : "Not recorded"}</span></div>
-<div class="row"><span class="label">Sex:</span><span class="value">${data.basicInfo.sex ? data.basicInfo.sex.toUpperCase() : "Not recorded"}</span></div>
-<div class="row"><span class="label">Breed:</span><span class="value">${data.basicInfo.breed || "Meatmaster"}</span></div>
-<div class="row"><span class="label">Status:</span><span class="value">${data.basicInfo.status ? data.basicInfo.status.charAt(0).toUpperCase() + data.basicInfo.status.slice(1) : "Not recorded"}</span></div>
+<table class="data-table">
+<tr><td class="label">Date of Birth</td><td class="value">${formatDate(data.basicInfo.birthDate)}</td></tr>
+<tr><td class="label">Birth Status</td><td class="value">${data.basicInfo.birthStatus ? data.basicInfo.birthStatus.charAt(0).toUpperCase() + data.basicInfo.birthStatus.slice(1) : "Not recorded"}</td></tr>
+<tr><td class="label">Sex</td><td class="value">${data.basicInfo.sex ? data.basicInfo.sex.toUpperCase() : "Not recorded"}</td></tr>
+<tr><td class="label">Breed</td><td class="value">${data.basicInfo.breed || "Meatmaster"}</td></tr>
+<tr><td class="label">Status</td><td class="value">${data.basicInfo.status ? data.basicInfo.status.charAt(0).toUpperCase() + data.basicInfo.status.slice(1) : "Not recorded"}</td></tr>
+</table>
 </div>
 
 <div class="section">
 <h2>Parentage</h2>
-<div class="row"><span class="label">Sire (Father):</span><span class="value">${data.parentage.sireTagId || data.parentage.externalSireInfo || "Not recorded"}</span></div>
-<div class="row"><span class="label">Dam (Mother):</span><span class="value">${data.parentage.damTagId || data.parentage.externalDamInfo || "Not recorded"}</span></div>
+<table class="data-table">
+<tr><td class="label">Sire (Father)</td><td class="value">${data.parentage.sireTagId || data.parentage.externalSireInfo || "Not recorded"}</td></tr>
+<tr><td class="label">Dam (Mother)</td><td class="value">${data.parentage.damTagId || data.parentage.externalDamInfo || "Not recorded"}</td></tr>
+</table>
 </div>
 
 <div class="section">
 <h2>Growth & Weaning</h2>
-<div class="row"><span class="label">Birth Weight:</span><span class="value">${data.weights.birthWeight ? data.weights.birthWeight + " kg" : "Not recorded"}</span></div>
-<div class="row"><span class="label">Current Weight:</span><span class="value">${data.weights.currentWeight ? data.weights.currentWeight + " kg" : "Not recorded"}</span></div>
-<div class="row"><span class="label">100-Day Weigh Date:</span><span class="value">${formatDate(data.weights.weight100DayDate)}</span></div>
-<div class="row"><span class="label">100-Day Weight:</span><span class="value">${data.weights.weight100Day ? data.weights.weight100Day + " kg" : "Not recorded"}</span></div>
-<div class="row"><span class="label">270-Day Weight:</span><span class="value">${data.weights.weight270Day ? data.weights.weight270Day + " kg" : "Not recorded"}</span></div>
-<div class="row"><span class="label">Weaning Status:</span><span class="value">${data.weaningStatus === "sibling_died_before_weaning" ? "Sibling died before weaning" : "Normal"}</span></div>
+<table class="data-table">
+<tr><td class="label">Birth Weight</td><td class="value">${data.weights.birthWeight ? data.weights.birthWeight + " kg" : "Not recorded"}</td></tr>
+<tr><td class="label">Current Weight</td><td class="value">${data.weights.currentWeight ? data.weights.currentWeight + " kg" : "Not recorded"}</td></tr>
+<tr><td class="label">100-Day Weigh Date</td><td class="value">${formatDate(data.weights.weight100DayDate)}</td></tr>
+<tr><td class="label">100-Day Weight</td><td class="value">${data.weights.weight100Day ? data.weights.weight100Day + " kg" : "Not recorded"}</td></tr>
+<tr><td class="label">270-Day Weight</td><td class="value">${data.weights.weight270Day ? data.weights.weight270Day + " kg" : "Not recorded"}</td></tr>
+<tr><td class="label">Weaning Status</td><td class="value">${data.weaningStatus === "sibling_died_before_weaning" ? "Sibling died before weaning" : "Normal"}</td></tr>
+</table>
 </div>
 
 ${data.breedingStats ? `
 <div class="section">
 <h2>Breeding Statistics</h2>
-<div class="row"><span class="label">Total Matings:</span><span class="value">${data.breedingStats.totalMatings}</span></div>
-<div class="row"><span class="label">Total Lambings:</span><span class="value">${data.breedingStats.totalLambings}</span></div>
-<div class="row"><span class="label">Total Lambs Born:</span><span class="value">${data.breedingStats.totalLambsBorn}</span></div>
-<div class="row"><span class="label">Fertility Rate:</span><span class="value">${data.breedingStats.fertilityRate}</span></div>
-<div class="row"><span class="label">Lambs Reared:</span><span class="value">${data.breedingStats.lambsReared}</span></div>
-<div class="row"><span class="label">Lambs Weaned:</span><span class="value">${data.breedingStats.lambsWeaned}</span></div>
+<table class="data-table">
+<tr><td class="label">Total Matings</td><td class="value">${data.breedingStats.totalMatings}</td></tr>
+<tr><td class="label">Total Lambings</td><td class="value">${data.breedingStats.totalLambings}</td></tr>
+<tr><td class="label">Total Lambs Born</td><td class="value">${data.breedingStats.totalLambsBorn}</td></tr>
+<tr><td class="label">Fertility Rate</td><td class="value">${data.breedingStats.fertilityRate}</td></tr>
+<tr><td class="label">Lambs Reared</td><td class="value">${data.breedingStats.lambsReared}</td></tr>
+<tr><td class="label">Lambs Weaned</td><td class="value">${data.breedingStats.lambsWeaned}</td></tr>
+</table>
 </div>
 ` : ""}
 
