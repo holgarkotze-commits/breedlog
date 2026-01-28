@@ -3,6 +3,7 @@ import { useAnimal, useFamilyTree, useUpdateAnimal, useAnimals, useAnimalImages,
 import { usePerformanceRecords, useHealthRecords, useCreatePerformanceRecord } from "@/hooks/use-records";
 import { useEvaluations, useCreateEvaluation } from "@/hooks/use-evaluations";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
+import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import { Layout } from "@/components/Layout";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -774,6 +775,12 @@ function BreedingStatsView({ animal }: { animal: AnimalWithRelations }) {
 function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelations, farmSettings?: { farmName?: string | null, studName?: string | null, studPrefix?: string | null, ownerName?: string | null, ownerEmail?: string | null, ownerPhone?: string | null, farmLocation?: string | null, farmAddress?: string | null, membershipNumber?: string | null, registrationNumber?: string | null, logoUrl?: string | null, logoSize?: string | null, logoWidth?: number | null, logoHeight?: number | null } | null }) {
     const { data: breedingEvents } = useAnimalBreedingEvents(animal.id, animal.sex);
     const { toast } = useToast();
+    const createExportedDoc = useCreateExportedDocument();
+    
+    const getDocumentFileName = (type: string, identifier: string) => {
+        const date = format(new Date(), "yyyy-MM-dd");
+        return `${type}_${identifier}_${date}.pdf`;
+    };
     
     const getProfileData = () => {
         const offspring = animal.offspringAsDam || animal.offspringAsSire || [];
@@ -1245,6 +1252,11 @@ ${includeTree ? buildFamilyTreePage() : ''}
             printWindow.document.close();
             setTimeout(() => printWindow.print(), 500);
         }
+        createExportedDoc.mutate({
+            name: getDocumentFileName("AnimalProfile", animal.tagId || `ID${animal.id}`),
+            documentType: "individual",
+            subfolder: "individual"
+        });
         toast({ title: "PDF Ready", description: `Print dialog opened for ${animal.tagId} profile${includeTree ? ' with family tree' : ''}` });
     };
     

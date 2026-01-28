@@ -10,6 +10,7 @@ import {
   farmSettings,
   documents,
   animalImages,
+  exportedDocuments,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -20,6 +21,7 @@ import {
   type InsertFarmSettings,
   type InsertDocument,
   type InsertAnimalImage,
+  type InsertExportedDocument,
   type Animal,
   type BreedingEvent,
   type Offspring,
@@ -30,6 +32,7 @@ import {
   type FarmSettings,
   type Document,
   type AnimalImage,
+  type ExportedDocument,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -74,6 +77,11 @@ export interface IStorage {
   getAnimalImages(animalId: number): Promise<AnimalImage[]>;
   createAnimalImage(image: InsertAnimalImage): Promise<AnimalImage>;
   deleteAnimalImage(id: number): Promise<void>;
+  
+  // Exported Documents
+  getExportedDocuments(subfolder?: string): Promise<ExportedDocument[]>;
+  createExportedDocument(doc: InsertExportedDocument): Promise<ExportedDocument>;
+  deleteExportedDocument(id: number): Promise<void>;
   
   // Bulk import
   bulkCreateAnimals(animalsList: InsertAnimal[]): Promise<Animal[]>;
@@ -234,6 +242,25 @@ export class DatabaseStorage implements IStorage {
   
   async deleteAnimalImage(id: number): Promise<void> {
     await db.delete(animalImages).where(eq(animalImages.id, id));
+  }
+  
+  // Exported Documents
+  async getExportedDocuments(subfolder?: string): Promise<ExportedDocument[]> {
+    if (subfolder) {
+      return await db.select().from(exportedDocuments)
+        .where(eq(exportedDocuments.subfolder, subfolder))
+        .orderBy(desc(exportedDocuments.exportedAt));
+    }
+    return await db.select().from(exportedDocuments).orderBy(desc(exportedDocuments.exportedAt));
+  }
+  
+  async createExportedDocument(doc: InsertExportedDocument): Promise<ExportedDocument> {
+    const [newDoc] = await db.insert(exportedDocuments).values(doc).returning();
+    return newDoc;
+  }
+  
+  async deleteExportedDocument(id: number): Promise<void> {
+    await db.delete(exportedDocuments).where(eq(exportedDocuments.id, id));
   }
   
   // Bulk import

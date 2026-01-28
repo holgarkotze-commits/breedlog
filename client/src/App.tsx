@@ -14,7 +14,7 @@ import AnimalDetail from "@/pages/AnimalDetail";
 import Breeding from "@/pages/Breeding";
 import Settings from "@/pages/Settings";
 import Lambs from "@/pages/Lambs";
-import Culled from "@/pages/Culled";
+import Records from "@/pages/Records";
 
 function Router() {
   return (
@@ -23,9 +23,8 @@ function Router() {
       <Route path="/animals" component={Animals} />
       <Route path="/animals/:id" component={AnimalDetail} />
       <Route path="/lambs" component={Lambs} />
-      <Route path="/culled" component={Culled} />
       <Route path="/breeding" component={Breeding} />
-      <Route path="/records" component={Animals} />
+      <Route path="/records" component={Records} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

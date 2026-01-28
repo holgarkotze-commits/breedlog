@@ -358,3 +358,17 @@ export const documents = pgTable("documents", {
 export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true });
 export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
+
+// Exported documents tracking for Records filing system
+export const exportedDocuments = pgTable("exported_documents", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  documentType: text("document_type").notNull(), // herd, individual, mating, culled, sold, productivity
+  subfolder: text("subfolder").notNull(), // matches documentType or specific category
+  animalId: integer("animal_id").references(() => animals.id),
+  exportedAt: timestamp("exported_at").defaultNow(),
+});
+
+export const insertExportedDocumentSchema = createInsertSchema(exportedDocuments).omit({ id: true, exportedAt: true });
+export type ExportedDocument = typeof exportedDocuments.$inferSelect;
+export type InsertExportedDocument = z.infer<typeof insertExportedDocumentSchema>;

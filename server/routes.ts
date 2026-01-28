@@ -597,6 +597,47 @@ export async function registerRoutes(
     }
   });
 
+  // === EXPORTED DOCUMENTS ===
+  app.get("/api/exported-documents", async (req, res) => {
+    try {
+      const subfolder = req.query.subfolder as string | undefined;
+      const docs = await storage.getExportedDocuments(subfolder);
+      res.json(docs);
+    } catch (err: any) {
+      console.error("Get exported docs error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/exported-documents", async (req, res) => {
+    try {
+      const { name, documentType, subfolder, animalId } = req.body;
+      if (!name || !documentType || !subfolder) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      const doc = await storage.createExportedDocument({
+        name,
+        documentType,
+        subfolder,
+        animalId: animalId || null,
+      });
+      res.status(201).json(doc);
+    } catch (err: any) {
+      console.error("Create exported doc error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/exported-documents/:id", async (req, res) => {
+    try {
+      await storage.deleteExportedDocument(Number(req.params.id));
+      res.status(204).send();
+    } catch (err: any) {
+      console.error("Delete exported doc error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // === DEBUG ===
   app.post(api.debug.test.path, async (req, res) => {
     const results: string[] = [];

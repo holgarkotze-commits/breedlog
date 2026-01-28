@@ -3,6 +3,7 @@ import { useBreedingEvents, useCreateBreedingEvent } from "@/hooks/use-breeding"
 import { useMatingGroups, useCreateMatingGroup, useUpdateMatingGroup, useDeleteMatingGroup } from "@/hooks/use-mating-groups";
 import { useAnimals } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
+import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,6 +32,13 @@ export default function Breeding() {
   const [openMatingGroup, setOpenMatingGroup] = useState(false);
   const [editingGroup, setEditingGroup] = useState<MatingGroup | null>(null);
 
+  const createExportedDoc = useCreateExportedDocument();
+  
+  const getDocumentFileName = (type: string, identifier: string) => {
+    const date = format(new Date(), "yyyy-MM-dd");
+    return `${type}_${identifier}_${date}.pdf`;
+  };
+  
   const activeGroups = matingGroupsList?.filter(g => g.status === 'active') || [];
   const closedGroups = matingGroupsList?.filter(g => g.status === 'closed') || [];
 
@@ -374,16 +382,21 @@ ${g.notes ? `<p style="margin-top: 8px; font-size: 9pt; color: #555; padding: 0 
       printWindow.document.close();
       setTimeout(() => printWindow.print(), 250);
     }
+    createExportedDoc.mutate({
+      name: getDocumentFileName("MatingGroups", "Report"),
+      documentType: "breeding",
+      subfolder: "breeding"
+    });
   };
 
   return (
     <Layout>
       <div className="space-y-4 md:space-y-8 animate-in fade-in duration-500">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-          <h1 className="text-lg md:text-3xl font-bold uppercase tracking-tight" data-testid="page-title">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-lg md:text-3xl font-bold uppercase tracking-tight leading-tight" data-testid="page-title">
             {displayName ? `${displayName} - Breeding` : "Breeding Program"}
           </h1>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             <RecordBreedingDialog open={openRecord} onOpenChange={setOpenRecord} />
           </div>
         </div>

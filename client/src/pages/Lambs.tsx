@@ -170,8 +170,8 @@ export default function Lambs() {
   return (
     <Layout>
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
-        <div className="flex flex-row justify-between items-center gap-2">
-          <h1 className="text-base md:text-3xl font-bold tracking-tight" data-testid="page-title">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-lg md:text-3xl font-bold tracking-tight leading-tight" data-testid="page-title">
             {displayName ? `${displayName} - Lambs` : "Lambs"}
           </h1>
         </div>

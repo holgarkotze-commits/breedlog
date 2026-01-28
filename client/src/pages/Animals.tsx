@@ -3,6 +3,7 @@ import { Layout } from "@/components/Layout";
 import { useAnimals, useCreateAnimal, useDeleteAnimal, useRemoveFromHerd, useClassifyRamLamb, useConfirmCull, useMoveToEwes, useMoveToRams, useUpdateAnimal } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useBreedingEvents } from "@/hooks/use-breeding";
+import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import { AnimalCard } from "@/components/AnimalCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -147,6 +148,12 @@ export default function Animals() {
   const moveToEwesMutation = useMoveToEwes();
   const moveToRamsMutation = useMoveToRams();
   const updateAnimalMutation = useUpdateAnimal();
+  const createExportedDoc = useCreateExportedDocument();
+  
+  const getDocumentFileName = (type: string, identifier: string) => {
+    const date = format(new Date(), "yyyy-MM-dd");
+    return `${type}_${identifier}_${date}.pdf`;
+  };
   
   const handleRemoveFromHerd = () => {
     if (!animalToRemove) return;
@@ -468,6 +475,11 @@ export default function Animals() {
       printWindow.document.close();
       setTimeout(() => printWindow.print(), 500);
     }
+    createExportedDoc.mutate({
+      name: getDocumentFileName("HerdExport", "FullHerd"),
+      documentType: "herd",
+      subfolder: "herd"
+    });
     toast({ title: "PDF Ready", description: "Full Herd Register export opened for printing" });
   };
 
@@ -637,6 +649,11 @@ export default function Animals() {
         printWindow.document.close();
         setTimeout(() => printWindow.print(), 500);
       }
+      createExportedDoc.mutate({
+        name: getDocumentFileName("HerdExport", "EwesOnly"),
+        documentType: "herd",
+        subfolder: "herd"
+      });
       toast({ title: "PDF Ready", description: `${exportTitle} export opened for printing` });
       return;
     }
@@ -760,6 +777,11 @@ export default function Animals() {
       printWindow.document.close();
       setTimeout(() => printWindow.print(), 500);
     }
+    createExportedDoc.mutate({
+      name: getDocumentFileName("HerdExport", exportType === "rams" ? "RamsOnly" : "LambsOnly"),
+      documentType: "herd",
+      subfolder: "herd"
+    });
     toast({ title: "PDF Ready", description: `${exportTitle} export opened for printing` });
   };
 
@@ -915,6 +937,11 @@ export default function Animals() {
       printWindow.document.close();
       setTimeout(() => printWindow.print(), 500);
     }
+    createExportedDoc.mutate({
+      name: getDocumentFileName("RamsRegister", "Full"),
+      documentType: "herd",
+      subfolder: "herd"
+    });
     toast({ title: "PDF Ready", description: "Rams Register export opened for printing" });
   };
 
@@ -1051,6 +1078,11 @@ export default function Animals() {
       printWindow.document.close();
       setTimeout(() => printWindow.print(), 500);
     }
+    createExportedDoc.mutate({
+      name: getDocumentFileName("EwesRegister", "Full"),
+      documentType: "herd",
+      subfolder: "herd"
+    });
     toast({ title: "PDF Ready", description: "Ewes Register export opened for printing" });
   };
 
@@ -1085,15 +1117,16 @@ export default function Animals() {
   return (
     <Layout>
       <div className="space-y-2.5 md:space-y-6 animate-in fade-in duration-500">
-        <div className="flex flex-row justify-between items-center gap-2">
-          <h1 className="text-base md:text-3xl font-bold tracking-tight" data-testid="page-title">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-lg md:text-3xl font-bold tracking-tight leading-tight" data-testid="page-title">
             {displayName ? `${displayName} - My Herd` : "My Herd"}
           </h1>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button 
                   variant="outline" 
+                  size="sm"
                   disabled={!allAnimals || allAnimals.length === 0}
                   data-testid="button-export-herd"
                 >
@@ -1101,7 +1134,7 @@ export default function Animals() {
                   Export
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="start">
                 <DropdownMenuItem 
                   onClick={exportFullHerdPDF}
                   data-testid="export-full-herd"
