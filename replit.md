@@ -137,13 +137,20 @@ shared/           # Shared types, schemas, and route definitions
 
 ### My Herd & PDF Exports (January 2026)
 - **My Herd Branding**: Animals tab renamed to "My Herd" throughout navigation and page titles
-- **Professional PDF Export**: Herd list export with:
-  - 30pt row sizing with 28px photo thumbnails on far left
-  - Ewe breeding statistics when ewes present: Tag ID, DOB, # Lambs, First Lamb Date, ILP, Lambs Weaned, Avg Wean Weight
-  - Standard animal data for non-ewes: Tag ID, Name, Sex, Breed, DOB, Weight, Status
-  - Golden yellow (#FFC300) header and footer styling
+- **Professional PDF Export**: All exports follow consistent body layout rules:
+  - A4 portrait format with 10mm margins
+  - Left-aligned text throughout tables (no center alignment in table bodies)
+  - Table-based layouts with 8-10px uniform cell padding
+  - Compact 30pt row height - rows do not stretch to fill page
+  - Fixed table height - table stops where data stops, leaving clean white space
+  - Bold column headers with golden (#FFC300) background
+  - Table headers repeat on new pages for multi-page tables
+  - Footer positioned absolutely at bottom with reserved space (25-30mm padding)
   - Footer ribbon with "BREEDLOG" text and "Professional Livestock Management" tagline
-- **Settings Export Updated**: PDF export now includes photo thumbnails with 30pt row sizing
+- **Ewe Breeding Statistics**: When ewes present in export:
+  - Tag ID, Sex, DOB, # Lambs, First Lamb Date, ILP, Lambs Weaned, Avg Wean Weight
+- **Animal Profile PDF**: Individual animal certificates with table-based layout for all sections
+- **Mating Groups PDF**: Report uses table-based layout for RAM identification and mating dates
 - **Ewe Stats Calculation**: Uses breedingEvents with lambingDate, weaningStatus for weaned count, weight100Day for average wean weight
 
 ### Schema Additions
