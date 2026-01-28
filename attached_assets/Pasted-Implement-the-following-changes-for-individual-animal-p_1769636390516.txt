@@ -1,0 +1,105 @@
+Implement the following changes for individual animal profiles and PDF exports.
+
+PART 1: INDIVIDUAL ANIMAL IMAGE FOLDER
+
+For EVERY individual animal profile (ram, ewe, lamb):
+
+- Create a dedicated “Images” folder inside that animal’s profile
+- Allow multiple images to be uploaded to this folder
+- Images must be stored and linked ONLY to that specific animal
+- Images must NOT be visible anywhere else in the app
+- Images can only be viewed when inside that specific animal’s profile
+- Provide basic image actions:
+  - Upload
+  - View (gallery or list view)
+  - Remove image
+- Images must remain attached to the animal record permanently unless deleted
+
+Do NOT include these images in herd exports.
+
+--------------------------------------------------
+
+PART 2: INDIVIDUAL ANIMAL PDF EXPORT (HIGH PRIORITY)
+
+When exporting an INDIVIDUAL animal to PDF, use the following STANDARDIZED, PROFESSIONAL layout.
+
+PDF GENERAL RULES:
+- A4 size
+- Portrait orientation
+- Clean, professional layout
+- Do NOT change existing header, logo, or footer styling
+- Header and footer must remain consistent across all animal PDFs
+
+--------------------------------------------------
+
+PAGE 1: MAIN ANIMAL PROFILE (PORTRAIT)
+
+TOP SECTION:
+- Centered at the top of the page:
+  - One LARGE, high-quality image of the animal
+  - Image must be clearly visible and proportionally scaled
+  - Image centered horizontally on the page
+
+TITLE BELOW IMAGE:
+- Clear, bold title:
+  “Individual Animal Record”
+
+--------------------------------------------------
+
+DETAIL TABLE (BELOW TITLE)
+
+Below the title, insert a structured table with:
+- Clear headings
+- Proper column alignment
+- Compact spacing
+- No stretched rows
+
+TABLE CONTENT MUST INCLUDE (FULL DETAILS):
+- Animal ID
+- Sex
+- Date of Birth
+- Birth Status (Single / Twin)
+- Sire (Father ID)
+- Dam (Mother ID)
+- Current Status (Active / Inactive / Sold / Deceased)
+- Growth data (where applicable):
+  - 100-Day Weigh Date
+  - 100-Day Weight (kg)
+  - 270-Day Weigh Date
+  - 270-Day Weight (kg)
+- Weaning status (if applicable)
+
+RULES:
+- Left-aligned text
+- Consistent spacing
+- Table ends where data ends (leave clean white space below)
+
+--------------------------------------------------
+
+PAGE 2 (OPTIONAL): FAMILY TREE EXPORT
+
+If selected, include a SECOND PAGE as an optional export:
+
+PAGE SETTINGS:
+- A4 size
+- Landscape orientation
+- Full-width layout
+
+CONTENT:
+- Full family tree of the animal
+- Sire line and dam line clearly shown
+- Well-structured, professional pedigree layout
+- Clean lines, readable text, no clutter
+- Optimized for printing
+
+RULES:
+- One pedigree per page
+- No compression or scaling that reduces readability
+
+--------------------------------------------------
+
+EXPORT OPTIONS:
+- Export Individual Animal (PDF)
+- Export Individual Animal + Family Tree (PDF)
+
+Ensure all layouts are visually professional, aligned, and suitable for stud, record-keeping, and official use.

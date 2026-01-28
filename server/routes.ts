@@ -117,6 +117,46 @@ export async function registerRoutes(
       res.status(204).send();
   });
 
+  // === ANIMAL IMAGES ===
+  app.get("/api/animals/:id/images", async (req, res) => {
+    const animalId = Number(req.params.id);
+    const images = await storage.getAnimalImages(animalId);
+    res.json(images);
+  });
+
+  app.post("/api/animals/:id/images", async (req, res) => {
+    try {
+      const animalId = Number(req.params.id);
+      const { imageData, fileName, caption } = req.body;
+      
+      if (!imageData || !fileName) {
+        return res.status(400).json({ message: "imageData and fileName are required" });
+      }
+      
+      const image = await storage.createAnimalImage({
+        animalId,
+        imageData,
+        fileName,
+        caption: caption || null
+      });
+      res.status(201).json(image);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join("."),
+        });
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/animals/:animalId/images/:imageId", async (req, res) => {
+    const imageId = Number(req.params.imageId);
+    await storage.deleteAnimalImage(imageId);
+    res.status(204).send();
+  });
+
   // === BREEDING ===
   app.get(api.breeding.list.path, async (req, res) => {
     const events = await storage.getBreedingEvents();

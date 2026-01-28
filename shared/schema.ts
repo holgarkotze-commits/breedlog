@@ -110,9 +110,33 @@ export const animalsRelations = relations(animals, ({ one, many }) => ({
   performanceRecords: many(performanceRecords),
   healthRecords: many(healthRecords),
   evaluations: many(evaluations),
+  images: many(animalImages),
 }));
 
 export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, createdAt: true });
+
+
+// === ANIMAL IMAGES ===
+// Stores multiple images per animal in their dedicated "Images" folder
+export const animalImages = pgTable("animal_images", {
+  id: serial("id").primaryKey(),
+  animalId: integer("animal_id").notNull(),
+  imageData: text("image_data").notNull(), // Base64 encoded image
+  fileName: text("file_name").notNull(),
+  caption: text("caption"), // Optional caption/description
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+});
+
+export const animalImagesRelations = relations(animalImages, ({ one }) => ({
+  animal: one(animals, {
+    fields: [animalImages.animalId],
+    references: [animals.id],
+  }),
+}));
+
+export const insertAnimalImageSchema = createInsertSchema(animalImages).omit({ id: true, uploadedAt: true });
+export type InsertAnimalImage = z.infer<typeof insertAnimalImageSchema>;
+export type AnimalImage = typeof animalImages.$inferSelect;
 
 
 // === BREEDING EVENTS ===

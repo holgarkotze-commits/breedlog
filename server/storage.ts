@@ -9,6 +9,7 @@ import {
   matingGroups,
   farmSettings,
   documents,
+  animalImages,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -18,6 +19,7 @@ import {
   type InsertMatingGroup,
   type InsertFarmSettings,
   type InsertDocument,
+  type InsertAnimalImage,
   type Animal,
   type BreedingEvent,
   type Offspring,
@@ -27,6 +29,7 @@ import {
   type MatingGroup,
   type FarmSettings,
   type Document,
+  type AnimalImage,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -66,6 +69,11 @@ export interface IStorage {
   getDocuments(): Promise<Document[]>;
   createDocument(doc: InsertDocument): Promise<Document>;
   deleteDocument(id: number): Promise<void>;
+  
+  // Animal Images
+  getAnimalImages(animalId: number): Promise<AnimalImage[]>;
+  createAnimalImage(image: InsertAnimalImage): Promise<AnimalImage>;
+  deleteAnimalImage(id: number): Promise<void>;
   
   // Bulk import
   bulkCreateAnimals(animalsList: InsertAnimal[]): Promise<Animal[]>;
@@ -210,6 +218,22 @@ export class DatabaseStorage implements IStorage {
   
   async deleteDocument(id: number): Promise<void> {
     await db.delete(documents).where(eq(documents.id, id));
+  }
+  
+  // Animal Images
+  async getAnimalImages(animalId: number): Promise<AnimalImage[]> {
+    return await db.select().from(animalImages)
+      .where(eq(animalImages.animalId, animalId))
+      .orderBy(desc(animalImages.uploadedAt));
+  }
+  
+  async createAnimalImage(image: InsertAnimalImage): Promise<AnimalImage> {
+    const [newImage] = await db.insert(animalImages).values(image).returning();
+    return newImage;
+  }
+  
+  async deleteAnimalImage(id: number): Promise<void> {
+    await db.delete(animalImages).where(eq(animalImages.id, id));
   }
   
   // Bulk import
