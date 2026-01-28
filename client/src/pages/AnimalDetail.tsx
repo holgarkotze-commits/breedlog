@@ -1,5 +1,5 @@
 import { useRoute } from "wouter";
-import { useAnimal, useFamilyTree, useUpdateAnimal, useAnimals } from "@/hooks/use-animals";
+import { useAnimal, useFamilyTree, useUpdateAnimal, useAnimals, useAnimalImages, useUploadAnimalImage, useDeleteAnimalImage } from "@/hooks/use-animals";
 import { usePerformanceRecords, useHealthRecords, useCreatePerformanceRecord } from "@/hooks/use-records";
 import { useEvaluations, useCreateEvaluation } from "@/hooks/use-evaluations";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -108,7 +108,7 @@ export default function AnimalDetail() {
                 <TabsTrigger value="performance" data-testid="tab-weights" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Scale className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Weights</span><span className="xs:hidden">Wt</span></TabsTrigger>
                 <TabsTrigger value="health" data-testid="tab-health" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Syringe className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Health</span><span className="xs:hidden">Hlth</span></TabsTrigger>
                 <TabsTrigger value="evaluations" data-testid="tab-evaluations" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><FileText className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> Eval</TabsTrigger>
-                <TabsTrigger value="documents" data-testid="tab-documents" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Image className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> Docs</TabsTrigger>
+                <TabsTrigger value="images" data-testid="tab-images" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Image className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> Images</TabsTrigger>
               </TabsList>
               
               <TabsContent value="pedigree" className="mt-4">
@@ -133,8 +133,8 @@ export default function AnimalDetail() {
                  <EvaluationView animalId={animal.id} initialEvaluations={animal.evaluations || []} />
               </TabsContent>
 
-              <TabsContent value="documents" className="mt-4">
-                 <DocumentsView animalId={animal.id} />
+              <TabsContent value="images" className="mt-4">
+                 <ImagesView animalId={animal.id} />
               </TabsContent>
             </Tabs>
           </div>
@@ -935,7 +935,7 @@ ${data.notes || "No notes recorded."}
         toast({ title: "Word Document Exported", description: `${animal.tagId} profile downloaded as Word document` });
     };
     
-    const handleExportPDF = () => {
+    const handleExportPDF = (includeTree: boolean = false) => {
         const data = getProfileData();
         const formatDate = (dateStr: string | null | undefined) => {
             if (!dateStr) return "Not recorded";
@@ -945,125 +945,229 @@ ${data.notes || "No notes recorded."}
                 return dateStr;
             }
         };
+        
+        const fb = data.farmBranding;
+        const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+        
+        // Page 1: Main Profile with large centered image
+        const page1 = `
+<div class="page portrait">
+  <div class="header">
+    <div class="header-left">
+      ${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" alt="Farm Logo" />` : ''}
+    </div>
+    <div class="header-center">
+      <h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1>
+      <p class="subtitle">Individual Animal Record</p>
+    </div>
+    <div class="header-right">
+      <p>${exportDate}</p>
+    </div>
+  </div>
+  
+  <!-- Large Centered Animal Photo -->
+  <div class="photo-section">
+    ${animal.photo 
+      ? `<img src="${animal.photo}" class="animal-photo" alt="${data.identification.tagId}" />`
+      : `<div class="no-photo">No Photo Available</div>`
+    }
+  </div>
+  
+  <!-- Title Below Image -->
+  <h2 class="record-title">Individual Animal Record</h2>
+  
+  <!-- Detail Table - Full Details -->
+  <table class="detail-table">
+    <tr><td class="section-header" colspan="2">IDENTIFICATION</td></tr>
+    <tr><td class="label">Animal ID</td><td class="value"><strong>${data.identification.tagId || "—"}</strong></td></tr>
+    <tr><td class="label">Name</td><td class="value">${data.identification.name || "—"}</td></tr>
+    <tr><td class="label">Electronic ID</td><td class="value">${data.identification.electronicId || "—"}</td></tr>
+    <tr><td class="label">Tattoo ID</td><td class="value">${data.identification.tattooId || "—"}</td></tr>
+    <tr><td class="label">Stud Prefix</td><td class="value">${data.identification.studPrefix || "—"}</td></tr>
+    
+    <tr><td class="section-header" colspan="2">BASIC INFORMATION</td></tr>
+    <tr><td class="label">Sex</td><td class="value">${data.basicInfo.sex ? data.basicInfo.sex.toUpperCase() : "—"}</td></tr>
+    <tr><td class="label">Breed</td><td class="value">${data.basicInfo.breed || "Meatmaster"}</td></tr>
+    <tr><td class="label">Date of Birth</td><td class="value">${formatDate(data.basicInfo.birthDate)}</td></tr>
+    <tr><td class="label">Birth Status</td><td class="value">${data.basicInfo.birthStatus ? data.basicInfo.birthStatus.charAt(0).toUpperCase() + data.basicInfo.birthStatus.slice(1) : "—"}</td></tr>
+    <tr><td class="label">Current Status</td><td class="value">${data.basicInfo.status ? data.basicInfo.status.charAt(0).toUpperCase() + data.basicInfo.status.slice(1) : "—"}</td></tr>
+    
+    <tr><td class="section-header" colspan="2">PARENTAGE</td></tr>
+    <tr><td class="label">Sire (Father)</td><td class="value">${data.parentage.sireTagId || data.parentage.externalSireInfo || "—"}</td></tr>
+    <tr><td class="label">Dam (Mother)</td><td class="value">${data.parentage.damTagId || data.parentage.externalDamInfo || "—"}</td></tr>
+    
+    <tr><td class="section-header" colspan="2">GROWTH DATA</td></tr>
+    <tr><td class="label">Birth Weight</td><td class="value">${data.weights.birthWeight ? data.weights.birthWeight + " kg" : "—"}</td></tr>
+    <tr><td class="label">Current Weight</td><td class="value">${data.weights.currentWeight ? data.weights.currentWeight + " kg" : "—"}</td></tr>
+    <tr><td class="label">100-Day Weigh Date</td><td class="value">${formatDate(data.weights.weight100DayDate)}</td></tr>
+    <tr><td class="label">100-Day Weight</td><td class="value">${data.weights.weight100Day ? data.weights.weight100Day + " kg" : "—"}</td></tr>
+    <tr><td class="label">270-Day Weigh Date</td><td class="value">${data.weights.weight270DayDate ? formatDate(data.weights.weight270DayDate) : "—"}</td></tr>
+    <tr><td class="label">270-Day Weight</td><td class="value">${data.weights.weight270Day ? data.weights.weight270Day + " kg" : "—"}</td></tr>
+    <tr><td class="label">Weaning Status</td><td class="value">${data.weaningStatus || "—"}</td></tr>
+    
+    <tr><td class="section-header" colspan="2">OWNERSHIP</td></tr>
+    <tr><td class="label">Breeder</td><td class="value">${data.ownership.breederName || "—"}</td></tr>
+    <tr><td class="label">Owner</td><td class="value">${data.ownership.ownerName || "—"}</td></tr>
+    <tr><td class="label">Farm</td><td class="value">${data.ownership.farmName || "—"}</td></tr>
+    <tr><td class="label">Location</td><td class="value">${data.ownership.location || "—"}</td></tr>
+  </table>
+  
+  <div class="footer">
+    <div class="footer-info">
+      <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+      <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
+    </div>
+    <div class="footer-branding">
+      <p class="breedlog-text">BREEDLOG</p>
+      <p class="tagline">Professional Livestock Management</p>
+    </div>
+  </div>
+</div>`;
+
+        // Page 2: Family Tree (Landscape) - only if requested
+        const buildFamilyTreePage = () => {
+            const sire = animal.sire;
+            const dam = animal.dam;
+            
+            return `
+<div class="page landscape">
+  <div class="header">
+    <div class="header-left">
+      ${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" alt="Farm Logo" />` : ''}
+    </div>
+    <div class="header-center">
+      <h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1>
+      <p class="subtitle">Family Tree / Pedigree Certificate</p>
+    </div>
+    <div class="header-right">
+      <p>${exportDate}</p>
+    </div>
+  </div>
+  
+  <h2 class="tree-title">Pedigree for: ${data.identification.tagId} ${data.identification.name ? `(${data.identification.name})` : ''}</h2>
+  
+  <div class="pedigree-container">
+    <div class="pedigree-tree">
+      <!-- Subject (Center Left) -->
+      <div class="pedigree-subject">
+        <div class="pedigree-box subject-box">
+          <div class="box-label">SUBJECT</div>
+          <div class="box-id">${data.identification.tagId}</div>
+          <div class="box-details">${data.basicInfo.sex?.toUpperCase() || ""} | ${data.basicInfo.breed || "Meatmaster"}</div>
+          <div class="box-details">${formatDate(data.basicInfo.birthDate)}</div>
+        </div>
+      </div>
+      
+      <!-- Parents Column -->
+      <div class="pedigree-parents">
+        <div class="pedigree-box sire-box">
+          <div class="box-label">SIRE</div>
+          <div class="box-id">${sire?.tagId || data.parentage.externalSireInfo || "Unknown"}</div>
+          ${sire?.name ? `<div class="box-details">${sire.name}</div>` : ''}
+        </div>
+        <div class="pedigree-connector"></div>
+        <div class="pedigree-box dam-box">
+          <div class="box-label">DAM</div>
+          <div class="box-id">${dam?.tagId || data.parentage.externalDamInfo || "Unknown"}</div>
+          ${dam?.name ? `<div class="box-details">${dam.name}</div>` : ''}
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="footer">
+    <div class="footer-info">
+      <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+      <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
+    </div>
+    <div class="footer-branding">
+      <p class="breedlog-text">BREEDLOG</p>
+      <p class="tagline">Professional Livestock Management</p>
+    </div>
+  </div>
+</div>`;
+        };
+        
         const content = `
 <!DOCTYPE html>
 <html>
 <head>
-<title>${data.identification.tagId} - Animal Profile</title>
+<meta charset="UTF-8">
+<title>${data.identification.tagId} - Individual Animal Record</title>
 <style>
 @page { size: A4 portrait; margin: 10mm; }
+@page landscape { size: A4 landscape; margin: 10mm; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10pt; color: #333; max-width: 190mm; margin: 0 auto; padding: 5mm; }
-h1 { color: #FFC300; font-size: 20pt; }
-h2 { color: #333; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #FFC300; padding-bottom: 6px; font-size: 12pt; font-weight: 700; text-align: left; }
-.data-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-.data-table td { padding: 8px 10px; border-bottom: 1px solid #e0e0e0; font-size: 10pt; text-align: left; vertical-align: middle; }
-.data-table tr:nth-child(even) { background: #fafafa; }
-.data-table .label { width: 200px; font-weight: 600; color: #555; }
-.data-table .value { color: #222; }
-.header { text-align: center; margin-bottom: 25px; padding: 15px 20px; background: linear-gradient(135deg, #1a1a1a 0%, #333 100%); color: white; border-radius: 6px; }
-.header h1 { color: #FFC300; border: none; margin: 0; font-size: 18pt; }
-.header p { color: #ccc; margin: 8px 0 0 0; font-size: 9pt; }
-.footer { margin-top: 40px; text-align: center; font-size: 9pt; color: #999; border-top: 2px solid #FFC300; padding-top: 15px; }
-.section { background: white; border-radius: 6px; padding: 10px 0; margin-bottom: 15px; }
-.highlight { background: #FFC300; color: #000; padding: 2px 8px; border-radius: 4px; font-weight: bold; }
-@media print { body { padding: 5mm; } .section { box-shadow: none; } }
+body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
+
+.page { width: 190mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+.page:last-child { page-break-after: avoid; }
+.page.landscape { width: 277mm; min-height: 190mm; }
+
+.header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
+.header-left { width: 60px; flex-shrink: 0; }
+.logo { width: 50px; height: 50px; object-fit: contain; }
+.header-center { flex: 1; text-align: center; }
+.header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; margin: 0; }
+.header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
+.header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
+
+.photo-section { text-align: center; margin: 10mm 0; }
+.animal-photo { max-width: 120mm; max-height: 100mm; object-fit: contain; border: 2px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.no-photo { width: 120mm; height: 80mm; margin: 0 auto; background: #f5f5f5; border: 2px dashed #ccc; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 12pt; }
+
+.record-title { text-align: center; font-size: 14pt; font-weight: 700; color: #1a1a1a; margin: 6mm 0 4mm 0; text-transform: uppercase; letter-spacing: 1px; }
+
+.detail-table { width: 100%; border-collapse: collapse; margin-top: 4mm; }
+.detail-table td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; text-align: left; vertical-align: middle; }
+.detail-table tr:nth-child(even) { background: #fafafa; }
+.detail-table .label { width: 45%; font-weight: 600; color: #555; }
+.detail-table .value { color: #222; }
+.detail-table .section-header { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; text-transform: uppercase; padding: 6px 10px; }
+
+.tree-title { text-align: center; font-size: 12pt; font-weight: 700; color: #1a1a1a; margin: 4mm 0 6mm 0; }
+
+.pedigree-container { padding: 10mm; }
+.pedigree-tree { display: flex; align-items: center; justify-content: center; gap: 30mm; }
+.pedigree-subject, .pedigree-parents { display: flex; flex-direction: column; gap: 8mm; }
+.pedigree-box { border: 2px solid #FFC300; border-radius: 6px; padding: 8px 12px; min-width: 80mm; background: white; }
+.subject-box { background: linear-gradient(135deg, #FFC300 0%, #ffdb4d 100%); }
+.sire-box { border-color: #3b82f6; }
+.dam-box { border-color: #ec4899; }
+.box-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; color: #666; margin-bottom: 3px; }
+.box-id { font-size: 14pt; font-weight: 800; color: #1a1a1a; }
+.box-details { font-size: 9pt; color: #555; margin-top: 2px; }
+.pedigree-connector { width: 2px; height: 15mm; background: #ccc; margin: 0 auto; }
+
+.footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
+.footer-info { flex: 1; }
+.footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
+.footer-info p { font-size: 7pt; margin-top: 2px; }
+.footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+.footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
+.footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
+
+@page landscape { size: A4 landscape; margin: 10mm; }
+@media print { 
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: avoid; }
+  .page.landscape { page: landscape; }
+}
 </style>
 </head>
 <body>
-<div class="header">
-<h1>${data.farmBranding?.studName || data.farmBranding?.farmName || "BreedLog"}</h1>
-<p>Animal Profile Certificate - Generated ${formatDate(new Date().toISOString())}</p>
-</div>
-
-<div class="section">
-<h2>Identification</h2>
-<table class="data-table">
-<tr><td class="label">Lamb/Animal ID</td><td class="value"><span class="highlight">${data.identification.tagId || "Not recorded"}</span></td></tr>
-<tr><td class="label">Name</td><td class="value">${data.identification.name || "Not recorded"}</td></tr>
-<tr><td class="label">Electronic ID</td><td class="value">${data.identification.electronicId || "Not recorded"}</td></tr>
-<tr><td class="label">Tattoo ID</td><td class="value">${data.identification.tattooId || "Not recorded"}</td></tr>
-</table>
-</div>
-
-<div class="section">
-<h2>Birth Information</h2>
-<table class="data-table">
-<tr><td class="label">Date of Birth</td><td class="value">${formatDate(data.basicInfo.birthDate)}</td></tr>
-<tr><td class="label">Birth Status</td><td class="value">${data.basicInfo.birthStatus ? data.basicInfo.birthStatus.charAt(0).toUpperCase() + data.basicInfo.birthStatus.slice(1) : "Not recorded"}</td></tr>
-<tr><td class="label">Sex</td><td class="value">${data.basicInfo.sex ? data.basicInfo.sex.toUpperCase() : "Not recorded"}</td></tr>
-<tr><td class="label">Breed</td><td class="value">${data.basicInfo.breed || "Meatmaster"}</td></tr>
-<tr><td class="label">Status</td><td class="value">${data.basicInfo.status ? data.basicInfo.status.charAt(0).toUpperCase() + data.basicInfo.status.slice(1) : "Not recorded"}</td></tr>
-</table>
-</div>
-
-<div class="section">
-<h2>Parentage</h2>
-<table class="data-table">
-<tr><td class="label">Sire (Father)</td><td class="value">${data.parentage.sireTagId || data.parentage.externalSireInfo || "Not recorded"}</td></tr>
-<tr><td class="label">Dam (Mother)</td><td class="value">${data.parentage.damTagId || data.parentage.externalDamInfo || "Not recorded"}</td></tr>
-</table>
-</div>
-
-<div class="section">
-<h2>Growth & Weaning</h2>
-<table class="data-table">
-<tr><td class="label">Birth Weight</td><td class="value">${data.weights.birthWeight ? data.weights.birthWeight + " kg" : "Not recorded"}</td></tr>
-<tr><td class="label">Current Weight</td><td class="value">${data.weights.currentWeight ? data.weights.currentWeight + " kg" : "Not recorded"}</td></tr>
-<tr><td class="label">100-Day Weigh Date</td><td class="value">${formatDate(data.weights.weight100DayDate)}</td></tr>
-<tr><td class="label">100-Day Weight</td><td class="value">${data.weights.weight100Day ? data.weights.weight100Day + " kg" : "Not recorded"}</td></tr>
-<tr><td class="label">270-Day Weight</td><td class="value">${data.weights.weight270Day ? data.weights.weight270Day + " kg" : "Not recorded"}</td></tr>
-<tr><td class="label">Weaning Status</td><td class="value">${data.weaningStatus === "sibling_died_before_weaning" ? "Sibling died before weaning" : "Normal"}</td></tr>
-</table>
-</div>
-
-${data.breedingStats ? `
-<div class="section">
-<h2>Breeding Statistics</h2>
-<table class="data-table">
-<tr><td class="label">Total Matings</td><td class="value">${data.breedingStats.totalMatings}</td></tr>
-<tr><td class="label">Total Lambings</td><td class="value">${data.breedingStats.totalLambings}</td></tr>
-<tr><td class="label">Total Lambs Born</td><td class="value">${data.breedingStats.totalLambsBorn}</td></tr>
-<tr><td class="label">Fertility Rate</td><td class="value">${data.breedingStats.fertilityRate}</td></tr>
-<tr><td class="label">Lambs Reared</td><td class="value">${data.breedingStats.lambsReared}</td></tr>
-<tr><td class="label">Lambs Weaned</td><td class="value">${data.breedingStats.lambsWeaned}</td></tr>
-</table>
-</div>
-` : ""}
-
-${data.farmBranding?.logoUrl || data.farmBranding?.farmName ? `
-<div class="farm-branding" style="margin-top: 40px; padding: 25px; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); border-radius: 12px; color: white;">
-<div style="display: flex; align-items: center; gap: 20px; justify-content: center; flex-wrap: wrap;">
-${data.farmBranding?.logoUrl ? `<img src="${data.farmBranding.logoUrl}" style="width: ${data.farmBranding?.logoSize === 'small' ? '80' : data.farmBranding?.logoSize === 'large' ? '180' : data.farmBranding?.logoWidth || '120'}px; height: ${data.farmBranding?.logoSize === 'small' ? '80' : data.farmBranding?.logoSize === 'large' ? '180' : data.farmBranding?.logoHeight || '120'}px; object-fit: contain; border-radius: 8px;" alt="Farm Logo" />` : ''}
-<div style="text-align: ${data.farmBranding?.logoUrl ? 'left' : 'center'};">
-${data.farmBranding?.studName ? `<div style="font-size: 20px; font-weight: bold; color: #FFC300; margin-bottom: 3px;">${data.farmBranding.studName}</div>` : ''}
-${data.farmBranding?.farmName && data.farmBranding?.farmName !== data.farmBranding?.studName ? `<div style="font-size: 14px; color: #ccc;">${data.farmBranding.farmName}</div>` : ''}
-${data.farmBranding?.ownerName ? `<div style="font-size: 13px; color: #aaa; margin-top: 6px;">${data.farmBranding.ownerName}</div>` : ''}
-<div style="font-size: 11px; color: #888; margin-top: 4px;">
-${data.farmBranding?.ownerPhone ? `<span>Tel: ${data.farmBranding.ownerPhone}</span>` : ''}
-${data.farmBranding?.ownerPhone && data.farmBranding?.ownerEmail ? ` | ` : ''}
-${data.farmBranding?.ownerEmail ? `<span>${data.farmBranding.ownerEmail}</span>` : ''}
-</div>
-${data.farmBranding?.farmLocation ? `<div style="font-size: 11px; color: #888; margin-top: 3px;">${data.farmBranding.farmLocation}</div>` : ''}
-${data.farmBranding?.membershipNumber ? `<div style="font-size: 10px; color: #666; margin-top: 6px;">Membership: ${data.farmBranding.membershipNumber}</div>` : ''}
-</div>
-</div>
-</div>
-` : ''}
-
-<div class="footer">
-<strong>Generated by BreedLog</strong><br>
-Breed Smart. Farm Better.
-</div>
+${page1}
+${includeTree ? buildFamilyTreePage() : ''}
 </body>
 </html>`;
+        
         const printWindow = window.open('', '_blank');
         if (printWindow) {
             printWindow.document.write(content);
             printWindow.document.close();
-            printWindow.print();
+            setTimeout(() => printWindow.print(), 500);
         }
-        toast({ title: "PDF Ready", description: `Print dialog opened for ${animal.tagId} profile` });
+        toast({ title: "PDF Ready", description: `Print dialog opened for ${animal.tagId} profile${includeTree ? ' with family tree' : ''}` });
     };
     
     return (
@@ -1074,17 +1178,20 @@ Breed Smart. Farm Better.
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExportPDF} data-testid="export-pdf">
-                    <FileText className="w-4 h-4 mr-2" /> PDF
+                <DropdownMenuItem onClick={() => handleExportPDF(false)} data-testid="export-pdf">
+                    <FileText className="w-4 h-4 mr-2" /> Export Individual (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExportPDF(true)} data-testid="export-pdf-tree">
+                    <Dna className="w-4 h-4 mr-2" /> Export + Family Tree (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportWord} data-testid="export-word">
-                    <FileText className="w-4 h-4 mr-2" /> Word
+                    <FileText className="w-4 h-4 mr-2" /> Word Document
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportCSV} data-testid="export-csv">
                     <FileText className="w-4 h-4 mr-2" /> CSV
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportJSON} data-testid="export-json">
-                    <FileText className="w-4 h-4 mr-2" /> JSON
+                    <FileText className="w-4 h-4 mr-2" /> JSON (SA Stamboek)
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
@@ -1442,6 +1549,131 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                 </div>
             </DialogContent>
         </Dialog>
+    );
+}
+
+function ImagesView({ animalId }: { animalId: number }) {
+    const { data: images, isLoading } = useAnimalImages(animalId);
+    const { mutate: uploadImage, isPending: isUploading } = useUploadAnimalImage();
+    const { mutate: deleteImage, isPending: isDeleting } = useDeleteAnimalImage();
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                uploadImage({
+                    animalId,
+                    imageData: reader.result as string,
+                    fileName: file.name,
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+        // Reset input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
+    const handleDelete = (imageId: number) => {
+        deleteImage({ animalId, imageId });
+    };
+
+    if (isLoading) {
+        return (
+            <Card className="bg-gradient-to-br from-card via-card to-secondary/20 rugged-card">
+                <CardHeader className="border-b border-border/50 bg-secondary/50">
+                    <Skeleton className="h-6 w-40" />
+                </CardHeader>
+                <CardContent className="p-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {[1, 2, 3].map(i => (
+                            <Skeleton key={i} className="aspect-square rounded-lg" />
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    return (
+        <Card className="bg-gradient-to-br from-card via-card to-secondary/20 rugged-card">
+            <CardHeader className="border-b border-border/50 bg-secondary/50">
+                <CardTitle className="text-lg flex items-center gap-2">
+                    <Image className="w-5 h-5 text-primary" />
+                    <span>IMAGES FOLDER</span>
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">Photos stored only for this animal's profile</p>
+            </CardHeader>
+            <CardContent className="p-4">
+                <input 
+                    ref={fileInputRef} 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleUpload} 
+                    className="hidden" 
+                    data-testid="input-upload-image"
+                />
+                
+                <Button 
+                    variant="outline" 
+                    className="w-full mb-4 border-dashed"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    data-testid="button-add-image"
+                >
+                    <Upload className="w-4 h-4 mr-2" /> 
+                    {isUploading ? "Uploading..." : "Add Photo to Folder"}
+                </Button>
+
+                {(!images || images.length === 0) ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                        <Image className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">No images uploaded yet</p>
+                        <p className="text-xs mt-1">Tap the button above to add photos</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        {images.map((img: any) => (
+                            <div key={img.id} className="relative group">
+                                <div 
+                                    className="aspect-square rounded-lg overflow-hidden border border-border bg-secondary cursor-pointer hover:border-primary transition-colors"
+                                    onClick={() => setSelectedImage(img.imageData)}
+                                    data-testid={`image-${img.id}`}
+                                >
+                                    <img src={img.imageData} alt={img.fileName} className="w-full h-full object-cover" />
+                                </div>
+                                <Button
+                                    variant="destructive"
+                                    size="icon"
+                                    className="absolute -top-2 -right-2 scale-75"
+                                    onClick={() => handleDelete(img.id)}
+                                    disabled={isDeleting}
+                                    data-testid={`button-delete-image-${img.id}`}
+                                >
+                                    <X className="w-4 h-4" />
+                                </Button>
+                                <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                                    {img.uploadedAt ? format(new Date(img.uploadedAt), "dd/MM/yy") : ""}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Lightbox for viewing images */}
+                <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
+                    <DialogContent className="max-w-2xl p-2 bg-card/98 border border-primary/50">
+                        {selectedImage && (
+                            <img src={selectedImage} alt="Image preview" className="w-full h-auto max-h-[80vh] object-contain rounded" />
+                        )}
+                    </DialogContent>
+                </Dialog>
+            </CardContent>
+        </Card>
     );
 }
 

@@ -127,3 +127,63 @@ export function useDeleteAnimal() {
     },
   });
 }
+
+// Animal Images Hooks
+export function useAnimalImages(animalId: number) {
+  return useQuery({
+    queryKey: ["/api/animals", animalId, "images"],
+    queryFn: async () => {
+      const res = await fetch(`/api/animals/${animalId}/images`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch images");
+      return res.json();
+    },
+    enabled: !!animalId,
+  });
+}
+
+export function useUploadAnimalImage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ animalId, imageData, fileName, caption }: { animalId: number; imageData: string; fileName: string; caption?: string }) => {
+      const res = await fetch(`/api/animals/${animalId}/images`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageData, fileName, caption }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to upload image");
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/animals", variables.animalId, "images"] });
+      toast({ title: "Image Uploaded", description: "Photo added to animal folder" });
+    },
+    onError: (error) => {
+      toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
+export function useDeleteAnimalImage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ animalId, imageId }: { animalId: number; imageId: number }) => {
+      const res = await fetch(`/api/animals/${animalId}/images/${imageId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete image");
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/animals", variables.animalId, "images"] });
+      toast({ title: "Image Deleted", description: "Photo removed from folder" });
+    },
+    onError: (error) => {
+      toast({ title: "Delete Failed", description: error.message, variant: "destructive" });
+    },
+  });
+}
