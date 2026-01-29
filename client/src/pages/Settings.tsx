@@ -168,12 +168,19 @@ export default function Settings() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const { compressImage } = await import("@/lib/image-compression");
-        const result = await compressImage(file, { maxWidth: 300, maxHeight: 300, quality: 0.8 });
+        toast({ title: "Optimising logo...", description: "Please wait" });
+        const { compressImageWithFeedback, formatFileSize } = await import("@/lib/image-compression");
+        const result = await compressImageWithFeedback(file, { maxWidth: 300, maxHeight: 300, quality: 0.8 });
         setLogoPreview(result.base64);
         form.setValue("logoUrl", result.base64);
+        const reduction = Math.round((1 - result.compressedSize / result.originalSize) * 100);
+        toast({ 
+          title: "Logo ready", 
+          description: `Optimised to ${formatFileSize(result.compressedSize)} (${reduction}% smaller)` 
+        });
       } catch (error) {
         console.error("Logo compression failed:", error);
+        toast({ title: "Error", description: "Failed to process logo image", variant: "destructive" });
       }
     }
   };

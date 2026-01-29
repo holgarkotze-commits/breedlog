@@ -198,9 +198,22 @@ export function useAnimalImages(animalId: number) {
   return useQuery({
     queryKey: ["/api/animals", animalId, "images"],
     queryFn: async () => {
-      const res = await fetch(`/api/animals/${animalId}/images`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch images");
-      return res.json();
+      try {
+        const res = await fetch(`/api/animals/${animalId}/images`, { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to fetch images");
+        const images = await res.json();
+        for (const img of images) {
+          await putInStore("animalImages", img);
+        }
+        return images;
+      } catch (error) {
+        if (!navigator.onLine) {
+          console.log("[useAnimalImages] Offline, fetching from IndexedDB");
+          const allImages = await getAllFromStore<any>("animalImages");
+          return allImages.filter(img => img.animalId === animalId);
+        }
+        throw error;
+      }
     },
     enabled: !!animalId,
   });
@@ -212,6 +225,27 @@ export function useUploadAnimalImage() {
 
   return useMutation({
     mutationFn: async ({ animalId, imageData, fileName, caption }: { animalId: number; imageData: string; fileName: string; caption?: string }) => {
+      if (!navigator.onLine) {
+        const tempId = -Date.now();
+        const offlineImage = { 
+          id: tempId, 
+          animalId, 
+          imageData, 
+          fileName, 
+          caption: caption || null, 
+          createdAt: new Date().toISOString() 
+        };
+        await putInStore("animalImages", offlineImage);
+        await addToSyncQueue({ 
+          action: "create", 
+          entity: "animalImages", 
+          data: { animalId, imageData, fileName, caption }, 
+          tempId 
+        });
+        console.log("[useUploadAnimalImage] Offline - saved locally with temp ID:", tempId);
+        return offlineImage;
+      }
+      
       const res = await fetch(`/api/animals/${animalId}/images`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -219,11 +253,17 @@ export function useUploadAnimalImage() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to upload image");
-      return res.json();
+      const result = await res.json();
+      await putInStore("animalImages", result);
+      return result;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/animals", variables.animalId, "images"] });
-      toast({ title: "Image Uploaded", description: "Photo added to animal folder" });
+      const isOffline = (data.id as number) < 0;
+      toast({ 
+        title: isOffline ? "Saved Offline" : "Image Uploaded", 
+        description: isOffline ? "Photo will sync when online" : "Photo added to animal folder" 
+      });
     },
     onError: (error) => {
       toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
