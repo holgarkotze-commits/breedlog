@@ -1424,8 +1424,12 @@ function RamsSection({
     return ageInDays <= 365;
   };
   
-  // Adult rams only (1 year or older) - consistent with Dashboard counting
-  const allRams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram" && !isLamb(a));
+  // Adult rams only (1 year or older, active status) - consistent with Dashboard counting
+  const allRams = allAnimals.filter(a => 
+    a.sex?.toLowerCase() === "ram" && 
+    a.status === 'active' &&
+    !isLamb(a)
+  );
   
   const rams = ramTypeFilter === "all" 
     ? allRams 
@@ -1615,13 +1619,10 @@ function EwesSection({
     return ageInDays <= 365;
   };
   
-  // Adult ewes only (1 year or older) - consistent with Dashboard counting
+  // Adult ewes only (1 year or older, active status) - consistent with Dashboard counting
   const allEwes = allAnimals.filter(a => 
     a.sex?.toLowerCase() === "ewe" && 
-    a.status !== 'culled' && 
-    a.lambStatus !== 'culled' &&
-    a.status !== 'sold' &&
-    a.status !== 'dead' &&
+    a.status === 'active' &&
     !isLamb(a)
   );
   
@@ -1762,14 +1763,13 @@ function LambsSection({
   const [weightType, setWeightType] = useState<"100" | "270">("100");
   const [selectedRamType, setSelectedRamType] = useState<"breeding_ram" | "stud_ram" | "commercial_ram">("breeding_ram");
   
+  // Lambs are active animals under 365 days old - consistent with Dashboard counting
+  // Once an animal reaches 365+ days, they automatically appear in Rams/Ewes section
   const lambs = allAnimals.filter(animal => {
     if (!animal.birthDate) return false;
     const ageDays = getAgeDays(animal.birthDate);
-    if (ageDays > 365) return false;
-    
-    if (animal.lambStatus === 'moved_to_ewes' || animal.lambStatus === 'moved_to_rams') return false;
-    if (animal.status === 'culled' || animal.lambStatus === 'culled') return false;
-    if (animal.status === 'sold' || animal.status === 'dead') return false;
+    if (ageDays > 365) return false; // Auto-promote at 12 months
+    if (animal.status !== 'active') return false; // Only active animals
     
     if (sexFilter !== "all" && animal.sex !== sexFilter) return false;
     
@@ -1780,8 +1780,9 @@ function LambsSection({
     return true;
   });
   
-  const ramLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 365 && a.sex === 'ram' && a.lambStatus !== 'moved_to_rams' && a.status !== 'culled');
-  const eweLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 365 && a.sex === 'ewe' && a.lambStatus !== 'moved_to_ewes' && a.status !== 'culled');
+  // Count for filter buttons - active lambs only
+  const ramLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 365 && a.sex === 'ram' && a.status === 'active');
+  const eweLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 365 && a.sex === 'ewe' && a.status === 'active');
   
   if (isLoading) {
     return (
