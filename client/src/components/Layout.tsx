@@ -86,8 +86,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
         <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors">
           <img src={logo} alt="BreedLog" className="w-32 h-32 object-contain" data-testid="logo-desktop" />
-          <p className="text-sm mt-3 font-medium tracking-wide text-primary/90 drop-shadow-[0_0_6px_rgba(255,195,0,0.4)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: '1.4' }}>
+          <p className="text-sm mt-3 font-medium tracking-normal text-primary/90 drop-shadow-[0_0_6px_rgba(255,195,0,0.4)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: '1.4' }}>
             Breeding Livestock Management
+          </p>
+          <p className="text-xs mt-1 uppercase tracking-widest font-semibold text-muted-foreground">
+            Breed Smart. Farm Better.
           </p>
         </Link>
         
@@ -135,11 +138,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {/* Tagline - hidden when scrolled */}
           <div className={cn(
             "flex flex-col items-center overflow-hidden transition-all duration-300",
-            isScrolled ? "max-h-0 opacity-0 mt-0" : "max-h-16 opacity-100 mt-3"
+            isScrolled ? "max-h-0 opacity-0 mt-0" : "max-h-20 opacity-100 mt-3"
           )}>
+            <p className="text-xs tracking-normal font-medium text-primary drop-shadow-[0_0_8px_rgba(255,195,0,0.6)]">
+              Breeding Livestock Management
+            </p>
             <ScrambleText 
-              text="Breeding Livestock Management" 
-              className="text-xs tracking-wide font-medium text-primary drop-shadow-[0_0_8px_rgba(255,195,0,0.6)]"
+              text="Breed Smart. Farm Better." 
+              className="text-[10px] mt-1 uppercase tracking-widest font-semibold text-muted-foreground"
             />
           </div>
         </Link>
