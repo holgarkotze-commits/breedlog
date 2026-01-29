@@ -13,7 +13,7 @@ const buttonVariants = cva(
         default:
           "bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-500 text-black font-semibold border-0 shadow-lg shadow-yellow-500/30 hover:shadow-xl hover:shadow-yellow-500/40 active:shadow-md active:translate-y-px",
         destructive:
-          "bg-gradient-to-b from-destructive via-destructive to-destructive/85 text-destructive-foreground border border-destructive-border shadow-md shadow-destructive/25 active:shadow-sm active:translate-y-px",
+          "bg-white text-red-600 border border-red-200 shadow-md hover:bg-red-50 active:shadow-sm active:translate-y-px",
         outline:
           "border [border-color:var(--button-outline)] shadow-sm bg-gradient-to-b from-background to-secondary/30 active:shadow-none active:translate-y-px",
         secondary: "bg-gradient-to-b from-secondary via-secondary to-secondary/85 text-secondary-foreground border border-secondary-border shadow-sm active:shadow-none active:translate-y-px",

@@ -83,7 +83,7 @@ export default function AnimalDetail() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  className="h-8 px-3 text-xs font-semibold text-destructive border-destructive/50 hover:bg-destructive/10"
+                  className="h-8 px-3 text-xs font-semibold bg-white text-red-600 border-white hover:bg-gray-100"
                   onClick={() => setRemoveDialogOpen(true)}
                   data-testid="button-remove-from-herd"
                 >
@@ -1684,7 +1684,7 @@ function ImagesView({ animalId }: { animalId: number }) {
                             <AlertDialogAction
                                 onClick={handleDeleteConfirm}
                                 disabled={isDeleting}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                className="bg-white text-red-600 border border-red-200 hover:bg-red-50"
                                 data-testid="button-confirm-delete-image"
                             >
                                 {isDeleting ? "Deleting..." : "Delete"}
@@ -1815,7 +1815,7 @@ function DocumentsView({ animalId }: { animalId: number }) {
                             <AlertDialogCancel data-testid="button-cancel-delete-doc">Cancel</AlertDialogCancel>
                             <AlertDialogAction
                                 onClick={handleDeleteConfirm}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                className="bg-white text-red-600 border border-red-200 hover:bg-red-50"
                                 data-testid="button-confirm-delete-doc"
                             >
                                 Delete

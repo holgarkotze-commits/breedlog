@@ -516,7 +516,7 @@ export default function Records() {
                       setDocToDelete(null);
                     }
                   }}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  className="bg-white text-red-600 border border-red-200 hover:bg-red-50"
                   data-testid="button-confirm-delete-export"
                 >
                   Delete

@@ -2128,7 +2128,7 @@ function LambsSection({
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmCull} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={handleConfirmCull} className="bg-white text-red-600 border border-red-200 hover:bg-red-50">
               Confirm Cull
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -2322,7 +2322,7 @@ function AnimalListRow({ animal }: { animal: Animal }) {
             <AlertDialogAction
               onClick={() => deleteAnimal(animal.id)}
               disabled={isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-white text-red-600 border border-red-200 hover:bg-red-50"
             >
               {isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>

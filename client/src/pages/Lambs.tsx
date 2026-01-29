@@ -454,7 +454,7 @@ export default function Lambs() {
               <AlertDialogCancel data-testid="btn-cancel-cull">Cancel</AlertDialogCancel>
               <AlertDialogAction 
                 onClick={handleConfirmCull}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="bg-white text-red-600 border border-red-200 hover:bg-red-50"
                 data-testid="btn-confirm-cull-action"
               >
                 Confirm Cull
