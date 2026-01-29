@@ -24,7 +24,6 @@ const API_ROUTES = [
   '/api/performance-records',
   '/api/health-records',
   '/api/farm-settings',
-  '/api/evaluations',
   '/api/documents',
   '/api/exported-documents'
 ];

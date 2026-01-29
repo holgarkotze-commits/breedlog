@@ -2,9 +2,9 @@
 
 ## Overview
 
-BreedLog is a livestock breeding and management application designed for sheep farmers. The primary purpose is to record, manage, and trace breeding lineages (family trees, bloodlines, sire/dam connections), store complete animal data (performance, reproduction, health, traits), and assist with evaluation through manual classing and optional AI valuation.
+BreedLog is a livestock breeding and management application designed for Meatmaster sheep farmers. The primary purpose is to record, manage, and trace breeding lineages (family trees, bloodlines, sire/dam connections), store complete animal data (performance, reproduction, health, traits), and attach evaluation documents to animal profiles.
 
-The application follows an offline-first design philosophy where core features work without internet connectivity. Only the AI valuation feature requires authentication and internet access.
+The application is a **fully offline-capable Progressive Web App (PWA)**. All core features work 100% offline with automatic synchronization when connectivity is restored. The app is installable on Android, iOS (Add to Home Screen), and desktop browsers.
 
 ## User Preferences
 
@@ -39,7 +39,7 @@ Preferred communication style: Simple, everyday language.
 
 ### AI Integration
 - **Provider**: OpenAI API via Replit AI Integrations
-- **Features**: AI valuation for livestock assessment, image generation, text-to-speech/speech-to-text
+- **Features**: Image generation, text-to-speech/speech-to-text (AI evaluation scoring has been removed)
 - **Gating**: AI features require authenticated user session
 
 ### Project Structure

@@ -36,13 +36,12 @@ export async function registerRoutes(
     
     const dam = animal.damId ? await storage.getAnimal(animal.damId) : null;
     const sire = animal.sireId ? await storage.getAnimal(animal.sireId) : null;
-    const evaluations = await storage.getEvaluations(animal.id);
     
     const allAnimals = await storage.getAnimals({});
     const offspringAsDam = animal.sex === "ewe" ? allAnimals.filter(a => a.damId === animal.id) : [];
     const offspringAsSire = animal.sex === "ram" ? allAnimals.filter(a => a.sireId === animal.id) : [];
 
-    res.json({ ...animal, dam, sire, evaluations, offspringAsDam, offspringAsSire });
+    res.json({ ...animal, dam, sire, offspringAsDam, offspringAsSire });
   });
 
   app.get(api.animals.familyTree.path, async (req, res) => {
@@ -414,27 +413,6 @@ export async function registerRoutes(
       }
   });
 
-  // === EVALUATIONS ===
-  app.get(api.evaluations.list.path, async (req, res) => {
-      const evals = await storage.getEvaluations(Number(req.params.id));
-      res.json(evals);
-  });
-
-  app.post(api.evaluations.create.path, async (req, res) => {
-      try {
-          const input = api.evaluations.create.input.parse(req.body);
-          const evaluation = await storage.createEvaluation(input);
-          res.status(201).json(evaluation);
-      } catch (err) {
-           if (err instanceof z.ZodError) {
-              return res.status(400).json({
-                  message: err.errors[0].message,
-                  field: err.errors[0].path.join("."),
-              });
-          }
-          throw err;
-      }
-  });
 
   // === SETTINGS / EXPORT / IMPORT ===
   app.get(api.settings.export.path, async (req, res) => {
@@ -695,17 +673,6 @@ async function seedDatabase() {
         matingDate: new Date().toISOString().split('T')[0],
         matingType: "natural",
         notes: "Successful mating observed.",
-    });
-    
-    // Add evaluation for the ram
-    await storage.createEvaluation({
-        animalId: ram.id,
-        headScore: 5,
-        frontScore: 5,
-        middleScore: 6,
-        rearScore: 5,
-        overallType: "Euro",
-        comments: "Strong masculine head, excellent length."
     });
   }
 }
