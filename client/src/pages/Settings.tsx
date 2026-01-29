@@ -45,7 +45,7 @@ export default function Settings() {
   });
 
   const uploadDocMutation = useMutation({
-    mutationFn: async (doc: { name: string; category: string; fileData: string; fileType: string }) => {
+    mutationFn: async (doc: { fileName: string; category: string; fileUrl: string; fileType: string; fileSize?: number }) => {
       return apiRequest('POST', '/api/documents', doc);
     },
     onSuccess: () => {
@@ -110,10 +110,11 @@ export default function Settings() {
       const reader = new FileReader();
       reader.onload = () => {
         uploadDocMutation.mutate({
-          name: file.name,
+          fileName: file.name,
           category: 'general',
-          fileData: reader.result as string,
-          fileType: file.type
+          fileUrl: reader.result as string,
+          fileType: file.type,
+          fileSize: file.size
         });
       };
       reader.readAsDataURL(file);
@@ -1034,21 +1035,21 @@ export default function Settings() {
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <FileText className="w-4 h-4 text-primary flex-shrink-0" />
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{doc.name}</p>
+                        <p className="text-sm font-medium truncate">{doc.fileName}</p>
                         <p className="text-xs text-muted-foreground">
-                          {doc.category} {doc.uploadedAt && `• ${format(new Date(doc.uploadedAt), "dd MMM yyyy")}`}
+                          {doc.category} {doc.createdAt && `• ${format(new Date(doc.createdAt), "dd MMM yyyy")}`}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {doc.fileData && (
+                      {doc.fileUrl && (
                         <Button
                           size="icon"
                           variant="ghost"
                           onClick={() => {
                             const link = document.createElement('a');
-                            link.href = doc.fileData;
-                            link.download = doc.name;
+                            link.href = doc.fileUrl;
+                            link.download = doc.fileName;
                             link.click();
                           }}
                           data-testid={`button-download-doc-${doc.id}`}
