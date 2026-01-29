@@ -80,7 +80,8 @@ class SyncManager {
       const pending = await getPendingSyncItems();
       this.updateState({ pendingCount: pending.length });
     } catch (error) {
-      console.error('[SyncManager] Failed to get pending count:', error);
+      console.log('[SyncManager] Database not ready yet, will retry');
+      setTimeout(() => this.updatePendingCount(), 1000);
     }
   }
 
