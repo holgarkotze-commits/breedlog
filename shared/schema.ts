@@ -372,3 +372,49 @@ export const exportedDocuments = pgTable("exported_documents", {
 export const insertExportedDocumentSchema = createInsertSchema(exportedDocuments).omit({ id: true, exportedAt: true });
 export type ExportedDocument = typeof exportedDocuments.$inferSelect;
 export type InsertExportedDocument = z.infer<typeof insertExportedDocumentSchema>;
+
+// === FLOCK HEALTH EVENTS ===
+// Master event record for flock-wide health treatments
+export const flockHealthEvents = pgTable("flock_health_events", {
+  id: serial("id").primaryKey(),
+  eventDate: date("event_date").notNull(),
+  productName: text("product_name").notNull(),
+  route: text("route").notNull(), // intravenous, intramuscular, subcutaneous
+  treatAllAnimals: boolean("treat_all_animals").default(false),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const flockHealthEventsRelations = relations(flockHealthEvents, ({ many }) => ({
+  treatments: many(flockHealthTreatments),
+}));
+
+export const insertFlockHealthEventSchema = createInsertSchema(flockHealthEvents).omit({ id: true, createdAt: true });
+export type FlockHealthEvent = typeof flockHealthEvents.$inferSelect;
+export type InsertFlockHealthEvent = z.infer<typeof insertFlockHealthEventSchema>;
+
+// === FLOCK HEALTH TREATMENTS ===
+// Individual treatment rows per animal
+export const flockHealthTreatments = pgTable("flock_health_treatments", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().references(() => flockHealthEvents.id),
+  animalId: integer("animal_id").notNull().references(() => animals.id),
+  quantity: decimal("quantity"), // ml
+  route: text("route"), // can override event route
+  notes: text("notes"),
+});
+
+export const flockHealthTreatmentsRelations = relations(flockHealthTreatments, ({ one }) => ({
+  event: one(flockHealthEvents, {
+    fields: [flockHealthTreatments.eventId],
+    references: [flockHealthEvents.id],
+  }),
+  animal: one(animals, {
+    fields: [flockHealthTreatments.animalId],
+    references: [animals.id],
+  }),
+}));
+
+export const insertFlockHealthTreatmentSchema = createInsertSchema(flockHealthTreatments).omit({ id: true });
+export type FlockHealthTreatment = typeof flockHealthTreatments.$inferSelect;
+export type InsertFlockHealthTreatment = z.infer<typeof insertFlockHealthTreatmentSchema>;

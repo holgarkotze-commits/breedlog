@@ -27,19 +27,33 @@ export default function Dashboard() {
     return Clock;
   };
 
-  // Calculate simple stats
-  const totalAnimals = animals?.length || 0;
+  // Calculate simple stats - use mutually exclusive categories based on lambStatus
+  // Lambs = animals still in lamb stage (lambStatus === 'active')
+  // Ewes/Rams = animals that have graduated from lamb stage (lambStatus !== 'active' or null)
   const activeAnimals = animals?.filter(a => a.status === 'active').length || 0;
   const soldAnimals = animals?.filter(a => a.status === 'sold').length || 0;
   const deadAnimals = animals?.filter(a => a.status === 'dead').length || 0;
   const culledAnimals = animals?.filter(a => a.status === 'culled').length || 0;
-  const activeEwes = animals?.filter(a => a.sex === 'ewe' && a.status === 'active').length || 0;
-  const activeRams = animals?.filter(a => a.sex === 'ram' && a.status === 'active').length || 0;
-  const lambs = animals?.filter(a => {
-    if (!a.birthDate) return false;
-    const ageInDays = (new Date().getTime() - new Date(a.birthDate).getTime()) / (1000 * 3600 * 24);
-    return ageInDays < 365 && a.status === 'active';
-  }).length || 0;
+  
+  // Lambs are animals with lambStatus === 'active' (still in lamb stage)
+  const lambs = animals?.filter(a => a.status === 'active' && a.lambStatus === 'active').length || 0;
+  
+  // Ewes are female animals that are NOT in lamb stage (graduated or entered as adults)
+  const activeEwes = animals?.filter(a => 
+    a.sex === 'ewe' && 
+    a.status === 'active' && 
+    a.lambStatus !== 'active'
+  ).length || 0;
+  
+  // Rams are male animals that are NOT in lamb stage (graduated or entered as adults)
+  const activeRams = animals?.filter(a => 
+    a.sex === 'ram' && 
+    a.status === 'active' && 
+    a.lambStatus !== 'active'
+  ).length || 0;
+  
+  // Total herd should equal sum of all active animals (ewes + rams + lambs)
+  const totalAnimals = activeAnimals;
 
   // Mock weight data for chart (in real app, use aggregated performance records)
   const weightData = [

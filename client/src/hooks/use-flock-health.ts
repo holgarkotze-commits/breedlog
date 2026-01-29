@@ -1,0 +1,107 @@
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import type { FlockHealthEvent, InsertFlockHealthEvent, FlockHealthTreatment } from "@shared/schema";
+import { useNetworkStatus } from "@/hooks/use-network-status";
+import { getAllFromStore, putManyInStore, putInStore, addToSyncQueue } from "@/lib/indexeddb";
+
+export type FlockHealthEventWithTreatments = FlockHealthEvent & {
+  treatments?: FlockHealthTreatment[];
+};
+
+export function useFlockHealthEvents() {
+  const { isOnline } = useNetworkStatus();
+
+  return useQuery<FlockHealthEvent[]>({
+    queryKey: ["/api/flock-health-events"],
+    queryFn: async () => {
+      if (!isOnline) {
+        console.log('[useFlockHealthEvents] Offline - fetching from IndexedDB');
+        return await getAllFromStore<FlockHealthEvent>('flockHealthEvents');
+      }
+
+      const res = await fetch("/api/flock-health-events", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch flock health events");
+      const data = await res.json();
+      
+      if (data.length > 0) {
+        await putManyInStore('flockHealthEvents', data);
+      }
+      
+      return data;
+    },
+  });
+}
+
+export function useFlockHealthEvent(id: number) {
+  const { isOnline } = useNetworkStatus();
+
+  return useQuery<FlockHealthEventWithTreatments>({
+    queryKey: ["/api/flock-health-events", id],
+    queryFn: async () => {
+      if (!isOnline) {
+        console.log('[useFlockHealthEvent] Offline - fetching from IndexedDB');
+        const events = await getAllFromStore<FlockHealthEvent>('flockHealthEvents');
+        const event = events.find(e => e.id === id);
+        if (!event) throw new Error("Event not found offline");
+        return event as FlockHealthEventWithTreatments;
+      }
+
+      const res = await fetch(`/api/flock-health-events/${id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch flock health event");
+      const data = await res.json();
+      await putInStore('flockHealthEvents', data);
+      return data;
+    },
+    enabled: !!id,
+  });
+}
+
+export interface CreateFlockHealthEventInput {
+  eventDate: string;
+  productName: string;
+  route: string;
+  treatAllAnimals?: boolean;
+  notes?: string;
+  treatments: {
+    animalId: number;
+    quantity?: string;
+    route?: string;
+    notes?: string;
+  }[];
+}
+
+export function useCreateFlockHealthEvent() {
+  const { isOnline } = useNetworkStatus();
+
+  return useMutation({
+    mutationFn: async (data: CreateFlockHealthEventInput) => {
+      const tempId = -Date.now();
+      const tempRecord = { 
+        ...data, 
+        id: tempId,
+        createdAt: new Date().toISOString(),
+      } as unknown as FlockHealthEvent;
+
+      await putInStore('flockHealthEvents', tempRecord);
+
+      if (!isOnline) {
+        console.log('[useCreateFlockHealthEvent] Offline - queuing for sync');
+        await addToSyncQueue({
+          entity: 'flockHealthEvents',
+          action: 'create',
+          data: data,
+          tempId: tempId,
+        });
+        return tempRecord;
+      }
+
+      const res = await apiRequest("POST", "/api/flock-health-events", data);
+      const created = await res.json();
+      await putInStore('flockHealthEvents', created);
+      return created;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/flock-health-events"] });
+    },
+  });
+}

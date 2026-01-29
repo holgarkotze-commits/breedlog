@@ -616,6 +616,51 @@ export async function registerRoutes(
     }
   });
 
+  // === FLOCK HEALTH EVENTS ===
+  app.get("/api/flock-health-events", async (req, res) => {
+    try {
+      const events = await storage.getFlockHealthEvents();
+      res.json(events);
+    } catch (err: any) {
+      console.error("Get flock health events error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/flock-health-events/:id", async (req, res) => {
+    try {
+      const event = await storage.getFlockHealthEvent(Number(req.params.id));
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      const treatments = await storage.getFlockHealthTreatments(event.id);
+      res.json({ ...event, treatments });
+    } catch (err: any) {
+      console.error("Get flock health event error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/flock-health-events", async (req, res) => {
+    try {
+      const { treatments, ...eventData } = req.body;
+      const event = await storage.createFlockHealthEvent(eventData);
+      
+      if (treatments && treatments.length > 0) {
+        const treatmentRecords = treatments.map((t: any) => ({
+          ...t,
+          eventId: event.id,
+        }));
+        await storage.createFlockHealthTreatments(treatmentRecords);
+      }
+      
+      res.status(201).json(event);
+    } catch (err: any) {
+      console.error("Create flock health event error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // === DEBUG ===
   app.post(api.debug.test.path, async (req, res) => {
     const results: string[] = [];

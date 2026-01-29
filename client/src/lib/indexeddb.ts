@@ -1,5 +1,5 @@
 const DB_NAME = 'breedlog-offline';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export interface SyncQueueItem {
   id: string;
@@ -89,6 +89,17 @@ export function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('animalImages')) {
         const imagesStore = db.createObjectStore('animalImages', { keyPath: 'id' });
         imagesStore.createIndex('animalId', 'animalId', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('flockHealthEvents')) {
+        const flockHealthStore = db.createObjectStore('flockHealthEvents', { keyPath: 'id' });
+        flockHealthStore.createIndex('eventDate', 'eventDate', { unique: false });
+      }
+
+      if (!db.objectStoreNames.contains('flockHealthTreatments')) {
+        const treatmentsStore = db.createObjectStore('flockHealthTreatments', { keyPath: 'id' });
+        treatmentsStore.createIndex('eventId', 'eventId', { unique: false });
+        treatmentsStore.createIndex('animalId', 'animalId', { unique: false });
       }
 
       if (!db.objectStoreNames.contains('syncQueue')) {

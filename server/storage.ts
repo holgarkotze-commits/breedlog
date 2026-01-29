@@ -11,6 +11,8 @@ import {
   documents,
   animalImages,
   exportedDocuments,
+  flockHealthEvents,
+  flockHealthTreatments,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -22,6 +24,8 @@ import {
   type InsertDocument,
   type InsertAnimalImage,
   type InsertExportedDocument,
+  type InsertFlockHealthEvent,
+  type InsertFlockHealthTreatment,
   type Animal,
   type BreedingEvent,
   type Offspring,
@@ -33,6 +37,8 @@ import {
   type Document,
   type AnimalImage,
   type ExportedDocument,
+  type FlockHealthEvent,
+  type FlockHealthTreatment,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -82,6 +88,13 @@ export interface IStorage {
   getExportedDocuments(subfolder?: string): Promise<ExportedDocument[]>;
   createExportedDocument(doc: InsertExportedDocument): Promise<ExportedDocument>;
   deleteExportedDocument(id: number): Promise<void>;
+  
+  // Flock Health Events
+  getFlockHealthEvents(): Promise<FlockHealthEvent[]>;
+  getFlockHealthEvent(id: number): Promise<FlockHealthEvent | undefined>;
+  createFlockHealthEvent(event: InsertFlockHealthEvent): Promise<FlockHealthEvent>;
+  getFlockHealthTreatments(eventId: number): Promise<FlockHealthTreatment[]>;
+  createFlockHealthTreatments(treatments: InsertFlockHealthTreatment[]): Promise<FlockHealthTreatment[]>;
   
   // Bulk import
   bulkCreateAnimals(animalsList: InsertAnimal[]): Promise<Animal[]>;
@@ -261,6 +274,30 @@ export class DatabaseStorage implements IStorage {
   
   async deleteExportedDocument(id: number): Promise<void> {
     await db.delete(exportedDocuments).where(eq(exportedDocuments.id, id));
+  }
+  
+  // Flock Health Events
+  async getFlockHealthEvents(): Promise<FlockHealthEvent[]> {
+    return await db.select().from(flockHealthEvents).orderBy(desc(flockHealthEvents.createdAt));
+  }
+  
+  async getFlockHealthEvent(id: number): Promise<FlockHealthEvent | undefined> {
+    const [event] = await db.select().from(flockHealthEvents).where(eq(flockHealthEvents.id, id));
+    return event;
+  }
+  
+  async createFlockHealthEvent(event: InsertFlockHealthEvent): Promise<FlockHealthEvent> {
+    const [newEvent] = await db.insert(flockHealthEvents).values(event).returning();
+    return newEvent;
+  }
+  
+  async getFlockHealthTreatments(eventId: number): Promise<FlockHealthTreatment[]> {
+    return await db.select().from(flockHealthTreatments).where(eq(flockHealthTreatments.eventId, eventId));
+  }
+  
+  async createFlockHealthTreatments(treatments: InsertFlockHealthTreatment[]): Promise<FlockHealthTreatment[]> {
+    if (treatments.length === 0) return [];
+    return await db.insert(flockHealthTreatments).values(treatments).returning();
   }
   
   // Bulk import
