@@ -27,32 +27,41 @@ export default function Dashboard() {
     return Clock;
   };
 
-  // Calculate simple stats - use mutually exclusive categories based on lambStatus
-  // Lambs = animals still in lamb stage (lambStatus === 'active')
-  // Ewes/Rams = animals that have graduated from lamb stage (lambStatus !== 'active' or null)
+  // Calculate simple stats using age-based counting (consistent with My Herd page)
+  // Lambs = animals under 1 year old (365 days)
+  // Ewes = female animals 1 year or older
+  // Rams = male animals 1 year or older
   const activeAnimals = animals?.filter(a => a.status === 'active').length || 0;
   const soldAnimals = animals?.filter(a => a.status === 'sold').length || 0;
   const deadAnimals = animals?.filter(a => a.status === 'dead').length || 0;
   const culledAnimals = animals?.filter(a => a.status === 'culled').length || 0;
   
-  // Lambs are animals with lambStatus === 'active' (still in lamb stage)
-  const lambs = animals?.filter(a => a.status === 'active' && a.lambStatus === 'active').length || 0;
+  // Helper function to check if animal is under 1 year old
+  const isLamb = (animal: { birthDate?: string | null; status?: string | null }) => {
+    if (!animal.birthDate || animal.status !== 'active') return false;
+    const birthDate = new Date(animal.birthDate);
+    const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
+    return ageInDays <= 365;
+  };
   
-  // Ewes are female animals that are NOT in lamb stage (graduated or entered as adults)
+  // Lambs are active animals under 1 year old
+  const lambs = animals?.filter(a => isLamb(a)).length || 0;
+  
+  // Ewes are female animals 1 year or older and active
   const activeEwes = animals?.filter(a => 
     a.sex === 'ewe' && 
     a.status === 'active' && 
-    a.lambStatus !== 'active'
+    !isLamb(a)
   ).length || 0;
   
-  // Rams are male animals that are NOT in lamb stage (graduated or entered as adults)
+  // Rams are male animals 1 year or older and active
   const activeRams = animals?.filter(a => 
     a.sex === 'ram' && 
     a.status === 'active' && 
-    a.lambStatus !== 'active'
+    !isLamb(a)
   ).length || 0;
   
-  // Total herd should equal sum of all active animals (ewes + rams + lambs)
+  // Total herd = all active animals
   const totalAnimals = activeAnimals;
 
   // Mock weight data for chart (in real app, use aggregated performance records)

@@ -1416,7 +1416,16 @@ function RamsSection({
   const [, setLocation] = useLocation();
   const [ramTypeFilter, setRamTypeFilter] = useState<"all" | "breeding_ram" | "stud_ram" | "commercial_ram">("all");
   
-  const allRams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram");
+  // Helper: check if animal is under 1 year old (lamb)
+  const isLamb = (animal: Animal) => {
+    if (!animal.birthDate) return false;
+    const birthDate = new Date(animal.birthDate);
+    const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
+    return ageInDays <= 365;
+  };
+  
+  // Adult rams only (1 year or older) - consistent with Dashboard counting
+  const allRams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram" && !isLamb(a));
   
   const rams = ramTypeFilter === "all" 
     ? allRams 
@@ -1598,12 +1607,22 @@ function EwesSection({
 }) {
   const [, setLocation] = useLocation();
   
+  // Helper: check if animal is under 1 year old (lamb)
+  const isLamb = (animal: Animal) => {
+    if (!animal.birthDate) return false;
+    const birthDate = new Date(animal.birthDate);
+    const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
+    return ageInDays <= 365;
+  };
+  
+  // Adult ewes only (1 year or older) - consistent with Dashboard counting
   const allEwes = allAnimals.filter(a => 
     a.sex?.toLowerCase() === "ewe" && 
     a.status !== 'culled' && 
     a.lambStatus !== 'culled' &&
     a.status !== 'sold' &&
-    a.status !== 'dead'
+    a.status !== 'dead' &&
+    !isLamb(a)
   );
   
   if (isLoading) {
