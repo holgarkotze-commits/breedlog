@@ -14,6 +14,8 @@ import Dashboard from "@/pages/Dashboard";
 import Animals from "@/pages/Animals";
 import AnimalDetail from "@/pages/AnimalDetail";
 import Breeding from "@/pages/Breeding";
+import MatingGroupDetail from "@/pages/MatingGroupDetail";
+import BreedingEventDetail from "@/pages/BreedingEventDetail";
 import Settings from "@/pages/Settings";
 import Lambs from "@/pages/Lambs";
 import Records from "@/pages/Records";
@@ -26,6 +28,8 @@ function Router() {
       <Route path="/animals/:id" component={AnimalDetail} />
       <Route path="/lambs" component={Lambs} />
       <Route path="/breeding" component={Breeding} />
+      <Route path="/breeding/groups/:id" component={MatingGroupDetail} />
+      <Route path="/breeding/events/:id" component={BreedingEventDetail} />
       <Route path="/records" component={Records} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />

@@ -161,3 +161,38 @@ export function useCreateMatingGroup() {
     }
   });
 }
+
+export function useDeleteBreedingEvent() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { isOnline } = useNetworkStatus();
+
+  return useMutation({
+    mutationFn: async (eventId: number) => {
+      if (!isOnline) {
+        console.log('[useDeleteBreedingEvent] Offline - queuing for sync');
+        await addToSyncQueue({
+          entity: 'breedingEvents',
+          action: 'delete',
+          data: { id: eventId },
+          tempId: eventId,
+        });
+        return { id: eventId };
+      }
+
+      const res = await fetch(`/api/breeding/${eventId}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+      if (!res.ok) throw new Error("Failed to delete breeding event");
+      return { id: eventId };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.breeding.list.path] });
+      toast({ title: "Deleted", description: "Breeding event deleted" });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
+  });
+}

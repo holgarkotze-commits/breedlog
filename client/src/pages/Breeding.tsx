@@ -19,12 +19,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertBreedingEventSchema, insertMatingGroupSchema, type MatingGroup } from "@shared/schema";
-import { Plus, Calendar, Shield, Heart, Users, Download, Pencil, Trash2, Archive, Syringe } from "lucide-react";
+import { Plus, Calendar, Shield, Heart, Users, Download, Pencil, Trash2, Archive, Syringe, ChevronRight } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format, addDays, addMonths } from "date-fns";
 import { useState } from "react";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 export default function Breeding() {
   const { data: events, isLoading } = useBreedingEvents();
@@ -469,48 +470,66 @@ ${g.notes ? `<p style="margin-top: 8px; font-size: 9pt; color: #555; padding: 0 
                     
                     const ram = getAnimalById(group.ramId);
                     return (
-                      <div key={group.id} className="p-3 bg-secondary rounded border border-border">
+                      <div key={group.id} className="p-3 bg-secondary rounded border border-border hover:bg-secondary/80 transition-colors">
                         <div className="flex justify-between items-start mb-2">
-                          <div>
-                            <p className="font-bold text-sm md:text-base">{group.name}</p>
+                          <Link 
+                            href={`/breeding/groups/${group.id}`}
+                            className="flex-1 cursor-pointer"
+                            data-testid={`link-group-${group.id}`}
+                          >
+                            <p className="font-bold text-sm md:text-base hover:text-primary transition-colors">{group.name}</p>
                             <p className="text-xs text-muted-foreground">
                               Ram: {ram?.tagId || group.ramId} {ram?.name && `(${ram.name})`}
                             </p>
                             {group.eweIds && group.eweIds.length > 0 && (
                               <p className="text-xs text-muted-foreground">{group.eweIds.length} ewes in group</p>
                             )}
-                          </div>
-                          <div className="flex items-center gap-2">
+                          </Link>
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             <Button 
                               size="icon" 
                               variant="ghost" 
-                              onClick={() => setEditingGroup(group)}
+                              onClick={(e) => { e.stopPropagation(); setEditingGroup(group); }}
                               data-testid={`button-edit-group-${group.id}`}
                               className="h-7 w-7"
                             >
                               <Pencil className="w-4 h-4" />
                             </Button>
                             <ArchiveMatingGroupButton group={group} />
-                            <Badge variant="outline" className="bg-green-900/30 text-green-400 border-green-700">
-                              Active
-                            </Badge>
+                            <Link href={`/breeding/groups/${group.id}`}>
+                              <Button size="icon" variant="ghost" className="h-7 w-7" data-testid={`button-view-group-${group.id}`}>
+                                <ChevronRight className="w-4 h-4" />
+                              </Button>
+                            </Link>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-xs mt-2">
-                          <div>
-                            <span className="text-muted-foreground">Mating Period:</span>
-                            <p className="font-medium">{format(dateIn, "dd MMM")} - {format(dateOut, "dd MMM yyyy")}</p>
+                        <Link href={`/breeding/groups/${group.id}`} className="block">
+                          <div className="grid grid-cols-2 gap-2 text-xs mt-2">
+                            <div>
+                              <span className="text-muted-foreground">Mating Period:</span>
+                              <p className="font-medium">{format(dateIn, "dd MMM")} - {format(dateOut, "dd MMM yyyy")}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Expected Lambing:</span>
+                              <p className="font-medium text-primary">{format(expectedLambing, "dd MMM yyyy")}</p>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-muted-foreground">Expected Lambing:</span>
-                            <p className="font-medium text-primary">{format(expectedLambing, "dd MMM yyyy")}</p>
-                          </div>
+                          {group.lambingSeason && (
+                            <p className="text-xs mt-2">
+                              <span className="text-muted-foreground">Season:</span> {group.lambingSeason}
+                            </p>
+                          )}
+                        </Link>
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/50">
+                          <Badge variant="outline" className="bg-green-900/30 text-green-400 border-green-700 text-xs">
+                            Active
+                          </Badge>
+                          <Link href={`/breeding/groups/${group.id}`}>
+                            <Button size="sm" variant="ghost" className="text-xs h-6 px-2" data-testid={`button-details-group-${group.id}`}>
+                              View Details <ChevronRight className="w-3 h-3 ml-1" />
+                            </Button>
+                          </Link>
                         </div>
-                        {group.lambingSeason && (
-                          <p className="text-xs mt-2">
-                            <span className="text-muted-foreground">Season:</span> {group.lambingSeason}
-                          </p>
-                        )}
                       </div>
                     );
                   })}
@@ -522,10 +541,18 @@ ${g.notes ? `<p style="margin-top: 8px; font-size: 9pt; color: #555; padding: 0 
                   <p className="text-xs text-muted-foreground mb-2">Previous Groups ({closedGroups.length})</p>
                   <div className="space-y-2">
                     {closedGroups.slice(0, 3).map((group) => (
-                      <div key={group.id} className="p-2 bg-secondary/50 rounded text-xs flex justify-between">
-                        <span>{group.name}</span>
-                        <span className="text-muted-foreground">{format(new Date(group.dateIn), "MMM yyyy")}</span>
-                      </div>
+                      <Link 
+                        key={group.id} 
+                        href={`/breeding/groups/${group.id}`}
+                        className="p-2 bg-secondary/50 rounded text-xs flex justify-between items-center hover:bg-secondary transition-colors cursor-pointer"
+                        data-testid={`link-closed-group-${group.id}`}
+                      >
+                        <span className="hover:text-primary">{group.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">{format(new Date(group.dateIn), "MMM yyyy")}</span>
+                          <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                        </div>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -538,17 +565,29 @@ ${g.notes ? `<p style="margin-top: 8px; font-size: 9pt; color: #555; padding: 0 
               <CardTitle className="uppercase text-sm md:text-lg">Recent Events</CardTitle>
             </CardHeader>
             <CardContent className="p-3 md:p-6 pt-0 space-y-3">
-              {isLoading ? <p className="text-sm text-muted-foreground">Loading...</p> : events?.slice(0, 5).map((evt, i) => (
-                <div key={i} className="flex justify-between items-center p-3 bg-secondary rounded border border-border">
-                  <div>
-                    <p className="font-bold text-sm">Ewe {evt.eweId} x Ram {evt.ramId}</p>
-                    <p className="text-xs text-muted-foreground">{format(new Date(evt.matingDate), "dd MMM yyyy")} • {evt.matingType}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xs uppercase font-bold text-primary">Recorded</span>
-                  </div>
-                </div>
-              ))}
+              {isLoading ? <p className="text-sm text-muted-foreground">Loading...</p> : events?.slice(0, 5).map((evt) => {
+                const ewe = getAnimalById(evt.eweId);
+                const ram = getAnimalById(evt.ramId);
+                return (
+                  <Link 
+                    key={evt.id} 
+                    href={`/breeding/events/${evt.id}`}
+                    className="flex justify-between items-center p-3 bg-secondary rounded border border-border hover:bg-secondary/80 transition-colors cursor-pointer"
+                    data-testid={`link-event-${evt.id}`}
+                  >
+                    <div>
+                      <p className="font-bold text-sm hover:text-primary transition-colors">
+                        {ewe?.tagId || `Ewe ${evt.eweId}`} x {ram?.tagId || `Ram ${evt.ramId}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{format(new Date(evt.matingDate), "dd MMM yyyy")} • {evt.matingType}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs uppercase font-bold text-primary">Recorded</span>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </Link>
+                );
+              })}
               {(!events || events.length === 0) && <p className="text-muted-foreground italic text-sm">No events recorded.</p>}
             </CardContent>
           </Card>
