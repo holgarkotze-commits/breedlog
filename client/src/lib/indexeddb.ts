@@ -1,5 +1,5 @@
 const DB_NAME = 'breedlog-offline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface SyncQueueItem {
   id: string;
@@ -74,6 +74,7 @@ export function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('farmSettings')) {
         db.createObjectStore('farmSettings', { keyPath: 'id' });
       }
+
 
       if (!db.objectStoreNames.contains('documents')) {
         const docsStore = db.createObjectStore('documents', { keyPath: 'id' });

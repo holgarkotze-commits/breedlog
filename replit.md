@@ -201,24 +201,31 @@ shared/           # Shared types, schemas, and route definitions
 - **Service Worker Registration**: Manual registration in `client/src/main.tsx`
 
 #### IndexedDB Offline Storage
-- **Database**: `client/src/lib/indexeddb.ts` with 12 object stores:
-  - animals, breedingEvents, healthRecords, performanceData
-  - documents, matingGroups, tasks, animalImages
-  - syncQueue (pending sync operations), syncMeta (sync state)
-  - offlineFlags, settings
+- **Database**: `client/src/lib/indexeddb.ts` (version 2) with object stores:
+  - animals, breedingEvents, healthRecords, performanceRecords
+  - documents, matingGroups, tasks, animalImages, farmSettings
+  - syncQueue (pending sync operations), syncMeta (sync state), offlineFlags
 - **Helper Functions**: `getFromStore`, `putInStore`, `getAllFromStore`, `putManyInStore`, `addToSyncQueue`
 
 #### Sync Manager
 - **Location**: `client/src/lib/sync-manager.ts`
 - **Features**:
-  - Offline queue system for create/update/delete actions
+  - Offline queue system for create/update/delete actions on all entity types
   - Automatic background sync on reconnect
   - Online/offline state detection with event listeners
   - Retry logic for failed sync operations
+  - Persisted tempId-to-serverId mapping for ID reconciliation
 - **Temp ID Strategy**: Offline-created records use negative timestamp IDs (e.g., -1769678301443) to avoid conflicts
+- **Supported Entities**: animals, breedingEvents, matingGroups, performanceRecords, healthRecords, evaluations, farmSettings, documents
 
-#### React Hooks Integration
-- **use-animals.ts**: Integrated with offline fallback - queries fetch from IndexedDB when offline, mutations queue changes for sync
+#### React Hooks with Full Offline Support
+All data hooks follow consistent offline-first pattern:
+- **use-animals.ts**: Animals with IndexedDB fallback and offline mutations
+- **use-breeding.ts**: Breeding events with offline CRUD operations
+- **use-mating-groups.ts**: Mating groups with offline storage and sync
+- **use-records.ts**: Performance and health records with offline support
+- **use-evaluations.ts**: Animal evaluations with offline capabilities
+- **use-farm-settings.ts**: Farm settings persisted offline with sync
 - **use-network-status.ts**: Hook for online/offline state and sync status
 - **use-pwa-install.ts**: Hook for PWA install prompt handling
 

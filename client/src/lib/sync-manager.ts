@@ -209,7 +209,8 @@ class SyncManager {
           }
         }
         if (updateId > 0) {
-          await apiRequest('PATCH', `${endpoint}/${updateId}`, { ...item.data, id: updateId });
+          const dataWithId = { ...(item.data as Record<string, unknown>), id: updateId };
+          await apiRequest('PATCH', `${endpoint}/${updateId}`, dataWithId);
         } else {
           console.log(`[SyncManager] Skipping update for unsynced temp ID: ${updateId}`);
         }
