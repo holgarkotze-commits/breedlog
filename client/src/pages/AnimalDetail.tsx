@@ -174,13 +174,13 @@ export default function AnimalDetail() {
           <div className="lg:col-span-2">
             <Tabs defaultValue="pedigree" className="w-full">
               <TabsList className="w-full bg-card border border-border h-9 md:h-12 flex-wrap">
-                <TabsTrigger value="pedigree" data-testid="tab-pedigree" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Dna className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Pedigree</span><span className="xs:hidden">Ped</span></TabsTrigger>
+                <TabsTrigger value="pedigree" data-testid="tab-pedigree" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3 text-white"><Dna className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1 text-primary" /> <span className="hidden xs:inline">Pedigree</span><span className="xs:hidden">Ped</span></TabsTrigger>
                 {animal.sex === "ewe" && (
-                  <TabsTrigger value="breeding" data-testid="tab-breeding" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Heart className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Breeding</span><span className="xs:hidden">Bred</span></TabsTrigger>
+                  <TabsTrigger value="breeding" data-testid="tab-breeding" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3 text-white"><Heart className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1 text-primary" /> <span className="hidden xs:inline">Breeding</span><span className="xs:hidden">Bred</span></TabsTrigger>
                 )}
-                <TabsTrigger value="performance" data-testid="tab-weights" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Scale className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Weights</span><span className="xs:hidden">Wt</span></TabsTrigger>
-                <TabsTrigger value="health" data-testid="tab-health" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Syringe className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> <span className="hidden xs:inline">Health</span><span className="xs:hidden">Hlth</span></TabsTrigger>
-                <TabsTrigger value="images" data-testid="tab-images" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3"><Image className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1" /> Images</TabsTrigger>
+                <TabsTrigger value="performance" data-testid="tab-weights" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3 text-white"><Scale className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1 text-primary" /> <span className="hidden xs:inline">Weights</span><span className="xs:hidden">Wt</span></TabsTrigger>
+                <TabsTrigger value="health" data-testid="tab-health" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3 text-white"><Syringe className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1 text-primary" /> <span className="hidden xs:inline">Health</span><span className="xs:hidden">Hlth</span></TabsTrigger>
+                <TabsTrigger value="images" data-testid="tab-images" className="flex-1 uppercase font-medium text-[10px] md:text-xs px-1 md:px-3 text-white"><Image className="w-3 h-3 md:w-4 md:h-4 mr-0.5 md:mr-1 text-primary" /> Images</TabsTrigger>
               </TabsList>
               
               <TabsContent value="pedigree" className="mt-4">
