@@ -47,6 +47,7 @@ export const animals = pgTable("animals", {
   // Basic Info
   sex: text("sex").notNull(), // ram, ewe, wether
   breed: text("breed").default("Meatmaster"),
+  classification: text("classification").default("unclassified"), // stud, commercial, slaughter_cull, unclassified
   status: text("status").default("active"), // active, sold, dead, culled, lost
   photo: text("photo"), // URL/Path to photo
   

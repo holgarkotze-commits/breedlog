@@ -1207,6 +1207,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
         name: animal.name || "",
         sex: animal.sex || "ewe",
         breed: animal.breed || "Meatmaster",
+        classification: animal.classification || "unclassified",
         status: animal.status || "active",
         birthDate: animal.birthDate || "",
         birthStatus: animal.birthStatus || "",
@@ -1352,7 +1353,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-1.5 md:gap-2">
+                    <div className="grid grid-cols-2 gap-1.5 md:gap-2">
                         <div>
                             <Label className="text-[11px] md:text-xs">Sex</Label>
                             <Select value={formData.sex} onValueChange={(val) => setFormData(prev => ({...prev, sex: val}))}>
@@ -1376,8 +1377,23 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                                 </SelectContent>
                             </Select>
                         </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5 md:gap-2">
                         <div>
-                            <Label className="text-[11px] md:text-xs">Birth</Label>
+                            <Label className="text-[11px] md:text-xs">Classification</Label>
+                            <Select value={formData.classification} onValueChange={(val) => setFormData(prev => ({...prev, classification: val}))}>
+                                <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-classification"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="unclassified">Unclassified</SelectItem>
+                                    <SelectItem value="stud">Stud</SelectItem>
+                                    <SelectItem value="commercial">Commercial</SelectItem>
+                                    <SelectItem value="slaughter_cull">Slaughter/Cull</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Birth Type</Label>
                             <Select value={formData.birthStatus || "unknown"} onValueChange={(val) => setFormData(prev => ({...prev, birthStatus: val === "unknown" ? "" : val}))}>
                                 <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-birth-status"><SelectValue /></SelectTrigger>
                                 <SelectContent>
