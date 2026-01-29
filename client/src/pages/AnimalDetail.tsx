@@ -311,49 +311,64 @@ function PedigreeView({ animal }: { animal: any }) {
                     onWheel={handleWheel}
                 >
                     <div 
-                        className="min-w-[500px] flex items-center gap-3 py-3 px-2 origin-top-left transition-transform duration-100" 
+                        className="min-w-[600px] py-4 px-4 origin-top-left transition-transform duration-100" 
                         style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
                     >
-                        {/* Subject (left) */}
-                        <div className="flex-shrink-0">
-                            <PedigreeNode 
-                                animal={animal}
-                                isSubject={true}
-                            />
-                        </div>
-                        
-                        {/* Connector line */}
-                        <div className="w-8 h-0.5 bg-gradient-to-r from-primary to-primary/50"></div>
-                        
-                        {/* Parents column */}
-                        <div className="flex flex-col gap-6 relative">
-                            {/* Vertical connector */}
-                            <div className="absolute left-0 top-1/2 -translate-x-4 w-4 h-[calc(100%-60px)] border-l-2 border-t-2 border-b-2 border-primary/50 rounded-l-lg"></div>
+                        {/* SVG for connecting lines - positioned behind nodes */}
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '600px', minHeight: '280px' }}>
+                            {/* Subject to fork point */}
+                            <line x1="180" y1="140" x2="220" y2="140" stroke="#FFC300" strokeWidth="3" />
+                            {/* Fork vertical line */}
+                            <line x1="220" y1="70" x2="220" y2="210" stroke="#FFC300" strokeWidth="3" />
+                            {/* Fork to Sire */}
+                            <line x1="220" y1="70" x2="260" y2="70" stroke="#FFC300" strokeWidth="3" />
+                            {/* Fork to Dam */}
+                            <line x1="220" y1="210" x2="260" y2="210" stroke="#FFC300" strokeWidth="3" />
                             
-                            <PedigreeNode 
-                                animal={animal.sire}
-                                label="SIRE"
-                                externalInfo={animal.externalSireInfo}
-                            />
-                            <PedigreeNode 
-                                animal={animal.dam}
-                                label="DAM"
-                                externalInfo={animal.externalDamInfo}
-                            />
-                        </div>
-                        
-                        {/* Connector line to grandparents */}
-                        <div className="w-8 h-0.5 bg-gradient-to-r from-primary/50 to-muted-foreground/30"></div>
-                        
-                        {/* Grandparents column */}
-                        <div className="flex flex-col gap-3 relative">
-                            <div className="absolute left-0 top-[25%] -translate-x-4 w-4 h-[15%] border-l-2 border-t-2 border-b-2 border-muted-foreground/30 rounded-l-lg"></div>
-                            <div className="absolute left-0 top-[60%] -translate-x-4 w-4 h-[15%] border-l-2 border-t-2 border-b-2 border-muted-foreground/30 rounded-l-lg"></div>
+                            {/* Sire to grandparents fork */}
+                            <line x1="400" y1="70" x2="440" y2="70" stroke="rgba(255,195,0,0.5)" strokeWidth="2" />
+                            <line x1="440" y1="35" x2="440" y2="105" stroke="rgba(255,195,0,0.5)" strokeWidth="2" />
+                            <line x1="440" y1="35" x2="470" y2="35" stroke="rgba(255,195,0,0.5)" strokeWidth="2" />
+                            <line x1="440" y1="105" x2="470" y2="105" stroke="rgba(255,195,0,0.5)" strokeWidth="2" />
                             
-                            <PedigreeNodeSmall label="GP Sire" sublabel="Sire's Father" />
-                            <PedigreeNodeSmall label="GP Dam" sublabel="Sire's Mother" />
-                            <PedigreeNodeSmall label="GP Sire" sublabel="Dam's Father" />
-                            <PedigreeNodeSmall label="GP Dam" sublabel="Dam's Mother" />
+                            {/* Dam to grandparents fork */}
+                            <line x1="400" y1="210" x2="440" y2="210" stroke="rgba(255,195,0,0.5)" strokeWidth="2" />
+                            <line x1="440" y1="175" x2="440" y2="245" stroke="rgba(255,195,0,0.5)" strokeWidth="2" />
+                            <line x1="440" y1="175" x2="470" y2="175" stroke="rgba(255,195,0,0.5)" strokeWidth="2" />
+                            <line x1="440" y1="245" x2="470" y2="245" stroke="rgba(255,195,0,0.5)" strokeWidth="2" />
+                        </svg>
+                        
+                        <div className="relative flex items-start gap-6">
+                            {/* Subject (left) - centered vertically */}
+                            <div className="flex-shrink-0 mt-[70px]">
+                                <PedigreeNode 
+                                    animal={animal}
+                                    isSubject={true}
+                                />
+                            </div>
+                            
+                            {/* Parents column */}
+                            <div className="flex flex-col ml-[60px]" style={{ gap: '60px' }}>
+                                <PedigreeNode 
+                                    animal={animal.sire}
+                                    label="SIRE"
+                                    externalInfo={animal.externalSireInfo}
+                                />
+                                <PedigreeNode 
+                                    animal={animal.dam}
+                                    label="DAM"
+                                    externalInfo={animal.externalDamInfo}
+                                />
+                            </div>
+                            
+                            {/* Grandparents column */}
+                            <div className="flex flex-col ml-[40px]" style={{ gap: '20px' }}>
+                                <PedigreeNodeSmall label="GP Sire" sublabel="Sire's Father" />
+                                <PedigreeNodeSmall label="GP Dam" sublabel="Sire's Mother" />
+                                <div className="h-8"></div>
+                                <PedigreeNodeSmall label="GP Sire" sublabel="Dam's Father" />
+                                <PedigreeNodeSmall label="GP Dam" sublabel="Dam's Mother" />
+                            </div>
                         </div>
                     </div>
                 </div>
