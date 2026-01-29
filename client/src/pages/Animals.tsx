@@ -152,7 +152,7 @@ export default function Animals() {
   
   const getDocumentFileName = (type: string, identifier: string) => {
     const date = format(new Date(), "yyyy-MM-dd");
-    return `${type}_${identifier}_${date}.pdf`;
+    return `${identifier}_${type}_${date}.pdf`;
   };
   
   const handleRemoveFromHerd = () => {

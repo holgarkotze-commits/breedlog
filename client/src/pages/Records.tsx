@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { 
   Folder, 
   FolderOpen, 
@@ -48,6 +49,7 @@ export default function Records() {
   const [activeFolder, setActiveFolder] = useState<FolderType>(null);
   const [activeSubfolder, setActiveSubfolder] = useState<DocumentSubfolder>(null);
   const [search, setSearch] = useState("");
+  const [docToDelete, setDocToDelete] = useState<{id: number, name: string} | null>(null);
   const { data: allAnimals, isLoading } = useAnimals({});
   const { data: breedingEvents } = useBreedingEvents();
   const { data: farmSettings } = useFarmSettings();
@@ -60,7 +62,7 @@ export default function Records() {
   
   const getDocumentFileName = (type: string, identifier: string) => {
     const date = format(new Date(), "yyyy-MM-dd");
-    return `${type}_${identifier}_${date}.pdf`;
+    return `${identifier}_${type}_${date}.pdf`;
   };
 
   const culledAnimals = (allAnimals || []).filter(a => 
@@ -459,30 +461,70 @@ export default function Records() {
       }
       
       return (
-        <div className="space-y-2">
-          {docs.map((doc) => (
-            <Card key={doc.id} className="p-3 flex items-center justify-between gap-3" data-testid={`doc-${doc.id}`}>
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <FileText className="w-5 h-5 text-primary flex-shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm truncate">{doc.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {doc.exportedAt ? format(new Date(doc.exportedAt), "dd MMM yyyy, HH:mm") : "—"}
-                  </p>
-                </div>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="text-destructive hover:text-destructive"
-                onClick={() => deleteExportedDoc.mutate(doc.id)}
-                data-testid={`button-delete-doc-${doc.id}`}
+        <>
+          <div className="space-y-2">
+            {docs.map((doc) => (
+              <Card 
+                key={doc.id} 
+                className="p-3 flex items-center justify-between gap-3 cursor-pointer hover:border-primary transition-colors" 
+                data-testid={`doc-${doc.id}`}
+                onClick={() => toast({
+                  title: "Export Record",
+                  description: `"${doc.name}" was exported on ${doc.exportedAt ? format(new Date(doc.exportedAt), "dd MMM yyyy 'at' HH:mm") : "unknown date"}. To re-export, go to the original section and export again.`
+                })}
               >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </Card>
-          ))}
-        </div>
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <FileText className="w-5 h-5 text-primary flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm truncate">{doc.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {doc.exportedAt ? format(new Date(doc.exportedAt), "dd MMM yyyy, HH:mm") : "—"}
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-destructive hover:text-destructive"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDocToDelete({ id: doc.id, name: doc.name });
+                  }}
+                  data-testid={`button-delete-doc-${doc.id}`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </Card>
+            ))}
+          </div>
+
+          {/* Delete confirmation dialog */}
+          <AlertDialog open={docToDelete !== null} onOpenChange={(open) => !open && setDocToDelete(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Export Record</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete the export record "{docToDelete?.name}"? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-delete-export">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    if (docToDelete) {
+                      deleteExportedDoc.mutate(docToDelete.id);
+                      setDocToDelete(null);
+                    }
+                  }}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  data-testid="button-confirm-delete-export"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
       );
     }
 

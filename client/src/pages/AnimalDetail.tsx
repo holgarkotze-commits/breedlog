@@ -1,4 +1,4 @@
-import { useRoute } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { useAnimal, useFamilyTree, useUpdateAnimal, useAnimals, useAnimalImages, useUploadAnimalImage, useDeleteAnimalImage, useRemoveFromHerd } from "@/hooks/use-animals";
 import { usePerformanceRecords, useHealthRecords, useCreatePerformanceRecord } from "@/hooks/use-records";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -224,6 +224,48 @@ function InfoRow({ label, value, testId }: { label: string, value: string, testI
 
 function PedigreeView({ animal }: { animal: any }) {
     const { data: tree } = useFamilyTree(animal.id);
+    const [scale, setScale] = useState(0.85);
+    const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    
+    const handleTouchStart = (e: React.TouchEvent) => {
+        if (e.touches.length === 2) {
+            const touch1 = e.touches[0];
+            const touch2 = e.touches[1];
+            const distance = Math.hypot(
+                touch2.clientX - touch1.clientX,
+                touch2.clientY - touch1.clientY
+            );
+            setLastTouchDistance(distance);
+        }
+    };
+    
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (e.touches.length === 2 && lastTouchDistance !== null) {
+            const touch1 = e.touches[0];
+            const touch2 = e.touches[1];
+            const distance = Math.hypot(
+                touch2.clientX - touch1.clientX,
+                touch2.clientY - touch1.clientY
+            );
+            
+            const scaleChange = (distance - lastTouchDistance) / 200;
+            setScale(prev => Math.min(Math.max(prev + scaleChange, 0.5), 1.5));
+            setLastTouchDistance(distance);
+        }
+    };
+    
+    const handleTouchEnd = () => {
+        setLastTouchDistance(null);
+    };
+    
+    const handleWheel = (e: React.WheelEvent) => {
+        if (e.ctrlKey) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.1 : 0.1;
+            setScale(prev => Math.min(Math.max(prev + delta, 0.5), 1.5));
+        }
+    };
     
     return (
         <Card className="bg-gradient-to-br from-card via-card to-secondary/20 rugged-card overflow-hidden">
@@ -233,11 +275,45 @@ function PedigreeView({ animal }: { animal: any }) {
                     <span>BLOODLINE</span>
                     <span className="text-primary font-black ml-1">- ELITE PEDIGREE</span>
                 </CardTitle>
-                <p className="text-xs text-muted-foreground mt-1">Pinch to zoom • Swipe to pan</p>
+                <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-muted-foreground">Pinch to zoom • Tap animal to view profile</p>
+                    <div className="flex items-center gap-1">
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6"
+                            onClick={() => setScale(prev => Math.max(prev - 0.15, 0.5))}
+                            data-testid="button-zoom-out"
+                        >
+                            <span className="text-sm font-bold">-</span>
+                        </Button>
+                        <span className="text-xs text-muted-foreground w-12 text-center">{Math.round(scale * 100)}%</span>
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-6 w-6"
+                            onClick={() => setScale(prev => Math.min(prev + 0.15, 1.5))}
+                            data-testid="button-zoom-in"
+                        >
+                            <span className="text-sm font-bold">+</span>
+                        </Button>
+                    </div>
+                </div>
             </CardHeader>
             <CardContent className="p-2 md:p-4">
-                <div className="overflow-auto touch-pan-x touch-pan-y" style={{ maxHeight: '400px' }}>
-                    <div className="min-w-[500px] flex items-center gap-3 py-3 px-2 origin-top-left" style={{ transform: 'scale(0.85)', transformOrigin: 'top left' }}>
+                <div 
+                    ref={containerRef}
+                    className="overflow-auto touch-pan-x touch-pan-y" 
+                    style={{ maxHeight: '400px' }}
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                    onWheel={handleWheel}
+                >
+                    <div 
+                        className="min-w-[500px] flex items-center gap-3 py-3 px-2 origin-top-left transition-transform duration-100" 
+                        style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+                    >
                         {/* Subject (left) */}
                         <div className="flex-shrink-0">
                             <PedigreeNode 
@@ -292,19 +368,32 @@ function PedigreeNode({ animal, label, isSubject, externalInfo }: {
     isSubject?: boolean,
     externalInfo?: string | null 
 }) {
+    const [, setLocation] = useLocation();
     const hasData = animal || externalInfo;
     const isRam = animal?.sex?.toLowerCase() === 'ram';
     const displayId = animal?.tagId || externalInfo || 'Unknown';
+    const isClickable = !isSubject && animal?.id;
+    
+    const handleClick = () => {
+        if (isClickable) {
+            setLocation(`/animals/${animal.id}`);
+        }
+    };
     
     return (
-        <div className={cn(
-            "flex items-center gap-3 p-3 rounded-xl border-2 transition-all",
-            isSubject 
-                ? "bg-gradient-to-r from-primary/20 to-primary/5 border-primary shadow-lg shadow-primary/20" 
-                : hasData 
-                    ? "bg-card/80 border-primary/50 hover:border-primary hover:shadow-md" 
-                    : "bg-secondary/50 border-dashed border-muted-foreground/30"
-        )}>
+        <div 
+            className={cn(
+                "flex items-center gap-3 p-3 rounded-xl border-2 transition-all",
+                isSubject 
+                    ? "bg-gradient-to-r from-primary/20 to-primary/5 border-primary shadow-lg shadow-primary/20" 
+                    : hasData 
+                        ? "bg-card/80 border-primary/50 hover:border-primary hover:shadow-md" 
+                        : "bg-secondary/50 border-dashed border-muted-foreground/30",
+                isClickable && "cursor-pointer active:scale-95"
+            )}
+            onClick={handleClick}
+            data-testid={`pedigree-node-${animal?.id || label || 'unknown'}`}
+        >
             {/* Circular photo with ring */}
             <div className={cn(
                 "relative flex-shrink-0 rounded-full p-1",
@@ -582,7 +671,7 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
     
     const getDocumentFileName = (type: string, identifier: string) => {
         const date = format(new Date(), "yyyy-MM-dd");
-        return `${type}_${identifier}_${date}.pdf`;
+        return `${identifier}_${type}_${date}.pdf`;
     };
     
     const getProfileData = () => {
@@ -1434,6 +1523,7 @@ function ImagesView({ animalId }: { animalId: number }) {
     const { mutate: deleteImage, isPending: isDeleting } = useDeleteAnimalImage();
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const [isCompressing, setIsCompressing] = useState(false);
+    const [imageToDelete, setImageToDelete] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const { toast } = useToast();
 
@@ -1466,8 +1556,11 @@ function ImagesView({ animalId }: { animalId: number }) {
         }
     };
 
-    const handleDelete = (imageId: number) => {
-        deleteImage({ animalId, imageId });
+    const handleDeleteConfirm = () => {
+        if (imageToDelete !== null) {
+            deleteImage({ animalId, imageId: imageToDelete });
+            setImageToDelete(null);
+        }
     };
 
     if (isLoading) {
@@ -1538,7 +1631,7 @@ function ImagesView({ animalId }: { animalId: number }) {
                                     variant="destructive"
                                     size="icon"
                                     className="absolute -top-2 -right-2 scale-75"
-                                    onClick={() => handleDelete(img.id)}
+                                    onClick={() => setImageToDelete(img.id)}
                                     disabled={isDeleting}
                                     data-testid={`button-delete-image-${img.id}`}
                                 >
@@ -1560,6 +1653,29 @@ function ImagesView({ animalId }: { animalId: number }) {
                         )}
                     </DialogContent>
                 </Dialog>
+
+                {/* Delete confirmation dialog */}
+                <AlertDialog open={imageToDelete !== null} onOpenChange={(open) => !open && setImageToDelete(null)}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Image</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Are you sure you want to delete this image? This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel data-testid="button-cancel-delete-image">Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleDeleteConfirm}
+                                disabled={isDeleting}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                data-testid="button-confirm-delete-image"
+                            >
+                                {isDeleting ? "Deleting..." : "Delete"}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </CardContent>
         </Card>
     );
@@ -1568,6 +1684,7 @@ function ImagesView({ animalId }: { animalId: number }) {
 function DocumentsView({ animalId }: { animalId: number }) {
     const [documents, setDocuments] = useState<{id: string, name: string, url: string, date: string}[]>([]);
     const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
+    const [docToDelete, setDocToDelete] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1587,8 +1704,11 @@ function DocumentsView({ animalId }: { animalId: number }) {
         }
     };
 
-    const handleDelete = (id: string) => {
-        setDocuments(prev => prev.filter(d => d.id !== id));
+    const handleDeleteConfirm = () => {
+        if (docToDelete) {
+            setDocuments(prev => prev.filter(d => d.id !== docToDelete));
+            setDocToDelete(null);
+        }
     };
 
     return (
@@ -1646,7 +1766,7 @@ function DocumentsView({ animalId }: { animalId: number }) {
                                     variant="destructive"
                                     size="icon"
                                     className="absolute -top-2 -right-2 scale-75"
-                                    onClick={() => handleDelete(doc.id)}
+                                    onClick={() => setDocToDelete(doc.id)}
                                     data-testid={`button-delete-doc-${doc.id}`}
                                 >
                                     <X className="w-4 h-4" />
@@ -1665,6 +1785,28 @@ function DocumentsView({ animalId }: { animalId: number }) {
                         )}
                     </DialogContent>
                 </Dialog>
+
+                {/* Delete confirmation dialog */}
+                <AlertDialog open={docToDelete !== null} onOpenChange={(open) => !open && setDocToDelete(null)}>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Document</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                Are you sure you want to delete this document? This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel data-testid="button-cancel-delete-doc">Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleDeleteConfirm}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                data-testid="button-confirm-delete-doc"
+                            >
+                                Delete
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
             </CardContent>
         </Card>
     );

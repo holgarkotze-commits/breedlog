@@ -8,6 +8,7 @@ import { useFlockHealthEvents, useCreateFlockHealthEvent } from "@/hooks/use-flo
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,7 +41,7 @@ export default function Breeding() {
   
   const getDocumentFileName = (type: string, identifier: string) => {
     const date = format(new Date(), "yyyy-MM-dd");
-    return `${type}_${identifier}_${date}.pdf`;
+    return `${identifier}_${type}_${date}.pdf`;
   };
   
   const activeGroups = matingGroupsList?.filter(g => g.status === 'active') || [];
@@ -912,6 +913,7 @@ function EditMatingGroupDialog({ group, open, onOpenChange }: { group: MatingGro
   const { mutate: deleteGroup, isPending: isDeleting } = useDeleteMatingGroup();
   const { data: animals } = useAnimals({});
   const [selectedEwes, setSelectedEwes] = useState<number[]>(group.eweIds || []);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   const rams = animals?.filter(a => a.sex === 'ram' && a.status === 'active') || [];
   const ewes = animals?.filter(a => a.sex === 'ewe' && a.status === 'active') || [];
@@ -962,14 +964,13 @@ function EditMatingGroupDialog({ group, open, onOpenChange }: { group: MatingGro
     });
   };
 
-  const handleDelete = () => {
-    if (confirm("Are you sure you want to delete this mating group?")) {
-      deleteGroup(group.id, {
-        onSuccess: () => {
-          onOpenChange(false);
-        }
-      });
-    }
+  const handleDeleteConfirm = () => {
+    deleteGroup(group.id, {
+      onSuccess: () => {
+        setShowDeleteConfirm(false);
+        onOpenChange(false);
+      }
+    });
   };
 
   return (
@@ -1105,7 +1106,7 @@ function EditMatingGroupDialog({ group, open, onOpenChange }: { group: MatingGro
               <Button 
                 type="button"
                 variant="destructive"
-                onClick={handleDelete}
+                onClick={() => setShowDeleteConfirm(true)}
                 disabled={isDeleting}
                 data-testid="button-delete-mating-group"
                 className="flex-1"
@@ -1124,6 +1125,29 @@ function EditMatingGroupDialog({ group, open, onOpenChange }: { group: MatingGro
             </div>
           </form>
         </Form>
+
+        {/* Delete confirmation dialog */}
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Mating Group</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete the mating group "{group.name}"? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel data-testid="button-cancel-delete-group">Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteConfirm}
+                disabled={isDeleting}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid="button-confirm-delete-group"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
