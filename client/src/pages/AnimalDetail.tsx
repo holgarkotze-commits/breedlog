@@ -1149,32 +1149,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
     const ewes = allAnimals?.filter(a => a.sex === "ewe" && a.id !== animal.id) || [];
     const rams = allAnimals?.filter(a => a.sex === "ram" && a.id !== animal.id) || [];
 
-    const compressImage = (file: File, maxWidth: number = 1200, quality: number = 0.8): Promise<string> => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const img = document.createElement('img') as HTMLImageElement;
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    let { width, height } = img;
-                    if (width > maxWidth) {
-                        height = (height * maxWidth) / width;
-                        width = maxWidth;
-                    }
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    if (!ctx) { reject(new Error('Could not get canvas context')); return; }
-                    ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL('image/jpeg', quality));
-                };
-                img.onerror = () => reject(new Error('Failed to load image'));
-                img.src = e.target?.result as string;
-            };
-            reader.onerror = () => reject(new Error('Failed to read file'));
-            reader.readAsDataURL(file);
-        });
-    };
+    const [isCompressing, setIsCompressing] = useState(false);
 
     const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -1184,13 +1159,21 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                 return;
             }
             try {
-                toast({ title: "Processing...", description: "Compressing image" });
-                const compressedBase64 = await compressImage(file, 1200, 0.8);
-                setPhotoPreview(compressedBase64);
-                setFormData(prev => ({ ...prev, photo: compressedBase64 }));
-                toast({ title: "Photo ready", description: "Image compressed" });
+                setIsCompressing(true);
+                toast({ title: "Optimising image...", description: "Please wait" });
+                const { compressImageWithFeedback, formatFileSize } = await import("@/lib/image-compression");
+                const result = await compressImageWithFeedback(file, { maxWidth: 1600, quality: 0.75 });
+                setPhotoPreview(result.base64);
+                setFormData(prev => ({ ...prev, photo: result.base64 }));
+                const reduction = Math.round((1 - result.compressedSize / result.originalSize) * 100);
+                toast({ 
+                    title: "Photo ready", 
+                    description: `Optimised to ${formatFileSize(result.compressedSize)} (${reduction}% smaller)` 
+                });
             } catch {
                 toast({ title: "Error", description: "Failed to process image", variant: "destructive" });
+            } finally {
+                setIsCompressing(false);
             }
         }
     };
@@ -1450,22 +1433,34 @@ function ImagesView({ animalId }: { animalId: number }) {
     const { mutate: uploadImage, isPending: isUploading } = useUploadAnimalImage();
     const { mutate: deleteImage, isPending: isDeleting } = useDeleteAnimalImage();
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [isCompressing, setIsCompressing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { toast } = useToast();
 
-    const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
+            try {
+                setIsCompressing(true);
+                toast({ title: "Optimising image...", description: "Please wait" });
+                const { compressImageWithFeedback, formatFileSize } = await import("@/lib/image-compression");
+                const result = await compressImageWithFeedback(file, { maxWidth: 1600, quality: 0.75 });
+                const reduction = Math.round((1 - result.compressedSize / result.originalSize) * 100);
                 uploadImage({
                     animalId,
-                    imageData: reader.result as string,
+                    imageData: result.base64,
                     fileName: file.name,
                 });
-            };
-            reader.readAsDataURL(file);
+                toast({ 
+                    title: "Photo ready", 
+                    description: `Optimised to ${formatFileSize(result.compressedSize)} (${reduction}% smaller)` 
+                });
+            } catch (error) {
+                toast({ title: "Error", description: "Failed to process image", variant: "destructive" });
+            } finally {
+                setIsCompressing(false);
+            }
         }
-        // Reset input
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
@@ -1515,11 +1510,11 @@ function ImagesView({ animalId }: { animalId: number }) {
                     variant="outline" 
                     className="w-full mb-4 border-dashed"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading}
+                    disabled={isUploading || isCompressing}
                     data-testid="button-add-image"
                 >
                     <Upload className="w-4 h-4 mr-2" /> 
-                    {isUploading ? "Uploading..." : "Add Photo to Folder"}
+                    {isCompressing ? "Optimising image..." : isUploading ? "Uploading..." : "Add Photo to Folder"}
                 </Button>
 
                 {(!images || images.length === 0) ? (

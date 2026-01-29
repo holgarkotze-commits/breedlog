@@ -2354,41 +2354,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
   const ewes = allAnimals?.filter(a => a.sex === "ewe") || [];
   const rams = allAnimals?.filter(a => a.sex === "ram") || [];
 
-  const compressImage = (file: File, maxWidth: number = 1200, quality: number = 0.8): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = document.createElement('img') as HTMLImageElement;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let { width, height } = img;
-          
-          // Scale down if larger than maxWidth
-          if (width > maxWidth) {
-            height = (height * maxWidth) / width;
-            width = maxWidth;
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            reject(new Error('Could not get canvas context'));
-            return;
-          }
-          
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
-          resolve(compressedBase64);
-        };
-        img.onerror = () => reject(new Error('Failed to load image'));
-        img.src = e.target?.result as string;
-      };
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(file);
-    });
-  };
+  const [isCompressing, setIsCompressing] = useState(false);
 
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2399,13 +2365,21 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
       }
       
       try {
-        toast({ title: "Processing photo...", description: "Compressing image for upload" });
-        const compressedBase64 = await compressImage(file, 1200, 0.8);
-        setPhotoPreview(compressedBase64);
-        form.setValue("photo", compressedBase64);
-        toast({ title: "Photo ready", description: "Image compressed successfully" });
+        setIsCompressing(true);
+        toast({ title: "Optimising image...", description: "Please wait" });
+        const { compressImageWithFeedback, formatFileSize } = await import("@/lib/image-compression");
+        const result = await compressImageWithFeedback(file, { maxWidth: 1600, quality: 0.75 });
+        setPhotoPreview(result.base64);
+        form.setValue("photo", result.base64);
+        const reduction = Math.round((1 - result.compressedSize / result.originalSize) * 100);
+        toast({ 
+          title: "Photo ready", 
+          description: `Optimised to ${formatFileSize(result.compressedSize)} (${reduction}% smaller)` 
+        });
       } catch (error) {
         toast({ title: "Photo error", description: "Failed to process image", variant: "destructive" });
+      } finally {
+        setIsCompressing(false);
       }
     }
   };

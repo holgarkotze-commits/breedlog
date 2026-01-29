@@ -164,41 +164,17 @@ export default function Settings() {
     }
   }, [farmSettings, form]);
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const img = document.createElement('img');
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const maxSize = 300;
-          let width = img.width;
-          let height = img.height;
-          
-          if (width > height) {
-            if (width > maxSize) {
-              height = Math.round((height * maxSize) / width);
-              width = maxSize;
-            }
-          } else {
-            if (height > maxSize) {
-              width = Math.round((width * maxSize) / height);
-              height = maxSize;
-            }
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
-          setLogoPreview(compressedBase64);
-          form.setValue("logoUrl", compressedBase64);
-        };
-        img.src = reader.result as string;
-      };
-      reader.readAsDataURL(file);
+      try {
+        const { compressImage } = await import("@/lib/image-compression");
+        const result = await compressImage(file, { maxWidth: 300, maxHeight: 300, quality: 0.8 });
+        setLogoPreview(result.base64);
+        form.setValue("logoUrl", result.base64);
+      } catch (error) {
+        console.error("Logo compression failed:", error);
+      }
     }
   };
 
