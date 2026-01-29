@@ -176,7 +176,6 @@ class SyncManager {
       matingGroups: '/api/mating-groups',
       performanceRecords: '/api/performance-records',
       healthRecords: '/api/health-records',
-      evaluations: '/api/evaluations',
       documents: '/api/documents',
       farmSettings: '/api/farm-settings',
     };
