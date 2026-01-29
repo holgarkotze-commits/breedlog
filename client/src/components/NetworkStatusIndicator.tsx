@@ -60,8 +60,7 @@ export function NetworkStatusIndicator() {
       {isOnline && syncState.pendingCount > 0 && syncState.status !== 'syncing' && (
         <Button 
           variant="ghost" 
-          size="icon" 
-          className="h-6 w-6"
+          size="sm"
           onClick={triggerSync}
           data-testid="button-sync"
         >

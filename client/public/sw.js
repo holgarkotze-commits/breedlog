@@ -1,12 +1,19 @@
 const CACHE_NAME = 'breedlog-v1';
 const STATIC_CACHE = 'breedlog-static-v1';
 const API_CACHE = 'breedlog-api-v1';
+const APP_SHELL_CACHE = 'breedlog-shell-v1';
 
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
   '/favicon.png',
+  '/icons/icon-72x72.png',
+  '/icons/icon-96x96.png',
+  '/icons/icon-128x128.png',
+  '/icons/icon-144x144.png',
+  '/icons/icon-152x152.png',
   '/icons/icon-192x192.png',
+  '/icons/icon-384x384.png',
   '/icons/icon-512x512.png'
 ];
 
@@ -35,11 +42,12 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating service worker...');
+  const validCaches = [STATIC_CACHE, API_CACHE, APP_SHELL_CACHE];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => name !== STATIC_CACHE && name !== API_CACHE)
+          .filter((name) => !validCaches.includes(name))
           .map((name) => {
             console.log('[SW] Deleting old cache:', name);
             return caches.delete(name);
@@ -64,6 +72,11 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com') {
+    event.respondWith(cacheFirstStrategy(request));
+    return;
+  }
+
+  if (url.pathname.match(/\.(js|css|woff2?|ttf|eot)$/)) {
     event.respondWith(cacheFirstStrategy(request));
     return;
   }

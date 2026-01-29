@@ -6,6 +6,7 @@ export interface SyncQueueItem {
   action: 'create' | 'update' | 'delete';
   entity: string;
   data: unknown;
+  tempId?: number;
   timestamp: number;
   synced: boolean;
 }

@@ -189,3 +189,45 @@ shared/           # Shared types, schemas, and route definitions
 - `externalDamInfo`: Text field for external dam information
 - `externalSireInfo`: Text field for external sire information  
 - `evaluationDocument`: Text field for evaluation document URLs
+
+### Progressive Web App (PWA) - Offline-First Architecture (January 2026)
+
+#### Core PWA Infrastructure
+- **Service Worker**: `client/public/sw.js` with multi-strategy caching:
+  - NetworkFirst for API routes with fallback to cache
+  - CacheFirst for static assets (JS, CSS, fonts, icons)
+  - StaleWhileRevalidate for app shell navigation
+- **Web App Manifest**: `client/public/manifest.json` for installability with app icons
+- **Service Worker Registration**: Manual registration in `client/src/main.tsx`
+
+#### IndexedDB Offline Storage
+- **Database**: `client/src/lib/indexeddb.ts` with 12 object stores:
+  - animals, breedingEvents, healthRecords, performanceData
+  - documents, matingGroups, tasks, animalImages
+  - syncQueue (pending sync operations), syncMeta (sync state)
+  - offlineFlags, settings
+- **Helper Functions**: `getFromStore`, `putInStore`, `getAllFromStore`, `putManyInStore`, `addToSyncQueue`
+
+#### Sync Manager
+- **Location**: `client/src/lib/sync-manager.ts`
+- **Features**:
+  - Offline queue system for create/update/delete actions
+  - Automatic background sync on reconnect
+  - Online/offline state detection with event listeners
+  - Retry logic for failed sync operations
+- **Temp ID Strategy**: Offline-created records use negative timestamp IDs (e.g., -1769678301443) to avoid conflicts
+
+#### React Hooks Integration
+- **use-animals.ts**: Integrated with offline fallback - queries fetch from IndexedDB when offline, mutations queue changes for sync
+- **use-network-status.ts**: Hook for online/offline state and sync status
+- **use-pwa-install.ts**: Hook for PWA install prompt handling
+
+#### UI Components
+- **OfflineBanner**: Yellow banner displayed when network is offline
+- **NetworkStatusIndicator**: Badge showing sync status and pending count in Layout sidebar
+- **PWAInstallPrompt**: Install prompt with Android (beforeinstallprompt) and iOS (Add to Home Screen) support
+
+#### Feature Flags
+- **Location**: `client/src/lib/feature-flags.ts`
+- **License Modes**: free, paid, trial, offline_licensed
+- **Interceptors**: Export gating for future monetization

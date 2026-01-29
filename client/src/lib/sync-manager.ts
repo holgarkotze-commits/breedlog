@@ -5,9 +5,42 @@ import {
   putManyInStore,
   getAllFromStore,
   setLastSyncTime,
+  deleteFromStore,
+  putInStore,
+  getFromStore,
   SyncQueueItem
 } from './indexeddb';
 import { apiRequest } from './queryClient';
+
+interface TempIdMapping {
+  tempId: number;
+  serverId: number;
+  entity: string;
+}
+
+async function getTempIdMappings(): Promise<TempIdMapping[]> {
+  try {
+    const mappings = await getAllFromStore<TempIdMapping>('metadata');
+    return mappings.filter(m => (m as { key?: string }).key?.startsWith('tempId:'))
+      .map(m => m as unknown as TempIdMapping);
+  } catch {
+    return [];
+  }
+}
+
+async function saveTempIdMapping(tempId: number, serverId: number, entity: string): Promise<void> {
+  const mapping = { key: `tempId:${entity}:${tempId}`, tempId, serverId, entity };
+  await putInStore('metadata', mapping);
+}
+
+async function getServerIdForTemp(tempId: number, entity: string): Promise<number | null> {
+  try {
+    const mapping = await getFromStore<{ tempId: number; serverId: number }>('metadata', `tempId:${entity}:${tempId}`);
+    return mapping?.serverId ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
 
@@ -156,15 +189,41 @@ class SyncManager {
 
     switch (item.action) {
       case 'create':
-        await apiRequest('POST', endpoint, item.data);
+        const response = await apiRequest('POST', endpoint, item.data);
+        const created = await response.json();
+        if (item.tempId && created.id) {
+          console.log(`[SyncManager] ID reconciliation: temp ${item.tempId} -> server ${created.id}`);
+          await saveTempIdMapping(item.tempId, created.id, item.entity);
+          await deleteFromStore(item.entity, item.tempId);
+          await putInStore(item.entity, created);
+        }
         break;
       case 'update':
         const updateData = item.data as { id: number; [key: string]: unknown };
-        await apiRequest('PATCH', `${endpoint}/${updateData.id}`, item.data);
+        let updateId = updateData.id;
+        if (item.tempId) {
+          const mappedId = await getServerIdForTemp(item.tempId, item.entity);
+          if (mappedId) {
+            updateId = mappedId;
+            console.log(`[SyncManager] Using mapped ID for update: ${item.tempId} -> ${updateId}`);
+          }
+        }
+        if (updateId > 0) {
+          await apiRequest('PATCH', `${endpoint}/${updateId}`, { ...item.data, id: updateId });
+        } else {
+          console.log(`[SyncManager] Skipping update for unsynced temp ID: ${updateId}`);
+        }
         break;
       case 'delete':
         const deleteData = item.data as { id: number };
-        await apiRequest('DELETE', `${endpoint}/${deleteData.id}`);
+        let deleteId = deleteData.id;
+        if (deleteId < 0) {
+          const mappedId = await getServerIdForTemp(deleteId, item.entity);
+          if (mappedId) deleteId = mappedId;
+        }
+        if (deleteId > 0) {
+          await apiRequest('DELETE', `${endpoint}/${deleteId}`);
+        }
         break;
     }
   }

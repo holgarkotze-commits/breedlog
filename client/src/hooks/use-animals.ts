@@ -2,23 +2,42 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertAnimal, type AnimalWithRelations } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue } from "@/lib/indexeddb";
 
 export function useAnimals(filters?: { search?: string; status?: string; sex?: string }) {
-  // Construct query key including filters to ensure refetch on filter change
   const queryKey = [api.animals.list.path, filters];
   
   return useQuery({
     queryKey,
     queryFn: async () => {
-      // Build URL with query params
       const url = new URL(api.animals.list.path, window.location.origin);
       if (filters?.search) url.searchParams.append("search", filters.search);
       if (filters?.status) url.searchParams.append("status", filters.status);
       if (filters?.sex) url.searchParams.append("sex", filters.sex);
 
-      const res = await fetch(url.toString(), { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch animals");
-      return api.animals.list.responses[200].parse(await res.json());
+      try {
+        const res = await fetch(url.toString(), { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to fetch animals");
+        const data = api.animals.list.responses[200].parse(await res.json());
+        await putManyInStore("animals", data);
+        return data;
+      } catch (error) {
+        if (!navigator.onLine) {
+          console.log("[useAnimals] Offline, fetching from IndexedDB");
+          let animals = await getAllFromStore<AnimalWithRelations>("animals");
+          if (filters?.search) {
+            const searchLower = filters.search.toLowerCase();
+            animals = animals.filter(a => 
+              a.tagId.toLowerCase().includes(searchLower) || 
+              a.name?.toLowerCase().includes(searchLower)
+            );
+          }
+          if (filters?.status) animals = animals.filter(a => a.status === filters.status);
+          if (filters?.sex) animals = animals.filter(a => a.sex === filters.sex);
+          return animals;
+        }
+        throw error;
+      }
     },
   });
 }
@@ -28,9 +47,20 @@ export function useAnimal(id: number) {
     queryKey: [api.animals.get.path, id],
     queryFn: async () => {
       const url = buildUrl(api.animals.get.path, { id });
-      const res = await fetch(url, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch animal details");
-      return api.animals.get.responses[200].parse(await res.json());
+      try {
+        const res = await fetch(url, { credentials: "include" });
+        if (!res.ok) throw new Error("Failed to fetch animal details");
+        const data = api.animals.get.responses[200].parse(await res.json());
+        await putInStore("animals", data);
+        return data;
+      } catch (error) {
+        if (!navigator.onLine) {
+          console.log("[useAnimal] Offline, fetching from IndexedDB");
+          const cached = await getFromStore<AnimalWithRelations>("animals", id);
+          if (cached) return cached;
+        }
+        throw error;
+      }
     },
     enabled: !!id,
   });
@@ -42,7 +72,15 @@ export function useCreateAnimal() {
 
   return useMutation({
     mutationFn: async (data: InsertAnimal) => {
-      // Transform dates to strings if strictly needed by API, though JSON stringify usually handles ISO
+      if (!navigator.onLine) {
+        const tempId = -Date.now();
+        const offlineAnimal = { ...data, id: tempId, createdAt: new Date() } as AnimalWithRelations;
+        await putInStore("animals", offlineAnimal);
+        await addToSyncQueue({ action: "create", entity: "animals", data, tempId });
+        console.log("[useCreateAnimal] Offline - saved locally with temp ID:", tempId);
+        return offlineAnimal;
+      }
+      
       const res = await fetch(api.animals.create.path, {
         method: api.animals.create.method,
         headers: { "Content-Type": "application/json" },
@@ -53,11 +91,18 @@ export function useCreateAnimal() {
         const error = await res.json();
         throw new Error(error.message || "Failed to create animal");
       }
-      return api.animals.create.responses[201].parse(await res.json());
+      const created = api.animals.create.responses[201].parse(await res.json());
+      await putInStore("animals", created);
+      return created;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
-      toast({ title: "Success", description: "Animal created successfully", variant: "default" });
+      const isOffline = (data.id as number) < 0;
+      toast({ 
+        title: isOffline ? "Saved Offline" : "Success", 
+        description: isOffline ? "Animal will sync when online" : "Animal created successfully", 
+        variant: "default" 
+      });
     },
     onError: (error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -71,6 +116,24 @@ export function useUpdateAnimal() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: number } & Partial<InsertAnimal>) => {
+      const existing = await getFromStore<AnimalWithRelations>("animals", id);
+      const updated = existing 
+        ? { ...existing, ...updates, id } as AnimalWithRelations
+        : { ...updates, id } as AnimalWithRelations;
+      await putInStore("animals", updated);
+      
+      if (!navigator.onLine) {
+        const isTempId = id < 0;
+        await addToSyncQueue({ 
+          action: "update", 
+          entity: "animals", 
+          data: { id, ...updates },
+          ...(isTempId ? { tempId: id } : {})
+        });
+        console.log("[useUpdateAnimal] Offline - queued update for ID:", id);
+        return updated;
+      }
+      
       const url = buildUrl(api.animals.update.path, { id });
       const res = await fetch(url, {
         method: api.animals.update.method,
@@ -79,7 +142,9 @@ export function useUpdateAnimal() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to update animal");
-      return api.animals.update.responses[200].parse(await res.json());
+      const serverData = api.animals.update.responses[200].parse(await res.json());
+      await putInStore("animals", serverData);
+      return serverData;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
