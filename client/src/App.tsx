@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { FarmSetupDialog } from "@/components/FarmSetupDialog";
+import { OfflineBanner } from "@/components/NetworkStatusIndicator";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { useState, useEffect } from "react";
 
 import NotFound from "@/pages/not-found";
@@ -49,7 +51,9 @@ function AppContent() {
 
   return (
     <>
+      <OfflineBanner />
       <FarmSetupDialog open={showSetup} onComplete={handleSetupComplete} />
+      <PWAInstallPrompt />
       <Router />
     </>
   );

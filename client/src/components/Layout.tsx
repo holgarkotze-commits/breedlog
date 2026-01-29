@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useRecentVisits } from "@/hooks/use-recent-visits";
+import { NetworkStatusIndicator } from "@/components/NetworkStatusIndicator";
 
 function ScrambleText({ text, className }: { text: string; className?: string }) {
   const [displayText, setDisplayText] = useState("");
@@ -104,8 +105,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         <div className="p-4 border-t border-border">
           <div className="bg-secondary/50 p-3 rounded-md">
-            <p className="text-xs text-muted-foreground font-mono">BreedLog v1.0.0</p>
-            <p className="text-xs text-primary/80 mt-1 font-bold">ONLINE</p>
+            <p className="text-xs text-muted-foreground font-mono mb-2">BreedLog v1.0.0</p>
+            <NetworkStatusIndicator />
           </div>
         </div>
       </aside>
