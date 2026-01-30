@@ -53,6 +53,7 @@ export interface IStorage {
   // Breeding
   getBreedingEvents(): Promise<BreedingEvent[]>;
   createBreedingEvent(event: InsertBreedingEvent): Promise<BreedingEvent>;
+  deleteBreedingEvent(id: number): Promise<void>;
   getOffspringByBreedingEvent(eventId: number): Promise<Offspring[]>;
   createOffspring(offspring: InsertOffspring): Promise<Offspring>;
   
@@ -146,6 +147,10 @@ export class DatabaseStorage implements IStorage {
   async createBreedingEvent(event: InsertBreedingEvent): Promise<BreedingEvent> {
     const [newEvent] = await db.insert(breedingEvents).values(event).returning();
     return newEvent;
+  }
+
+  async deleteBreedingEvent(id: number): Promise<void> {
+    await db.delete(breedingEvents).where(eq(breedingEvents.id, id));
   }
 
   async getOffspringByBreedingEvent(eventId: number): Promise<Offspring[]> {

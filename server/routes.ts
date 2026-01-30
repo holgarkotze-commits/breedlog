@@ -325,6 +325,20 @@ export async function registerRoutes(
       throw err;
     }
   });
+
+  app.delete("/api/breeding/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid breeding event ID" });
+      }
+      await storage.deleteBreedingEvent(id);
+      res.status(200).json({ message: "Breeding event deleted" });
+    } catch (err) {
+      console.error("Error deleting breeding event:", err);
+      res.status(500).json({ message: "Failed to delete breeding event" });
+    }
+  });
   
   app.get(api.breeding.groups.list.path, async (req, res) => {
       const groups = await storage.getMatingGroups();
