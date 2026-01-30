@@ -14,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAnimalSchema, type Animal, type BreedingEvent } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3, LogOut, Scale, Tag, ChevronRight } from "lucide-react";
+import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3, LogOut, Scale, Tag, ChevronRight, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -1087,6 +1087,176 @@ export default function Animals() {
     toast({ title: "PDF Ready", description: "Ewes Register export opened for printing" });
   };
 
+  // Export Culled Animals PDF
+  const exportCulledPDF = () => {
+    if (!allAnimals) return;
+    const fb = farmSettings;
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    
+    const culledAnimals = allAnimals.filter(a => 
+      a.classification === 'slaughter_cull' || 
+      a.ramClass === 'cull' || 
+      a.eweLambClass === 'cull' || 
+      a.ramLambClass === 'cull'
+    );
+    
+    if (culledAnimals.length === 0) {
+      toast({ title: "No Culled Animals", description: "No animals marked for cull to export", variant: "destructive" });
+      return;
+    }
+    
+    const animalsPerPage = 12;
+    const totalPages = Math.ceil(culledAnimals.length / animalsPerPage);
+    
+    let pagesHtml = "";
+    for (let page = 0; page < Math.max(1, totalPages); page++) {
+      const startIdx = page * animalsPerPage;
+      const pageAnimals = culledAnimals.slice(startIdx, startIdx + animalsPerPage);
+      
+      const tableRows = pageAnimals.map((animal) => {
+        const ageMonths = animal.birthDate 
+          ? Math.floor((Date.now() - new Date(animal.birthDate).getTime()) / (1000 * 60 * 60 * 24 * 30))
+          : '-';
+        return `<tr>
+          <td class="photo-cell">
+            ${animal.photo 
+              ? `<img src="${animal.photo}" class="animal-photo" alt="${animal.tagId}" />`
+              : `<div class="no-photo"></div>`
+            }
+          </td>
+          <td><strong>${animal.tagId}</strong></td>
+          <td>${animal.sex || '-'}</td>
+          <td>${animal.birthDate ? format(new Date(animal.birthDate), "dd/MM/yyyy") : '-'}</td>
+          <td>${ageMonths}</td>
+          <td>${animal.currentWeight || '-'} kg</td>
+          <td>${animal.notes || '-'}</td>
+        </tr>`;
+      }).join('');
+      
+      pagesHtml += `
+        <div class="page">
+          <div class="header">
+            <div class="header-left">
+              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+            </div>
+            <div class="header-center">
+              <h1>${fb?.studName || fb?.farmName || "Culled Animals"}</h1>
+              <p class="subtitle">Slaughter/Cull Register</p>
+            </div>
+            <div class="header-right">
+              <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
+              <p>${exportDate}</p>
+            </div>
+          </div>
+          
+          <table class="animals-table">
+            <thead>
+              <tr>
+                <th class="photo-header">Photo</th>
+                <th>Tag ID</th>
+                <th>Sex</th>
+                <th>DOB</th>
+                <th>Age (Mo)</th>
+                <th>Weight</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+          
+          <div class="footer">
+            <div class="footer-info">
+              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+              <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
+            </div>
+            <div class="footer-branding">
+              <p class="breedlog-text">BREEDLOG</p>
+              <p class="tagline">Professional Livestock Management</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${fb?.studName || fb?.farmName || "BreedLog"} - Culled Animals</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #000; color: #FCD34D; }
+    .page { 
+      width: 277mm; height: 190mm; 
+      background: #000; padding: 8mm;
+      page-break-after: always;
+      display: flex; flex-direction: column;
+    }
+    .page:last-child { page-break-after: avoid; }
+    .header { 
+      display: flex; justify-content: space-between; 
+      align-items: center; margin-bottom: 6mm;
+      padding-bottom: 4mm; border-bottom: 2px solid #FCD34D;
+    }
+    .header-center h1 { font-size: 20pt; color: #FCD34D; }
+    .header-center .subtitle { font-size: 10pt; color: #888; }
+    .header-right { text-align: right; font-size: 9pt; color: #888; }
+    .animals-table { 
+      width: 100%; border-collapse: collapse; 
+      flex: 1; font-size: 9pt;
+    }
+    .animals-table th, .animals-table td { 
+      padding: 4px 6px; text-align: left; 
+      border-bottom: 1px solid #333;
+    }
+    .animals-table th { 
+      background: #1a1a1a; color: #FCD34D; 
+      font-weight: bold; font-size: 8pt;
+    }
+    .photo-header { width: 50px; }
+    .photo-cell { width: 50px; padding: 2px; }
+    .animal-photo { 
+      width: 45px; height: 45px; 
+      object-fit: cover; border-radius: 4px;
+      border: 1px solid #FCD34D;
+    }
+    .no-photo { 
+      width: 45px; height: 45px; 
+      background: #1a1a1a; border-radius: 4px;
+      border: 1px solid #333;
+    }
+    .footer { 
+      display: flex; justify-content: space-between;
+      padding-top: 4mm; margin-top: auto;
+      border-top: 1px solid #333; font-size: 8pt;
+    }
+    .footer-title { color: #FCD34D; font-weight: bold; }
+    .breedlog-text { color: #FCD34D; font-weight: bold; letter-spacing: 2px; }
+    .tagline { color: #666; font-size: 7pt; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>${pagesHtml}</body>
+</html>`;
+    
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 500);
+    }
+    createExportedDoc.mutate({
+      name: getDocumentFileName("CulledAnimals", "Full"),
+      documentType: "herd",
+      subfolder: "herd"
+    });
+    toast({ title: "PDF Ready", description: "Culled Animals export opened for printing" });
+  };
+
   // Update filters when URL changes
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
@@ -1169,6 +1339,12 @@ export default function Animals() {
                   data-testid="export-lambs"
                 >
                   Export Lambs Only (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={exportCulledPDF}
+                  data-testid="export-culled"
+                >
+                  Export Culled Animals (PDF)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -2291,6 +2467,33 @@ function LambsSection({
                             <Tag className="w-4 h-4 mr-2" />
                             Mark for Cull
                           </DropdownMenuItem>
+                          {lamb.sex === 'ewe' && (
+                            <DropdownMenuItem 
+                              onClick={() => {
+                                moveToEwesMutation.mutate(lamb.id, {
+                                  onSuccess: () => {
+                                    toast({ title: "Moved to Ewes", description: `${lamb.tagId} has been moved to the Ewes section` });
+                                  }
+                                });
+                              }}
+                              data-testid={`action-move-ewes-${lamb.id}`}
+                            >
+                              <UserPlus className="w-4 h-4 mr-2" />
+                              Move to Ewes
+                            </DropdownMenuItem>
+                          )}
+                          {lamb.sex === 'ram' && (
+                            <DropdownMenuItem 
+                              onClick={() => {
+                                setSelectedAnimal(lamb);
+                                setShowPromoteDialog(true);
+                              }}
+                              data-testid={`action-move-rams-${lamb.id}`}
+                            >
+                              <UserPlus className="w-4 h-4 mr-2" />
+                              Move to Rams
+                            </DropdownMenuItem>
+                          )}
                           {lamb.ramLambClass === 'cull' && (
                             <DropdownMenuItem 
                               onClick={() => {
