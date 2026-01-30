@@ -361,12 +361,12 @@ export default function Dashboard() {
           </Card>
 
           {/* Birth Ratio Chart - Ram vs Ewe Lambs */}
-          <Card className="rugged-card bg-card">
-            <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
-              <CardTitle className="text-sm md:text-base font-semibold">Birth Ratio {new Date().getFullYear()} (Ram vs Ewe Lambs)</CardTitle>
-            </CardHeader>
-            <CardContent className="p-2 md:p-6 pt-0">
-              <div className="h-[160px] md:h-[260px] w-full">
+          <div className="flex flex-col">
+            <Card className="rugged-card bg-card">
+              <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
+                <CardTitle className="text-sm md:text-base font-semibold">Birth Ratio {new Date().getFullYear()} (Ram vs Ewe Lambs)</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[180px] md:h-[300px] w-full p-2 md:p-6 pt-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={birthRatioData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
@@ -381,20 +381,20 @@ export default function Dashboard() {
                     <Bar dataKey="eweLambs" name="Ewe Lambs" fill="#ec4899" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
-              {/* Ratio Summary */}
-              <div className="mt-2 md:mt-4 pt-2 md:pt-3 border-t border-border/50 text-center" data-testid="birth-ratio-summary">
-                <p className="text-xs md:text-sm text-muted-foreground">
-                  <span className="text-pink-500 font-semibold">Ewe Lambs</span>
-                  {" vs "}
-                  <span className="text-blue-500 font-semibold">Ram Lambs</span>
-                </p>
-                <p className="text-lg md:text-2xl font-bold text-foreground mt-1" data-testid="birth-ratio-value">
-                  {birthRatioText}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+            {/* Ratio Summary - Below the card */}
+            <div className="mt-3 md:mt-4 text-center" data-testid="birth-ratio-summary">
+              <p className="text-xs md:text-sm text-muted-foreground">
+                <span className="text-pink-500 font-semibold">Ewe Lambs</span>
+                {" vs "}
+                <span className="text-blue-500 font-semibold">Ram Lambs</span>
+              </p>
+              <p className="text-lg md:text-2xl font-bold text-foreground mt-1" data-testid="birth-ratio-value">
+                {birthRatioText}
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Encouraging message */}
