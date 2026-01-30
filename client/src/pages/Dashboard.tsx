@@ -95,6 +95,11 @@ export default function Dashboard() {
   
   const slaughterCullWeightData = getSlaughterCullWeightData();
   
+  // Count of slaughter/cull animals with weights for display
+  const slaughterCullCount = animals?.filter(a => 
+    (a.classification === 'slaughter_cull' || a.ramLambClass === 'cull') && a.currentWeight
+  ).length || 0;
+  
   // Calculate birth ratio data (Ram Lambs vs Ewe Lambs) for current year
   const getBirthRatioData = () => {
     const now = new Date();
@@ -333,32 +338,37 @@ export default function Dashboard() {
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-8 items-start">
           {/* Slaughter/Cull Weight Chart */}
-          <Card className="rugged-card bg-card h-[240px] md:h-[380px]">
-            <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
-              <CardTitle className="text-sm md:text-base font-semibold">Avg. Slaughter/Cull Weight</CardTitle>
-            </CardHeader>
-            <CardContent className="h-[180px] md:h-[300px] w-full p-2 md:p-6 pt-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={slaughterCullWeightData}>
-                  <defs>
-                    <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#FFC300" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#FFC300" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                  <XAxis dataKey="month" stroke="#666" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} unit="kg" width={35} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
-                    itemStyle={{ color: '#fff' }}
-                    formatter={(value: number) => [`${value} kg`, 'Avg Weight']}
-                  />
-                  <Area type="monotone" dataKey="avg" stroke="#FFC300" strokeWidth={2} fillOpacity={1} fill="url(#colorAvg)" name="Avg Weight" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          <div className="flex flex-col">
+            <Card className="rugged-card bg-card h-[240px] md:h-[380px]">
+              <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
+                <CardTitle className="text-sm md:text-base font-semibold">Avg. Slaughter/Cull Weight</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[180px] md:h-[300px] w-full p-2 md:p-6 pt-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={slaughterCullWeightData}>
+                    <defs>
+                      <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#FFC300" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#FFC300" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                    <XAxis dataKey="month" stroke="#666" fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} unit="kg" width={35} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
+                      itemStyle={{ color: '#fff' }}
+                      formatter={(value: number) => [`${value} kg`, 'Avg Weight']}
+                    />
+                    <Area type="monotone" dataKey="avg" stroke="#FFC300" strokeWidth={2} fillOpacity={1} fill="url(#colorAvg)" name="Avg Weight" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <p className="text-xs md:text-sm text-muted-foreground mt-2 text-center" data-testid="text-cull-count">
+              Based on {slaughterCullCount} animal{slaughterCullCount !== 1 ? 's' : ''} with recorded weights
+            </p>
+          </div>
 
           {/* Birth Ratio Chart - Ram vs Ewe Lambs */}
           <div className="flex flex-col">
