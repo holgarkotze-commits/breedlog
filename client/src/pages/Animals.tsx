@@ -1200,7 +1200,7 @@ export default function Animals() {
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="ewe">Ewes</SelectItem>
                 <SelectItem value="ram">Rams</SelectItem>
-                <SelectItem value="wether">Wethers</SelectItem>
+                <SelectItem value="wether">Lambs</SelectItem>
               </SelectContent>
             </Select>
             {/* View Mode Toggle */}
@@ -2502,7 +2502,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                       <SelectContent>
                         <SelectItem value="ram">Ram</SelectItem>
                         <SelectItem value="ewe">Ewe</SelectItem>
-                        <SelectItem value="wether">Wether</SelectItem>
+                        <SelectItem value="wether">Lamb</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />

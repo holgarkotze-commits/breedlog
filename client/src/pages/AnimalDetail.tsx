@@ -1409,7 +1409,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                                 <SelectContent>
                                     <SelectItem value="ram">Ram</SelectItem>
                                     <SelectItem value="ewe">Ewe</SelectItem>
-                                    <SelectItem value="wether">Wether</SelectItem>
+                                    <SelectItem value="wether">Lamb</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
