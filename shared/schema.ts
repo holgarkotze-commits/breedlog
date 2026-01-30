@@ -378,6 +378,7 @@ export type InsertExportedDocument = z.infer<typeof insertExportedDocumentSchema
 // Master event record for flock-wide health treatments
 export const flockHealthEvents = pgTable("flock_health_events", {
   id: serial("id").primaryKey(),
+  eventName: text("event_name").notNull().default("Health Treatment"), // User-defined label for the event
   eventDate: date("event_date").notNull(),
   productName: text("product_name").notNull(),
   route: text("route").notNull(), // intravenous, intramuscular, subcutaneous
