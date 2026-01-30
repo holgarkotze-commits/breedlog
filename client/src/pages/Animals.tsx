@@ -2037,33 +2037,27 @@ function LambsSection({
                             <Scale className="w-4 h-4 mr-2" />
                             Record Weight
                           </DropdownMenuItem>
-                          {lamb.sex === 'ram' && (
-                            <>
-                              <DropdownMenuItem onClick={() => handleClassify(lamb, 'stud')} data-testid={`action-stud-${lamb.id}`}>
-                                <Tag className="w-4 h-4 mr-2" />
-                                Mark as Stud
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleClassify(lamb, 'commercial')} data-testid={`action-commercial-${lamb.id}`}>
-                                <Tag className="w-4 h-4 mr-2" />
-                                Mark as Commercial
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleClassify(lamb, 'cull')}
-                                className="text-destructive"
-                                data-testid={`action-cull-class-${lamb.id}`}
-                              >
-                                <Tag className="w-4 h-4 mr-2" />
-                                Mark for Cull
-                              </DropdownMenuItem>
-                            </>
-                          )}
+                          <DropdownMenuItem onClick={() => handleClassify(lamb, 'stud')} data-testid={`action-stud-${lamb.id}`}>
+                            <Tag className="w-4 h-4 mr-2" />
+                            Mark as Stud
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleClassify(lamb, 'commercial')} data-testid={`action-commercial-${lamb.id}`}>
+                            <Tag className="w-4 h-4 mr-2" />
+                            Mark as Commercial
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleClassify(lamb, 'cull')}
+                            data-testid={`action-cull-class-${lamb.id}`}
+                          >
+                            <Tag className="w-4 h-4 mr-2" />
+                            Mark for Cull
+                          </DropdownMenuItem>
                           {lamb.ramLambClass === 'cull' && (
                             <DropdownMenuItem 
                               onClick={() => {
                                 setSelectedAnimal(lamb);
                                 setShowCullConfirm(true);
                               }}
-                              className="text-destructive"
                               data-testid={`action-confirm-cull-${lamb.id}`}
                             >
                               <Trash2 className="w-4 h-4 mr-2" />

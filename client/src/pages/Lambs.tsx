@@ -342,7 +342,6 @@ export default function Lambs() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
                               onClick={() => handleClassify(lamb, "cull")}
-                              className="text-destructive"
                               data-testid={`classify-cull-${lamb.id}`}
                             >
                               Mark for Cull
@@ -416,7 +415,6 @@ export default function Lambs() {
                               setSelectedAnimal(lamb);
                               setShowCullConfirm(true);
                             }}
-                            className="text-destructive"
                             data-testid={`remove-cull-${lamb.id}`}
                           >
                             Cull Animal
