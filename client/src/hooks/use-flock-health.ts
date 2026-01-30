@@ -57,6 +57,7 @@ export function useFlockHealthEvent(id: number) {
 }
 
 export interface CreateFlockHealthEventInput {
+  eventName: string;
   eventDate: string;
   productName: string;
   route: string;

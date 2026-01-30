@@ -4,7 +4,6 @@ import { useMatingGroups, useCreateMatingGroup, useUpdateMatingGroup, useDeleteM
 import { useAnimals } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
-import { useFlockHealthEvents, useCreateFlockHealthEvent } from "@/hooks/use-flock-health";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,7 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertBreedingEventSchema, insertMatingGroupSchema, type MatingGroup } from "@shared/schema";
-import { Plus, Calendar, Shield, Heart, Users, Download, Pencil, Trash2, Archive, Syringe, ChevronRight } from "lucide-react";
+import { Plus, Calendar, Shield, Heart, Users, Download, Pencil, Trash2, Archive, ChevronRight } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format, addDays, addMonths } from "date-fns";
 import { useState } from "react";
@@ -35,7 +34,6 @@ export default function Breeding() {
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [openRecord, setOpenRecord] = useState(false);
   const [openMatingGroup, setOpenMatingGroup] = useState(false);
-  const [openFlockHealth, setOpenFlockHealth] = useState(false);
   const [editingGroup, setEditingGroup] = useState<MatingGroup | null>(null);
 
   const createExportedDoc = useCreateExportedDocument();
@@ -403,12 +401,8 @@ ${g.notes ? `<p style="margin-top: 8px; font-size: 9pt; color: #555; padding: 0 
             {displayName ? `${displayName} - Breeding` : "Breeding Program"}
           </h1>
           <div className="flex flex-wrap gap-2 items-center">
-            <RecordEventDropdown 
-              onOpenMating={() => setOpenRecord(true)} 
-              onOpenFlockHealth={() => setOpenFlockHealth(true)} 
-            />
+            <RecordEventButton onOpenMating={() => setOpenRecord(true)} />
             <RecordBreedingDialog open={openRecord} onOpenChange={setOpenRecord} />
-            <FlockHealthEventDialog open={openFlockHealth} onOpenChange={setOpenFlockHealth} />
           </div>
         </div>
 
@@ -798,33 +792,15 @@ function CreateMatingGroupDialog({ open, onOpenChange }: { open: boolean, onOpen
   );
 }
 
-function RecordEventDropdown({ onOpenMating, onOpenFlockHealth }: { onOpenMating: () => void, onOpenFlockHealth: () => void }) {
+function RecordEventButton({ onOpenMating }: { onOpenMating: () => void }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button data-testid="button-record-event" className="rugged-btn bg-primary text-black">
-          <Plus className="w-4 h-4 mr-2" /> Record Event
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem 
-          onClick={onOpenMating}
-          data-testid="menu-mating-event"
-          className="gap-2 cursor-pointer"
-        >
-          <Heart className="w-4 h-4 text-pink-400" />
-          Mating Event
-        </DropdownMenuItem>
-        <DropdownMenuItem 
-          onClick={onOpenFlockHealth}
-          data-testid="menu-flock-health"
-          className="gap-2 cursor-pointer"
-        >
-          <Syringe className="w-4 h-4 text-green-400" />
-          Flock Health Treatment
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Button 
+      onClick={onOpenMating}
+      data-testid="button-record-event" 
+      className="rugged-btn bg-primary text-black"
+    >
+      <Plus className="w-4 h-4 mr-2" /> Record Mating
+    </Button>
   );
 }
 
@@ -1230,290 +1206,3 @@ function ArchiveMatingGroupButton({ group }: { group: MatingGroup }) {
   );
 }
 
-const flockHealthFormSchema = z.object({
-  eventDate: z.string().min(1, "Event date is required"),
-  productName: z.string().min(1, "Product name is required"),
-  route: z.enum(["intravenous", "intramuscular", "subcutaneous"]),
-  notes: z.string().optional(),
-});
-
-function FlockHealthEventDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
-  const { mutate, isPending } = useCreateFlockHealthEvent();
-  const { data: animals } = useAnimals({});
-  const { data: farmSettings } = useFarmSettings();
-  const createExportedDoc = useCreateExportedDocument();
-  const displayName = farmSettings?.studName || farmSettings?.farmName;
-  const { toast } = useToast();
-  
-  const activeAnimals = animals?.filter(a => a.status === 'active') || [];
-  const [treatAll, setTreatAll] = useState(true);
-  const [selectedAnimals, setSelectedAnimals] = useState<number[]>([]);
-  
-  const form = useForm({
-    resolver: zodResolver(flockHealthFormSchema),
-    defaultValues: {
-      eventDate: new Date().toISOString().split('T')[0],
-      productName: "",
-      route: "intramuscular",
-      notes: "",
-    }
-  });
-
-  const toggleAnimal = (animalId: number) => {
-    setSelectedAnimals(prev => 
-      prev.includes(animalId) 
-        ? prev.filter(id => id !== animalId)
-        : [...prev, animalId]
-    );
-  };
-
-  const buildTreatments = (route: string) => {
-    const targetAnimals = treatAll ? activeAnimals : activeAnimals.filter(a => selectedAnimals.includes(a.id));
-    return targetAnimals.map(a => ({
-      animalId: a.id,
-      quantity: "2",
-      route: route,
-      notes: "",
-    }));
-  };
-
-  const exportFlockHealthPDF = (eventData: any, treatmentList: any[]) => {
-    const content = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-@page { size: A4 portrait; margin: 10mm; }
-body { font-family: Arial, sans-serif; font-size: 10pt; color: #333; margin: 0; padding: 0; }
-.header { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 2px solid #FFC300; margin-bottom: 15px; }
-.header-left { flex: 1; }
-.header-center { flex: 2; text-align: center; }
-.header-right { flex: 1; text-align: right; font-size: 9pt; }
-h1 { margin: 0; font-size: 16pt; color: #FFC300; }
-.summary { background: #f5f5f5; padding: 10px; margin-bottom: 15px; border-radius: 4px; }
-.summary p { margin: 3px 0; }
-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-th { background: #FFC300; color: #000; padding: 8px; text-align: left; font-weight: bold; }
-td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
-tr:nth-child(even) { background: #f9f9f9; }
-.footer { position: fixed; bottom: 10mm; left: 10mm; right: 10mm; text-align: center; padding: 8px; background: #1a1a1a; color: #FFC300; }
-.footer-brand { font-weight: bold; }
-.footer-tagline { font-size: 8pt; color: #aaa; }
-</style>
-</head>
-<body>
-<div class="header">
-<div class="header-left">
-${farmSettings?.logoUrl ? `<img src="${farmSettings.logoUrl}" style="width: 50px; height: 50px; object-fit: contain;" alt="Logo" />` : ''}
-</div>
-<div class="header-center">
-<h1>Flock Health Treatment Record</h1>
-<p>${displayName || "BreedLog"}</p>
-</div>
-<div class="header-right">
-<div>Date: ${format(new Date(), "dd MMM yyyy")}</div>
-</div>
-</div>
-
-<div class="summary">
-<p><strong>Event Date:</strong> ${eventData.eventDate}</p>
-<p><strong>Product Name:</strong> ${eventData.productName}</p>
-<p><strong>Route:</strong> ${eventData.route}</p>
-<p><strong>Treated:</strong> ${treatAll ? `All Active Animals (${treatmentList.length})` : `Selected Animals (${treatmentList.length})`}</p>
-${eventData.notes ? `<p><strong>Notes:</strong> ${eventData.notes}</p>` : ''}
-</div>
-
-<table>
-<thead>
-<tr>
-<th>Date</th>
-<th>Animal ID</th>
-<th>Product Name</th>
-<th>Qty (ml)</th>
-<th>Route</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>
-${treatmentList.map(t => {
-  const animal = activeAnimals.find(a => a.id === t.animalId);
-  return `<tr>
-<td>${eventData.eventDate}</td>
-<td>${animal?.tagId || t.animalId}</td>
-<td>${eventData.productName}</td>
-<td>${t.quantity}</td>
-<td>${t.route}</td>
-<td>${t.notes || "—"}</td>
-</tr>`;
-}).join("")}
-</tbody>
-</table>
-
-<div class="footer">
-<div class="footer-brand">BREEDLOG</div>
-<div class="footer-tagline">Professional Livestock Management</div>
-</div>
-</body>
-</html>`;
-    
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(content);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 250);
-    }
-  };
-
-  const onSubmit = (data: any) => {
-    const treatmentList = buildTreatments(data.route);
-    
-    mutate({
-      eventDate: data.eventDate,
-      productName: data.productName,
-      route: data.route,
-      treatAllAnimals: treatAll,
-      notes: data.notes || undefined,
-      treatments: treatmentList,
-    }, { 
-      onSuccess: () => {
-        exportFlockHealthPDF(data, treatmentList);
-        createExportedDoc.mutate({
-          name: `Flock Health - ${data.productName} - ${format(new Date(data.eventDate), "dd MMM yyyy")}`,
-          documentType: "productivity",
-          subfolder: "flock-health"
-        });
-        toast({ title: "Treatment Recorded", description: `${treatmentList.length} animals treated` });
-        onOpenChange(false);
-        form.reset();
-        setSelectedAnimals([]);
-        setTreatAll(true);
-      }
-    });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="uppercase font-bold flex items-center gap-2">
-            <Syringe className="w-5 h-5 text-primary" /> Flock Health Treatment
-          </DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField name="eventDate" control={form.control} render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Event Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" className="rugged-input" {...field} />
-                  </FormControl>
-                  <FormMessage/>
-                </FormItem>
-              )}/>
-              
-              <FormField name="productName" control={form.control} render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Product Name *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Multimin, Ivermectin" className="rugged-input" {...field} />
-                  </FormControl>
-                  <FormMessage/>
-                </FormItem>
-              )}/>
-            </div>
-
-            <FormField name="route" control={form.control} render={({ field }) => (
-              <FormItem>
-                <FormLabel>Route *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="rugged-input">
-                      <SelectValue placeholder="Select route..." />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="intravenous">Intravenous (IV)</SelectItem>
-                    <SelectItem value="intramuscular">Intramuscular (IM)</SelectItem>
-                    <SelectItem value="subcutaneous">Subcutaneous (SC)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage/>
-              </FormItem>
-            )}/>
-
-            <FormField name="notes" control={form.control} render={({ field }) => (
-              <FormItem>
-                <FormLabel>Notes (Optional)</FormLabel>
-                <FormControl>
-                  <Textarea placeholder="Additional notes..." className="rugged-input" {...field} />
-                </FormControl>
-              </FormItem>
-            )}/>
-
-            <div className="space-y-2">
-              <FormLabel>Treat Which Animals?</FormLabel>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={treatAll ? "default" : "outline"}
-                  onClick={() => setTreatAll(true)}
-                  className={treatAll ? "bg-primary text-black" : ""}
-                  data-testid="button-treat-all"
-                >
-                  Treat All Active Animals ({activeAnimals.length})
-                </Button>
-                <Button
-                  type="button"
-                  variant={!treatAll ? "default" : "outline"}
-                  onClick={() => setTreatAll(false)}
-                  className={!treatAll ? "bg-primary text-black" : ""}
-                  data-testid="button-select-individual"
-                >
-                  Select Individual Animals
-                </Button>
-              </div>
-            </div>
-
-            {!treatAll && (
-              <div className="space-y-2">
-                <FormLabel>Select Animals ({selectedAnimals.length} selected)</FormLabel>
-                <div className="max-h-40 overflow-y-auto border border-border rounded-md p-2 space-y-1">
-                  {activeAnimals.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-2">No active animals</p>
-                  ) : (
-                    activeAnimals.map(animal => (
-                      <label 
-                        key={animal.id} 
-                        className="flex items-center gap-2 p-1.5 rounded hover:bg-secondary cursor-pointer text-sm"
-                      >
-                        <Checkbox 
-                          checked={selectedAnimals.includes(animal.id)}
-                          onCheckedChange={() => toggleAnimal(animal.id)}
-                        />
-                        <span>{animal.tagId}</span>
-                        {animal.name && <span className="text-muted-foreground">({animal.name})</span>}
-                        <Badge variant="outline" className="ml-auto text-xs">
-                          {animal.sex === 'ram' ? 'Ram' : animal.sex === 'ewe' ? 'Ewe' : 'Lamb'}
-                        </Badge>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
-            <Button 
-              type="submit" 
-              disabled={isPending || (!treatAll && selectedAnimals.length === 0)} 
-              data-testid="button-save-flock-health" 
-              className="w-full rugged-btn bg-primary text-black"
-            >
-              {isPending ? "Saving..." : "Save & Export PDF"}
-            </Button>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}

@@ -16,6 +16,8 @@ import AnimalDetail from "@/pages/AnimalDetail";
 import Breeding from "@/pages/Breeding";
 import MatingGroupDetail from "@/pages/MatingGroupDetail";
 import BreedingEventDetail from "@/pages/BreedingEventDetail";
+import Health from "@/pages/Health";
+import HealthEventDetail from "@/pages/HealthEventDetail";
 import Settings from "@/pages/Settings";
 import Lambs from "@/pages/Lambs";
 import Records from "@/pages/Records";
@@ -30,6 +32,8 @@ function Router() {
       <Route path="/breeding" component={Breeding} />
       <Route path="/breeding/groups/:id" component={MatingGroupDetail} />
       <Route path="/breeding/events/:id" component={BreedingEventDetail} />
+      <Route path="/health" component={Health} />
+      <Route path="/health/:id" component={HealthEventDetail} />
       <Route path="/records" component={Records} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
