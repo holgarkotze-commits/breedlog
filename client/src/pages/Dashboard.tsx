@@ -73,9 +73,9 @@ export default function Dashboard() {
     for (let m = 0; m < 12; m++) {
       const monthName = format(new Date(currentYear, m, 1), 'MMM');
       
-      // Get slaughter/cull animals that have a current weight
+      // Get slaughter/cull animals that have a current weight (includes lambs marked as cull)
       const slaughterCullAnimals = animals?.filter(a => 
-        a.classification === 'slaughter_cull' && a.currentWeight
+        (a.classification === 'slaughter_cull' || a.ramLambClass === 'cull') && a.currentWeight
       ) || [];
       
       // Calculate average weight (using currentWeight)
