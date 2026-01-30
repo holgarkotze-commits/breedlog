@@ -400,10 +400,6 @@ ${g.notes ? `<p style="margin-top: 8px; font-size: 9pt; color: #555; padding: 0 
           <h1 className="text-lg md:text-3xl font-bold uppercase tracking-tight leading-tight" data-testid="page-title">
             {displayName ? `${displayName} - Breeding` : "Breeding Program"}
           </h1>
-          <div className="flex flex-wrap gap-2 items-center">
-            <RecordEventButton onOpenMating={() => setOpenRecord(true)} />
-            <RecordBreedingDialog open={openRecord} onOpenChange={setOpenRecord} />
-          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
