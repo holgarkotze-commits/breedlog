@@ -331,9 +331,9 @@ export default function Dashboard() {
         </Card>
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-8 items-start">
           {/* Slaughter/Cull Weight Chart */}
-          <Card className="rugged-card bg-card">
+          <Card className="rugged-card bg-card h-[240px] md:h-[380px]">
             <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
               <CardTitle className="text-sm md:text-base font-semibold">Avg. Slaughter/Cull Weight</CardTitle>
             </CardHeader>
@@ -362,7 +362,7 @@ export default function Dashboard() {
 
           {/* Birth Ratio Chart - Ram vs Ewe Lambs */}
           <div className="flex flex-col">
-            <Card className="rugged-card bg-card">
+            <Card className="rugged-card bg-card h-[240px] md:h-[380px]">
               <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
                 <CardTitle className="text-sm md:text-base font-semibold">Birth Ratio {new Date().getFullYear()} (Ram vs Ewe Lambs)</CardTitle>
               </CardHeader>
