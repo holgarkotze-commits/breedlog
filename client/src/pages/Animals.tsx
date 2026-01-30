@@ -1130,7 +1130,7 @@ export default function Animals() {
       <div className="space-y-2.5 md:space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col gap-2">
           <h1 className="text-lg md:text-3xl font-bold tracking-tight leading-tight" data-testid="page-title">
-            {displayName ? `${displayName} - My Herd` : "My Herd"}
+            {displayName ? `${displayName} - My Herd` : "My Herd"} ({allAnimals?.length || 0})
           </h1>
           <div className="flex flex-wrap gap-2 items-center">
             <DropdownMenu>
