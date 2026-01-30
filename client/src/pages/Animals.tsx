@@ -1352,6 +1352,8 @@ export default function Animals() {
           breedingEvents={breedingEvents || []} 
           onExport={exportRamsPDF}
           isLoading={isLoading}
+          updateAnimalMutation={updateAnimalMutation}
+          classifyMutation={classifyMutation}
         />
 
         {/* Dedicated EWES Section */}
@@ -1360,6 +1362,8 @@ export default function Animals() {
           breedingEvents={breedingEvents || []} 
           onExport={exportEwesPDF}
           isLoading={isLoading}
+          updateAnimalMutation={updateAnimalMutation}
+          classifyMutation={classifyMutation}
         />
 
         {/* Dedicated LAMBS Section */}
@@ -1430,15 +1434,53 @@ function RamsSection({
   allAnimals, 
   breedingEvents, 
   onExport,
-  isLoading 
+  isLoading,
+  updateAnimalMutation,
+  classifyMutation
 }: { 
   allAnimals: Animal[]; 
   breedingEvents: BreedingEvent[];
   onExport: () => void;
   isLoading: boolean;
+  updateAnimalMutation: ReturnType<typeof useUpdateAnimal>;
+  classifyMutation: ReturnType<typeof useClassifyRamLamb>;
 }) {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const [ramTypeFilter, setRamTypeFilter] = useState<"all" | "breeding_ram" | "stud_ram" | "commercial_ram">("all");
+  const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+  const [showWeightDialog, setShowWeightDialog] = useState(false);
+  const [weightValue, setWeightValue] = useState("");
+  const [weightType, setWeightType] = useState<"100" | "270" | "current">("current");
+  
+  const handleSaveWeight = () => {
+    if (!selectedAnimal || !weightValue) return;
+    const today = format(new Date(), "yyyy-MM-dd");
+    let updates: Record<string, string> = {};
+    if (weightType === "100") {
+      updates = { weight100Day: weightValue, weight100DayDate: today };
+    } else if (weightType === "270") {
+      updates = { weight270Day: weightValue, weight270DayDate: today };
+    } else {
+      updates = { currentWeight: weightValue };
+    }
+    updateAnimalMutation.mutate({ id: selectedAnimal.id, ...updates }, {
+      onSuccess: () => {
+        setShowWeightDialog(false);
+        setSelectedAnimal(null);
+        setWeightValue("");
+        toast({ title: "Weight Recorded", description: `Weight saved for ${selectedAnimal.tagId}` });
+      }
+    });
+  };
+  
+  const handleClassify = (animal: Animal, classification: string) => {
+    classifyMutation.mutate({ id: animal.id, ramLambClass: classification }, {
+      onSuccess: () => {
+        toast({ title: "Classification Updated", description: `${animal.tagId} marked as ${classification}` });
+      }
+    });
+  };
   
   // Helper: check if animal is under 1 year old (lamb)
   const isLamb = (animal: Animal) => {
@@ -1558,6 +1600,7 @@ function RamsSection({
                 <th className="text-left p-2.5 font-semibold">Twin Count</th>
                 <th className="text-left p-2.5 font-semibold">Avg Wean (kg)</th>
                 <th className="text-left p-2.5 font-semibold">Status</th>
+                <th className="text-left p-2.5 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1607,12 +1650,88 @@ function RamsSection({
                       {ram.status}
                     </Badge>
                   </td>
+                  <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost" data-testid={`ram-actions-${ram.id}`}>
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            setSelectedAnimal(ram);
+                            setWeightType("current");
+                            setShowWeightDialog(true);
+                          }}
+                          data-testid={`ram-weight-${ram.id}`}
+                        >
+                          <Scale className="w-4 h-4 mr-2" />
+                          Record Weight
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleClassify(ram, 'stud')} data-testid={`ram-stud-${ram.id}`}>
+                          <Tag className="w-4 h-4 mr-2" />
+                          Mark as Stud
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleClassify(ram, 'commercial')} data-testid={`ram-commercial-${ram.id}`}>
+                          <Tag className="w-4 h-4 mr-2" />
+                          Mark as Commercial
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleClassify(ram, 'slaughter_cull')} data-testid={`ram-cull-${ram.id}`}>
+                          <Tag className="w-4 h-4 mr-2" />
+                          Mark for Cull
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      
+      {/* Weight Dialog for Rams */}
+      <Dialog open={showWeightDialog} onOpenChange={setShowWeightDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Weight - {selectedAnimal?.tagId}</DialogTitle>
+            <DialogDescription>
+              Enter the {weightType === "100" ? "100-day" : weightType === "270" ? "270-day" : "current"} weight for this ram.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Weight Type</Label>
+              <Select value={weightType} onValueChange={(v) => setWeightType(v as "100" | "270" | "current")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="100">100-Day Weight</SelectItem>
+                  <SelectItem value="270">270-Day Weight</SelectItem>
+                  <SelectItem value="current">Current Weight</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Weight (kg)</Label>
+              <Input 
+                type="number" 
+                step="0.1"
+                value={weightValue}
+                onChange={(e) => setWeightValue(e.target.value)}
+                placeholder="Enter weight in kg"
+                data-testid="input-ram-weight"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowWeightDialog(false)}>Cancel</Button>
+            <Button onClick={handleSaveWeight} disabled={!weightValue}>Save Weight</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1626,14 +1745,52 @@ function EwesSection({
   allAnimals, 
   breedingEvents, 
   onExport,
-  isLoading 
+  isLoading,
+  updateAnimalMutation,
+  classifyMutation
 }: { 
   allAnimals: Animal[]; 
   breedingEvents: BreedingEvent[];
   onExport: () => void;
   isLoading: boolean;
+  updateAnimalMutation: ReturnType<typeof useUpdateAnimal>;
+  classifyMutation: ReturnType<typeof useClassifyRamLamb>;
 }) {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
+  const [showWeightDialog, setShowWeightDialog] = useState(false);
+  const [weightValue, setWeightValue] = useState("");
+  const [weightType, setWeightType] = useState<"100" | "270" | "current">("current");
+  
+  const handleSaveWeight = () => {
+    if (!selectedAnimal || !weightValue) return;
+    const today = format(new Date(), "yyyy-MM-dd");
+    let updates: Record<string, string> = {};
+    if (weightType === "100") {
+      updates = { weight100Day: weightValue, weight100DayDate: today };
+    } else if (weightType === "270") {
+      updates = { weight270Day: weightValue, weight270DayDate: today };
+    } else {
+      updates = { currentWeight: weightValue };
+    }
+    updateAnimalMutation.mutate({ id: selectedAnimal.id, ...updates }, {
+      onSuccess: () => {
+        setShowWeightDialog(false);
+        setSelectedAnimal(null);
+        setWeightValue("");
+        toast({ title: "Weight Recorded", description: `Weight saved for ${selectedAnimal.tagId}` });
+      }
+    });
+  };
+  
+  const handleClassify = (animal: Animal, classification: string) => {
+    classifyMutation.mutate({ id: animal.id, ramLambClass: classification }, {
+      onSuccess: () => {
+        toast({ title: "Classification Updated", description: `${animal.tagId} marked as ${classification}` });
+      }
+    });
+  };
   
   // Helper: check if animal is under 1 year old (lamb)
   const isLamb = (animal: Animal) => {
@@ -1700,6 +1857,7 @@ function EwesSection({
                 <th className="text-left p-2.5 font-semibold">Lambs Weaned</th>
                 <th className="text-left p-2.5 font-semibold">Avg Wean (kg)</th>
                 <th className="text-left p-2.5 font-semibold">Status</th>
+                <th className="text-left p-2.5 font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1744,12 +1902,88 @@ function EwesSection({
                       {ewe.status}
                     </Badge>
                   </td>
+                  <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost" data-testid={`ewe-actions-${ewe.id}`}>
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            setSelectedAnimal(ewe);
+                            setWeightType("current");
+                            setShowWeightDialog(true);
+                          }}
+                          data-testid={`ewe-weight-${ewe.id}`}
+                        >
+                          <Scale className="w-4 h-4 mr-2" />
+                          Record Weight
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleClassify(ewe, 'stud')} data-testid={`ewe-stud-${ewe.id}`}>
+                          <Tag className="w-4 h-4 mr-2" />
+                          Mark as Stud
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleClassify(ewe, 'commercial')} data-testid={`ewe-commercial-${ewe.id}`}>
+                          <Tag className="w-4 h-4 mr-2" />
+                          Mark as Commercial
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleClassify(ewe, 'slaughter_cull')} data-testid={`ewe-cull-${ewe.id}`}>
+                          <Tag className="w-4 h-4 mr-2" />
+                          Mark for Cull
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      
+      {/* Weight Dialog for Ewes */}
+      <Dialog open={showWeightDialog} onOpenChange={setShowWeightDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Weight - {selectedAnimal?.tagId}</DialogTitle>
+            <DialogDescription>
+              Enter the {weightType === "100" ? "100-day" : weightType === "270" ? "270-day" : "current"} weight for this ewe.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Weight Type</Label>
+              <Select value={weightType} onValueChange={(v) => setWeightType(v as "100" | "270" | "current")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="100">100-Day Weight</SelectItem>
+                  <SelectItem value="270">270-Day Weight</SelectItem>
+                  <SelectItem value="current">Current Weight</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Weight (kg)</Label>
+              <Input 
+                type="number" 
+                step="0.1"
+                value={weightValue}
+                onChange={(e) => setWeightValue(e.target.value)}
+                placeholder="Enter weight in kg"
+                data-testid="input-ewe-weight"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowWeightDialog(false)}>Cancel</Button>
+            <Button onClick={handleSaveWeight} disabled={!weightValue}>Save Weight</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1784,7 +2018,7 @@ function LambsSection({
   const [showPromoteDialog, setShowPromoteDialog] = useState(false);
   const [cullReason, setCullReason] = useState("");
   const [weightValue, setWeightValue] = useState("");
-  const [weightType, setWeightType] = useState<"100" | "270">("100");
+  const [weightType, setWeightType] = useState<"100" | "270" | "current">("100");
   const [selectedRamType, setSelectedRamType] = useState<"breeding_ram" | "stud_ram" | "commercial_ram">("breeding_ram");
   
   // Lambs are active animals under 365 days old - consistent with Dashboard counting
@@ -1836,9 +2070,14 @@ function LambsSection({
   const handleSaveWeight = () => {
     if (!selectedAnimal || !weightValue) return;
     const today = format(new Date(), "yyyy-MM-dd");
-    const updates = weightType === "100" 
-      ? { weight100Day: weightValue, weight100DayDate: today }
-      : { weight270Day: weightValue, weight270DayDate: today };
+    let updates: Record<string, string> = {};
+    if (weightType === "100") {
+      updates = { weight100Day: weightValue, weight100DayDate: today };
+    } else if (weightType === "270") {
+      updates = { weight270Day: weightValue, weight270DayDate: today };
+    } else {
+      updates = { currentWeight: weightValue };
+    }
     
     updateAnimalMutation.mutate({ id: selectedAnimal.id, ...updates }, {
       onSuccess: (updatedAnimal) => {
@@ -2081,19 +2320,20 @@ function LambsSection({
           <DialogHeader>
             <DialogTitle>Record Weight - {selectedAnimal?.tagId}</DialogTitle>
             <DialogDescription>
-              Enter the {weightType === "100" ? "100-day" : "270-day"} weight for this lamb.
+              Enter the {weightType === "100" ? "100-day" : weightType === "270" ? "270-day" : "current"} weight for this animal.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Weight Type</Label>
-              <Select value={weightType} onValueChange={(v) => setWeightType(v as "100" | "270")}>
+              <Select value={weightType} onValueChange={(v) => setWeightType(v as "100" | "270" | "current")}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="100">100-Day Weight</SelectItem>
                   <SelectItem value="270">270-Day Weight</SelectItem>
+                  <SelectItem value="current">Current Weight</SelectItem>
                 </SelectContent>
               </Select>
             </div>
