@@ -131,6 +131,13 @@ export default function Dashboard() {
   };
   
   const birthRatioData = getBirthRatioData();
+  
+  // Calculate total birth ratio for the year
+  const totalRamLambs = birthRatioData.reduce((sum, m) => sum + m.ramLambs, 0);
+  const totalEweLambs = birthRatioData.reduce((sum, m) => sum + m.eweLambs, 0);
+  const birthRatioText = totalRamLambs > 0 || totalEweLambs > 0 
+    ? `${totalEweLambs} : ${totalRamLambs}` 
+    : 'No births recorded';
 
   // Calculate 12-month herd growth/decline data
   const getHerdGrowthData = () => {
@@ -358,21 +365,34 @@ export default function Dashboard() {
             <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
               <CardTitle className="text-sm md:text-base font-semibold">Birth Ratio {new Date().getFullYear()} (Ram vs Ewe Lambs)</CardTitle>
             </CardHeader>
-            <CardContent className="h-[180px] md:h-[300px] w-full p-2 md:p-6 pt-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={birthRatioData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                  <XAxis dataKey="month" stroke="#666" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} width={25} allowDecimals={false} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
-                    itemStyle={{ color: '#fff' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '10px' }} />
-                  <Bar dataKey="ramLambs" name="Ram Lambs" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="eweLambs" name="Ewe Lambs" fill="#ec4899" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <CardContent className="p-2 md:p-6 pt-0">
+              <div className="h-[160px] md:h-[260px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={birthRatioData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                    <XAxis dataKey="month" stroke="#666" fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} width={25} allowDecimals={false} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
+                      itemStyle={{ color: '#fff' }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '10px' }} />
+                    <Bar dataKey="ramLambs" name="Ram Lambs" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="eweLambs" name="Ewe Lambs" fill="#ec4899" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Ratio Summary */}
+              <div className="mt-2 md:mt-4 pt-2 md:pt-3 border-t border-border/50 text-center" data-testid="birth-ratio-summary">
+                <p className="text-xs md:text-sm text-muted-foreground">
+                  <span className="text-pink-500 font-semibold">Ewe Lambs</span>
+                  {" vs "}
+                  <span className="text-blue-500 font-semibold">Ram Lambs</span>
+                </p>
+                <p className="text-lg md:text-2xl font-bold text-foreground mt-1" data-testid="birth-ratio-value">
+                  {birthRatioText}
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>
