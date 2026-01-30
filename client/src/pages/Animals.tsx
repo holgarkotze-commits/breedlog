@@ -1095,8 +1095,6 @@ export default function Animals() {
     
     const culledAnimals = allAnimals.filter(a => 
       a.classification === 'slaughter_cull' || 
-      a.ramClass === 'cull' || 
-      a.eweLambClass === 'cull' || 
       a.ramLambClass === 'cull'
     );
     
@@ -2814,6 +2812,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
       sex: "ewe",
       breed: "Meatmaster",
       status: "active",
+      classification: "unclassified" as string,
       birthDate: new Date().toISOString().split('T')[0],
       birthStatus: "single" as string,
       birthWeight: null as string | null,
@@ -2972,19 +2971,44 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="breed"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Breed</FormLabel>
-                  <FormControl>
-                    <Input className="rugged-input" data-testid="input-breed" {...field} value={field.value || ''} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="breed"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breed</FormLabel>
+                    <FormControl>
+                      <Input className="rugged-input" data-testid="input-breed" {...field} value={field.value || ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="classification"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Classification</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || "unclassified"}>
+                      <FormControl>
+                        <SelectTrigger className="rugged-input" data-testid="select-classification">
+                          <SelectValue placeholder="Select classification" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="unclassified">Unclassified</SelectItem>
+                        <SelectItem value="stud">Stud</SelectItem>
+                        <SelectItem value="commercial">Commercial</SelectItem>
+                        <SelectItem value="slaughter_cull">Slaughter/Cull</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
