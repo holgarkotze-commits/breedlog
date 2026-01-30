@@ -126,6 +126,7 @@ export default function Animals() {
   
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(urlParams.get("status") || "active");
+  const [classificationFilter, setClassificationFilter] = useState(urlParams.get("classification") || "all");
   const [sexFilter, setSexFilter] = useState(urlParams.get("sex") || "all");
   const [ageFilter, setAgeFilter] = useState(urlParams.get("age") || "all");
   const { data: allAnimals, isLoading } = useAnimals({ search });
@@ -1090,6 +1091,7 @@ export default function Animals() {
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
     setStatusFilter(params.get("status") || "active");
+    setClassificationFilter(params.get("classification") || "all");
     setSexFilter(params.get("sex") || "all");
     setAgeFilter(params.get("age") || "all");
   }, [searchParams]);
@@ -1103,6 +1105,15 @@ export default function Animals() {
     } else {
       if (animal.status !== statusFilter) return false;
     }
+    
+    // Classification filter
+    if (classificationFilter !== "all") {
+      if (classificationFilter === "stud" && animal.classification !== "stud") return false;
+      if (classificationFilter === "commercial" && animal.classification !== "commercial") return false;
+      if (classificationFilter === "slaughter_cull" && animal.classification !== "slaughter_cull") return false;
+      if (classificationFilter === "unclassified" && animal.classification !== "unclassified" && animal.classification !== null) return false;
+    }
+    
     if (sexFilter !== "all" && animal.sex?.toLowerCase() !== sexFilter) return false;
     
     // Age filter for lambs (under 1 year old)
@@ -1178,6 +1189,19 @@ export default function Animals() {
             />
           </div>
           <div className="flex gap-2">
+            <Select value={classificationFilter} onValueChange={setClassificationFilter}>
+              <SelectTrigger className="flex-1 md:w-[140px] text-sm rugged-input" data-testid="select-classification-filter">
+                <Tag className="w-4 h-4 mr-1" />
+                <SelectValue placeholder="Class" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Classes</SelectItem>
+                <SelectItem value="stud">Stud</SelectItem>
+                <SelectItem value="commercial">Commercial</SelectItem>
+                <SelectItem value="slaughter_cull">Slaughter/Cull</SelectItem>
+                <SelectItem value="unclassified">Unclassified</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="flex-1 md:w-[120px] text-sm rugged-input" data-testid="select-status-filter">
                 <Filter className="w-4 h-4 mr-1" />
