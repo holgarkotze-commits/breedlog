@@ -17,17 +17,23 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Syringe, ChevronRight, Calendar, Users } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
-import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { insertFlockHealthEventSchema } from "@shared/schema";
 
-const flockHealthFormSchema = z.object({
-  eventName: z.string().min(1, "Event name is required"),
-  eventDate: z.string().min(1, "Event date is required"),
-  productName: z.string().min(1, "Product/treatment name is required"),
-  route: z.enum(["intravenous", "intramuscular", "subcutaneous", "oral", "topical", "other"]),
-  notes: z.string().optional(),
-});
+const flockHealthFormSchema = insertFlockHealthEventSchema
+  .pick({
+    eventName: true,
+    eventDate: true,
+    productName: true,
+    route: true,
+    notes: true,
+  })
+  .extend({
+    eventName: insertFlockHealthEventSchema.shape.eventName.refine(val => val && val.length > 0, "Event name is required"),
+    eventDate: insertFlockHealthEventSchema.shape.eventDate.refine(val => val && val.length > 0, "Event date is required"),
+    productName: insertFlockHealthEventSchema.shape.productName.refine(val => val && val.length > 0, "Product/treatment name is required"),
+  });
 
 export default function Health() {
   const { data: healthEvents, isLoading } = useFlockHealthEvents();
@@ -327,8 +333,9 @@ function FlockHealthEventDialog({ open, onOpenChange }: { open: boolean, onOpenC
                         <Checkbox 
                           checked={selectedAnimals.includes(animal.id)}
                           onCheckedChange={() => toggleAnimal(animal.id)}
+                          data-testid={`checkbox-animal-${animal.id}`}
                         />
-                        <span>{animal.tagId}</span>
+                        <span data-testid={`text-animal-tag-${animal.id}`}>{animal.tagId}</span>
                         {animal.name && <span className="text-muted-foreground">({animal.name})</span>}
                         <Badge variant="outline" className="text-xs ml-auto capitalize">{animal.sex}</Badge>
                       </label>

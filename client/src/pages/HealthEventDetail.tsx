@@ -233,29 +233,29 @@ ${eventAnimals.map((animal, idx) => `<tr>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Event Name</p>
-                  <p className="font-medium text-sm">{event.eventName || "—"}</p>
+                  <p className="font-medium text-sm" data-testid="text-event-name">{event.eventName || "—"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Date</p>
-                  <p className="font-medium text-sm flex items-center gap-1">
+                  <p className="font-medium text-sm flex items-center gap-1" data-testid="text-event-date">
                     <Calendar className="w-3 h-3" />
                     {format(new Date(event.eventDate), "dd MMM yyyy")}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Treatment/Product</p>
-                  <p className="font-medium text-sm">{event.productName}</p>
+                  <p className="font-medium text-sm" data-testid="text-product-name">{event.productName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Treatment Type</p>
-                  <Badge variant="outline" className="capitalize">{event.route}</Badge>
+                  <Badge variant="outline" className="capitalize" data-testid="text-route">{event.route}</Badge>
                 </div>
               </div>
               
               {event.notes && (
                 <div className="pt-2 border-t border-border">
                   <p className="text-xs text-muted-foreground">Notes</p>
-                  <p className="text-sm mt-1">{event.notes}</p>
+                  <p className="text-sm mt-1" data-testid="text-notes">{event.notes}</p>
                 </div>
               )}
             </CardContent>
