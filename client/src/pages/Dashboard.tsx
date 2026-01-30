@@ -64,15 +64,73 @@ export default function Dashboard() {
   // Total herd = all active animals
   const totalAnimals = activeAnimals;
 
-  // Mock weight data for chart (in real app, use aggregated performance records)
-  const weightData = [
-    { month: 'Jan', avg: 45 },
-    { month: 'Feb', avg: 48 },
-    { month: 'Mar', avg: 52 },
-    { month: 'Apr', avg: 55 },
-    { month: 'May', avg: 58 },
-    { month: 'Jun', avg: 62 },
-  ];
+  // Calculate average weight of slaughter/cull animals by month
+  const getSlaughterCullWeightData = () => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const monthData = [];
+    
+    for (let m = 0; m < 12; m++) {
+      const monthName = format(new Date(currentYear, m, 1), 'MMM');
+      
+      // Get slaughter/cull animals that have a current weight
+      const slaughterCullAnimals = animals?.filter(a => 
+        a.classification === 'slaughter_cull' && a.currentWeight
+      ) || [];
+      
+      // Calculate average weight (using currentWeight)
+      const totalWeight = slaughterCullAnimals.reduce((sum, a) => sum + parseFloat(a.currentWeight || '0'), 0);
+      const avgWeight = slaughterCullAnimals.length > 0 
+        ? Math.round(totalWeight / slaughterCullAnimals.length) 
+        : 0;
+      
+      monthData.push({
+        month: monthName,
+        avg: avgWeight
+      });
+    }
+    
+    return monthData;
+  };
+  
+  const slaughterCullWeightData = getSlaughterCullWeightData();
+  
+  // Calculate birth ratio data (Ram Lambs vs Ewe Lambs) for current year
+  const getBirthRatioData = () => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const monthData = [];
+    
+    for (let m = 0; m < 12; m++) {
+      const monthStart = new Date(currentYear, m, 1);
+      const monthEnd = new Date(currentYear, m + 1, 0);
+      const monthName = format(monthStart, 'MMM');
+      
+      // Count ram lambs born in this month (sex='ram' and birthDate in this month)
+      const ramLambs = animals?.filter(a => {
+        if (!a.birthDate || a.sex !== 'ram') return false;
+        const birthDate = new Date(a.birthDate);
+        return birthDate >= monthStart && birthDate <= monthEnd && birthDate.getFullYear() === currentYear;
+      }).length || 0;
+      
+      // Count ewe lambs born in this month (sex='ewe' and birthDate in this month)
+      const eweLambs = animals?.filter(a => {
+        if (!a.birthDate || a.sex !== 'ewe') return false;
+        const birthDate = new Date(a.birthDate);
+        return birthDate >= monthStart && birthDate <= monthEnd && birthDate.getFullYear() === currentYear;
+      }).length || 0;
+      
+      monthData.push({
+        month: monthName,
+        ramLambs,
+        eweLambs
+      });
+    }
+    
+    return monthData;
+  };
+  
+  const birthRatioData = getBirthRatioData();
 
   // Calculate 12-month herd growth/decline data
   const getHerdGrowthData = () => {
@@ -265,16 +323,16 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Charts & Activity Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 md:gap-8">
-          {/* Main Chart */}
-          <Card className="lg:col-span-2 rugged-card bg-card">
+        {/* Charts Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-8">
+          {/* Slaughter/Cull Weight Chart */}
+          <Card className="rugged-card bg-card">
             <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
-              <CardTitle className="text-sm md:text-base font-semibold">Avg. Herd Weight Trend</CardTitle>
+              <CardTitle className="text-sm md:text-base font-semibold">Avg. Slaughter/Cull Weight</CardTitle>
             </CardHeader>
             <CardContent className="h-[180px] md:h-[300px] w-full p-2 md:p-6 pt-0">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={weightData}>
+                <AreaChart data={slaughterCullWeightData}>
                   <defs>
                     <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#FFC300" stopOpacity={0.3}/>
@@ -287,43 +345,34 @@ export default function Dashboard() {
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
                     itemStyle={{ color: '#fff' }}
+                    formatter={(value: number) => [`${value} kg`, 'Avg Weight']}
                   />
-                  <Area type="monotone" dataKey="avg" stroke="#FFC300" strokeWidth={2} fillOpacity={1} fill="url(#colorAvg)" />
+                  <Area type="monotone" dataKey="avg" stroke="#FFC300" strokeWidth={2} fillOpacity={1} fill="url(#colorAvg)" name="Avg Weight" />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
 
-          {/* Recent Activity Feed */}
+          {/* Birth Ratio Chart - Ram vs Ewe Lambs */}
           <Card className="rugged-card bg-card">
             <CardHeader className="p-3 md:p-6 pb-1 md:pb-2">
-              <CardTitle className="text-sm md:text-base font-semibold">Recent Events</CardTitle>
+              <CardTitle className="text-sm md:text-base font-semibold">Birth Ratio {new Date().getFullYear()} (Ram vs Ewe Lambs)</CardTitle>
             </CardHeader>
-            <CardContent className="p-3 md:p-6 pt-1 md:pt-2">
-              {loadingBreeding ? (
-                <div className="space-y-2 md:space-y-4">
-                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 md:h-16 w-full bg-secondary" />)}
-                </div>
-              ) : (
-                <div className="space-y-3 md:space-y-6">
-                  {breeding?.slice(0, 4).map((event, i) => (
-                    <div key={i} className="flex gap-2 md:gap-4 items-start border-l-2 border-border pl-2 md:pl-4 relative">
-                      <div className="absolute -left-[4px] md:-left-[5px] top-0 w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-primary" />
-                      <div>
-                        <p className="text-xs md:text-sm font-semibold text-foreground">
-                          {event.matingType}
-                        </p>
-                        <p className="text-[10px] md:text-xs text-muted-foreground">
-                          {new Date(event.matingDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {(!breeding || breeding.length === 0) && (
-                    <p className="text-muted-foreground text-xs italic">No recent events.</p>
-                  )}
-                </div>
-              )}
+            <CardContent className="h-[180px] md:h-[300px] w-full p-2 md:p-6 pt-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={birthRatioData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                  <XAxis dataKey="month" stroke="#666" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} width={25} allowDecimals={false} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
+                    itemStyle={{ color: '#fff' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '10px' }} />
+                  <Bar dataKey="ramLambs" name="Ram Lambs" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="eweLambs" name="Ewe Lambs" fill="#ec4899" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
         </div>
