@@ -1151,10 +1151,10 @@ export default function Settings() {
         </Card>
 
         {/* Advanced Settings */}
-        <Card className="rugged-card border-destructive/30">
+        <Card className="rugged-card border-border">
           <CardHeader>
             <CardTitle className="uppercase flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-destructive" /> Advanced Settings
+              <AlertTriangle className="w-5 h-5 text-primary" /> Advanced Settings
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1174,7 +1174,7 @@ export default function Settings() {
             </div>
             
             <div className="border-t border-border pt-4 space-y-2">
-              <h4 className="font-semibold text-sm text-destructive">Production Reset</h4>
+              <h4 className="font-semibold text-sm">Production Reset</h4>
               <p className="text-xs text-muted-foreground">
                 Remove ALL test/demo data and reset the app for production use. 
                 This action cannot be undone.
@@ -1182,7 +1182,6 @@ export default function Settings() {
               <Button 
                 variant="outline"
                 size="sm"
-                className="text-destructive border-destructive/50 hover:bg-destructive/10"
                 onClick={() => setShowResetDialog(true)}
                 data-testid="button-open-reset-dialog"
               >
