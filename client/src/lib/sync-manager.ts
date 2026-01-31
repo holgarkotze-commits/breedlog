@@ -77,17 +77,22 @@ class SyncManager {
     }
 
     // Run migrations on startup to fix any old data
-    this.initialize();
+    this.initialize(0);
   }
   
-  private async initialize() {
+  private async initialize(attempt: number) {
+    const maxAttempts = 5;
     try {
       await runMigrations();
-      this.updatePendingCount();
+      await this.updatePendingCount();
+      console.log('[SyncManager] Initialization complete');
     } catch (error) {
-      console.warn('[SyncManager] Initialization failed:', error);
-      // Retry after a delay
-      setTimeout(() => this.initialize(), 2000);
+      if (attempt < maxAttempts) {
+        console.log(`[SyncManager] Initialization attempt ${attempt + 1}/${maxAttempts} failed, retrying...`);
+        setTimeout(() => this.initialize(attempt + 1), 2000);
+      } else {
+        console.warn('[SyncManager] Initialization failed after max attempts:', error);
+      }
     }
   }
 
@@ -121,13 +126,18 @@ class SyncManager {
     return this.state;
   }
 
-  async updatePendingCount() {
+  async updatePendingCount(retryCount = 0): Promise<void> {
+    const maxRetries = 3;
     try {
       const pending = await getPendingSyncItems();
       this.updateState({ pendingCount: pending.length });
     } catch (error) {
-      console.log('[SyncManager] Database not ready yet, will retry');
-      setTimeout(() => this.updatePendingCount(), 1000);
+      if (retryCount < maxRetries) {
+        setTimeout(() => this.updatePendingCount(retryCount + 1), 1000);
+      } else {
+        console.warn('[SyncManager] Failed to get pending count after retries');
+        this.updateState({ pendingCount: 0 });
+      }
     }
   }
 

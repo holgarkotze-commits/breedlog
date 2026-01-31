@@ -125,27 +125,48 @@ export function openDatabase(): Promise<IDBDatabase> {
 export async function runMigrations(): Promise<void> {
   try {
     const db = await openDatabase();
-    const transaction = db.transaction('syncQueue', 'readwrite');
-    const store = transaction.objectStore('syncQueue');
-    const request = store.getAll();
     
-    request.onsuccess = () => {
-      const items = request.result;
-      let migratedCount = 0;
-      
-      for (const item of items) {
-        // Convert boolean to number if needed
-        if (typeof item.synced === 'boolean') {
-          item.synced = item.synced ? 1 : 0;
-          store.put(item);
-          migratedCount++;
-        }
+    // Check if syncQueue store exists before trying to access it
+    if (!db.objectStoreNames.contains('syncQueue')) {
+      console.log('[IndexedDB] No syncQueue store yet, skipping migration');
+      return;
+    }
+    
+    return new Promise((resolve, reject) => {
+      try {
+        const transaction = db.transaction('syncQueue', 'readwrite');
+        const store = transaction.objectStore('syncQueue');
+        const request = store.getAll();
+        
+        request.onsuccess = () => {
+          const items = request.result || [];
+          let migratedCount = 0;
+          
+          for (const item of items) {
+            // Convert boolean to number if needed
+            if (typeof item.synced === 'boolean') {
+              item.synced = item.synced ? 1 : 0;
+              store.put(item);
+              migratedCount++;
+            }
+          }
+          
+          if (migratedCount > 0) {
+            console.log(`[IndexedDB] Migrated ${migratedCount} syncQueue items from boolean to number`);
+          }
+        };
+        
+        request.onerror = () => {
+          console.warn('[IndexedDB] Migration getAll failed:', request.error);
+        };
+        
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      } catch (error) {
+        console.warn('[IndexedDB] Migration transaction error:', error);
+        resolve(); // Don't crash if migration fails
       }
-      
-      if (migratedCount > 0) {
-        console.log(`[IndexedDB] Migrated ${migratedCount} syncQueue items from boolean to number`);
-      }
-    };
+    });
   } catch (error) {
     console.warn('[IndexedDB] Migration check failed:', error);
   }
@@ -236,17 +257,23 @@ export async function addToSyncQueue(item: Omit<SyncQueueItem, 'id' | 'timestamp
 
 export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
   const db = await openDatabase();
-  return new Promise((resolve, reject) => {
+  
+  // Check if syncQueue store exists
+  if (!db.objectStoreNames.contains('syncQueue')) {
+    return [];
+  }
+  
+  return new Promise((resolve) => {
     try {
       const transaction = db.transaction('syncQueue', 'readonly');
       const store = transaction.objectStore('syncQueue');
       
-      // First try using the index with number key
-      const index = store.index('synced');
-      const request = index.getAll(IDBKeyRange.only(0)); // 0 = not synced
+      // Use getAll and filter manually to avoid IDBKeyRange errors with mixed key types
+      // This is safer than using the index which can throw if boolean keys exist
+      const request = store.getAll();
 
       request.onsuccess = () => {
-        // Filter results to ensure we only get unsynced items (handles migration edge cases)
+        // Filter to only get unsynced items (handles both boolean and number values)
         const items = (request.result || []).filter(item => 
           item.synced === 0 || item.synced === false
         );
@@ -254,16 +281,13 @@ export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
       };
       
       request.onerror = () => {
-        // Fallback: get all items and filter manually
-        console.warn('[IndexedDB] Index query failed, using fallback');
-        const allRequest = store.getAll();
-        allRequest.onsuccess = () => {
-          const items = (allRequest.result || []).filter(item => 
-            item.synced === 0 || item.synced === false
-          );
-          resolve(items);
-        };
-        allRequest.onerror = () => reject(allRequest.error);
+        console.warn('[IndexedDB] getPendingSyncItems getAll failed:', request.error);
+        resolve([]);
+      };
+      
+      transaction.onerror = () => {
+        console.warn('[IndexedDB] getPendingSyncItems transaction failed:', transaction.error);
+        resolve([]);
       };
     } catch (error) {
       console.error('[IndexedDB] getPendingSyncItems error:', error);
