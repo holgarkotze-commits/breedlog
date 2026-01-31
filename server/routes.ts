@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAudioRoutes } from "./replit_integrations/audio/routes";
@@ -693,8 +693,32 @@ export async function registerRoutes(
     }
   });
 
-  // Seeding
-  seedDatabase();
+  // === PRODUCTION RESET ===
+  app.post("/api/admin/reset", isAuthenticated, async (req, res) => {
+    try {
+      const { confirmPhrase } = req.body;
+      
+      if (confirmPhrase !== "RESET BREEDLOG") {
+        return res.status(400).json({ 
+          message: "Invalid confirmation phrase. Type 'RESET BREEDLOG' to confirm." 
+        });
+      }
+      
+      console.log(`[Admin Reset] User initiated production reset`);
+      await storage.clearAllData();
+      
+      res.json({ 
+        success: true, 
+        message: "All data has been cleared. App is ready for production use." 
+      });
+    } catch (err: any) {
+      console.error("Reset error:", err);
+      res.status(500).json({ message: "Failed to reset data: " + err.message });
+    }
+  });
+
+  // Seeding disabled for production - uncomment for development if needed
+  // seedDatabase();
 
   return httpServer;
 }

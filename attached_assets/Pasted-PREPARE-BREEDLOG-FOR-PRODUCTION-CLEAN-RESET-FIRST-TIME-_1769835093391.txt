@@ -1,0 +1,137 @@
+PREPARE BREEDLOG FOR PRODUCTION (CLEAN RESET) + FIRST-TIME USER ONBOARDING
+
+We are moving from test/dev to production-ready. Please implement TWO things:
+(A) a clean reset process so NO test data remains, and
+(B) a first-time user onboarding flow so new users start clean and guided.
+
+====================================================
+A) CLEAN RESET (PRODUCTION-READY, NO TEST DATA)
+====================================================
+
+Goal:
+When we publish for real users, the app must open with:
+- Zero animals (no rams/ewes/lambs)
+- Zero breeding groups
+- Zero health events
+- Zero performance/weights
+- Zero records/PDF logs
+- Zero demo/test docs
+A brand-new user must see a clean app.
+
+IMPORTANT:
+Do not “recount” or hide test items. We must truly remove them from the data stores and server.
+
+A1) Identify where test data currently lives
+- Confirm all entities stored in PostgreSQL (server) and IndexedDB (offline) that contain test data:
+  - animals
+  - weights/performanceRecords
+  - breeding events / mating groups
+  - health records
+  - farm settings
+  - documents/uploads metadata
+  - records logs (exports lists)
+- Provide a short list of actual tables/collections and the key fields used (id, farmId, createdAt, etc.)
+
+A2) Implement PRODUCTION RESET MODE (safe, controlled)
+Add a “Production Reset” admin tool that:
+- is hidden behind a safety gate (Settings -> Advanced -> “Reset Demo/Test Data”)
+- requires typing a confirmation phrase: RESET BREEDLOG
+- once confirmed, performs a FULL RESET for the current farm/user:
+
+RESET MUST CLEAR:
+1) IndexedDB stores (all offline caches + sync queues + temp ID maps)
+2) Server data for this farm/user (all animals, groups, events, records)
+3) Any “seed/demo/test” records used during development
+
+After reset:
+- Home counts must show 0
+- My Herd is empty
+- Breeding is empty
+- Records is empty
+- No old PDFs listed
+
+A3) Ensure we are NOT seeding demo data by default
+- Check codebase for any “seed”, “mock”, “demo”, “test” creation logic.
+- Remove it from production build.
+- If we still want a demo mode later, it must be optional and separate, not default.
+
+A4) Multi-user safety (important)
+If the app supports multiple users/farms:
+- Reset must only wipe the current user/farm data (not global data)
+- Ensure no shared “default farm” is leaking across users.
+
+A5) Verification checklist (must pass)
+After reset:
+- Refresh page / restart app
+- Confirm Home + My Herd + Breeding + Records show empty
+- Go offline/online and confirm nothing reappears after sync
+
+====================================================
+B) FIRST-TIME USER ONBOARDING FLOW
+====================================================
+
+Goal:
+When a brand-new user opens BreedLog for the first time (no animals yet),
+show a short guided onboarding that helps them set up fast.
+
+B1) Detect first-time user
+Create a reliable check:
+- “first run” if:
+  - farm settings not completed OR
+  - no animals exist for this user/farm
+Use a persisted flag (local + server if needed):
+- onboardingCompleted = true/false
+
+B2) Onboarding screens (simple, minimal, professional)
+Create a 4-step onboarding wizard (mobile friendly):
+
+Step 1: Welcome
+- Show logo
+- Text: “BreedLog helps you track rams, ewes, lambs, breeding, weights, and health — even offline.”
+- Button: “Get Started”
+
+Step 2: Farm Setup
+Fields:
+- Farm Name (required)
+- Owner Name (optional)
+- Location (optional)
+- Primary Breed (optional)
+Button: “Save & Continue”
+Must save to farm settings (offline-capable)
+
+Step 3: Add Your First Animal
+Give 3 buttons:
+- Add Ram
+- Add Ewe
+- Add Lamb
+Each opens the existing “Add Animal” form with the type preselected.
+After saving one animal, allow continue.
+
+Step 4: Quick Tips + Finish
+- Tip 1: “Use Breeding to record mating groups.”
+- Tip 2: “Use Health to record treatments.”
+- Tip 3: “Export PDFs anytime for records.”
+Button: “Go to Dashboard”
+
+B3) Onboarding behavior
+- Onboarding must appear ONLY once (unless user resets from Settings)
+- Add a Settings option: “Restart Onboarding”
+- Works offline: onboarding screens must function without internet
+
+B4) Post-onboarding empty state UX
+If user has 0 animals:
+- Home screen should show friendly empty state:
+  “No animals yet. Add your first ram/ewe/lamb.”
+- My Herd screen should show an “Add Animal” call-to-action
+
+====================================================
+DELIVERABLES
+====================================================
+
+1) Implement clean reset tool + remove any default seeding for production
+2) Implement onboarding wizard + restart option
+3) Confirm with a short test report:
+   - Before reset: shows test data
+   - After reset: all cleared (server + IndexedDB)
+   - First-time onboarding appears on clean install
+   - Onboarding does NOT appear again once completed

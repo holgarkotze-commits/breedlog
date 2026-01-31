@@ -5,9 +5,10 @@ import { useRecentVisits } from "@/hooks/use-recent-visits";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
-import { Clock, Beef, Dna, Settings, ChevronRight, Heart, Shield, Baby } from "lucide-react";
+import { Clock, Beef, Dna, Settings, ChevronRight, Heart, Shield, Baby, PlusCircle } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { format } from "date-fns";
@@ -203,6 +204,39 @@ export default function Dashboard() {
             {new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
           </div>
         </div>
+
+        {/* Empty State - Show when no animals */}
+        {!loadingAnimals && totalAnimals === 0 && (
+          <Card className="rugged-card border-primary/30 bg-primary/5">
+            <CardContent className="p-6 md:p-8 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+                <Beef className="w-8 h-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-bold mb-2">No animals yet</h3>
+              <p className="text-muted-foreground text-sm mb-4 max-w-md mx-auto">
+                Add your first ram, ewe, or lamb to start tracking your herd. 
+                All your data will sync automatically and work offline.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <Link href="/animals?add=ram">
+                  <Button variant="outline" className="w-full sm:w-auto" data-testid="button-add-ram-empty">
+                    <PlusCircle className="w-4 h-4 mr-2" /> Add Ram
+                  </Button>
+                </Link>
+                <Link href="/animals?add=ewe">
+                  <Button variant="outline" className="w-full sm:w-auto" data-testid="button-add-ewe-empty">
+                    <PlusCircle className="w-4 h-4 mr-2" /> Add Ewe
+                  </Button>
+                </Link>
+                <Link href="/animals?add=lamb">
+                  <Button variant="outline" className="w-full sm:w-auto" data-testid="button-add-lamb-empty">
+                    <PlusCircle className="w-4 h-4 mr-2" /> Add Lamb
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Key Metrics Grid - 2x2 on mobile */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">

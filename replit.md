@@ -62,6 +62,9 @@ Preferred communication style: Simple, everyday language.
 - **PDF Exports**: Professional PDF generation for individual animal profiles, full herd, rams, ewes, lambs, mating groups, and ewe breeding statistics, adhering to specific layout and branding guidelines.
 - **Animal Images**: Store and manage multiple photos per animal.
 - **Automatic Animal Categorization**: Animals automatically transition from "Lambs" to "Rams/Ewes" at 12 months based on birth date.
+- **First-Time User Onboarding**: 4-step wizard guides new users through farm setup, first animal entry, and app tips. Detects first-time users via IndexedDB metadata.
+- **Production Reset**: Settings → Advanced → Reset All Data allows complete database wipe with confirmation phrase ("RESET BREEDLOG"). Clears both server database and IndexedDB offline stores.
+- **Empty State UX**: Dashboard and My Herd show friendly empty states with action buttons when no animals exist.
 
 ## External Dependencies
 

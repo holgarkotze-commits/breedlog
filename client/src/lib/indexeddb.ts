@@ -249,3 +249,49 @@ export async function getLastSyncTime(): Promise<number | null> {
 export async function setLastSyncTime(timestamp: number): Promise<void> {
   await putInStore('metadata', { key: 'lastSync', value: timestamp });
 }
+
+export async function clearAllOfflineData(): Promise<void> {
+  const db = await openDatabase();
+  const storeNames = [
+    'animals',
+    'breedingEvents',
+    'matingGroups',
+    'performanceRecords',
+    'healthRecords',
+    'evaluations',
+    'farmSettings',
+    'documents',
+    'exportedDocuments',
+    'animalImages',
+    'flockHealthEvents',
+    'flockHealthTreatments',
+    'syncQueue',
+    'metadata'
+  ];
+
+  const existingStores = Array.from(db.objectStoreNames);
+  const storesToClear = storeNames.filter(name => existingStores.includes(name));
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storesToClear, 'readwrite');
+    
+    storesToClear.forEach(storeName => {
+      transaction.objectStore(storeName).clear();
+    });
+
+    transaction.oncomplete = () => {
+      console.log('[IndexedDB] All offline data cleared');
+      resolve();
+    };
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+export async function getOnboardingCompleted(): Promise<boolean> {
+  const metadata = await getFromStore<{ key: string; value: boolean }>('metadata', 'onboardingCompleted');
+  return metadata?.value ?? false;
+}
+
+export async function setOnboardingCompleted(completed: boolean): Promise<void> {
+  await putInStore('metadata', { key: 'onboardingCompleted', value: completed });
+}

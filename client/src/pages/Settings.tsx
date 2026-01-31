@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle } from "lucide-react";
+import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle, AlertTriangle, RotateCcw } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertFarmSettingsSchema, type InsertFarmSettings } from "@shared/schema";
@@ -21,6 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { clearAllOfflineData, setOnboardingCompleted } from "@/lib/indexeddb";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function Settings() {
   const { user, logout } = useAuth();
@@ -39,6 +41,10 @@ export default function Settings() {
   const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
+  
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetConfirmPhrase, setResetConfirmPhrase] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
 
   const { data: documents, isLoading: docsLoading } = useQuery<any[]>({
     queryKey: ['/api/documents'],
@@ -102,6 +108,70 @@ export default function Settings() {
       importCsvMutation.mutate(csvData);
     };
     reader.readAsText(csvFile);
+  };
+
+  const handleProductionReset = async () => {
+    if (resetConfirmPhrase !== "RESET BREEDLOG") {
+      toast({ 
+        title: "Invalid Phrase", 
+        description: "Type 'RESET BREEDLOG' exactly to confirm", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    setIsResetting(true);
+    try {
+      const res = await fetch("/api/admin/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmPhrase: resetConfirmPhrase }),
+        credentials: "include"
+      });
+      
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Reset failed");
+      }
+      
+      await clearAllOfflineData();
+      queryClient.clear();
+      
+      toast({ 
+        title: "Reset Complete", 
+        description: "All data has been cleared. The app is now production-ready." 
+      });
+      
+      setShowResetDialog(false);
+      setResetConfirmPhrase("");
+      
+      window.location.reload();
+    } catch (err: any) {
+      toast({ 
+        title: "Reset Failed", 
+        description: err.message || "Could not complete reset", 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const handleRestartOnboarding = async () => {
+    try {
+      await setOnboardingCompleted(false);
+      toast({ 
+        title: "Onboarding Reset", 
+        description: "The welcome wizard will show on next refresh." 
+      });
+      window.location.reload();
+    } catch (err) {
+      toast({ 
+        title: "Error", 
+        description: "Could not reset onboarding", 
+        variant: "destructive" 
+      });
+    }
   };
 
   const handleDocUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1080,6 +1150,48 @@ export default function Settings() {
           </CardContent>
         </Card>
 
+        {/* Advanced Settings */}
+        <Card className="rugged-card border-destructive/30">
+          <CardHeader>
+            <CardTitle className="uppercase flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" /> Advanced Settings
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <h4 className="font-semibold text-sm">Restart Onboarding</h4>
+              <p className="text-xs text-muted-foreground">
+                Show the welcome wizard again on next page load.
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleRestartOnboarding}
+                data-testid="button-restart-onboarding"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" /> Restart Onboarding
+              </Button>
+            </div>
+            
+            <div className="border-t border-border pt-4 space-y-2">
+              <h4 className="font-semibold text-sm text-destructive">Production Reset</h4>
+              <p className="text-xs text-muted-foreground">
+                Remove ALL test/demo data and reset the app for production use. 
+                This action cannot be undone.
+              </p>
+              <Button 
+                variant="outline"
+                size="sm"
+                className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                onClick={() => setShowResetDialog(true)}
+                data-testid="button-open-reset-dialog"
+              >
+                <Trash2 className="w-4 h-4 mr-2" /> Reset All Data
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Encouraging message */}
         <div className="text-center py-6 px-4 border-t border-border/30 mt-4">
           <p className="text-sm text-muted-foreground italic max-w-md mx-auto">
@@ -1087,6 +1199,62 @@ export default function Settings() {
           </p>
         </div>
       </div>
+
+      {/* Production Reset Dialog */}
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" /> Production Reset
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete ALL data including animals, breeding events, 
+              mating groups, health records, and documents. The app will be reset to a 
+              clean state for production use.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="bg-destructive/10 border border-destructive/30 rounded p-3">
+              <p className="text-sm font-medium text-destructive">
+                To confirm, type: <code className="bg-background px-1 rounded">RESET BREEDLOG</code>
+              </p>
+            </div>
+            <Input
+              value={resetConfirmPhrase}
+              onChange={(e) => setResetConfirmPhrase(e.target.value)}
+              placeholder="Type confirmation phrase..."
+              data-testid="input-reset-confirm"
+            />
+          </div>
+          
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowResetDialog(false);
+                setResetConfirmPhrase("");
+              }}
+              disabled={isResetting}
+              data-testid="button-cancel-reset"
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={handleProductionReset}
+              disabled={isResetting || resetConfirmPhrase !== "RESET BREEDLOG"}
+              data-testid="button-confirm-reset"
+            >
+              {isResetting ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Resetting...</>
+              ) : (
+                <><Trash2 className="w-4 h-4 mr-2" /> Reset Everything</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

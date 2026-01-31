@@ -4,9 +4,11 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
-import { FarmSetupDialog } from "@/components/FarmSetupDialog";
+import { useAnimals } from "@/hooks/use-animals";
 import { OfflineBanner } from "@/components/NetworkStatusIndicator";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
+import { OnboardingWizard } from "@/components/OnboardingWizard";
+import { getOnboardingCompleted } from "@/lib/indexeddb";
 import { useState, useEffect } from "react";
 
 import NotFound from "@/pages/not-found";
@@ -42,27 +44,51 @@ function Router() {
 }
 
 function AppContent() {
-  const { data: farmSettings, isLoading } = useFarmSettings();
-  const [showSetup, setShowSetup] = useState(false);
-  const [setupCompleted, setSetupCompleted] = useState(false);
+  const { data: farmSettings, isLoading: farmLoading } = useFarmSettings();
+  const { data: animals, isLoading: animalsLoading } = useAnimals();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && farmSettings === null && !setupCompleted) {
-      setShowSetup(true);
+    async function checkOnboarding() {
+      if (farmLoading || animalsLoading) return;
+      
+      const onboardingCompleted = await getOnboardingCompleted();
+      
+      const hasNoAnimals = !animals || animals.length === 0;
+      const isFirstTimeUser = !onboardingCompleted && (!farmSettings || hasNoAnimals);
+      
+      setShowOnboarding(!!isFirstTimeUser);
+      setOnboardingChecked(true);
     }
-  }, [farmSettings, isLoading, setupCompleted]);
+    
+    checkOnboarding();
+  }, [farmSettings, farmLoading, animals, animalsLoading]);
 
-  const handleSetupComplete = () => {
-    setShowSetup(false);
-    setSetupCompleted(true);
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
   };
+
+  if (!onboardingChecked && (farmLoading || animalsLoading)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading BreedLog...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
       <OfflineBanner />
-      <FarmSetupDialog open={showSetup} onComplete={handleSetupComplete} />
       <PWAInstallPrompt />
-      <Router />
+      {showOnboarding ? (
+        <OnboardingWizard onComplete={handleOnboardingComplete} />
+      ) : (
+        <Router />
+      )}
     </>
   );
 }

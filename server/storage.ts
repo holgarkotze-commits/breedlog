@@ -90,6 +90,9 @@ export interface IStorage {
   createExportedDocument(doc: InsertExportedDocument): Promise<ExportedDocument>;
   deleteExportedDocument(id: number): Promise<void>;
   
+  // Production Reset
+  clearAllData(): Promise<void>;
+  
   // Flock Health Events
   getFlockHealthEvents(): Promise<FlockHealthEvent[]>;
   getFlockHealthEvent(id: number): Promise<FlockHealthEvent | undefined>;
@@ -310,6 +313,24 @@ export class DatabaseStorage implements IStorage {
     if (animalsList.length === 0) return [];
     const created = await db.insert(animals).values(animalsList).returning();
     return created;
+  }
+  
+  // Production Reset - clears all farm data
+  async clearAllData(): Promise<void> {
+    await db.delete(flockHealthTreatments);
+    await db.delete(flockHealthEvents);
+    await db.delete(exportedDocuments);
+    await db.delete(documents);
+    await db.delete(animalImages);
+    await db.delete(evaluations);
+    await db.delete(healthRecords);
+    await db.delete(performanceRecords);
+    await db.delete(offspring);
+    await db.delete(breedingEvents);
+    await db.delete(matingGroups);
+    await db.delete(animals);
+    await db.delete(farmSettings);
+    console.log('[Storage] All farm data cleared');
   }
 }
 
