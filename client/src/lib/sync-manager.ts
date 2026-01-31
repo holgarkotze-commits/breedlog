@@ -8,6 +8,7 @@ import {
   deleteFromStore,
   putInStore,
   getFromStore,
+  runMigrations,
   SyncQueueItem
 } from './indexeddb';
 import { apiRequest } from './queryClient';
@@ -75,7 +76,19 @@ class SyncManager {
       });
     }
 
-    this.updatePendingCount();
+    // Run migrations on startup to fix any old data
+    this.initialize();
+  }
+  
+  private async initialize() {
+    try {
+      await runMigrations();
+      this.updatePendingCount();
+    } catch (error) {
+      console.warn('[SyncManager] Initialization failed:', error);
+      // Retry after a delay
+      setTimeout(() => this.initialize(), 2000);
+    }
   }
 
   private handleOnline() {

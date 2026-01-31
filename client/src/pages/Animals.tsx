@@ -3190,11 +3190,24 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                             <SelectValue placeholder="Select dam" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           <SelectItem value="none">Unknown</SelectItem>
                           {ewes.map(ewe => (
                             <SelectItem key={ewe.id} value={String(ewe.id)}>
-                              {ewe.tagId} {ewe.name ? `- ${ewe.name}` : ''}
+                              <div className="flex items-center gap-2">
+                                {ewe.photo ? (
+                                  <img 
+                                    src={ewe.photo} 
+                                    alt="" 
+                                    className="w-8 h-8 rounded object-cover flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                                    <Image className="w-4 h-4 text-muted-foreground" />
+                                  </div>
+                                )}
+                                <span className="truncate">{ewe.tagId} {ewe.name ? `- ${ewe.name}` : ''}</span>
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -3258,11 +3271,24 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                             <SelectValue placeholder="Select sire" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           <SelectItem value="none">Unknown</SelectItem>
                           {rams.map(ram => (
                             <SelectItem key={ram.id} value={String(ram.id)}>
-                              {ram.tagId} {ram.name ? `- ${ram.name}` : ''}
+                              <div className="flex items-center gap-2">
+                                {ram.photo ? (
+                                  <img 
+                                    src={ram.photo} 
+                                    alt="" 
+                                    className="w-8 h-8 rounded object-cover flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                                    <Image className="w-4 h-4 text-muted-foreground" />
+                                  </div>
+                                )}
+                                <span className="truncate">{ram.tagId} {ram.name ? `- ${ram.name}` : ''}</span>
+                              </div>
                             </SelectItem>
                           ))}
                         </SelectContent>

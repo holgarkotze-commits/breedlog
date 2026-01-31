@@ -88,8 +88,16 @@ export function useCreateAnimal() {
         credentials: "include",
       });
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to create animal");
+        let errorMessage = "Failed to create animal";
+        try {
+          const text = await res.text();
+          const error = JSON.parse(text);
+          errorMessage = error.message || errorMessage;
+        } catch {
+          // Server returned non-JSON, use status text
+          errorMessage = `Server error: ${res.status} ${res.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
       const created = api.animals.create.responses[201].parse(await res.json());
       await putInStore("animals", created);
@@ -141,7 +149,17 @@ export function useUpdateAnimal() {
         body: JSON.stringify(updates),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to update animal");
+      if (!res.ok) {
+        let errorMessage = "Failed to update animal";
+        try {
+          const text = await res.text();
+          const error = JSON.parse(text);
+          errorMessage = error.message || errorMessage;
+        } catch {
+          errorMessage = `Server error: ${res.status} ${res.statusText}`;
+        }
+        throw new Error(errorMessage);
+      }
       const serverData = api.animals.update.responses[200].parse(await res.json());
       await putInStore("animals", serverData);
       return serverData;

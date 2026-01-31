@@ -112,8 +112,43 @@ export function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('metadata')) {
         db.createObjectStore('metadata', { keyPath: 'key' });
       }
+      
+      // Migration for version 4: Convert boolean synced values to numbers
+      if (event.oldVersion < 4 && db.objectStoreNames.contains('syncQueue')) {
+        console.log('[IndexedDB] Migrating syncQueue boolean values to numbers');
+      }
     };
   });
+}
+
+// Run migration to fix any old boolean values in syncQueue
+export async function runMigrations(): Promise<void> {
+  try {
+    const db = await openDatabase();
+    const transaction = db.transaction('syncQueue', 'readwrite');
+    const store = transaction.objectStore('syncQueue');
+    const request = store.getAll();
+    
+    request.onsuccess = () => {
+      const items = request.result;
+      let migratedCount = 0;
+      
+      for (const item of items) {
+        // Convert boolean to number if needed
+        if (typeof item.synced === 'boolean') {
+          item.synced = item.synced ? 1 : 0;
+          store.put(item);
+          migratedCount++;
+        }
+      }
+      
+      if (migratedCount > 0) {
+        console.log(`[IndexedDB] Migrated ${migratedCount} syncQueue items from boolean to number`);
+      }
+    };
+  } catch (error) {
+    console.warn('[IndexedDB] Migration check failed:', error);
+  }
 }
 
 export async function getAllFromStore<T>(storeName: string): Promise<T[]> {
@@ -202,13 +237,38 @@ export async function addToSyncQueue(item: Omit<SyncQueueItem, 'id' | 'timestamp
 export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction('syncQueue', 'readonly');
-    const store = transaction.objectStore('syncQueue');
-    const index = store.index('synced');
-    const request = index.getAll(IDBKeyRange.only(0)); // 0 = not synced
+    try {
+      const transaction = db.transaction('syncQueue', 'readonly');
+      const store = transaction.objectStore('syncQueue');
+      
+      // First try using the index with number key
+      const index = store.index('synced');
+      const request = index.getAll(IDBKeyRange.only(0)); // 0 = not synced
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        // Filter results to ensure we only get unsynced items (handles migration edge cases)
+        const items = (request.result || []).filter(item => 
+          item.synced === 0 || item.synced === false
+        );
+        resolve(items);
+      };
+      
+      request.onerror = () => {
+        // Fallback: get all items and filter manually
+        console.warn('[IndexedDB] Index query failed, using fallback');
+        const allRequest = store.getAll();
+        allRequest.onsuccess = () => {
+          const items = (allRequest.result || []).filter(item => 
+            item.synced === 0 || item.synced === false
+          );
+          resolve(items);
+        };
+        allRequest.onerror = () => reject(allRequest.error);
+      };
+    } catch (error) {
+      console.error('[IndexedDB] getPendingSyncItems error:', error);
+      resolve([]); // Return empty array on error to prevent crashes
+    }
   });
 }
 
@@ -223,21 +283,27 @@ export async function markSynced(id: string): Promise<void> {
 export async function removeSyncedItems(): Promise<void> {
   const db = await openDatabase();
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction('syncQueue', 'readwrite');
-    const store = transaction.objectStore('syncQueue');
-    const index = store.index('synced');
-    const request = index.openCursor(IDBKeyRange.only(1)); // 1 = synced
+    try {
+      const transaction = db.transaction('syncQueue', 'readwrite');
+      const store = transaction.objectStore('syncQueue');
+      
+      // Get all items and delete synced ones (handles both boolean and number values)
+      const allRequest = store.getAll();
+      allRequest.onsuccess = () => {
+        const items = allRequest.result || [];
+        for (const item of items) {
+          if (item.synced === 1 || item.synced === true) {
+            store.delete(item.id);
+          }
+        }
+      };
 
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (cursor) {
-        cursor.delete();
-        cursor.continue();
-      }
-    };
-
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    } catch (error) {
+      console.error('[IndexedDB] removeSyncedItems error:', error);
+      resolve(); // Don't crash on cleanup errors
+    }
   });
 }
 
