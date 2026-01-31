@@ -1203,8 +1203,8 @@ export default function Settings() {
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="w-5 h-5" /> Production Reset
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-primary" /> Production Reset
             </DialogTitle>
             <DialogDescription>
               This will permanently delete ALL data including animals, breeding events, 
@@ -1214,9 +1214,9 @@ export default function Settings() {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            <div className="bg-destructive/10 border border-destructive/30 rounded p-3">
-              <p className="text-sm font-medium text-destructive">
-                To confirm, type: <code className="bg-background px-1 rounded">RESET BREEDLOG</code>
+            <div className="bg-secondary border border-border rounded p-3">
+              <p className="text-sm font-medium">
+                To confirm, type: <code className="bg-background px-1 rounded text-primary">RESET BREEDLOG</code>
               </p>
             </div>
             <Input
@@ -1240,7 +1240,7 @@ export default function Settings() {
               Cancel
             </Button>
             <Button 
-              variant="destructive"
+              variant="outline"
               onClick={handleProductionReset}
               disabled={isResetting || resetConfirmPhrase !== "RESET BREEDLOG"}
               data-testid="button-confirm-reset"

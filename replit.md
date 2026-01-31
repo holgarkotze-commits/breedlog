@@ -8,6 +8,9 @@ BreedLog is an offline-capable Progressive Web App (PWA) designed for Meatmaster
 
 Preferred communication style: Simple, everyday language.
 
+### Design Rules
+- **No red on dark backgrounds**: Never use red text, red icons, or red lines/borders on dark backgrounds. Use white text and primary (yellow) icons instead for better outdoor visibility and readability.
+
 ## System Architecture
 
 ### Frontend
