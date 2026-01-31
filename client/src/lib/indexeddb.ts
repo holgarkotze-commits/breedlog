@@ -1,5 +1,5 @@
 const DB_NAME = 'breedlog-offline';
-const DB_VERSION = 3;
+const DB_VERSION = 4; // Updated to fix boolean key issue in syncQueue
 
 export interface SyncQueueItem {
   id: string;
@@ -8,7 +8,7 @@ export interface SyncQueueItem {
   data: unknown;
   tempId?: number;
   timestamp: number;
-  synced: boolean;
+  synced: number; // Use 0/1 instead of boolean for IndexedDB key compatibility
 }
 
 let dbInstance: IDBDatabase | null = null;
@@ -194,7 +194,7 @@ export async function addToSyncQueue(item: Omit<SyncQueueItem, 'id' | 'timestamp
     ...item,
     id: crypto.randomUUID(),
     timestamp: Date.now(),
-    synced: false,
+    synced: 0, // Use 0 for false (IndexedDB doesn't support boolean keys)
   };
   await putInStore('syncQueue', queueItem);
 }
@@ -205,7 +205,7 @@ export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
     const transaction = db.transaction('syncQueue', 'readonly');
     const store = transaction.objectStore('syncQueue');
     const index = store.index('synced');
-    const request = index.getAll(IDBKeyRange.only(false));
+    const request = index.getAll(IDBKeyRange.only(0)); // 0 = not synced
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -215,7 +215,7 @@ export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
 export async function markSynced(id: string): Promise<void> {
   const item = await getFromStore<SyncQueueItem>('syncQueue', id);
   if (item) {
-    item.synced = true;
+    item.synced = 1; // 1 = synced
     await putInStore('syncQueue', item);
   }
 }
@@ -226,7 +226,7 @@ export async function removeSyncedItems(): Promise<void> {
     const transaction = db.transaction('syncQueue', 'readwrite');
     const store = transaction.objectStore('syncQueue');
     const index = store.index('synced');
-    const request = index.openCursor(IDBKeyRange.only(true));
+    const request = index.openCursor(IDBKeyRange.only(1)); // 1 = synced
 
     request.onsuccess = () => {
       const cursor = request.result;
