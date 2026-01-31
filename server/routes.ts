@@ -694,7 +694,9 @@ export async function registerRoutes(
   });
 
   // === PRODUCTION RESET ===
-  app.post("/api/admin/reset", isAuthenticated, async (req, res) => {
+  // Note: Protected by confirmation phrase requirement instead of auth
+  // This allows reset even when offline/not logged in
+  app.post("/api/admin/reset", async (req, res) => {
     try {
       const { confirmPhrase } = req.body;
       
@@ -704,7 +706,7 @@ export async function registerRoutes(
         });
       }
       
-      console.log(`[Admin Reset] User initiated production reset`);
+      console.log(`[Admin Reset] Production reset initiated at ${new Date().toISOString()}`);
       await storage.clearAllData();
       
       res.json({ 
