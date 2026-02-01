@@ -14,7 +14,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAnimalSchema, type Animal, type BreedingEvent } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3, LogOut, Scale, Tag, ChevronRight, UserPlus } from "lucide-react";
+import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3, LogOut, Scale, Tag, ChevronRight, UserPlus, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -137,6 +138,12 @@ export default function Animals() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"detailed" | "list" | "thumbnail">("detailed");
   const isMobile = useIsMobile();
+  
+  // Collapsible section states - Total Herd expanded by default, sections collapsed
+  const [totalHerdExpanded, setTotalHerdExpanded] = useState(true);
+  const [ramsExpanded, setRamsExpanded] = useState(false);
+  const [ewesExpanded, setEwesExpanded] = useState(false);
+  const [lambsExpanded, setLambsExpanded] = useState(false);
   
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [animalToRemove, setAnimalToRemove] = useState<Animal | null>(null);
@@ -1520,37 +1527,54 @@ export default function Animals() {
           </div>
         )}
 
-        {/* Dedicated RAMS Section */}
-        <RamsSection 
-          allAnimals={allAnimals || []} 
-          breedingEvents={breedingEvents || []} 
-          onExport={exportRamsPDF}
-          isLoading={isLoading}
-          updateAnimalMutation={updateAnimalMutation}
-          classifyMutation={classifyMutation}
-        />
+        {/* Total Herd Collapsible */}
+        <SectionRibbon
+          title="Total Herd"
+          count={(allAnimals || []).filter(a => a.status === 'active').length}
+          isExpanded={totalHerdExpanded}
+          onToggle={() => setTotalHerdExpanded(!totalHerdExpanded)}
+          testId="ribbon-total-herd"
+        >
+          <div className="space-y-2">
+            {/* Dedicated RAMS Section */}
+            <RamsSection 
+              allAnimals={allAnimals || []} 
+              breedingEvents={breedingEvents || []} 
+              onExport={exportRamsPDF}
+              isLoading={isLoading}
+              isExpanded={ramsExpanded}
+              onToggle={() => setRamsExpanded(!ramsExpanded)}
+              updateAnimalMutation={updateAnimalMutation}
+              classifyMutation={classifyMutation}
+            />
 
-        {/* Dedicated EWES Section */}
-        <EwesSection 
-          allAnimals={allAnimals || []} 
-          breedingEvents={breedingEvents || []} 
-          onExport={exportEwesPDF}
-          isLoading={isLoading}
-          updateAnimalMutation={updateAnimalMutation}
-          classifyMutation={classifyMutation}
-        />
+            {/* Dedicated EWES Section */}
+            <EwesSection 
+              allAnimals={allAnimals || []} 
+              breedingEvents={breedingEvents || []} 
+              onExport={exportEwesPDF}
+              isLoading={isLoading}
+              isExpanded={ewesExpanded}
+              onToggle={() => setEwesExpanded(!ewesExpanded)}
+              updateAnimalMutation={updateAnimalMutation}
+              classifyMutation={classifyMutation}
+            />
 
-        {/* Dedicated LAMBS Section */}
-        <LambsSection 
-          allAnimals={allAnimals || []} 
-          breedingEvents={breedingEvents || []}
-          isLoading={isLoading}
-          classifyMutation={classifyMutation}
-          confirmCullMutation={confirmCullMutation}
-          moveToEwesMutation={moveToEwesMutation}
-          moveToRamsMutation={moveToRamsMutation}
-          updateAnimalMutation={updateAnimalMutation}
-        />
+            {/* Dedicated LAMBS Section */}
+            <LambsSection 
+              allAnimals={allAnimals || []} 
+              breedingEvents={breedingEvents || []}
+              isLoading={isLoading}
+              isExpanded={lambsExpanded}
+              onToggle={() => setLambsExpanded(!lambsExpanded)}
+              classifyMutation={classifyMutation}
+              confirmCullMutation={confirmCullMutation}
+              moveToEwesMutation={moveToEwesMutation}
+              moveToRamsMutation={moveToRamsMutation}
+              updateAnimalMutation={updateAnimalMutation}
+            />
+          </div>
+        </SectionRibbon>
 
         {/* Encouraging message */}
         <div className="text-center py-6 px-4 border-t border-border/30 mt-4">
@@ -1604,11 +1628,72 @@ export default function Animals() {
   );
 }
 
+// Collapsible Section Ribbon Component
+function SectionRibbon({ 
+  title, 
+  count, 
+  isExpanded, 
+  onToggle,
+  children,
+  actions,
+  testId
+}: { 
+  title: string;
+  count: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  actions?: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    <Collapsible open={isExpanded} onOpenChange={onToggle}>
+      <div className="border border-border rounded-lg overflow-hidden">
+        <CollapsibleTrigger asChild>
+          <button 
+            type="button"
+            className="w-full flex items-center justify-between px-4 py-3 bg-primary/10 cursor-pointer hover:bg-primary/20 transition-colors text-left"
+            aria-expanded={isExpanded}
+            data-testid={testId || `ribbon-${title.toLowerCase().replace(/\s/g, '-')}`}
+          >
+            <div className="flex items-center gap-3">
+              <ChevronDown 
+                className={cn(
+                  "w-5 h-5 text-primary transition-transform duration-200",
+                  !isExpanded && "-rotate-90"
+                )}
+              />
+              <h2 className="text-base md:text-lg font-bold text-primary uppercase tracking-wide">
+                {title} ({count})
+              </h2>
+            </div>
+            {actions && (
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                {actions}
+              </div>
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 overflow-hidden">
+          {/* Lazy render - only mount children when expanded for performance */}
+          {isExpanded && (
+            <div className="p-4 pt-2">
+              {children}
+            </div>
+          )}
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
 function RamsSection({ 
   allAnimals, 
   breedingEvents, 
   onExport,
   isLoading,
+  isExpanded,
+  onToggle,
   updateAnimalMutation,
   classifyMutation
 }: { 
@@ -1616,6 +1701,8 @@ function RamsSection({
   breedingEvents: BreedingEvent[];
   onExport: () => void;
   isLoading: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
   updateAnimalMutation: ReturnType<typeof useUpdateAnimal>;
   classifyMutation: ReturnType<typeof useClassifyRamLamb>;
 }) {
@@ -1695,66 +1782,70 @@ function RamsSection({
   const studCount = allRams.filter(r => r.ramType === 'stud_ram').length;
   const commercialCount = allRams.filter(r => r.ramType === 'commercial_ram').length;
 
+  const exportButton = (
+    <Button 
+      variant="outline" 
+      size="sm"
+      onClick={onExport}
+      disabled={rams.length === 0}
+      data-testid="button-export-rams-section"
+    >
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  );
+
   return (
-    <div className="mt-8 space-y-4" data-testid="rams-section">
-      {/* Section Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-3">
-        <h2 className="text-lg md:text-xl font-bold text-primary uppercase tracking-wide" data-testid="rams-section-title">
-          Rams ({allRams.length})
-        </h2>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1">
-            <Button 
-              variant={ramTypeFilter === "all" ? "default" : "outline"} 
-              size="sm"
-              onClick={() => setRamTypeFilter("all")}
-              className="h-7 text-xs"
-              data-testid="filter-rams-all"
-            >
-              All ({allRams.length})
-            </Button>
-            <Button 
-              variant={ramTypeFilter === "breeding_ram" ? "default" : "outline"} 
-              size="sm"
-              onClick={() => setRamTypeFilter("breeding_ram")}
-              className="h-7 text-xs"
-              data-testid="filter-rams-breeding"
-            >
-              Breeding ({breedingCount})
-            </Button>
-            <Button 
-              variant={ramTypeFilter === "stud_ram" ? "default" : "outline"} 
-              size="sm"
-              onClick={() => setRamTypeFilter("stud_ram")}
-              className="h-7 text-xs"
-              data-testid="filter-rams-stud"
-            >
-              Stud ({studCount})
-            </Button>
-            <Button 
-              variant={ramTypeFilter === "commercial_ram" ? "default" : "outline"} 
-              size="sm"
-              onClick={() => setRamTypeFilter("commercial_ram")}
-              className="h-7 text-xs"
-              data-testid="filter-rams-commercial"
-            >
-              Commercial ({commercialCount})
-            </Button>
-          </div>
+    <div className="mt-4" data-testid="rams-section">
+      <SectionRibbon
+        title="Rams"
+        count={allRams.length}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        actions={exportButton}
+        testId="ribbon-rams"
+      >
+        {/* Filter buttons inside expanded section */}
+        <div className="flex items-center gap-1 mb-3 flex-wrap">
           <Button 
-            variant="outline" 
+            variant={ramTypeFilter === "all" ? "default" : "outline"} 
             size="sm"
-            onClick={onExport}
-            disabled={rams.length === 0}
-            data-testid="button-export-rams-section"
+            onClick={() => setRamTypeFilter("all")}
+            className="h-7 text-xs"
+            data-testid="filter-rams-all"
           >
-            <Download className="w-4 h-4 mr-2" />
-            Export Rams PDF
+            All ({allRams.length})
+          </Button>
+          <Button 
+            variant={ramTypeFilter === "breeding_ram" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setRamTypeFilter("breeding_ram")}
+            className="h-7 text-xs"
+            data-testid="filter-rams-breeding"
+          >
+            Breeding ({breedingCount})
+          </Button>
+          <Button 
+            variant={ramTypeFilter === "stud_ram" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setRamTypeFilter("stud_ram")}
+            className="h-7 text-xs"
+            data-testid="filter-rams-stud"
+          >
+            Stud ({studCount})
+          </Button>
+          <Button 
+            variant={ramTypeFilter === "commercial_ram" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setRamTypeFilter("commercial_ram")}
+            className="h-7 text-xs"
+            data-testid="filter-rams-commercial"
+          >
+            Commercial ({commercialCount})
           </Button>
         </div>
-      </div>
 
-      {rams.length === 0 ? (
+        {rams.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
           <p>No rams in your herd yet.</p>
         </div>
@@ -1863,7 +1954,8 @@ function RamsSection({
             </tbody>
           </table>
         </div>
-      )}
+        )}
+      </SectionRibbon>
       
       {/* Weight Dialog for Rams */}
       <Dialog open={showWeightDialog} onOpenChange={setShowWeightDialog}>
@@ -1920,6 +2012,8 @@ function EwesSection({
   breedingEvents, 
   onExport,
   isLoading,
+  isExpanded,
+  onToggle,
   updateAnimalMutation,
   classifyMutation
 }: { 
@@ -1927,6 +2021,8 @@ function EwesSection({
   breedingEvents: BreedingEvent[];
   onExport: () => void;
   isLoading: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
   updateAnimalMutation: ReturnType<typeof useUpdateAnimal>;
   classifyMutation: ReturnType<typeof useClassifyRamLamb>;
 }) {
@@ -1995,25 +2091,30 @@ function EwesSection({
     return { ...ewe, stats };
   });
 
-  return (
-    <div className="mt-8 space-y-4" data-testid="ewes-section">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-3">
-        <h2 className="text-lg md:text-xl font-bold text-primary uppercase tracking-wide" data-testid="ewes-section-title">
-          Ewes ({allEwes.length})
-        </h2>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={onExport}
-          disabled={allEwes.length === 0}
-          data-testid="button-export-ewes-section"
-        >
-          <Download className="w-4 h-4 mr-2" />
-          Export Ewes PDF
-        </Button>
-      </div>
+  const exportButton = (
+    <Button 
+      variant="outline" 
+      size="sm"
+      onClick={onExport}
+      disabled={allEwes.length === 0}
+      data-testid="button-export-ewes-section"
+    >
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  );
 
-      {allEwes.length === 0 ? (
+  return (
+    <div className="mt-4" data-testid="ewes-section">
+      <SectionRibbon
+        title="Ewes"
+        count={allEwes.length}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        actions={exportButton}
+        testId="ribbon-ewes"
+      >
+        {allEwes.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
           <p>No ewes in your herd yet.</p>
         </div>
@@ -2115,7 +2216,8 @@ function EwesSection({
             </tbody>
           </table>
         </div>
-      )}
+        )}
+      </SectionRibbon>
       
       {/* Weight Dialog for Ewes */}
       <Dialog open={showWeightDialog} onOpenChange={setShowWeightDialog}>
@@ -2166,6 +2268,8 @@ function LambsSection({
   allAnimals, 
   breedingEvents,
   isLoading,
+  isExpanded,
+  onToggle,
   classifyMutation,
   confirmCullMutation,
   moveToEwesMutation,
@@ -2175,6 +2279,8 @@ function LambsSection({
   allAnimals: Animal[]; 
   breedingEvents: BreedingEvent[];
   isLoading: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
   classifyMutation: ReturnType<typeof useClassifyRamLamb>;
   confirmCullMutation: ReturnType<typeof useConfirmCull>;
   moveToEwesMutation: ReturnType<typeof useMoveToEwes>;
@@ -2292,12 +2398,16 @@ function LambsSection({
   };
 
   return (
-    <div className="mt-8 space-y-4" data-testid="lambs-section">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-3">
-        <h2 className="text-lg md:text-xl font-bold text-primary uppercase tracking-wide" data-testid="lambs-section-title">
-          Lambs ({lambs.length})
-        </h2>
-        <div className="flex items-center gap-2 flex-wrap">
+    <div className="mt-4" data-testid="lambs-section">
+      <SectionRibbon
+        title="Lambs"
+        count={lambs.length}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        testId="ribbon-lambs"
+      >
+        {/* Filter buttons */}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
           <div className="flex items-center gap-1">
             <Button 
               variant={sexFilter === "all" ? "default" : "outline"} 
@@ -2339,9 +2449,8 @@ function LambsSection({
             </SelectContent>
           </Select>
         </div>
-      </div>
 
-      {lambs.length === 0 ? (
+        {lambs.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
           <p>No lambs in your herd yet.</p>
         </div>
@@ -2513,7 +2622,8 @@ function LambsSection({
             </tbody>
           </table>
         </div>
-      )}
+        )}
+      </SectionRibbon>
 
       {/* Weight Dialog */}
       <Dialog open={showWeightDialog} onOpenChange={setShowWeightDialog}>
