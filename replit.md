@@ -62,7 +62,7 @@ Preferred communication style: Simple, everyday language.
 - **Farm Branding & Settings**: Customizable farm details (name, stud, owner) stored and integrated into exports and UI.
 - **Documents Management**: Upload, view, and delete various document types with optional animal linking.
 - **CSV Import**: Bulk animal import with flexible column mapping and validation.
-- **My Herd View**: Multiple view modes (Detailed, List, Thumbnail) and advanced filtering.
+- **My Herd View**: Multiple view modes (Detailed, List, Thumbnail) and advanced filtering. Collapsible section ribbons with lazy rendering (Total Herd wrapper with Rams/Ewes/Lambs subsections).
 - **PDF Exports**: Professional PDF generation for individual animal profiles, full herd, rams, ewes, lambs, mating groups, and ewe breeding statistics, adhering to specific layout and branding guidelines.
 - **Animal Images**: Store and manage multiple photos per animal.
 - **Automatic Animal Categorization**: Animals automatically transition from "Lambs" to "Rams/Ewes" at 12 months based on birth date.
