@@ -12,6 +12,12 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  // Check if online for write operations
+  if (!navigator.onLine && method !== 'GET') {
+    // For offline mutations, let the caller handle queueing
+    throw new Error('OFFLINE: Operation queued for sync');
+  }
+  
   const res = await fetch(url, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},

@@ -319,11 +319,15 @@ class SyncManager {
       { url: '/api/breeding-events', store: 'breedingEvents' },
       { url: '/api/mating-groups', store: 'matingGroups' },
       { url: '/api/farm-settings', store: 'farmSettings' },
+      { url: '/api/health-records', store: 'healthRecords' },
+      { url: '/api/performance-records', store: 'performanceRecords' },
+      { url: '/api/documents', store: 'documents' },
     ];
 
-    for (const { url, store } of endpoints) {
+    // Pull data in parallel for faster sync
+    await Promise.all(endpoints.map(async ({ url, store }) => {
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { credentials: 'include' });
         if (response.ok) {
           const data = await response.json();
           const items = Array.isArray(data) ? data : data ? [data] : [];
@@ -334,7 +338,7 @@ class SyncManager {
       } catch (error) {
         console.warn(`[SyncManager] Failed to pull ${store}:`, error);
       }
-    }
+    }));
   }
 
   async getOfflineData<T>(storeName: string): Promise<T[]> {

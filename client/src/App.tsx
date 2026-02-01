@@ -11,39 +11,52 @@ import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { OnboardingWizard } from "@/components/OnboardingWizard";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
 import { getOnboardingCompleted } from "@/lib/indexeddb";
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
-import Animals from "@/pages/Animals";
-import AnimalDetail from "@/pages/AnimalDetail";
-import Breeding from "@/pages/Breeding";
-import MatingGroupDetail from "@/pages/MatingGroupDetail";
-import BreedingEventDetail from "@/pages/BreedingEventDetail";
-import Health from "@/pages/Health";
-import HealthEventDetail from "@/pages/HealthEventDetail";
-import Settings from "@/pages/Settings";
-import Lambs from "@/pages/Lambs";
-import Records from "@/pages/Records";
-import Admin from "@/pages/Admin";
+
+// Lazy load less frequently used pages for faster initial load
+const Animals = lazy(() => import("@/pages/Animals"));
+const AnimalDetail = lazy(() => import("@/pages/AnimalDetail"));
+const Breeding = lazy(() => import("@/pages/Breeding"));
+const MatingGroupDetail = lazy(() => import("@/pages/MatingGroupDetail"));
+const BreedingEventDetail = lazy(() => import("@/pages/BreedingEventDetail"));
+const Health = lazy(() => import("@/pages/Health"));
+const HealthEventDetail = lazy(() => import("@/pages/HealthEventDetail"));
+const Settings = lazy(() => import("@/pages/Settings"));
+const Lambs = lazy(() => import("@/pages/Lambs"));
+const Records = lazy(() => import("@/pages/Records"));
+const Admin = lazy(() => import("@/pages/Admin"));
+
+// Loading fallback for lazy loaded pages
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/animals" component={Animals} />
-      <Route path="/animals/:id" component={AnimalDetail} />
-      <Route path="/lambs" component={Lambs} />
-      <Route path="/breeding" component={Breeding} />
-      <Route path="/breeding/groups/:id" component={MatingGroupDetail} />
-      <Route path="/breeding/events/:id" component={BreedingEventDetail} />
-      <Route path="/health" component={Health} />
-      <Route path="/health/:id" component={HealthEventDetail} />
-      <Route path="/records" component={Records} />
-      <Route path="/settings" component={Settings} />
-      <Route path="/admin" component={Admin} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/" component={Dashboard} />
+        <Route path="/animals" component={Animals} />
+        <Route path="/animals/:id" component={AnimalDetail} />
+        <Route path="/lambs" component={Lambs} />
+        <Route path="/breeding" component={Breeding} />
+        <Route path="/breeding/groups/:id" component={MatingGroupDetail} />
+        <Route path="/breeding/events/:id" component={BreedingEventDetail} />
+        <Route path="/health" component={Health} />
+        <Route path="/health/:id" component={HealthEventDetail} />
+        <Route path="/records" component={Records} />
+        <Route path="/settings" component={Settings} />
+        <Route path="/admin" component={Admin} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 

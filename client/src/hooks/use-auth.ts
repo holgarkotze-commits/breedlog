@@ -5,19 +5,28 @@ import { ensureUserIsolation, clearAllOfflineData } from "@/lib/indexeddb";
 import { clearBetaAccessStorage } from "@/components/BetaAccessGate";
 
 async function fetchUser(): Promise<User | null> {
-  const response = await fetch("/api/auth/user", {
-    credentials: "include",
-  });
+  try {
+    const response = await fetch("/api/auth/user", {
+      credentials: "include",
+    });
 
-  if (response.status === 401) {
-    return null;
+    if (response.status === 401) {
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    // Network error - offline scenario
+    if (!navigator.onLine) {
+      console.log('[Auth] Offline - using cached user data');
+      return null; // Will use React Query cached data if available
+    }
+    throw error;
   }
-
-  if (!response.ok) {
-    throw new Error(`${response.status}: ${response.statusText}`);
-  }
-
-  return response.json();
 }
 
 async function logout(): Promise<void> {

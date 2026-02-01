@@ -25,7 +25,9 @@ const API_ROUTES = [
   '/api/health-records',
   '/api/farm-settings',
   '/api/documents',
-  '/api/exported-documents'
+  '/api/exported-documents',
+  '/api/beta/access',
+  '/api/auth/user'
 ];
 
 self.addEventListener('install', (event) => {
