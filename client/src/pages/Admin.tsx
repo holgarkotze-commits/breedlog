@@ -146,14 +146,51 @@ export default function AdminPage() {
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle>Access Denied</CardTitle>
+            <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <ShieldCheck className="h-8 w-8 text-primary" />
+            </div>
+            <CardTitle>Admin Access</CardTitle>
             <CardDescription>
-              You don't have admin privileges to manage beta access codes.
+              Enter the admin PIN to manage beta access codes.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild className="w-full">
-              <Link href="/">Return to Dashboard</Link>
+            <form onSubmit={(e) => { e.preventDefault(); loginMutation.mutate(adminPin); }} className="space-y-4">
+              <div>
+                <Input
+                  type="password"
+                  placeholder="Enter admin PIN"
+                  value={adminPin}
+                  onChange={(e) => setAdminPin(e.target.value)}
+                  className="text-center text-lg tracking-widest"
+                  data-testid="input-admin-pin"
+                  autoFocus
+                />
+              </div>
+              
+              {pinError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{pinError}</AlertDescription>
+                </Alert>
+              )}
+              
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={!adminPin.trim() || loginMutation.isPending}
+                data-testid="button-admin-login"
+              >
+                {loginMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Key className="mr-2 h-4 w-4" />
+                )}
+                Access Admin Panel
+              </Button>
+            </form>
+            
+            <Button asChild variant="ghost" className="w-full mt-4">
+              <Link href="/">Return to App</Link>
             </Button>
           </CardContent>
         </Card>
