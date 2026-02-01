@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, date, varchar } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -7,9 +7,13 @@ import { z } from "zod";
 export * from "./models/auth";
 export * from "./models/chat";
 
+// Import users table for foreign key references
+import { users } from "./models/auth";
+
 // === MATING GROUPS ===
 export const matingGroups = pgTable("mating_groups", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership - CRITICAL for data isolation
   name: text("name").notNull(),
   ramId: integer("ram_id").notNull(),
   eweIds: integer("ewe_ids").array(), // Array of ewe IDs in this mating group
@@ -37,8 +41,9 @@ export const insertMatingGroupSchema = createInsertSchema(matingGroups).omit({ i
 // === ANIMALS ===
 export const animals = pgTable("animals", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership - CRITICAL for data isolation
   // Identification
-  tagId: text("tag_id").notNull().unique(), // Ear tag
+  tagId: text("tag_id").notNull(), // Ear tag - removed unique constraint, now unique per user
   tattooId: text("tattoo_id"), // Tattoo
   electronicId: text("electronic_id"), // RFID
   studPrefix: text("stud_prefix"),
@@ -130,6 +135,7 @@ export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, c
 // Stores multiple images per animal in their dedicated "Images" folder
 export const animalImages = pgTable("animal_images", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   animalId: integer("animal_id").notNull(),
   imageData: text("image_data").notNull(), // Base64 encoded image
   fileName: text("file_name").notNull(),
@@ -152,6 +158,7 @@ export type AnimalImage = typeof animalImages.$inferSelect;
 // === BREEDING EVENTS ===
 export const breedingEvents = pgTable("breeding_events", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   eweId: integer("ewe_id").notNull(),
   ramId: integer("ram_id").notNull(),
   matingGroupId: integer("mating_group_id"), // Optional link to group
@@ -187,6 +194,7 @@ export const insertBreedingEventSchema = createInsertSchema(breedingEvents).omit
 // Links a breeding event to the resulting lamb(s)
 export const offspring = pgTable("offspring", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   breedingEventId: integer("breeding_event_id").notNull(),
   lambId: integer("lamb_id").notNull(),
 });
@@ -208,6 +216,7 @@ export const insertOffspringSchema = createInsertSchema(offspring).omit({ id: tr
 // === PERFORMANCE RECORDS ===
 export const performanceRecords = pgTable("performance_records", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   animalId: integer("animal_id").notNull(),
   date: date("date").notNull(),
   weight: decimal("weight"),
@@ -230,6 +239,7 @@ export const insertPerformanceRecordSchema = createInsertSchema(performanceRecor
 // === HEALTH RECORDS ===
 export const healthRecords = pgTable("health_records", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   animalId: integer("animal_id").notNull(),
   date: date("date").notNull(),
   treatment: text("treatment").notNull(),
@@ -253,6 +263,7 @@ export const insertHealthRecordSchema = createInsertSchema(healthRecords).omit({
 // === EVALUATIONS (Manual) ===
 export const evaluations = pgTable("evaluations", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   animalId: integer("animal_id").notNull(),
   date: date("date").defaultNow(),
   evaluator: text("evaluator"), // manual or AI
@@ -277,6 +288,7 @@ export const insertEvaluationSchema = createInsertSchema(evaluations).omit({ id:
 // === AI VALUATIONS ===
 export const aiValuations = pgTable("ai_valuations", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   animalId: integer("animal_id").notNull(),
   valuationText: text("valuation_text").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -321,6 +333,7 @@ export type AnimalWithRelations = Animal & {
 // === FARM SETTINGS ===
 export const farmSettings = pgTable("farm_settings", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership - one farm per user
   farmName: text("farm_name").notNull(),
   studName: text("stud_name"),
   studPrefix: text("stud_prefix"),
@@ -346,6 +359,7 @@ export type InsertFarmSettings = z.infer<typeof insertFarmSettingsSchema>;
 // Documents table for uploaded files
 export const documents = pgTable("documents", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   fileName: text("file_name").notNull(),
   fileType: text("file_type").notNull(), // pdf, image, csv, etc.
   fileUrl: text("file_url").notNull(), // base64 data URL
@@ -363,6 +377,7 @@ export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 // Exported documents tracking for Records filing system
 export const exportedDocuments = pgTable("exported_documents", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   name: text("name").notNull(),
   documentType: text("document_type").notNull(), // herd, individual, mating, culled, sold, productivity
   subfolder: text("subfolder").notNull(), // matches documentType or specific category
@@ -378,6 +393,7 @@ export type InsertExportedDocument = z.infer<typeof insertExportedDocumentSchema
 // Master event record for flock-wide health treatments
 export const flockHealthEvents = pgTable("flock_health_events", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   eventName: text("event_name").notNull().default("Health Treatment"), // User-defined label for the event
   eventDate: date("event_date").notNull(),
   productName: text("product_name").notNull(),
@@ -399,6 +415,7 @@ export type InsertFlockHealthEvent = z.infer<typeof insertFlockHealthEventSchema
 // Individual treatment rows per animal
 export const flockHealthTreatments = pgTable("flock_health_treatments", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   eventId: integer("event_id").notNull().references(() => flockHealthEvents.id),
   animalId: integer("animal_id").notNull().references(() => animals.id),
   quantity: decimal("quantity"), // ml

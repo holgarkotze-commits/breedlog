@@ -40,297 +40,337 @@ import {
   type FlockHealthEvent,
   type FlockHealthTreatment,
 } from "@shared/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
-  // Animals
-  getAnimals(filters?: { search?: string; status?: string; sex?: string }): Promise<Animal[]>;
-  getAnimal(id: number): Promise<Animal | undefined>;
-  createAnimal(animal: InsertAnimal): Promise<Animal>;
-  updateAnimal(id: number, animal: Partial<InsertAnimal>): Promise<Animal>;
-  deleteAnimal(id: number): Promise<void>;
+  // Animals - ALL methods now require userId for data isolation
+  getAnimals(userId: string, filters?: { search?: string; status?: string; sex?: string }): Promise<Animal[]>;
+  getAnimal(userId: string, id: number): Promise<Animal | undefined>;
+  createAnimal(userId: string, animal: Omit<InsertAnimal, 'userId'>): Promise<Animal>;
+  updateAnimal(userId: string, id: number, animal: Partial<Omit<InsertAnimal, 'userId'>>): Promise<Animal>;
+  deleteAnimal(userId: string, id: number): Promise<void>;
 
   // Breeding
-  getBreedingEvents(): Promise<BreedingEvent[]>;
-  createBreedingEvent(event: InsertBreedingEvent): Promise<BreedingEvent>;
-  deleteBreedingEvent(id: number): Promise<void>;
-  getOffspringByBreedingEvent(eventId: number): Promise<Offspring[]>;
-  createOffspring(offspring: InsertOffspring): Promise<Offspring>;
+  getBreedingEvents(userId: string): Promise<BreedingEvent[]>;
+  createBreedingEvent(userId: string, event: Omit<InsertBreedingEvent, 'userId'>): Promise<BreedingEvent>;
+  deleteBreedingEvent(userId: string, id: number): Promise<void>;
+  getOffspringByBreedingEvent(userId: string, eventId: number): Promise<Offspring[]>;
+  createOffspring(userId: string, newOffspring: Omit<InsertOffspring, 'userId'>): Promise<Offspring>;
   
   // Mating Groups
-  getMatingGroups(): Promise<MatingGroup[]>;
-  createMatingGroup(group: InsertMatingGroup): Promise<MatingGroup>;
+  getMatingGroups(userId: string): Promise<MatingGroup[]>;
+  createMatingGroup(userId: string, group: Omit<InsertMatingGroup, 'userId'>): Promise<MatingGroup>;
+  updateMatingGroup(userId: string, id: number, updates: Partial<Omit<InsertMatingGroup, 'userId'>>): Promise<MatingGroup | null>;
+  deleteMatingGroup(userId: string, id: number): Promise<boolean>;
 
   // Records
-  getPerformanceRecords(animalId: number): Promise<PerformanceRecord[]>;
-  createPerformanceRecord(record: InsertPerformanceRecord): Promise<PerformanceRecord>;
-  getHealthRecords(animalId: number): Promise<HealthRecord[]>;
-  createHealthRecord(record: InsertHealthRecord): Promise<HealthRecord>;
+  getPerformanceRecords(userId: string, animalId: number): Promise<PerformanceRecord[]>;
+  createPerformanceRecord(userId: string, record: Omit<InsertPerformanceRecord, 'userId'>): Promise<PerformanceRecord>;
+  getHealthRecords(userId: string, animalId: number): Promise<HealthRecord[]>;
+  createHealthRecord(userId: string, record: Omit<InsertHealthRecord, 'userId'>): Promise<HealthRecord>;
 
   // Evaluations
-  getEvaluations(animalId: number): Promise<Evaluation[]>;
-  createEvaluation(evaluation: InsertEvaluation): Promise<Evaluation>;
+  getEvaluations(userId: string, animalId: number): Promise<Evaluation[]>;
+  createEvaluation(userId: string, evaluation: Omit<InsertEvaluation, 'userId'>): Promise<Evaluation>;
   
   // Farm Settings
-  getFarmSettings(): Promise<FarmSettings | undefined>;
-  saveFarmSettings(settings: InsertFarmSettings): Promise<FarmSettings>;
+  getFarmSettings(userId: string): Promise<FarmSettings | undefined>;
+  saveFarmSettings(userId: string, settings: Omit<InsertFarmSettings, 'userId'>): Promise<FarmSettings>;
   
   // Documents
-  getDocuments(): Promise<Document[]>;
-  createDocument(doc: InsertDocument): Promise<Document>;
-  deleteDocument(id: number): Promise<void>;
+  getDocuments(userId: string): Promise<Document[]>;
+  createDocument(userId: string, doc: Omit<InsertDocument, 'userId'>): Promise<Document>;
+  deleteDocument(userId: string, id: number): Promise<void>;
   
   // Animal Images
-  getAnimalImages(animalId: number): Promise<AnimalImage[]>;
-  createAnimalImage(image: InsertAnimalImage): Promise<AnimalImage>;
-  deleteAnimalImage(id: number): Promise<void>;
+  getAnimalImages(userId: string, animalId: number): Promise<AnimalImage[]>;
+  createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>): Promise<AnimalImage>;
+  deleteAnimalImage(userId: string, id: number): Promise<void>;
   
   // Exported Documents
-  getExportedDocuments(subfolder?: string): Promise<ExportedDocument[]>;
-  createExportedDocument(doc: InsertExportedDocument): Promise<ExportedDocument>;
-  deleteExportedDocument(id: number): Promise<void>;
+  getExportedDocuments(userId: string, subfolder?: string): Promise<ExportedDocument[]>;
+  createExportedDocument(userId: string, doc: Omit<InsertExportedDocument, 'userId'>): Promise<ExportedDocument>;
+  deleteExportedDocument(userId: string, id: number): Promise<void>;
   
-  // Production Reset
-  clearAllData(): Promise<void>;
+  // Production Reset - clears data for specific user only
+  clearAllData(userId: string): Promise<void>;
   
   // Flock Health Events
-  getFlockHealthEvents(): Promise<FlockHealthEvent[]>;
-  getFlockHealthEvent(id: number): Promise<FlockHealthEvent | undefined>;
-  createFlockHealthEvent(event: InsertFlockHealthEvent): Promise<FlockHealthEvent>;
-  getFlockHealthTreatments(eventId: number): Promise<FlockHealthTreatment[]>;
-  createFlockHealthTreatments(treatments: InsertFlockHealthTreatment[]): Promise<FlockHealthTreatment[]>;
+  getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]>;
+  getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined>;
+  createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>): Promise<FlockHealthEvent>;
+  getFlockHealthTreatments(userId: string, eventId: number): Promise<FlockHealthTreatment[]>;
+  createFlockHealthTreatments(userId: string, treatments: Omit<InsertFlockHealthTreatment, 'userId'>[]): Promise<FlockHealthTreatment[]>;
   
   // Bulk import
-  bulkCreateAnimals(animalsList: InsertAnimal[]): Promise<Animal[]>;
+  bulkCreateAnimals(userId: string, animalsList: Omit<InsertAnimal, 'userId'>[]): Promise<Animal[]>;
 }
 
 export class DatabaseStorage implements IStorage {
-  // Animals
-  async getAnimals(filters?: { search?: string; status?: string; sex?: string }): Promise<Animal[]> {
-    let query = db.select().from(animals);
-    
-    // Simple in-memory filtering for now or basic SQL WHEREs if needed.
+  // Animals - ALL queries now filter by userId
+  async getAnimals(userId: string, filters?: { search?: string; status?: string; sex?: string }): Promise<Animal[]> {
+    let conditions = [eq(animals.userId, userId)];
     
     if (filters?.status) {
-      query.where(eq(animals.status, filters.status));
+      conditions.push(eq(animals.status, filters.status));
     }
     
-    const results = await query;
-    return results; // Further filtering can be done in memory or via more complex SQL
+    const results = await db.select().from(animals).where(and(...conditions));
+    return results;
   }
 
-  async getAnimal(id: number): Promise<Animal | undefined> {
-    const [animal] = await db.select().from(animals).where(eq(animals.id, id));
+  async getAnimal(userId: string, id: number): Promise<Animal | undefined> {
+    const [animal] = await db.select().from(animals).where(
+      and(eq(animals.id, id), eq(animals.userId, userId))
+    );
     return animal;
   }
 
-  async createAnimal(animal: InsertAnimal): Promise<Animal> {
-    const [newAnimal] = await db.insert(animals).values(animal).returning();
+  async createAnimal(userId: string, animal: Omit<InsertAnimal, 'userId'>): Promise<Animal> {
+    const [newAnimal] = await db.insert(animals).values({ ...animal, userId }).returning();
     return newAnimal;
   }
 
-  async updateAnimal(id: number, updates: Partial<InsertAnimal>): Promise<Animal> {
+  async updateAnimal(userId: string, id: number, updates: Partial<Omit<InsertAnimal, 'userId'>>): Promise<Animal> {
     const [updatedAnimal] = await db
       .update(animals)
       .set(updates)
-      .where(eq(animals.id, id))
+      .where(and(eq(animals.id, id), eq(animals.userId, userId)))
       .returning();
     return updatedAnimal;
   }
 
-  async deleteAnimal(id: number): Promise<void> {
-    await db.delete(animals).where(eq(animals.id, id));
+  async deleteAnimal(userId: string, id: number): Promise<void> {
+    await db.delete(animals).where(and(eq(animals.id, id), eq(animals.userId, userId)));
   }
 
   // Breeding
-  async getBreedingEvents(): Promise<BreedingEvent[]> {
-    return await db.select().from(breedingEvents).orderBy(desc(breedingEvents.matingDate));
+  async getBreedingEvents(userId: string): Promise<BreedingEvent[]> {
+    return await db.select().from(breedingEvents)
+      .where(eq(breedingEvents.userId, userId))
+      .orderBy(desc(breedingEvents.matingDate));
   }
 
-  async createBreedingEvent(event: InsertBreedingEvent): Promise<BreedingEvent> {
-    const [newEvent] = await db.insert(breedingEvents).values(event).returning();
+  async createBreedingEvent(userId: string, event: Omit<InsertBreedingEvent, 'userId'>): Promise<BreedingEvent> {
+    const [newEvent] = await db.insert(breedingEvents).values({ ...event, userId }).returning();
     return newEvent;
   }
 
-  async deleteBreedingEvent(id: number): Promise<void> {
-    await db.delete(breedingEvents).where(eq(breedingEvents.id, id));
+  async deleteBreedingEvent(userId: string, id: number): Promise<void> {
+    await db.delete(breedingEvents).where(
+      and(eq(breedingEvents.id, id), eq(breedingEvents.userId, userId))
+    );
   }
 
-  async getOffspringByBreedingEvent(eventId: number): Promise<Offspring[]> {
-      return await db.select().from(offspring).where(eq(offspring.breedingEventId, eventId));
+  async getOffspringByBreedingEvent(userId: string, eventId: number): Promise<Offspring[]> {
+    return await db.select().from(offspring).where(
+      and(eq(offspring.breedingEventId, eventId), eq(offspring.userId, userId))
+    );
   }
 
-  async createOffspring(newOffspring: InsertOffspring): Promise<Offspring> {
-    const [created] = await db.insert(offspring).values(newOffspring).returning();
+  async createOffspring(userId: string, newOffspring: Omit<InsertOffspring, 'userId'>): Promise<Offspring> {
+    const [created] = await db.insert(offspring).values({ ...newOffspring, userId }).returning();
     return created;
   }
   
   // Mating Groups
-  async getMatingGroups(): Promise<MatingGroup[]> {
-      return await db.select().from(matingGroups).orderBy(desc(matingGroups.dateIn));
+  async getMatingGroups(userId: string): Promise<MatingGroup[]> {
+    return await db.select().from(matingGroups)
+      .where(eq(matingGroups.userId, userId))
+      .orderBy(desc(matingGroups.dateIn));
   }
   
-  async createMatingGroup(group: InsertMatingGroup): Promise<MatingGroup> {
-      const [newGroup] = await db.insert(matingGroups).values(group).returning();
-      return newGroup;
+  async createMatingGroup(userId: string, group: Omit<InsertMatingGroup, 'userId'>): Promise<MatingGroup> {
+    const [newGroup] = await db.insert(matingGroups).values({ ...group, userId }).returning();
+    return newGroup;
   }
   
-  async updateMatingGroup(id: number, updates: Partial<InsertMatingGroup>): Promise<MatingGroup | null> {
-      const [updated] = await db.update(matingGroups).set(updates).where(eq(matingGroups.id, id)).returning();
-      return updated || null;
+  async updateMatingGroup(userId: string, id: number, updates: Partial<Omit<InsertMatingGroup, 'userId'>>): Promise<MatingGroup | null> {
+    const [updated] = await db.update(matingGroups)
+      .set(updates)
+      .where(and(eq(matingGroups.id, id), eq(matingGroups.userId, userId)))
+      .returning();
+    return updated || null;
   }
   
-  async deleteMatingGroup(id: number): Promise<boolean> {
-      const result = await db.delete(matingGroups).where(eq(matingGroups.id, id));
-      return true;
+  async deleteMatingGroup(userId: string, id: number): Promise<boolean> {
+    await db.delete(matingGroups).where(
+      and(eq(matingGroups.id, id), eq(matingGroups.userId, userId))
+    );
+    return true;
   }
 
   // Records
-  async getPerformanceRecords(animalId: number): Promise<PerformanceRecord[]> {
-    return await db.select().from(performanceRecords).where(eq(performanceRecords.animalId, animalId)).orderBy(desc(performanceRecords.date));
+  async getPerformanceRecords(userId: string, animalId: number): Promise<PerformanceRecord[]> {
+    return await db.select().from(performanceRecords)
+      .where(and(eq(performanceRecords.animalId, animalId), eq(performanceRecords.userId, userId)))
+      .orderBy(desc(performanceRecords.date));
   }
 
-  async createPerformanceRecord(record: InsertPerformanceRecord): Promise<PerformanceRecord> {
-    const [newRecord] = await db.insert(performanceRecords).values(record).returning();
+  async createPerformanceRecord(userId: string, record: Omit<InsertPerformanceRecord, 'userId'>): Promise<PerformanceRecord> {
+    const [newRecord] = await db.insert(performanceRecords).values({ ...record, userId }).returning();
     return newRecord;
   }
 
-  async getHealthRecords(animalId: number): Promise<HealthRecord[]> {
-    return await db.select().from(healthRecords).where(eq(healthRecords.animalId, animalId)).orderBy(desc(healthRecords.date));
+  async getHealthRecords(userId: string, animalId: number): Promise<HealthRecord[]> {
+    return await db.select().from(healthRecords)
+      .where(and(eq(healthRecords.animalId, animalId), eq(healthRecords.userId, userId)))
+      .orderBy(desc(healthRecords.date));
   }
 
-  async createHealthRecord(record: InsertHealthRecord): Promise<HealthRecord> {
-    const [newRecord] = await db.insert(healthRecords).values(record).returning();
+  async createHealthRecord(userId: string, record: Omit<InsertHealthRecord, 'userId'>): Promise<HealthRecord> {
+    const [newRecord] = await db.insert(healthRecords).values({ ...record, userId }).returning();
     return newRecord;
   }
 
   // Evaluations
-  async getEvaluations(animalId: number): Promise<Evaluation[]> {
-    return await db.select().from(evaluations).where(eq(evaluations.animalId, animalId)).orderBy(desc(evaluations.date));
+  async getEvaluations(userId: string, animalId: number): Promise<Evaluation[]> {
+    return await db.select().from(evaluations)
+      .where(and(eq(evaluations.animalId, animalId), eq(evaluations.userId, userId)))
+      .orderBy(desc(evaluations.date));
   }
 
-  async createEvaluation(evaluation: InsertEvaluation): Promise<Evaluation> {
-    const [newEvaluation] = await db.insert(evaluations).values(evaluation).returning();
+  async createEvaluation(userId: string, evaluation: Omit<InsertEvaluation, 'userId'>): Promise<Evaluation> {
+    const [newEvaluation] = await db.insert(evaluations).values({ ...evaluation, userId }).returning();
     return newEvaluation;
   }
   
-  // Farm Settings
-  async getFarmSettings(): Promise<FarmSettings | undefined> {
-    const [settings] = await db.select().from(farmSettings).limit(1);
+  // Farm Settings - one per user
+  async getFarmSettings(userId: string): Promise<FarmSettings | undefined> {
+    const [settings] = await db.select().from(farmSettings)
+      .where(eq(farmSettings.userId, userId))
+      .limit(1);
     return settings;
   }
   
-  async saveFarmSettings(settings: InsertFarmSettings): Promise<FarmSettings> {
-    const existing = await this.getFarmSettings();
+  async saveFarmSettings(userId: string, settings: Omit<InsertFarmSettings, 'userId'>): Promise<FarmSettings> {
+    const existing = await this.getFarmSettings(userId);
     if (existing) {
       const [updated] = await db
         .update(farmSettings)
         .set({ ...settings, updatedAt: new Date() })
-        .where(eq(farmSettings.id, existing.id))
+        .where(and(eq(farmSettings.id, existing.id), eq(farmSettings.userId, userId)))
         .returning();
       return updated;
     } else {
-      const [created] = await db.insert(farmSettings).values(settings).returning();
+      const [created] = await db.insert(farmSettings).values({ ...settings, userId }).returning();
       return created;
     }
   }
   
   // Documents
-  async getDocuments(): Promise<Document[]> {
-    return await db.select().from(documents).orderBy(desc(documents.createdAt));
+  async getDocuments(userId: string): Promise<Document[]> {
+    return await db.select().from(documents)
+      .where(eq(documents.userId, userId))
+      .orderBy(desc(documents.createdAt));
   }
   
-  async createDocument(doc: InsertDocument): Promise<Document> {
-    const [newDoc] = await db.insert(documents).values(doc).returning();
+  async createDocument(userId: string, doc: Omit<InsertDocument, 'userId'>): Promise<Document> {
+    const [newDoc] = await db.insert(documents).values({ ...doc, userId }).returning();
     return newDoc;
   }
   
-  async deleteDocument(id: number): Promise<void> {
-    await db.delete(documents).where(eq(documents.id, id));
+  async deleteDocument(userId: string, id: number): Promise<void> {
+    await db.delete(documents).where(
+      and(eq(documents.id, id), eq(documents.userId, userId))
+    );
   }
   
   // Animal Images
-  async getAnimalImages(animalId: number): Promise<AnimalImage[]> {
+  async getAnimalImages(userId: string, animalId: number): Promise<AnimalImage[]> {
     return await db.select().from(animalImages)
-      .where(eq(animalImages.animalId, animalId))
+      .where(and(eq(animalImages.animalId, animalId), eq(animalImages.userId, userId)))
       .orderBy(desc(animalImages.uploadedAt));
   }
   
-  async createAnimalImage(image: InsertAnimalImage): Promise<AnimalImage> {
-    const [newImage] = await db.insert(animalImages).values(image).returning();
+  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>): Promise<AnimalImage> {
+    const [newImage] = await db.insert(animalImages).values({ ...image, userId }).returning();
     return newImage;
   }
   
-  async deleteAnimalImage(id: number): Promise<void> {
-    await db.delete(animalImages).where(eq(animalImages.id, id));
+  async deleteAnimalImage(userId: string, id: number): Promise<void> {
+    await db.delete(animalImages).where(
+      and(eq(animalImages.id, id), eq(animalImages.userId, userId))
+    );
   }
   
   // Exported Documents
-  async getExportedDocuments(subfolder?: string): Promise<ExportedDocument[]> {
+  async getExportedDocuments(userId: string, subfolder?: string): Promise<ExportedDocument[]> {
+    let conditions = [eq(exportedDocuments.userId, userId)];
     if (subfolder) {
-      return await db.select().from(exportedDocuments)
-        .where(eq(exportedDocuments.subfolder, subfolder))
-        .orderBy(desc(exportedDocuments.exportedAt));
+      conditions.push(eq(exportedDocuments.subfolder, subfolder));
     }
-    return await db.select().from(exportedDocuments).orderBy(desc(exportedDocuments.exportedAt));
+    return await db.select().from(exportedDocuments)
+      .where(and(...conditions))
+      .orderBy(desc(exportedDocuments.exportedAt));
   }
   
-  async createExportedDocument(doc: InsertExportedDocument): Promise<ExportedDocument> {
-    const [newDoc] = await db.insert(exportedDocuments).values(doc).returning();
+  async createExportedDocument(userId: string, doc: Omit<InsertExportedDocument, 'userId'>): Promise<ExportedDocument> {
+    const [newDoc] = await db.insert(exportedDocuments).values({ ...doc, userId }).returning();
     return newDoc;
   }
   
-  async deleteExportedDocument(id: number): Promise<void> {
-    await db.delete(exportedDocuments).where(eq(exportedDocuments.id, id));
+  async deleteExportedDocument(userId: string, id: number): Promise<void> {
+    await db.delete(exportedDocuments).where(
+      and(eq(exportedDocuments.id, id), eq(exportedDocuments.userId, userId))
+    );
   }
   
   // Flock Health Events
-  async getFlockHealthEvents(): Promise<FlockHealthEvent[]> {
-    return await db.select().from(flockHealthEvents).orderBy(desc(flockHealthEvents.createdAt));
+  async getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]> {
+    return await db.select().from(flockHealthEvents)
+      .where(eq(flockHealthEvents.userId, userId))
+      .orderBy(desc(flockHealthEvents.createdAt));
   }
   
-  async getFlockHealthEvent(id: number): Promise<FlockHealthEvent | undefined> {
-    const [event] = await db.select().from(flockHealthEvents).where(eq(flockHealthEvents.id, id));
+  async getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined> {
+    const [event] = await db.select().from(flockHealthEvents).where(
+      and(eq(flockHealthEvents.id, id), eq(flockHealthEvents.userId, userId))
+    );
     return event;
   }
   
-  async createFlockHealthEvent(event: InsertFlockHealthEvent): Promise<FlockHealthEvent> {
-    const [newEvent] = await db.insert(flockHealthEvents).values(event).returning();
+  async createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>): Promise<FlockHealthEvent> {
+    const [newEvent] = await db.insert(flockHealthEvents).values({ ...event, userId }).returning();
     return newEvent;
   }
   
-  async getFlockHealthTreatments(eventId: number): Promise<FlockHealthTreatment[]> {
-    return await db.select().from(flockHealthTreatments).where(eq(flockHealthTreatments.eventId, eventId));
+  async getFlockHealthTreatments(userId: string, eventId: number): Promise<FlockHealthTreatment[]> {
+    return await db.select().from(flockHealthTreatments).where(
+      and(eq(flockHealthTreatments.eventId, eventId), eq(flockHealthTreatments.userId, userId))
+    );
   }
   
-  async createFlockHealthTreatments(treatments: InsertFlockHealthTreatment[]): Promise<FlockHealthTreatment[]> {
+  async createFlockHealthTreatments(userId: string, treatments: Omit<InsertFlockHealthTreatment, 'userId'>[]): Promise<FlockHealthTreatment[]> {
     if (treatments.length === 0) return [];
-    return await db.insert(flockHealthTreatments).values(treatments).returning();
+    const treatmentsWithUserId = treatments.map(t => ({ ...t, userId }));
+    return await db.insert(flockHealthTreatments).values(treatmentsWithUserId).returning();
   }
   
   // Bulk import
-  async bulkCreateAnimals(animalsList: InsertAnimal[]): Promise<Animal[]> {
+  async bulkCreateAnimals(userId: string, animalsList: Omit<InsertAnimal, 'userId'>[]): Promise<Animal[]> {
     if (animalsList.length === 0) return [];
-    const created = await db.insert(animals).values(animalsList).returning();
+    const animalsWithUserId = animalsList.map(a => ({ ...a, userId }));
+    const created = await db.insert(animals).values(animalsWithUserId).returning();
     return created;
   }
   
-  // Production Reset - clears all farm data
-  async clearAllData(): Promise<void> {
-    await db.delete(flockHealthTreatments);
-    await db.delete(flockHealthEvents);
-    await db.delete(exportedDocuments);
-    await db.delete(documents);
-    await db.delete(animalImages);
-    await db.delete(evaluations);
-    await db.delete(healthRecords);
-    await db.delete(performanceRecords);
-    await db.delete(offspring);
-    await db.delete(breedingEvents);
-    await db.delete(matingGroups);
-    await db.delete(animals);
-    await db.delete(farmSettings);
-    console.log('[Storage] All farm data cleared');
+  // Production Reset - clears data for specific user only
+  async clearAllData(userId: string): Promise<void> {
+    await db.delete(flockHealthTreatments).where(eq(flockHealthTreatments.userId, userId));
+    await db.delete(flockHealthEvents).where(eq(flockHealthEvents.userId, userId));
+    await db.delete(exportedDocuments).where(eq(exportedDocuments.userId, userId));
+    await db.delete(documents).where(eq(documents.userId, userId));
+    await db.delete(animalImages).where(eq(animalImages.userId, userId));
+    await db.delete(evaluations).where(eq(evaluations.userId, userId));
+    await db.delete(healthRecords).where(eq(healthRecords.userId, userId));
+    await db.delete(performanceRecords).where(eq(performanceRecords.userId, userId));
+    await db.delete(offspring).where(eq(offspring.userId, userId));
+    await db.delete(breedingEvents).where(eq(breedingEvents.userId, userId));
+    await db.delete(matingGroups).where(eq(matingGroups.userId, userId));
+    await db.delete(animals).where(eq(animals.userId, userId));
+    await db.delete(farmSettings).where(eq(farmSettings.userId, userId));
+    console.log(`[Storage] All farm data cleared for user: ${userId}`);
   }
 }
 

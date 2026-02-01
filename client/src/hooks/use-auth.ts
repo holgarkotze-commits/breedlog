@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import type { User } from "@shared/models/auth";
+import { ensureUserIsolation, clearAllOfflineData } from "@/lib/indexeddb";
 
 async function fetchUser(): Promise<User | null> {
   const response = await fetch("/api/auth/user", {
@@ -30,8 +32,23 @@ export function useAuth() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
+  // Ensure user data isolation when user changes
+  useEffect(() => {
+    if (user?.id) {
+      ensureUserIsolation(user.id).then((dataCleared) => {
+        if (dataCleared) {
+          console.log('[Auth] User changed, offline data cleared for isolation');
+          queryClient.invalidateQueries();
+        }
+      });
+    }
+  }, [user?.id, queryClient]);
+
   const logoutMutation = useMutation({
-    mutationFn: logout,
+    mutationFn: async () => {
+      await clearAllOfflineData();
+      window.location.href = "/api/logout";
+    },
     onSuccess: () => {
       queryClient.setQueryData(["/api/auth/user"], null);
     },

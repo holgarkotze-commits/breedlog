@@ -385,3 +385,31 @@ export async function getOnboardingCompleted(): Promise<boolean> {
 export async function setOnboardingCompleted(completed: boolean): Promise<void> {
   await putInStore('metadata', { key: 'onboardingCompleted', value: completed });
 }
+
+// User isolation - store current userId and clear data when user changes
+export async function getCurrentUserId(): Promise<string | null> {
+  const metadata = await getFromStore<{ key: string; value: string }>('metadata', 'currentUserId');
+  return metadata?.value || null;
+}
+
+export async function setCurrentUserId(userId: string): Promise<void> {
+  await putInStore('metadata', { key: 'currentUserId', value: userId });
+}
+
+// Called on login to ensure data isolation between users
+export async function ensureUserIsolation(userId: string): Promise<boolean> {
+  const storedUserId = await getCurrentUserId();
+  
+  if (storedUserId && storedUserId !== userId) {
+    console.log(`[IndexedDB] User changed from ${storedUserId} to ${userId}, clearing offline data`);
+    await clearAllOfflineData();
+    await setCurrentUserId(userId);
+    return true; // Data was cleared
+  }
+  
+  if (!storedUserId) {
+    await setCurrentUserId(userId);
+  }
+  
+  return false; // No data cleared
+}
