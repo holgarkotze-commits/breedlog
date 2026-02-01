@@ -35,7 +35,7 @@ export const matingGroupsRelations = relations(matingGroups, ({ one, many }) => 
   breedingEvents: many(breedingEvents),
 }));
 
-export const insertMatingGroupSchema = createInsertSchema(matingGroups).omit({ id: true });
+export const insertMatingGroupSchema = createInsertSchema(matingGroups).omit({ id: true, userId: true });
 
 
 // === ANIMALS ===
@@ -128,7 +128,7 @@ export const animalsRelations = relations(animals, ({ one, many }) => ({
   images: many(animalImages),
 }));
 
-export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, createdAt: true });
+export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, userId: true, createdAt: true });
 
 
 // === ANIMAL IMAGES ===
@@ -150,7 +150,7 @@ export const animalImagesRelations = relations(animalImages, ({ one }) => ({
   }),
 }));
 
-export const insertAnimalImageSchema = createInsertSchema(animalImages).omit({ id: true, uploadedAt: true });
+export const insertAnimalImageSchema = createInsertSchema(animalImages).omit({ id: true, userId: true, uploadedAt: true });
 export type InsertAnimalImage = z.infer<typeof insertAnimalImageSchema>;
 export type AnimalImage = typeof animalImages.$inferSelect;
 
@@ -187,7 +187,7 @@ export const breedingEventsRelations = relations(breedingEvents, ({ one, many })
   offspring: many(offspring),
 }));
 
-export const insertBreedingEventSchema = createInsertSchema(breedingEvents).omit({ id: true });
+export const insertBreedingEventSchema = createInsertSchema(breedingEvents).omit({ id: true, userId: true });
 
 
 // === OFFSPRING ===
@@ -210,7 +210,7 @@ export const offspringRelations = relations(offspring, ({ one }) => ({
   }),
 }));
 
-export const insertOffspringSchema = createInsertSchema(offspring).omit({ id: true });
+export const insertOffspringSchema = createInsertSchema(offspring).omit({ id: true, userId: true });
 
 
 // === PERFORMANCE RECORDS ===
@@ -233,7 +233,7 @@ export const performanceRecordsRelations = relations(performanceRecords, ({ one 
   }),
 }));
 
-export const insertPerformanceRecordSchema = createInsertSchema(performanceRecords).omit({ id: true });
+export const insertPerformanceRecordSchema = createInsertSchema(performanceRecords).omit({ id: true, userId: true });
 
 
 // === HEALTH RECORDS ===
@@ -257,7 +257,7 @@ export const healthRecordsRelations = relations(healthRecords, ({ one }) => ({
   }),
 }));
 
-export const insertHealthRecordSchema = createInsertSchema(healthRecords).omit({ id: true });
+export const insertHealthRecordSchema = createInsertSchema(healthRecords).omit({ id: true, userId: true });
 
 
 // === EVALUATIONS (Manual) ===
@@ -282,7 +282,7 @@ export const evaluationsRelations = relations(evaluations, ({ one }) => ({
   }),
 }));
 
-export const insertEvaluationSchema = createInsertSchema(evaluations).omit({ id: true });
+export const insertEvaluationSchema = createInsertSchema(evaluations).omit({ id: true, userId: true });
 
 
 // === AI VALUATIONS ===
@@ -352,7 +352,7 @@ export const farmSettings = pgTable("farm_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertFarmSettingsSchema = createInsertSchema(farmSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertFarmSettingsSchema = createInsertSchema(farmSettings).omit({ id: true, userId: true, createdAt: true, updatedAt: true });
 export type FarmSettings = typeof farmSettings.$inferSelect;
 export type InsertFarmSettings = z.infer<typeof insertFarmSettingsSchema>;
 
@@ -370,7 +370,7 @@ export const documents = pgTable("documents", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, createdAt: true });
+export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, userId: true, createdAt: true });
 export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 
@@ -385,7 +385,7 @@ export const exportedDocuments = pgTable("exported_documents", {
   exportedAt: timestamp("exported_at").defaultNow(),
 });
 
-export const insertExportedDocumentSchema = createInsertSchema(exportedDocuments).omit({ id: true, exportedAt: true });
+export const insertExportedDocumentSchema = createInsertSchema(exportedDocuments).omit({ id: true, userId: true, exportedAt: true });
 export type ExportedDocument = typeof exportedDocuments.$inferSelect;
 export type InsertExportedDocument = z.infer<typeof insertExportedDocumentSchema>;
 
@@ -407,7 +407,7 @@ export const flockHealthEventsRelations = relations(flockHealthEvents, ({ many }
   treatments: many(flockHealthTreatments),
 }));
 
-export const insertFlockHealthEventSchema = createInsertSchema(flockHealthEvents).omit({ id: true, createdAt: true });
+export const insertFlockHealthEventSchema = createInsertSchema(flockHealthEvents).omit({ id: true, userId: true, createdAt: true });
 export type FlockHealthEvent = typeof flockHealthEvents.$inferSelect;
 export type InsertFlockHealthEvent = z.infer<typeof insertFlockHealthEventSchema>;
 
@@ -434,7 +434,7 @@ export const flockHealthTreatmentsRelations = relations(flockHealthTreatments, (
   }),
 }));
 
-export const insertFlockHealthTreatmentSchema = createInsertSchema(flockHealthTreatments).omit({ id: true });
+export const insertFlockHealthTreatmentSchema = createInsertSchema(flockHealthTreatments).omit({ id: true, userId: true });
 export type FlockHealthTreatment = typeof flockHealthTreatments.$inferSelect;
 export type InsertFlockHealthTreatment = z.infer<typeof insertFlockHealthTreatmentSchema>;
 
