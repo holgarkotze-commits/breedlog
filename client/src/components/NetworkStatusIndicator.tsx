@@ -1,7 +1,8 @@
+import { useState, useEffect, useRef } from 'react';
 import { useNetworkStatus } from '@/hooks/use-network-status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Wifi, WifiOff, RefreshCw, Check, AlertCircle, Cloud, CloudOff } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, Check, AlertCircle, Cloud, CloudOff, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function NetworkStatusIndicator() {
@@ -72,32 +73,103 @@ export function NetworkStatusIndicator() {
 }
 
 export function OfflineBanner() {
-  const { isOnline, syncState } = useNetworkStatus();
+  const { isOnline, syncState, triggerSync } = useNetworkStatus();
+  const [dismissed, setDismissed] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const lastErrorRef = useRef<string | null>(null);
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  if (isOnline && syncState.status !== 'error') return null;
+  // Reset dismissed state when status changes or error changes
+  useEffect(() => {
+    const currentError = syncState.error;
+    if (currentError !== lastErrorRef.current || !isOnline !== dismissed) {
+      setDismissed(false);
+      lastErrorRef.current = currentError;
+    }
+  }, [isOnline, syncState.error]);
+
+  // Auto-dismiss after 5 seconds
+  useEffect(() => {
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current);
+    }
+
+    const shouldShow = !isOnline || syncState.status === 'error';
+    if (shouldShow && !dismissed) {
+      dismissTimerRef.current = setTimeout(() => {
+        setDismissed(true);
+      }, 5000);
+    }
+
+    return () => {
+      if (dismissTimerRef.current) {
+        clearTimeout(dismissTimerRef.current);
+      }
+    };
+  }, [isOnline, syncState.status, dismissed]);
+
+  const handleRetry = async () => {
+    if (isRetrying) return;
+    setIsRetrying(true);
+    try {
+      await triggerSync();
+    } finally {
+      setTimeout(() => setIsRetrying(false), 2000);
+    }
+  };
+
+  const handleDismiss = () => {
+    setDismissed(true);
+  };
+
+  // Don't show if online and no error, or if dismissed
+  if ((isOnline && syncState.status !== 'error') || dismissed) return null;
 
   return (
     <div 
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 py-2 px-4 text-center text-sm font-medium",
+        "fixed top-0 left-0 right-0 z-50 py-2 px-4 text-center text-sm font-medium animate-in slide-in-from-top duration-300",
         !isOnline 
           ? "bg-amber-900/90 text-amber-100" 
-          : "bg-red-900/90 text-red-100"
+          : "bg-card/95 text-foreground border-b border-border"
       )}
       data-testid="offline-banner"
     >
       <div className="flex items-center justify-center gap-2">
         {!isOnline ? (
           <>
-            <CloudOff className="w-4 h-4" />
-            <span>You're offline. Changes will sync when connection returns.</span>
+            <CloudOff className="w-4 h-4 text-primary" />
+            <span>Offline mode - changes saved locally</span>
           </>
         ) : (
           <>
-            <AlertCircle className="w-4 h-4" />
-            <span>Sync error: {syncState.error}. Tap to retry.</span>
+            <AlertCircle className="w-4 h-4 text-primary" />
+            <span>Sync issue - data saved locally</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRetry}
+              disabled={isRetrying}
+              className="h-6 px-2 text-xs"
+              data-testid="button-retry-sync"
+            >
+              {isRetrying ? (
+                <RefreshCw className="w-3 h-3 animate-spin" />
+              ) : (
+                'Retry'
+              )}
+            </Button>
           </>
         )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleDismiss}
+          className="h-6 w-6 ml-2"
+          data-testid="button-dismiss-banner"
+        >
+          <X className="w-3 h-3" />
+        </Button>
       </div>
     </div>
   );

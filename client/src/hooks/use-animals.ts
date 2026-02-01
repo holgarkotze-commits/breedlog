@@ -3,6 +3,7 @@ import { api, buildUrl } from "@shared/routes";
 import { type InsertAnimal, type AnimalWithRelations } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue } from "@/lib/indexeddb";
+import { syncManager } from "@/lib/sync-manager";
 
 export function useAnimals(filters?: { search?: string; status?: string; sex?: string }) {
   const queryKey = [api.animals.list.path, filters];
@@ -72,48 +73,58 @@ export function useCreateAnimal() {
 
   return useMutation({
     mutationFn: async (data: InsertAnimal) => {
-      if (!navigator.onLine) {
-        const tempId = -Date.now();
-        const offlineAnimal = { ...data, id: tempId, createdAt: new Date() } as AnimalWithRelations;
-        await putInStore("animals", offlineAnimal);
-        await addToSyncQueue({ action: "create", entity: "animals", data, tempId });
-        console.log("[useCreateAnimal] Offline - saved locally with temp ID:", tempId);
-        return offlineAnimal;
+      // OFFLINE-FIRST: Always save locally first for instant response
+      const tempId = -Date.now();
+      const offlineAnimal = { 
+        ...data, 
+        id: tempId, 
+        createdAt: new Date(),
+        synced: 0 // 0 = pending sync
+      } as AnimalWithRelations;
+      
+      // Save to IndexedDB immediately
+      await putInStore("animals", offlineAnimal);
+      await addToSyncQueue({ action: "create", entity: "animals", data, tempId });
+      console.log("[useCreateAnimal] Saved locally with temp ID:", tempId);
+      
+      // Return immediately - don't block on network
+      // Trigger background sync if online (non-blocking)
+      if (navigator.onLine) {
+        syncManager.sync().catch(err => {
+          console.log("[useCreateAnimal] Background sync failed, will retry later:", err);
+        });
       }
       
-      const res = await fetch(api.animals.create.path, {
-        method: api.animals.create.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        let errorMessage = "Failed to create animal";
-        try {
-          const text = await res.text();
-          const error = JSON.parse(text);
-          errorMessage = error.message || errorMessage;
-        } catch {
-          // Server returned non-JSON, use status text
-          errorMessage = `Server error: ${res.status} ${res.statusText}`;
-        }
-        throw new Error(errorMessage);
-      }
-      const created = api.animals.create.responses[201].parse(await res.json());
-      await putInStore("animals", created);
-      return created;
+      return offlineAnimal;
+    },
+    onMutate: async (newAnimal) => {
+      // Optimistic update: Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: [api.animals.list.path] });
+      
+      // Snapshot previous value for rollback
+      const previousAnimals = queryClient.getQueryData([api.animals.list.path]);
+      
+      return { previousAnimals };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
-      const isOffline = (data.id as number) < 0;
+      // Optimistically add to cache immediately
+      queryClient.setQueryData([api.animals.list.path], (old: AnimalWithRelations[] | undefined) => {
+        if (!old) return [data];
+        return [data, ...old];
+      });
+      
       toast({ 
-        title: isOffline ? "Saved Offline" : "Success", 
-        description: isOffline ? "Animal will sync when online" : "Animal created successfully", 
+        title: "Saved", 
+        description: navigator.onLine ? "Animal saved, syncing..." : "Saved locally, will sync when online",
         variant: "default" 
       });
     },
-    onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    onError: (error, _, context) => {
+      // Rollback on error
+      if (context?.previousAnimals) {
+        queryClient.setQueryData([api.animals.list.path], context.previousAnimals);
+      }
+      toast({ title: "Save Failed", description: error.message, variant: "destructive" });
     },
   });
 }
@@ -124,53 +135,65 @@ export function useUpdateAnimal() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: number } & Partial<InsertAnimal>) => {
+      // OFFLINE-FIRST: Always save locally first for instant response
       const existing = await getFromStore<AnimalWithRelations>("animals", id);
       const updated = existing 
-        ? { ...existing, ...updates, id } as AnimalWithRelations
-        : { ...updates, id } as AnimalWithRelations;
+        ? { ...existing, ...updates, id, synced: 0 } as AnimalWithRelations
+        : { ...updates, id, synced: 0, createdAt: new Date() } as unknown as AnimalWithRelations;
+      
+      // Save to IndexedDB immediately
       await putInStore("animals", updated);
       
-      if (!navigator.onLine) {
-        const isTempId = id < 0;
-        await addToSyncQueue({ 
-          action: "update", 
-          entity: "animals", 
-          data: { id, ...updates },
-          ...(isTempId ? { tempId: id } : {})
+      const isTempId = id < 0;
+      await addToSyncQueue({ 
+        action: "update", 
+        entity: "animals", 
+        data: { id, ...updates },
+        ...(isTempId ? { tempId: id } : {})
+      });
+      console.log("[useUpdateAnimal] Saved locally, ID:", id);
+      
+      // Trigger background sync if online (non-blocking)
+      if (navigator.onLine) {
+        syncManager.sync().catch(err => {
+          console.log("[useUpdateAnimal] Background sync failed, will retry later:", err);
         });
-        console.log("[useUpdateAnimal] Offline - queued update for ID:", id);
-        return updated;
       }
       
-      const url = buildUrl(api.animals.update.path, { id });
-      const res = await fetch(url, {
-        method: api.animals.update.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        let errorMessage = "Failed to update animal";
-        try {
-          const text = await res.text();
-          const error = JSON.parse(text);
-          errorMessage = error.message || errorMessage;
-        } catch {
-          errorMessage = `Server error: ${res.status} ${res.statusText}`;
-        }
-        throw new Error(errorMessage);
-      }
-      const serverData = api.animals.update.responses[200].parse(await res.json());
-      await putInStore("animals", serverData);
-      return serverData;
+      return updated;
+    },
+    onMutate: async ({ id, ...updates }) => {
+      // Optimistic update
+      await queryClient.cancelQueries({ queryKey: [api.animals.list.path] });
+      await queryClient.cancelQueries({ queryKey: [api.animals.get.path, id] });
+      
+      const previousAnimals = queryClient.getQueryData([api.animals.list.path]);
+      const previousAnimal = queryClient.getQueryData([api.animals.get.path, id]);
+      
+      return { previousAnimals, previousAnimal };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
-      toast({ title: "Updated", description: "Animal record updated", variant: "default" });
+      // Optimistically update cache
+      queryClient.setQueryData([api.animals.list.path], (old: AnimalWithRelations[] | undefined) => {
+        if (!old) return old;
+        return old.map(animal => animal.id === data.id ? data : animal);
+      });
+      queryClient.setQueryData([api.animals.get.path, data.id], data);
+      
+      toast({ 
+        title: "Updated", 
+        description: navigator.onLine ? "Changes saved, syncing..." : "Saved locally, will sync when online"
+      });
     },
-    onError: (error) => {
-        toast({ title: "Error", description: error.message, variant: "destructive" });
+    onError: (error, variables, context) => {
+      // Rollback on error
+      if (context?.previousAnimals) {
+        queryClient.setQueryData([api.animals.list.path], context.previousAnimals);
+      }
+      if (context?.previousAnimal) {
+        queryClient.setQueryData([api.animals.get.path, variables.id], context.previousAnimal);
+      }
+      toast({ title: "Update Failed", description: error.message, variant: "destructive" });
     }
   });
 }
@@ -243,48 +266,51 @@ export function useUploadAnimalImage() {
 
   return useMutation({
     mutationFn: async ({ animalId, imageData, fileName, caption }: { animalId: number; imageData: string; fileName: string; caption?: string }) => {
-      if (!navigator.onLine) {
-        const tempId = -Date.now();
-        const offlineImage = { 
-          id: tempId, 
-          animalId, 
-          imageData, 
-          fileName, 
-          caption: caption || null, 
-          createdAt: new Date().toISOString() 
-        };
-        await putInStore("animalImages", offlineImage);
-        await addToSyncQueue({ 
-          action: "create", 
-          entity: "animalImages", 
-          data: { animalId, imageData, fileName, caption }, 
-          tempId 
+      // OFFLINE-FIRST: Always save locally first for instant response
+      const tempId = -Date.now();
+      const offlineImage = { 
+        id: tempId, 
+        animalId, 
+        imageData, 
+        fileName, 
+        caption: caption || null, 
+        createdAt: new Date().toISOString(),
+        synced: 0
+      };
+      
+      // Save to IndexedDB immediately
+      await putInStore("animalImages", offlineImage);
+      await addToSyncQueue({ 
+        action: "create", 
+        entity: "animalImages", 
+        data: { animalId, imageData, fileName, caption }, 
+        tempId 
+      });
+      console.log("[useUploadAnimalImage] Saved locally with temp ID:", tempId);
+      
+      // Trigger background sync if online (non-blocking)
+      if (navigator.onLine) {
+        syncManager.sync().catch(err => {
+          console.log("[useUploadAnimalImage] Background sync failed, will retry later:", err);
         });
-        console.log("[useUploadAnimalImage] Offline - saved locally with temp ID:", tempId);
-        return offlineImage;
       }
       
-      const res = await fetch(`/api/animals/${animalId}/images`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageData, fileName, caption }),
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to upload image");
-      const result = await res.json();
-      await putInStore("animalImages", result);
-      return result;
+      return offlineImage;
     },
     onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/animals", variables.animalId, "images"] });
-      const isOffline = (data.id as number) < 0;
+      // Optimistically add to cache
+      queryClient.setQueryData(["/api/animals", variables.animalId, "images"], (old: any[] | undefined) => {
+        if (!old) return [data];
+        return [...old, data];
+      });
+      
       toast({ 
-        title: isOffline ? "Saved Offline" : "Image Uploaded", 
-        description: isOffline ? "Photo will sync when online" : "Photo added to animal folder" 
+        title: "Photo Saved", 
+        description: navigator.onLine ? "Syncing in background..." : "Saved locally, will sync when online"
       });
     },
     onError: (error) => {
-      toast({ title: "Upload Failed", description: error.message, variant: "destructive" });
+      toast({ title: "Save Failed", description: error.message, variant: "destructive" });
     },
   });
 }

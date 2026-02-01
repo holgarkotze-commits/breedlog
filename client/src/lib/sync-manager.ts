@@ -54,6 +54,10 @@ export interface SyncState {
 
 type SyncCallback = (state: SyncState) => void;
 
+const MAX_RETRIES = 3;
+const BASE_RETRY_DELAY = 2000; // 2 seconds
+const MAX_RETRY_DELAY = 30000; // 30 seconds
+
 class SyncManager {
   private listeners: Set<SyncCallback> = new Set();
   private state: SyncState = {
@@ -63,6 +67,8 @@ class SyncManager {
     error: null,
   };
   private syncInProgress = false;
+  private retryCount = 0;
+  private retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     window.addEventListener('online', () => this.handleOnline());
@@ -146,6 +152,12 @@ class SyncManager {
       return false;
     }
 
+    // Clear any pending retry
+    if (this.retryTimeoutId) {
+      clearTimeout(this.retryTimeoutId);
+      this.retryTimeoutId = null;
+    }
+
     this.syncInProgress = true;
     this.updateState({ status: 'syncing', error: null });
 
@@ -157,6 +169,9 @@ class SyncManager {
       const now = Date.now();
       await setLastSyncTime(now);
       
+      // Reset retry count on success
+      this.retryCount = 0;
+      
       this.updateState({ 
         status: 'synced', 
         lastSyncTime: now,
@@ -167,10 +182,40 @@ class SyncManager {
       return true;
     } catch (error) {
       console.error('[SyncManager] Sync failed:', error);
-      this.updateState({ 
-        status: 'error', 
-        error: error instanceof Error ? error.message : 'Sync failed' 
-      });
+      
+      // Log detailed error info for debugging
+      const errorDetails = {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        retryCount: this.retryCount,
+        timestamp: new Date().toISOString(),
+        online: navigator.onLine
+      };
+      console.log('[SyncManager] Error details:', JSON.stringify(errorDetails));
+      
+      // Schedule retry with exponential backoff if under max retries
+      if (this.retryCount < MAX_RETRIES && navigator.onLine) {
+        const delay = Math.min(BASE_RETRY_DELAY * Math.pow(2, this.retryCount), MAX_RETRY_DELAY);
+        this.retryCount++;
+        console.log(`[SyncManager] Scheduling retry ${this.retryCount}/${MAX_RETRIES} in ${delay}ms`);
+        
+        this.retryTimeoutId = setTimeout(() => {
+          this.retryTimeoutId = null;
+          this.sync();
+        }, delay);
+        
+        // Don't show error status during retry, keep syncing status
+        this.updateState({ status: 'idle' });
+      } else {
+        // Max retries exceeded, show error but don't spam user
+        this.updateState({ 
+          status: 'error', 
+          error: 'Sync failed - will retry automatically'
+        });
+        
+        // Reset retry count for next manual attempt
+        this.retryCount = 0;
+      }
+      
       return false;
     } finally {
       this.syncInProgress = false;

@@ -1,0 +1,51 @@
+Objective: Farm-test fixes. App must be faster + stable online/offline. Major issue is saving/editing profiles when photos are involved + repeated Sync 500 / Failed to fetch banners.
+
+A) Critical Bug: Save/Edit with Photo is Slow or Fails
+- Current behaviour:
+  - Creating profile WITHOUT photo saves fast.
+  - Adding photo later (edit profile) becomes very slow and sometimes fails to save.
+  - Sometimes shows “Server error: 500” or “Failed to fetch” and record doesn’t save.
+- Fix requirements:
+  1) Make image upload + save reliable and fast (mobile network + offline).
+  2) Compress/resize images on-device BEFORE upload (reduce file size + dimensions).
+  3) Save must be atomic and predictable:
+     - If offline: save profile + image locally, queue upload/sync later.
+     - If online: save profile immediately, upload image in background (do not block UI).
+  4) Add timeout + retry logic for image upload and sync (with backoff).
+  5) Ensure “Save Record” cannot get stuck; always ends with success OR clear failure + keep draft.
+  6) Prevent duplicate saves: disable button while saving; show progress indicator.
+
+B) Error 500 / Failed to fetch Handling (UI + Logic)
+- Screens show:
+  - “Error: Server error: 500”
+  - “Sync error: 500 Internal Server Error. Tap to retry.”
+  - “Sync error: Failed to fetch. Tap to retry.”
+- Fix requirements:
+  1) These banners/toasts must NOT stay permanently.
+  2) Show once per event, auto-dismiss after a few seconds.
+  3) Provide a small non-blocking sync status indicator (optional), but no stuck red bar.
+  4) “Tap to retry” must actually retry AND should not spam/re-trigger endlessly.
+  5) Log full error details (endpoint/action, payload size, status code) for debugging.
+
+C) Offline Banner Behaviour
+- Current banner: “You’re offline. Changes will sync when connection returns.”
+- Requirement:
+  - Display briefly (auto-dismiss) OR collapse to a small status indicator.
+  - Must not block screens or overlap important UI.
+
+D) Fast UI Refresh After Add/Edit
+- Fix issue where newly added animals or changes take long to reflect in:
+  - My Herd list
+  - related sections (e.g. Ram/Ewe sections, Pedigree/Bloodline screens)
+- Requirement:
+  - Use optimistic UI update + immediate local list update after save.
+  - Background sync should confirm later; rollback only if save truly fails.
+
+E) Required Testing (Must Confirm)
+1) Create new animal WITH photo (online) → save must complete quickly and appear immediately in herd list.
+2) Create new animal WITHOUT photo → save fast → then edit and add photo → must also save fast + reliably.
+3) Offline: create profile + add photo → must save locally with “queued to sync” status; later sync when online.
+4) Force low-signal/timeout scenario → confirm retry works and user never loses data (draft preserved).
+5) Confirm banners/toasts auto-dismiss and never get stuck on screen.
+
+Note: I’m attaching farm-test screenshots showing the exact 500 / Failed to fetch messages and stuck sync banners. Fix all related flows.

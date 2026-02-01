@@ -3418,7 +3418,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
             )}
 
             <Button type="submit" disabled={isPending} data-testid="button-save-animal" className="w-full rugged-btn bg-primary text-black">
-              {isPending ? "Creating..." : "Save Record"}
+              {isPending ? "Saving..." : "Save Record"}
             </Button>
           </form>
         </Form>

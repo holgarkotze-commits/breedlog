@@ -1,0 +1,55 @@
+Objective: Make the app truly OFFLINE-FIRST and fix the main on-site issue: saving profiles is too slow and often fails. Saving must be instant, reliable, and never block the user.
+
+1) Offline-First Saving (CRITICAL)
+- App must work fully offline for:
+  - Creating new animal profiles
+  - Editing profiles
+  - Capturing and attaching photos
+- When offline or weak signal:
+  - Save must write to LOCAL storage immediately (no waiting for server).
+  - Mark record as “Pending Sync”.
+  - Queue uploads (including photos) for later sync.
+- User must never be prevented from working because of no internet.
+
+2) Fix Slow Saves + Save Failures (CRITICAL)
+- Current issue: Save can take very long and fails many times (especially with photos).
+- Requirements:
+  - Save action must complete quickly (under a few seconds) by saving locally first.
+  - Do not block save on network calls.
+  - Disable double-taps while saving.
+  - Always show clear result: Saved locally / Pending sync / Failed (draft kept).
+  - Never lose user input if sync fails.
+
+3) Photo Handling (Main Bottleneck)
+- Implement on-device image compression + resizing BEFORE saving/uploading.
+- Save profile instantly, then upload photo in background.
+- If offline: keep photo locally and sync later reliably.
+- Add retry + timeout + backoff for photo upload.
+
+4) Sync Engine Improvements
+- Create a proper sync queue:
+  - FIFO queue, retry with exponential backoff.
+  - Only one sync process running at a time.
+  - No endless retry loops spamming the UI.
+- When connection returns:
+  - Auto-sync quietly in background.
+  - Provide a small sync status indicator (optional), NOT blocking banners.
+
+5) Error/Message Behaviour (UI)
+- Fix stuck banners:
+  - “Server error: 500”, “Failed to fetch”, “Sync error… Tap to retry”
+- Requirements:
+  - Show message once, auto-dismiss after a few seconds.
+  - Provide “Retry” in a non-blocking way.
+  - Log technical error details silently for debugging.
+
+6) Testing (Must Confirm)
+- OFFLINE test:
+  - Create profile + add photo + save → must succeed locally every time.
+  - Close and reopen app → record must still be there.
+  - Make multiple offline saves → all must queue.
+- ONLINE return:
+  - Auto-sync queued records + photos.
+  - No duplicates, no lost photos, no stuck banners.
+- Weak-signal test:
+  - Save must still complete locally fast, then sync later.
