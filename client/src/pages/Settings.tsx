@@ -901,34 +901,29 @@ export default function Settings() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {user ? (
-              <div className="space-y-4">
-                 <div className="flex items-center gap-4 p-4 bg-secondary/30 rounded border border-border">
-                    <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center font-black text-2xl text-black">
-                      {user.firstName?.[0] || user.email?.[0] || "U"}
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold">{user.firstName} {user.lastName}</h3>
-                      <p className="text-muted-foreground">{user.email}</p>
-                    </div>
-                 </div>
+            <div className="space-y-4">
+               <div className="flex items-center gap-4 p-4 bg-secondary/30 rounded border border-border">
+                  <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center font-black text-2xl text-black">
+                    D
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold">Device Registered</h3>
+                    <p className="text-muted-foreground text-xs font-mono truncate max-w-[200px]">
+                      {user?.deviceId || "Not registered"}
+                    </p>
+                  </div>
+               </div>
+               {user && (
                  <Button onClick={() => logout()} variant="destructive" data-testid="button-logout" className="w-full rugged-btn">
-                   <LogOut className="w-4 h-4 mr-2" /> Log Out
+                   <LogOut className="w-4 h-4 mr-2" /> Clear Device Data
                  </Button>
-                 <Button asChild variant="outline" className="w-full rugged-btn" data-testid="button-admin">
-                   <Link href="/admin">
-                     <ShieldCheck className="w-4 h-4 mr-2" /> Beta Admin Panel
-                   </Link>
-                 </Button>
-              </div>
-            ) : (
-              <div className="text-center py-6 space-y-4">
-                 <p className="text-muted-foreground">You are currently using Guest mode.</p>
-                 <Button onClick={() => window.location.href = "/api/login"} data-testid="button-settings-login" className="rugged-btn bg-primary text-black w-full">
-                   Log In to Sync Data
-                 </Button>
-              </div>
-            )}
+               )}
+               <Button asChild variant="outline" className="w-full rugged-btn" data-testid="button-admin">
+                 <Link href="/admin">
+                   <ShieldCheck className="w-4 h-4 mr-2" /> Beta Admin Panel
+                 </Link>
+               </Button>
+            </div>
           </CardContent>
         </Card>
 

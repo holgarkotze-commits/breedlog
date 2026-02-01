@@ -2,16 +2,14 @@ export function isUnauthorizedError(error: Error): boolean {
   return /^401: .*Unauthorized/.test(error.message);
 }
 
-// Redirect to login with a toast notification
-export function redirectToLogin(toast?: (options: { title: string; description: string; variant: string }) => void) {
+// Handle unauthorized errors - with device-based auth, we don't redirect to login
+// Instead, we just show a notification and let the user retry
+export function handleUnauthorized(toast?: (options: { title: string; description: string; variant: string }) => void) {
   if (toast) {
     toast({
-      title: "Unauthorized",
-      description: "You are logged out. Logging in again...",
+      title: "Access Error",
+      description: "Unable to complete this action. Please try again.",
       variant: "destructive",
     });
   }
-  setTimeout(() => {
-    window.location.href = "/api/login";
-  }, 500);
 }

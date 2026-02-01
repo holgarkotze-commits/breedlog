@@ -37,8 +37,14 @@ Preferred communication style: Simple, everyday language.
 - **Migrations**: Managed via drizzle-kit.
 
 ### Authentication
-- Replit Auth using OpenID Connect.
-- PostgreSQL-backed sessions via connect-pg-simple.
+- **Device-Based Authentication**: No user accounts required. Each device gets a unique UUID on first launch.
+  - Device ID is generated client-side using `crypto.randomUUID()` and stored in localStorage.
+  - Device is auto-registered on first launch, creating a user record in the database.
+  - PostgreSQL-backed sessions via connect-pg-simple.
+- **Beta Access Control**: Devices must enter an invite code to access the app.
+  - Admin panel at `/admin` is protected by ADMIN_PIN environment variable (bypasses beta access gate).
+  - Invite codes are single-use and bind to specific device IDs.
+  - 7-day offline grace period for continued access without internet.
 
 ### AI Integration
 - OpenAI API via Replit AI Integrations for image generation and text-to-speech/speech-to-text.
@@ -83,7 +89,7 @@ Preferred communication style: Simple, everyday language.
 - **OpenAI API**: Used for image generation and audio functionalities, integrated via Replit AI Integrations.
 
 ### Authentication
-- **Replit Auth**: OpenID Connect based authentication.
+- **Device-Based Auth**: UUID-based device identification with ADMIN_PIN for admin access.
 
 ### Third-Party Libraries
 - **@tanstack/react-query**: Data fetching and caching.
