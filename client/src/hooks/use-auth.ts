@@ -67,31 +67,35 @@ async function registerDevice(): Promise<DeviceInfo> {
 export function useAuth() {
   const queryClient = useQueryClient();
   const [isRegistering, setIsRegistering] = useState(false);
+  const [registrationAttempted, setRegistrationAttempted] = useState(false);
   
   const { data: deviceInfo, isLoading, refetch } = useQuery<DeviceInfo>({
     queryKey: ["/api/device/info"],
     queryFn: fetchDeviceInfo,
-    retry: false,
+    retry: 1,
+    retryDelay: 1000,
     staleTime: 1000 * 60 * 5,
   });
 
-  // Auto-register device on first load if not registered
+  // Auto-register device on first load if not registered (only try once)
   useEffect(() => {
     async function autoRegister() {
-      if (deviceInfo && !deviceInfo.registered && !isRegistering) {
+      if (deviceInfo && !deviceInfo.registered && !isRegistering && !registrationAttempted) {
         setIsRegistering(true);
+        setRegistrationAttempted(true);
         try {
           await registerDevice();
           refetch();
         } catch (err) {
           console.error('[Auth] Device registration failed:', err);
+          // Don't retry - let the app proceed to beta access gate
         } finally {
           setIsRegistering(false);
         }
       }
     }
     autoRegister();
-  }, [deviceInfo, isRegistering, refetch]);
+  }, [deviceInfo, isRegistering, registrationAttempted, refetch]);
 
   // Ensure user data isolation when device changes
   useEffect(() => {
@@ -117,9 +121,13 @@ export function useAuth() {
     },
   });
 
+  // Only show loading on initial fetch, not during registration attempts
+  // This prevents the app from being stuck if registration fails
+  const effectiveLoading = isLoading && !registrationAttempted;
+
   return {
     user: deviceInfo?.registered ? { id: deviceInfo.userId!, deviceId: deviceInfo.deviceId! } : null,
-    isLoading: isLoading || isRegistering,
+    isLoading: effectiveLoading,
     isAuthenticated: !!deviceInfo?.registered,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
