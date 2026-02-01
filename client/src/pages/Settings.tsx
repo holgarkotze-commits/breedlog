@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle, AlertTriangle, RotateCcw } from "lucide-react";
+import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle, AlertTriangle, RotateCcw, ShieldCheck } from "lucide-react";
+import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertFarmSettingsSchema, type InsertFarmSettings } from "@shared/schema";
@@ -913,6 +914,11 @@ export default function Settings() {
                  </div>
                  <Button onClick={() => logout()} variant="destructive" data-testid="button-logout" className="w-full rugged-btn">
                    <LogOut className="w-4 h-4 mr-2" /> Log Out
+                 </Button>
+                 <Button asChild variant="outline" className="w-full rugged-btn" data-testid="button-admin">
+                   <Link href="/admin">
+                     <ShieldCheck className="w-4 h-4 mr-2" /> Beta Admin Panel
+                   </Link>
                  </Button>
               </div>
             ) : (

@@ -1,0 +1,69 @@
+FEATURE: Controlled Beta Access with Invite Codes (Expiry, Limits, Offline Grace)
+
+Goal:
+When sharing the install link, ONLY invited testers can use the app via an access code. Access must expire, be revocable instantly, and remain secure even with offline use.
+
+1) Access Gate (First Launch & Re-Check)
+- On first launch, block app usage until a valid Access Code is entered.
+- After validation, store a local access token linked to userId.
+- Re-check access validity:
+  - On every app launch when online
+  - At least once every 24 hours when online
+
+2) Invite Code Rules (MANDATORY)
+Each access code must support:
+- Expiry date: default = 30 days from creation
+- Max uses: default = 1 device only
+- Instant revoke: admin can disable a code at any time
+- Hard tester limit: maximum 10 active testers allowed at any time
+
+3) Offline Grace Period
+- If user goes offline after successful activation:
+  - App may continue working offline for a maximum of 7 days.
+- After 7 days without successful online validation:
+  - App must LOCK and show:
+    “Offline grace period expired. Please connect to the internet.”
+- Once online again:
+  - If code is still valid → unlock app
+  - If expired or revoked → keep app locked
+
+4) Backend Data Model (Correctness Required)
+Create InviteCodes table with:
+- code (unique, non-guessable)
+- status (active / revoked / expired)
+- expiresAt (timestamp)
+- maxUses (integer)
+- usesCount (integer)
+- maxDevices = 1
+- createdAt
+- lastValidatedAt
+
+5) User Binding & Isolation
+- On successful code entry:
+  - Generate or assign a unique userId
+  - Bind userId to that invite code
+- ALL data (farm, herd, animals, images, records, settings) MUST be scoped to userId
+- Users must NEVER see other users’ data
+
+6) Admin Control (Minimum Required)
+- Admin must be able to:
+  - Generate new invite codes
+  - Set expiry date (default 30 days)
+  - Set maxUses (default 1)
+  - Revoke codes instantly
+  - See active tester count (must never exceed 10)
+
+7) Lock Behaviour
+- If access is invalid (expired / revoked / over limit):
+  - App must immediately lock
+  - Show clear message:
+    “Beta access expired or revoked. Contact admin.”
+
+8) Testing (Must Pass)
+- User without code → no access
+- Valid code → access granted
+- Same code on second device → blocked
+- Revoke code → user loses access on next online check
+- Offline use works up to 7 days only
+- More than 10 testers → new codes cannot be activated
+- Users never see each other’s farm data

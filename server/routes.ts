@@ -779,5 +779,293 @@ export async function registerRoutes(
     res.json({ success: true, timestamp: new Date().toISOString() });
   });
 
+  // === BETA ACCESS SYSTEM ===
+  const BETA_CONFIG = {
+    MAX_TESTERS: 10,
+    DEFAULT_EXPIRY_DAYS: 30,
+    OFFLINE_GRACE_DAYS: 7,
+  };
+  
+  // Generate a secure random code
+  function generateInviteCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude confusing chars
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
+  }
+  
+  // Helper to generate device ID from user agent + some user data
+  function getDeviceId(req: Request): string {
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const acceptLang = req.headers['accept-language'] || 'unknown';
+    const hash = Buffer.from(userAgent + acceptLang).toString('base64').substring(0, 32);
+    return hash;
+  }
+  
+  // Check if invite code is valid (not expired, not revoked, uses remaining)
+  async function isCodeValid(code: any): Promise<{ valid: boolean; reason?: string }> {
+    if (!code) return { valid: false, reason: 'Code not found' };
+    if (code.status === 'revoked') return { valid: false, reason: 'Code has been revoked' };
+    if (code.status === 'expired') return { valid: false, reason: 'Code has expired' };
+    if (new Date(code.expiresAt) < new Date()) return { valid: false, reason: 'Code has expired' };
+    if (code.usesCount >= code.maxUses) return { valid: false, reason: 'Code has reached maximum uses' };
+    return { valid: true };
+  }
+  
+  // Check access status for authenticated user
+  app.get("/api/beta/access", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const activation = await storage.getUserActivation(userId);
+      
+      if (!activation) {
+        return res.json({ 
+          hasAccess: false, 
+          reason: 'No activation found',
+          needsCode: true 
+        });
+      }
+      
+      // Check if activation is still valid
+      if (activation.status !== 'active') {
+        return res.json({ 
+          hasAccess: false, 
+          reason: 'Access revoked or expired',
+          needsCode: false 
+        });
+      }
+      
+      // Get linked invite code to check its status
+      const codes = await storage.getInviteCodes();
+      const code = codes.find(c => c.id === activation.inviteCodeId);
+      
+      if (code && (code.status === 'revoked' || new Date(code.expiresAt) < new Date())) {
+        // Update activation status
+        await storage.updateUserActivation(userId, { status: 'revoked' });
+        return res.json({ 
+          hasAccess: false, 
+          reason: 'Access has expired or been revoked',
+          needsCode: false 
+        });
+      }
+      
+      // Check offline grace period
+      const lastOnline = new Date(activation.lastOnlineCheck);
+      const graceDays = BETA_CONFIG.OFFLINE_GRACE_DAYS;
+      const graceEnd = new Date(lastOnline.getTime() + graceDays * 24 * 60 * 60 * 1000);
+      
+      if (new Date() > graceEnd) {
+        return res.json({ 
+          hasAccess: false, 
+          reason: 'Offline grace period expired. Please connect to the internet.',
+          needsCode: false,
+          offlineGraceExpired: true
+        });
+      }
+      
+      // Update last online check
+      await storage.updateUserActivation(userId, { 
+        lastOnlineCheck: new Date(),
+        offlineGraceStart: null 
+      });
+      
+      res.json({ 
+        hasAccess: true,
+        activatedAt: activation.activatedAt,
+        expiresAt: code?.expiresAt 
+      });
+    } catch (err: any) {
+      console.error("Beta access check error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+  
+  // Validate and activate with invite code
+  app.post("/api/beta/validate", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { code: inputCode } = req.body;
+      
+      if (!inputCode || typeof inputCode !== 'string') {
+        return res.status(400).json({ message: 'Access code is required' });
+      }
+      
+      const codeUpper = inputCode.toUpperCase().trim();
+      
+      // Check if user already has an activation
+      const existingActivation = await storage.getUserActivation(userId);
+      if (existingActivation && existingActivation.status === 'active') {
+        return res.json({ success: true, message: 'Already activated' });
+      }
+      
+      // Find the invite code
+      const inviteCode = await storage.getInviteCodeByCode(codeUpper);
+      const validation = await isCodeValid(inviteCode);
+      
+      if (!validation.valid) {
+        return res.status(400).json({ message: validation.reason });
+      }
+      
+      // Check max testers limit
+      const activeTesters = await storage.getActiveTestersCount();
+      if (activeTesters >= BETA_CONFIG.MAX_TESTERS) {
+        return res.status(400).json({ message: 'Beta testing limit reached. No new testers can be added.' });
+      }
+      
+      // Check device limit (1 device per code)
+      const deviceId = getDeviceId(req);
+      const allActivations = await storage.getAllActiveActivations();
+      const codeActivations = allActivations.filter(a => a.inviteCodeId === inviteCode!.id);
+      
+      if (codeActivations.length >= inviteCode!.maxDevices) {
+        // Check if it's the same device
+        const sameDevice = codeActivations.find(a => a.deviceId === deviceId);
+        if (!sameDevice) {
+          return res.status(400).json({ message: 'This code has already been used on another device' });
+        }
+      }
+      
+      // Create activation
+      await storage.createUserActivation({
+        userId,
+        inviteCodeId: inviteCode!.id,
+        deviceId,
+        status: 'active',
+      });
+      
+      // Increment uses count
+      await storage.incrementInviteCodeUses(inviteCode!.id);
+      
+      res.json({ 
+        success: true, 
+        message: 'Access granted!',
+        expiresAt: inviteCode!.expiresAt
+      });
+    } catch (err: any) {
+      console.error("Beta validation error:", err);
+      if (err.message?.includes('unique constraint')) {
+        // User already has activation, this is fine
+        return res.json({ success: true, message: 'Already activated' });
+      }
+      res.status(500).json({ message: err.message });
+    }
+  });
+  
+  // === ADMIN ROUTES (require admin check) ===
+  // Admin is specified via ADMIN_USER_ID env var - if not set, first authenticated user becomes admin
+  let bootstrappedAdminId: string | null = null;
+  
+  const isAdmin = async (req: Request): Promise<boolean> => {
+    const userId = getUserId(req);
+    const adminId = process.env.ADMIN_USER_ID;
+    
+    // If admin ID is set in env, use that
+    if (adminId) {
+      return userId === adminId;
+    }
+    
+    // Bootstrap: first user to check becomes admin (stored in memory for this session)
+    if (!bootstrappedAdminId) {
+      bootstrappedAdminId = userId;
+      console.log(`[Admin] Bootstrapped admin user: ${userId}`);
+    }
+    
+    return userId === bootstrappedAdminId;
+  };
+  
+  const requireAdmin = async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    const adminCheck = await isAdmin(req);
+    if (!adminCheck) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    next();
+  };
+  
+  // Check if current user is admin
+  app.get("/api/admin/check", requireAuth, async (req, res) => {
+    const adminCheck = await isAdmin(req);
+    res.json({ isAdmin: adminCheck });
+  });
+  
+  // List all invite codes
+  app.get("/api/admin/invite-codes", requireAdmin, async (req, res) => {
+    try {
+      const codes = await storage.getInviteCodes();
+      const activeTesters = await storage.getActiveTestersCount();
+      res.json({ 
+        codes, 
+        activeTesters,
+        maxTesters: BETA_CONFIG.MAX_TESTERS
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+  
+  // Create new invite code
+  app.post("/api/admin/invite-codes", requireAdmin, async (req, res) => {
+    try {
+      const { notes, expiryDays = BETA_CONFIG.DEFAULT_EXPIRY_DAYS, maxUses = 1 } = req.body;
+      
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + expiryDays);
+      
+      const code = await storage.createInviteCode({
+        code: generateInviteCode(),
+        expiresAt,
+        maxUses,
+        maxDevices: 1,
+        notes,
+      });
+      
+      res.status(201).json(code);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+  
+  // Revoke invite code
+  app.post("/api/admin/invite-codes/:id/revoke", requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const code = await storage.updateInviteCode(id, { status: 'revoked' });
+      
+      if (!code) {
+        return res.status(404).json({ message: 'Code not found' });
+      }
+      
+      // Also revoke all activations using this code
+      const activations = await storage.getAllActiveActivations();
+      for (const activation of activations) {
+        if (activation.inviteCodeId === id) {
+          await storage.updateUserActivation(activation.userId, { status: 'revoked' });
+        }
+      }
+      
+      res.json({ success: true, code });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+  
+  // Get active testers
+  app.get("/api/admin/testers", requireAdmin, async (req, res) => {
+    try {
+      const activations = await storage.getAllActiveActivations();
+      res.json({ 
+        activations,
+        count: activations.length,
+        max: BETA_CONFIG.MAX_TESTERS
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }

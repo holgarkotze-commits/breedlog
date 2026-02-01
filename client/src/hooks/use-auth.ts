@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { User } from "@shared/models/auth";
 import { ensureUserIsolation, clearAllOfflineData } from "@/lib/indexeddb";
+import { clearBetaAccessStorage } from "@/components/BetaAccessGate";
 
 async function fetchUser(): Promise<User | null> {
   const response = await fetch("/api/auth/user", {
@@ -47,6 +48,7 @@ export function useAuth() {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       await clearAllOfflineData();
+      clearBetaAccessStorage();
       window.location.href = "/api/logout";
     },
     onSuccess: () => {

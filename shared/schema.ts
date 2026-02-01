@@ -437,3 +437,49 @@ export const flockHealthTreatmentsRelations = relations(flockHealthTreatments, (
 export const insertFlockHealthTreatmentSchema = createInsertSchema(flockHealthTreatments).omit({ id: true });
 export type FlockHealthTreatment = typeof flockHealthTreatments.$inferSelect;
 export type InsertFlockHealthTreatment = z.infer<typeof insertFlockHealthTreatmentSchema>;
+
+// === BETA ACCESS - INVITE CODES ===
+export const inviteCodes = pgTable("invite_codes", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 32 }).notNull().unique(), // Non-guessable unique code
+  status: text("status").notNull().default("active"), // active, revoked, expired
+  expiresAt: timestamp("expires_at").notNull(), // When the code expires
+  maxUses: integer("max_uses").notNull().default(1), // Maximum number of uses (typically 1)
+  usesCount: integer("uses_count").notNull().default(0), // Current number of uses
+  maxDevices: integer("max_devices").notNull().default(1), // Max devices per code (typically 1)
+  notes: text("notes"), // Admin notes about who this code is for
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  lastValidatedAt: timestamp("last_validated_at"), // Last time any user validated with this code
+});
+
+export const insertInviteCodeSchema = createInsertSchema(inviteCodes).omit({ id: true, createdAt: true, usesCount: true, lastValidatedAt: true });
+export type InviteCode = typeof inviteCodes.$inferSelect;
+export type InsertInviteCode = z.infer<typeof insertInviteCodeSchema>;
+
+// === BETA ACCESS - USER ACTIVATIONS ===
+// Links a user to their invite code and tracks their access status
+export const userActivations = pgTable("user_activations", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id).unique(), // One activation per user
+  inviteCodeId: integer("invite_code_id").notNull().references(() => inviteCodes.id),
+  deviceId: varchar("device_id", { length: 64 }).notNull(), // Unique device identifier
+  status: text("status").notNull().default("active"), // active, revoked, expired
+  activatedAt: timestamp("activated_at").notNull().defaultNow(),
+  lastOnlineCheck: timestamp("last_online_check").notNull().defaultNow(), // Last successful online validation
+  offlineGraceStart: timestamp("offline_grace_start"), // When offline grace period started (null = currently online)
+});
+
+export const userActivationsRelations = relations(userActivations, ({ one }) => ({
+  user: one(users, {
+    fields: [userActivations.userId],
+    references: [users.id],
+  }),
+  inviteCode: one(inviteCodes, {
+    fields: [userActivations.inviteCodeId],
+    references: [inviteCodes.id],
+  }),
+}));
+
+export const insertUserActivationSchema = createInsertSchema(userActivations).omit({ id: true, activatedAt: true, lastOnlineCheck: true });
+export type UserActivation = typeof userActivations.$inferSelect;
+export type InsertUserActivation = z.infer<typeof insertUserActivationSchema>;

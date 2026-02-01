@@ -13,6 +13,8 @@ import {
   exportedDocuments,
   flockHealthEvents,
   flockHealthTreatments,
+  inviteCodes,
+  userActivations,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -26,6 +28,8 @@ import {
   type InsertExportedDocument,
   type InsertFlockHealthEvent,
   type InsertFlockHealthTreatment,
+  type InsertInviteCode,
+  type InsertUserActivation,
   type Animal,
   type BreedingEvent,
   type Offspring,
@@ -39,8 +43,10 @@ import {
   type ExportedDocument,
   type FlockHealthEvent,
   type FlockHealthTreatment,
+  type InviteCode,
+  type UserActivation,
 } from "@shared/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql, lt, gte } from "drizzle-orm";
 
 export interface IStorage {
   // Animals - ALL methods now require userId for data isolation
@@ -104,6 +110,20 @@ export interface IStorage {
   
   // Bulk import
   bulkCreateAnimals(userId: string, animalsList: Omit<InsertAnimal, 'userId'>[]): Promise<Animal[]>;
+  
+  // Beta Access - Invite Codes (Admin operations, no userId required)
+  getInviteCodes(): Promise<InviteCode[]>;
+  getInviteCodeByCode(code: string): Promise<InviteCode | undefined>;
+  createInviteCode(code: Omit<InsertInviteCode, 'status'>): Promise<InviteCode>;
+  updateInviteCode(id: number, updates: Partial<InsertInviteCode>): Promise<InviteCode | undefined>;
+  incrementInviteCodeUses(id: number): Promise<void>;
+  getActiveTestersCount(): Promise<number>;
+  
+  // Beta Access - User Activations
+  getUserActivation(userId: string): Promise<UserActivation | undefined>;
+  createUserActivation(activation: InsertUserActivation): Promise<UserActivation>;
+  updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, 'id' | 'userId' | 'activatedAt'>>): Promise<UserActivation | undefined>;
+  getAllActiveActivations(): Promise<UserActivation[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -371,6 +391,58 @@ export class DatabaseStorage implements IStorage {
     await db.delete(animals).where(eq(animals.userId, userId));
     await db.delete(farmSettings).where(eq(farmSettings.userId, userId));
     console.log(`[Storage] All farm data cleared for user: ${userId}`);
+  }
+  
+  // === BETA ACCESS - INVITE CODES ===
+  async getInviteCodes(): Promise<InviteCode[]> {
+    return await db.select().from(inviteCodes).orderBy(desc(inviteCodes.createdAt));
+  }
+  
+  async getInviteCodeByCode(code: string): Promise<InviteCode | undefined> {
+    const results = await db.select().from(inviteCodes).where(eq(inviteCodes.code, code));
+    return results[0];
+  }
+  
+  async createInviteCode(input: Omit<InsertInviteCode, 'status'>): Promise<InviteCode> {
+    const results = await db.insert(inviteCodes).values({ ...input, status: 'active' }).returning();
+    return results[0];
+  }
+  
+  async updateInviteCode(id: number, updates: Partial<InsertInviteCode>): Promise<InviteCode | undefined> {
+    const results = await db.update(inviteCodes).set(updates).where(eq(inviteCodes.id, id)).returning();
+    return results[0];
+  }
+  
+  async incrementInviteCodeUses(id: number): Promise<void> {
+    await db.update(inviteCodes).set({ 
+      usesCount: sql`${inviteCodes.usesCount} + 1`,
+      lastValidatedAt: new Date()
+    }).where(eq(inviteCodes.id, id));
+  }
+  
+  async getActiveTestersCount(): Promise<number> {
+    const results = await db.select().from(userActivations).where(eq(userActivations.status, 'active'));
+    return results.length;
+  }
+  
+  // === BETA ACCESS - USER ACTIVATIONS ===
+  async getUserActivation(userId: string): Promise<UserActivation | undefined> {
+    const results = await db.select().from(userActivations).where(eq(userActivations.userId, userId));
+    return results[0];
+  }
+  
+  async createUserActivation(activation: InsertUserActivation): Promise<UserActivation> {
+    const results = await db.insert(userActivations).values(activation).returning();
+    return results[0];
+  }
+  
+  async updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, 'id' | 'userId' | 'activatedAt'>>): Promise<UserActivation | undefined> {
+    const results = await db.update(userActivations).set(updates).where(eq(userActivations.userId, userId)).returning();
+    return results[0];
+  }
+  
+  async getAllActiveActivations(): Promise<UserActivation[]> {
+    return await db.select().from(userActivations).where(eq(userActivations.status, 'active'));
   }
 }
 
