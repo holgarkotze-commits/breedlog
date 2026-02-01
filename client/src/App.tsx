@@ -111,41 +111,22 @@ function AuthenticatedApp() {
 }
 
 function AppContent() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, deviceId } = useAuth();
   
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">Initializing BreedLog...</p>
         </div>
       </div>
     );
   }
   
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <div className="text-center max-w-md">
-          <h1 className="text-3xl font-bold text-primary mb-4">BreedLog</h1>
-          <p className="text-muted-foreground mb-6">
-            Livestock management for Meatmaster sheep farmers
-          </p>
-          <a 
-            href="/api/login" 
-            className="inline-flex items-center justify-center rounded-md bg-primary px-8 py-3 text-primary-foreground font-medium hover:opacity-90 transition-opacity"
-            data-testid="button-login"
-          >
-            Sign in with Replit
-          </a>
-        </div>
-      </div>
-    );
-  }
-  
+  // Device is auto-registered, now check beta access
   return (
-    <BetaAccessGate userId={user.id}>
+    <BetaAccessGate deviceId={deviceId}>
       <AuthenticatedApp />
     </BetaAccessGate>
   );

@@ -37,9 +37,26 @@ export default function AdminPage() {
   const [newCodeNotes, setNewCodeNotes] = useState("");
   const [newCodeExpiry, setNewCodeExpiry] = useState(30);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [adminPin, setAdminPin] = useState("");
+  const [pinError, setPinError] = useState("");
   
-  const { data: adminCheck, isLoading: checkingAdmin } = useQuery<{ isAdmin: boolean }>({
+  const { data: adminCheck, isLoading: checkingAdmin, refetch: refetchAdmin } = useQuery<{ isAdmin: boolean }>({
     queryKey: ["/api/admin/check"],
+  });
+  
+  const loginMutation = useMutation({
+    mutationFn: async (pin: string) => {
+      const response = await apiRequest("POST", "/api/admin/login", { pin });
+      return response.json();
+    },
+    onSuccess: () => {
+      refetchAdmin();
+      setPinError("");
+      setAdminPin("");
+    },
+    onError: (err: Error) => {
+      setPinError(err.message || "Invalid PIN");
+    }
   });
   
   const { data: codesData, isLoading: loadingCodes, error } = useQuery<InviteCodesResponse>({

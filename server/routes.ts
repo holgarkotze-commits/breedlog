@@ -3,42 +3,34 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAdminPin, getUserId as getDeviceUserId } from "./device-auth";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAudioRoutes } from "./replit_integrations/audio/routes";
 import { stringify } from "csv-stringify/sync";
 import { parse } from "csv-parse/sync";
 
-// Helper to extract userId from authenticated request
+// Helper to extract userId from device session
 function getUserId(req: Request): string {
-  const user = req.user as any;
-  if (!user || !user.claims || !user.claims.sub) {
-    throw new Error("User not authenticated");
+  const userId = getDeviceUserId(req);
+  if (!userId) {
+    throw new Error("Device not authenticated");
   }
-  return user.claims.sub;
+  return userId;
 }
 
-// Middleware to require authentication and set userId
-const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-  if (!req.isAuthenticated || !req.isAuthenticated()) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-  try {
-    getUserId(req);
-    next();
-  } catch (err) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-};
+// Middleware to require device authentication
+const requireAuth = requireDeviceAuth;
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Register Integrations
-  await setupAuth(app);
-  registerAuthRoutes(app);
+  // Setup device-based authentication
+  setupDeviceAuth(app);
+  registerDeviceAuthRoutes(app);
+  
+  // Register AI Integrations (chat, image, audio)
   registerChatRoutes(app);
   registerImageRoutes(app);
   registerAudioRoutes(app);
@@ -953,47 +945,12 @@ export async function registerRoutes(
     }
   });
   
-  // === ADMIN ROUTES (require admin check) ===
-  // Admin is specified via ADMIN_USER_ID env var - if not set, first authenticated user becomes admin
-  let bootstrappedAdminId: string | null = null;
-  
-  const isAdmin = async (req: Request): Promise<boolean> => {
-    const userId = getUserId(req);
-    const adminId = process.env.ADMIN_USER_ID;
-    
-    // If admin ID is set in env, use that
-    if (adminId) {
-      return userId === adminId;
-    }
-    
-    // Bootstrap: first user to check becomes admin (stored in memory for this session)
-    if (!bootstrappedAdminId) {
-      bootstrappedAdminId = userId;
-      console.log(`[Admin] Bootstrapped admin user: ${userId}`);
-    }
-    
-    return userId === bootstrappedAdminId;
-  };
-  
-  const requireAdmin = async (req: Request, res: Response, next: NextFunction) => {
-    if (!req.isAuthenticated || !req.isAuthenticated()) {
-      return res.status(401).json({ message: "Authentication required" });
-    }
-    const adminCheck = await isAdmin(req);
-    if (!adminCheck) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
-    next();
-  };
-  
-  // Check if current user is admin
-  app.get("/api/admin/check", requireAuth, async (req, res) => {
-    const adminCheck = await isAdmin(req);
-    res.json({ isAdmin: adminCheck });
-  });
+  // === ADMIN ROUTES (require ADMIN_PIN for access) ===
+  // Admin routes are now protected by ADMIN_PIN secret (no Replit auth)
+  // Admin check is already registered in registerDeviceAuthRoutes
   
   // List all invite codes
-  app.get("/api/admin/invite-codes", requireAdmin, async (req, res) => {
+  app.get("/api/admin/invite-codes", requireAdminPin, async (req, res) => {
     try {
       const codes = await storage.getInviteCodes();
       const activeTesters = await storage.getActiveTestersCount();
@@ -1008,7 +965,7 @@ export async function registerRoutes(
   });
   
   // Create new invite code
-  app.post("/api/admin/invite-codes", requireAdmin, async (req, res) => {
+  app.post("/api/admin/invite-codes", requireAdminPin, async (req, res) => {
     try {
       const { notes, expiryDays = BETA_CONFIG.DEFAULT_EXPIRY_DAYS, maxUses = 1 } = req.body;
       
@@ -1030,7 +987,7 @@ export async function registerRoutes(
   });
   
   // Revoke invite code
-  app.post("/api/admin/invite-codes/:id/revoke", requireAdmin, async (req, res) => {
+  app.post("/api/admin/invite-codes/:id/revoke", requireAdminPin, async (req, res) => {
     try {
       const id = Number(req.params.id);
       const code = await storage.updateInviteCode(id, { status: 'revoked' });
@@ -1054,7 +1011,7 @@ export async function registerRoutes(
   });
   
   // Get active testers
-  app.get("/api/admin/testers", requireAdmin, async (req, res) => {
+  app.get("/api/admin/testers", requireAdminPin, async (req, res) => {
     try {
       const activations = await storage.getAllActiveActivations();
       res.json({ 

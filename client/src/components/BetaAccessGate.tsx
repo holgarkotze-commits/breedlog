@@ -16,22 +16,31 @@ interface AccessStatus {
 }
 
 const OFFLINE_GRACE_DAYS = 7;
-const LOCAL_STORAGE_KEY_PREFIX = "breedlog_beta_access_";
-
-function getStorageKey(userId: string): string {
-  return `${LOCAL_STORAGE_KEY_PREFIX}${userId}`;
-}
+const LOCAL_STORAGE_KEY = "breedlog_beta_access";
 
 export function clearBetaAccessStorage(): void {
-  const keys = Object.keys(localStorage);
-  keys.forEach(key => {
-    if (key.startsWith(LOCAL_STORAGE_KEY_PREFIX)) {
-      localStorage.removeItem(key);
-    }
-  });
+  localStorage.removeItem(LOCAL_STORAGE_KEY);
 }
 
-export function useBetaAccess(userId?: string) {
+function getStoredAccess(): { hasAccess: boolean; lastCheck: string; expiresAt?: string } | null {
+  try {
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!stored) return null;
+    return JSON.parse(stored);
+  } catch {
+    return null;
+  }
+}
+
+function storeAccess(expiresAt?: string): void {
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({
+    hasAccess: true,
+    lastCheck: new Date().toISOString(),
+    expiresAt
+  }));
+}
+
+export function useBetaAccess(deviceId?: string) {
   const queryClient = useQueryClient();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   
@@ -48,45 +57,36 @@ export function useBetaAccess(userId?: string) {
   
   const { data: accessStatus, isLoading, error, refetch } = useQuery<AccessStatus>({
     queryKey: ["/api/beta/access"],
-    enabled: isOnline && !!userId,
+    enabled: isOnline && !!deviceId,
     retry: false,
     staleTime: 1000 * 60 * 5,
   });
   
   const getOfflineAccess = (): AccessStatus => {
-    if (!userId) return { hasAccess: false, needsCode: true };
+    if (!deviceId) return { hasAccess: false, needsCode: true };
     
-    try {
-      const stored = localStorage.getItem(getStorageKey(userId));
-      if (!stored) return { hasAccess: false, needsCode: true };
-      
-      const data = JSON.parse(stored);
-      const lastCheck = new Date(data.lastCheck);
-      const gracePeriod = OFFLINE_GRACE_DAYS * 24 * 60 * 60 * 1000;
-      
-      if (Date.now() - lastCheck.getTime() > gracePeriod) {
-        return { 
-          hasAccess: false, 
-          offlineGraceExpired: true,
-          reason: "Offline grace period expired. Please connect to the internet."
-        };
-      }
-      
-      return { hasAccess: true };
-    } catch {
-      return { hasAccess: false, needsCode: true };
+    const stored = getStoredAccess();
+    if (!stored || !stored.hasAccess) return { hasAccess: false, needsCode: true };
+    
+    const lastCheck = new Date(stored.lastCheck);
+    const gracePeriod = OFFLINE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+    
+    if (Date.now() - lastCheck.getTime() > gracePeriod) {
+      return { 
+        hasAccess: false, 
+        offlineGraceExpired: true,
+        reason: "Offline grace period expired. Please connect to the internet."
+      };
     }
+    
+    return { hasAccess: true };
   };
   
   useEffect(() => {
-    if (accessStatus?.hasAccess && isOnline && userId) {
-      localStorage.setItem(getStorageKey(userId), JSON.stringify({
-        hasAccess: true,
-        lastCheck: new Date().toISOString(),
-        expiresAt: accessStatus.expiresAt
-      }));
+    if (accessStatus?.hasAccess && isOnline) {
+      storeAccess(accessStatus.expiresAt);
     }
-  }, [accessStatus, isOnline, userId]);
+  }, [accessStatus, isOnline]);
   
   const effectiveStatus = isOnline 
     ? (accessStatus || { hasAccess: false, needsCode: true })
@@ -106,36 +106,27 @@ export function useBetaAccess(userId?: string) {
 
 interface BetaAccessGateProps {
   children: React.ReactNode;
-  userId: string;
+  deviceId: string;
 }
 
-export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
+export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
   const queryClient = useQueryClient();
-  const { hasAccess, needsCode, reason, offlineGraceExpired, isLoading, isOnline, refetch } = useBetaAccess(userId);
+  const { hasAccess, needsCode, reason, offlineGraceExpired, isLoading, isOnline, refetch } = useBetaAccess(deviceId);
   const [code, setCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   
-  // Check if user is admin - admins bypass beta access requirement
-  const { data: adminCheck, isLoading: adminLoading } = useQuery<{ isAdmin: boolean }>({
-    queryKey: ["/api/admin/check"],
-    enabled: !!userId,
-    retry: false,
-    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
-  });
-  
   const validateMutation = useMutation({
     mutationFn: async (inputCode: string) => {
-      const response = await apiRequest("POST", "/api/beta/validate", { code: inputCode });
+      const response = await apiRequest("POST", "/api/beta/validate", { 
+        code: inputCode,
+        deviceId 
+      });
       return response.json();
     },
     onSuccess: (data) => {
       if (data.success) {
         queryClient.invalidateQueries({ queryKey: ["/api/beta/access"] });
-        localStorage.setItem(getStorageKey(userId), JSON.stringify({
-          hasAccess: true,
-          lastCheck: new Date().toISOString(),
-          expiresAt: data.expiresAt
-        }));
+        storeAccess(data.expiresAt);
         setErrorMessage("");
       }
     },
@@ -151,7 +142,7 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
     }
   };
   
-  if (isLoading || adminLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -160,11 +151,6 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
         </div>
       </div>
     );
-  }
-  
-  // Admin users bypass beta access requirement entirely
-  if (adminCheck?.isAdmin) {
-    return <>{children}</>;
   }
   
   if (hasAccess) {
@@ -176,27 +162,26 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-              <WifiOff className="h-6 w-6 text-muted-foreground" />
+            <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-muted flex items-center justify-center">
+              <WifiOff className="h-8 w-8 text-muted-foreground" />
             </div>
-            <CardTitle>Offline Grace Period Expired</CardTitle>
+            <CardTitle className="text-xl">Connection Required</CardTitle>
             <CardDescription>
-              Please connect to the internet to continue using BreedLog.
+              Your offline access period has expired. Please connect to the internet to continue using BreedLog.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Alert>
               <AlertDescription>
-                Your offline access period has ended. Connect to verify your beta access.
+                BreedLog works offline for up to {OFFLINE_GRACE_DAYS} days. After that, you need to reconnect to verify your access.
               </AlertDescription>
             </Alert>
             <Button 
-              className="w-full mt-4" 
-              onClick={() => refetch()}
+              onClick={() => refetch()} 
+              className="w-full mt-4"
               disabled={!isOnline}
-              data-testid="button-retry-connection"
             >
-              {isOnline ? "Check Access" : "Waiting for connection..."}
+              {isOnline ? "Retry Connection" : "Waiting for Internet..."}
             </Button>
           </CardContent>
         </Card>
@@ -204,39 +189,17 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
     );
   }
   
-  if (!needsCode && reason) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-              <Lock className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <CardTitle>Access Denied</CardTitle>
-            <CardDescription>{reason}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Alert>
-              <AlertDescription>
-                Beta access expired or revoked. Contact admin for a new access code.
-              </AlertDescription>
-            </Alert>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-  
+  // Show access code entry screen
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <Shield className="h-6 w-6 text-primary" />
+          <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <Shield className="h-8 w-8 text-primary" />
           </div>
-          <CardTitle>Beta Access Required</CardTitle>
+          <CardTitle className="text-xl">Enter Access Code</CardTitle>
           <CardDescription>
-            Enter your invite code to access BreedLog beta.
+            BreedLog is currently in beta testing. Enter your invite code to get started.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -244,12 +207,14 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
             <div>
               <Input
                 type="text"
-                placeholder="Enter access code"
+                placeholder="Enter your access code"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                className="text-center text-lg tracking-widest uppercase"
-                maxLength={8}
+                className="text-center text-lg tracking-widest font-mono"
+                maxLength={16}
                 data-testid="input-access-code"
+                autoComplete="off"
+                autoFocus
               />
             </div>
             
@@ -259,9 +224,15 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
               </Alert>
             )}
             
+            {reason && (
+              <Alert>
+                <AlertDescription>{reason}</AlertDescription>
+              </Alert>
+            )}
+            
             <Button 
               type="submit" 
-              className="w-full"
+              className="w-full" 
               disabled={!code.trim() || validateMutation.isPending}
               data-testid="button-validate-code"
             >
@@ -271,19 +242,17 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
                   Validating...
                 </>
               ) : (
-                "Activate Access"
+                <>
+                  <Lock className="mr-2 h-4 w-4" />
+                  Activate Access
+                </>
               )}
             </Button>
           </form>
           
-          {!isOnline && (
-            <Alert className="mt-4">
-              <WifiOff className="h-4 w-4" />
-              <AlertDescription>
-                You're offline. Connect to the internet to validate your code.
-              </AlertDescription>
-            </Alert>
-          )}
+          <p className="text-xs text-muted-foreground text-center mt-4">
+            Don't have a code? Contact the BreedLog team to request beta access.
+          </p>
         </CardContent>
       </Card>
     </div>
