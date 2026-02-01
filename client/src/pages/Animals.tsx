@@ -3329,7 +3329,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                 />
                 <Button 
                   type="button" 
-                  variant="destructive" 
+                  variant="outline" 
                   size="icon"
                   className="absolute top-2 right-2"
                   onClick={clearPhoto}

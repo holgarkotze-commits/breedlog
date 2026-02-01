@@ -83,7 +83,7 @@ export default function AnimalDetail() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  className="h-8 px-3 text-xs font-semibold bg-white text-red-600 border-white hover:bg-gray-100"
+                  className="h-8 px-3 text-xs font-semibold"
                   onClick={() => setRemoveDialogOpen(true)}
                   data-testid="button-remove-from-herd"
                 >
@@ -1377,7 +1377,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                                 <Button type="button" variant="secondary" size="icon" className="h-7 w-7" onClick={() => galleryInputRef.current?.click()} data-testid="button-change-photo">
                                     <Image className="w-3 h-3" />
                                 </Button>
-                                <Button type="button" variant="destructive" size="icon" className="h-7 w-7" onClick={() => { setPhotoPreview(null); setFormData(prev => ({...prev, photo: null})); }} data-testid="button-clear-photo">
+                                <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={() => { setPhotoPreview(null); setFormData(prev => ({...prev, photo: null})); }} data-testid="button-clear-photo">
                                     <X className="w-3 h-3" />
                                 </Button>
                             </div>
@@ -1692,7 +1692,7 @@ function ImagesView({ animalId }: { animalId: number }) {
                                     <img src={img.imageData} alt={img.fileName} className="w-full h-full object-cover" />
                                 </div>
                                 <Button
-                                    variant="destructive"
+                                    variant="outline"
                                     size="icon"
                                     className="absolute -top-2 -right-2 scale-75"
                                     onClick={() => setImageToDelete(img.id)}
@@ -1827,7 +1827,7 @@ function DocumentsView({ animalId }: { animalId: number }) {
                                     )}
                                 </div>
                                 <Button
-                                    variant="destructive"
+                                    variant="outline"
                                     size="icon"
                                     className="absolute -top-2 -right-2 scale-75"
                                     onClick={() => setDocToDelete(doc.id)}

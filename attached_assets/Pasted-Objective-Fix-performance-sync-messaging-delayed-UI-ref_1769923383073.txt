@@ -1,0 +1,40 @@
+Objective: Fix performance, sync messaging, delayed UI refresh, and profile image preview issues found during on-site testing (online + offline). App must be fast, stable, and predictable.
+
+1) Delayed UI Refresh / Data Not Reflecting
+- Fix issue where newly added animals (e.g., rams or any new profile) take a long time to appear in the Animals list and in relevant sections.
+- After creating/saving a profile, the list must refresh immediately (optimistic UI update), then confirm with DB/sync in background.
+- If save fails, show error + rollback the optimistic entry safely.
+
+2) Sync Status Message (Top Banner)
+- Fix the top-screen message that shows sync/online/offline status.
+- Requirements:
+  - Show a clear banner/toast when offline: “Offline — will sync when online.”
+  - The message must auto-dismiss after a few seconds (or collapse to a small status indicator).
+  - Do NOT leave permanent error banners stuck on screen.
+  - Prevent duplicate stacking of sync/error messages.
+
+3) Extra Error Message Handling
+- Another error message was displayed and stayed on screen.
+- Add proper error handling so any error toast/banner:
+  - Shows once per event,
+  - Auto-dismisses,
+  - Is logged (local) for debugging,
+  - Does not block the user from continuing.
+
+4) Animal Profile Image Preview (Tap to Open)
+- Inside an animal’s profile screen:
+  - When the user taps the main profile image, open a full-screen image preview (zoom/pan optional).
+  - Include a close button.
+  - Must work offline.
+
+5) Performance & Stability (General)
+- Optimise app responsiveness for on-farm use (slow network / offline).
+- Ensure saving, image capture, and navigation do not freeze UI.
+- Disable double taps on Save to prevent duplicate actions.
+- Clear success/failure feedback on save.
+
+6) Testing (Must Confirm)
+- Create a new profile → verify it appears immediately in Animals list and relevant sections.
+- Offline mode: create profile + image → confirm visible instantly, queues for sync, and syncs properly when online.
+- Verify offline banner appears briefly and then dismisses (no stuck messages).
+- Verify tapping profile image opens preview correctly.
