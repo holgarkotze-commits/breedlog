@@ -115,6 +115,14 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
   const [code, setCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   
+  // Check if user is admin - admins bypass beta access requirement
+  const { data: adminCheck, isLoading: adminLoading } = useQuery<{ isAdmin: boolean }>({
+    queryKey: ["/api/admin/check"],
+    enabled: !!userId,
+    retry: false,
+    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+  });
+  
   const validateMutation = useMutation({
     mutationFn: async (inputCode: string) => {
       const response = await apiRequest("POST", "/api/beta/validate", { code: inputCode });
@@ -143,7 +151,7 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
     }
   };
   
-  if (isLoading) {
+  if (isLoading || adminLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -152,6 +160,11 @@ export function BetaAccessGate({ children, userId }: BetaAccessGateProps) {
         </div>
       </div>
     );
+  }
+  
+  // Admin users bypass beta access requirement entirely
+  if (adminCheck?.isAdmin) {
+    return <>{children}</>;
   }
   
   if (hasAccess) {
