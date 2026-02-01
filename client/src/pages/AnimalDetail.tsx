@@ -35,6 +35,7 @@ export default function AnimalDetail() {
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [removeReason, setRemoveReason] = useState<"sold" | "deceased" | "transferred">("sold");
   const [removeNotes, setRemoveNotes] = useState("");
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const removeFromHerdMutation = useRemoveFromHerd();
   const { toast } = useToast();
   
@@ -149,11 +150,47 @@ export default function AnimalDetail() {
           </AlertDialogContent>
         </AlertDialog>
 
+        {/* Full-screen Image Preview */}
+        <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
+          <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none">
+            <div className="relative w-full h-full flex items-center justify-center min-h-[50vh]">
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute top-2 right-2 z-10"
+                onClick={() => setImagePreviewOpen(false)}
+                data-testid="button-close-image-preview"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+              {animal.photo && (
+                <img 
+                  src={animal.photo} 
+                  alt={animal.tagId}
+                  className="max-w-full max-h-[90vh] object-contain"
+                  data-testid="image-preview-full"
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-8">
           {/* Main Info Card - Compact on Mobile */}
           <div className="lg:col-span-1 space-y-3 md:space-y-6">
             <Card className="rugged-card overflow-hidden">
-                <div className="aspect-video md:aspect-square bg-secondary relative">
+                <div 
+                  className={cn(
+                    "aspect-video md:aspect-square bg-secondary relative",
+                    animal.photo && "cursor-pointer"
+                  )}
+                  onClick={() => animal.photo && setImagePreviewOpen(true)}
+                  onKeyDown={(e) => animal.photo && (e.key === 'Enter' || e.key === ' ') && setImagePreviewOpen(true)}
+                  role={animal.photo ? "button" : undefined}
+                  tabIndex={animal.photo ? 0 : undefined}
+                  aria-label={animal.photo ? `View full image of ${animal.tagId}` : undefined}
+                  data-testid="animal-profile-image"
+                >
                     <img src={animal.photo || logo} className={animal.photo ? "w-full h-full object-cover" : "w-1/3 md:w-1/2 h-1/3 md:h-1/2 absolute top-1/3 md:top-1/4 left-1/3 md:left-1/4 opacity-20 grayscale"} />
                 </div>
                 <CardContent className="p-3 md:p-6 space-y-1 md:space-y-3">

@@ -2804,6 +2804,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
   const [evalDocPreview, setEvalDocPreview] = useState<string | null>(null);
   const [useCustomDam, setUseCustomDam] = useState(false);
   const [useCustomSire, setUseCustomSire] = useState(false);
+  const [parentPreviewImage, setParentPreviewImage] = useState<{ photo: string; tagId: string } | null>(null);
   
   const form = useForm({
     resolver: zodResolver(insertAnimalSchema),
@@ -2920,6 +2921,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button data-testid="button-add-animal" className="rugged-btn bg-primary text-black hover:bg-primary/90">
@@ -3196,11 +3198,19 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                             <SelectItem key={ewe.id} value={String(ewe.id)}>
                               <div className="flex items-center gap-2">
                                 {ewe.photo ? (
-                                  <img 
-                                    src={ewe.photo} 
-                                    alt="" 
-                                    className="w-8 h-8 rounded object-cover flex-shrink-0"
-                                  />
+                                  <button
+                                    type="button"
+                                    className="w-8 h-8 rounded overflow-hidden flex-shrink-0 cursor-zoom-in hover-elevate"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      e.preventDefault();
+                                      setParentPreviewImage({ photo: ewe.photo!, tagId: ewe.tagId });
+                                    }}
+                                    aria-label={`Preview image of ${ewe.tagId}`}
+                                    data-testid={`thumbnail-dam-${ewe.id}`}
+                                  >
+                                    <img src={ewe.photo} alt="" className="w-full h-full object-cover" />
+                                  </button>
                                 ) : (
                                   <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
                                     <Image className="w-4 h-4 text-muted-foreground" />
@@ -3277,11 +3287,19 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                             <SelectItem key={ram.id} value={String(ram.id)}>
                               <div className="flex items-center gap-2">
                                 {ram.photo ? (
-                                  <img 
-                                    src={ram.photo} 
-                                    alt="" 
-                                    className="w-8 h-8 rounded object-cover flex-shrink-0"
-                                  />
+                                  <button
+                                    type="button"
+                                    className="w-8 h-8 rounded overflow-hidden flex-shrink-0 cursor-zoom-in hover-elevate"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      e.preventDefault();
+                                      setParentPreviewImage({ photo: ram.photo!, tagId: ram.tagId });
+                                    }}
+                                    aria-label={`Preview image of ${ram.tagId}`}
+                                    data-testid={`thumbnail-sire-${ram.id}`}
+                                  >
+                                    <img src={ram.photo} alt="" className="w-full h-full object-cover" />
+                                  </button>
                                 ) : (
                                   <div className="w-8 h-8 rounded bg-muted flex items-center justify-center flex-shrink-0">
                                     <Image className="w-4 h-4 text-muted-foreground" />
@@ -3406,5 +3424,34 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
         </Form>
       </DialogContent>
     </Dialog>
+
+    {/* Parent Image Preview Dialog - rendered as sibling to avoid focus-trap conflicts */}
+    <Dialog open={!!parentPreviewImage} onOpenChange={(open) => !open && setParentPreviewImage(null)}>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none">
+        <div className="relative w-full h-full flex items-center justify-center min-h-[50vh]">
+          <Button
+            variant="outline"
+            size="icon"
+            className="absolute top-2 right-2 z-10"
+            onClick={() => setParentPreviewImage(null)}
+            data-testid="button-close-parent-preview"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+          {parentPreviewImage && (
+            <div className="flex flex-col items-center gap-4">
+              <img 
+                src={parentPreviewImage.photo} 
+                alt={parentPreviewImage.tagId}
+                className="max-w-full max-h-[80vh] object-contain"
+                data-testid="parent-preview-image"
+              />
+              <span className="text-white text-lg font-semibold">{parentPreviewImage.tagId}</span>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
