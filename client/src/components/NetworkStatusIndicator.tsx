@@ -74,39 +74,39 @@ export function NetworkStatusIndicator() {
 
 export function OfflineBanner() {
   const { isOnline, syncState, triggerSync } = useNetworkStatus();
-  const [dismissed, setDismissed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const lastErrorRef = useRef<string | null>(null);
-  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset dismissed state when status changes or error changes
+  // Reset collapsed state when status changes significantly
   useEffect(() => {
     const currentError = syncState.error;
-    if (currentError !== lastErrorRef.current || !isOnline !== dismissed) {
-      setDismissed(false);
+    if (currentError !== lastErrorRef.current) {
+      setIsCollapsed(false);
       lastErrorRef.current = currentError;
     }
-  }, [isOnline, syncState.error]);
+  }, [syncState.error]);
 
-  // Auto-dismiss after 5 seconds
+  // Auto-collapse after 5 seconds (but keep minimal indicator visible)
   useEffect(() => {
-    if (dismissTimerRef.current) {
-      clearTimeout(dismissTimerRef.current);
+    if (collapseTimerRef.current) {
+      clearTimeout(collapseTimerRef.current);
     }
 
     const shouldShow = !isOnline || syncState.status === 'error';
-    if (shouldShow && !dismissed) {
-      dismissTimerRef.current = setTimeout(() => {
-        setDismissed(true);
+    if (shouldShow && !isCollapsed) {
+      collapseTimerRef.current = setTimeout(() => {
+        setIsCollapsed(true);
       }, 5000);
     }
 
     return () => {
-      if (dismissTimerRef.current) {
-        clearTimeout(dismissTimerRef.current);
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current);
       }
     };
-  }, [isOnline, syncState.status, dismissed]);
+  }, [isOnline, syncState.status, isCollapsed]);
 
   const handleRetry = async () => {
     if (isRetrying) return;
@@ -118,13 +118,44 @@ export function OfflineBanner() {
     }
   };
 
-  const handleDismiss = () => {
-    setDismissed(true);
+  const handleExpand = () => {
+    setIsCollapsed(false);
   };
 
-  // Don't show if online and no error, or if dismissed
-  if ((isOnline && syncState.status !== 'error') || dismissed) return null;
+  const handleCollapse = () => {
+    setIsCollapsed(true);
+  };
 
+  // Don't show if online and no error
+  if (isOnline && syncState.status !== 'error') return null;
+
+  // Collapsed minimal indicator (small floating badge)
+  if (isCollapsed) {
+    return (
+      <button
+        onClick={handleExpand}
+        className={cn(
+          "fixed top-2 left-2 z-50 flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all hover-elevate",
+          !isOnline 
+            ? "bg-amber-900/90 text-amber-100" 
+            : "bg-card/95 text-foreground border border-border"
+        )}
+        data-testid="offline-indicator-collapsed"
+        aria-label="Expand offline status"
+      >
+        {!isOnline ? (
+          <CloudOff className="w-3 h-3" />
+        ) : (
+          <AlertCircle className="w-3 h-3 text-primary" />
+        )}
+        <span className="sr-only sm:not-sr-only">
+          {!isOnline ? "Offline" : "Sync"}
+        </span>
+      </button>
+    );
+  }
+
+  // Expanded banner
   return (
     <div 
       className={cn(
@@ -164,9 +195,9 @@ export function OfflineBanner() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={handleDismiss}
+          onClick={handleCollapse}
           className="h-6 w-6 ml-2"
-          data-testid="button-dismiss-banner"
+          data-testid="button-collapse-banner"
         >
           <X className="w-3 h-3" />
         </Button>

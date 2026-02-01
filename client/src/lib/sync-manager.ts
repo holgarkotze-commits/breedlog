@@ -53,6 +53,7 @@ export interface SyncState {
 }
 
 type SyncCallback = (state: SyncState) => void;
+type SyncCompleteCallback = () => void;
 
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY = 2000; // 2 seconds
@@ -60,6 +61,7 @@ const MAX_RETRY_DELAY = 30000; // 30 seconds
 
 class SyncManager {
   private listeners: Set<SyncCallback> = new Set();
+  private syncCompleteListeners: Set<SyncCompleteCallback> = new Set();
   private state: SyncState = {
     status: navigator.onLine ? 'idle' : 'offline',
     pendingCount: 0,
@@ -128,6 +130,15 @@ class SyncManager {
     return () => this.listeners.delete(callback);
   }
 
+  subscribeToSyncComplete(callback: SyncCompleteCallback): () => void {
+    this.syncCompleteListeners.add(callback);
+    return () => this.syncCompleteListeners.delete(callback);
+  }
+
+  private notifySyncComplete() {
+    this.syncCompleteListeners.forEach((callback) => callback());
+  }
+
   getState(): SyncState {
     return this.state;
   }
@@ -179,6 +190,10 @@ class SyncManager {
       });
       
       console.log('[SyncManager] Sync completed successfully');
+      
+      // Notify listeners that sync is complete (for cache invalidation)
+      this.notifySyncComplete();
+      
       return true;
     } catch (error) {
       console.error('[SyncManager] Sync failed:', error);
