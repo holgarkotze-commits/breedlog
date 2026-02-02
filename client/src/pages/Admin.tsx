@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
+import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 
@@ -101,6 +101,27 @@ export default function AdminPage() {
       toast({
         title: "Code Revoked",
         description: "The access code has been revoked and all linked users have lost access.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive"
+      });
+    }
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/logout", {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/check"] });
+      toast({
+        title: "Logged Out",
+        description: "You have been logged out of the admin panel.",
       });
     },
     onError: (err: Error) => {
@@ -216,6 +237,19 @@ export default function AdminPage() {
               <p className="text-muted-foreground">Manage invite codes and testers</p>
             </div>
           </div>
+          <Button 
+            variant="outline" 
+            onClick={() => logoutMutation.mutate()}
+            disabled={logoutMutation.isPending}
+            data-testid="button-admin-logout"
+          >
+            {logoutMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <LogOut className="mr-2 h-4 w-4" />
+            )}
+            Logout
+          </Button>
         </div>
         
         <div className="grid gap-4 md:grid-cols-3">
