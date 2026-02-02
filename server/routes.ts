@@ -875,13 +875,45 @@ export async function registerRoutes(
   });
   
   // Validate and activate with invite code
-  app.post("/api/beta/validate", requireAuth, async (req, res) => {
+  // Note: This endpoint handles device registration inline to avoid session cookie issues
+  app.post("/api/beta/validate", async (req, res) => {
     try {
-      const userId = getUserId(req);
-      const { code: inputCode } = req.body;
+      const { code: inputCode, deviceId: clientDeviceId } = req.body;
       
       if (!inputCode || typeof inputCode !== 'string') {
         return res.status(400).json({ message: 'Access code is required' });
+      }
+      
+      // Try to get userId from session first, fallback to deviceId from request
+      let userId = getUserId(req);
+      let deviceId = getDeviceId(req);
+      
+      // If no session, try to register/find device using deviceId from request body
+      if (!userId && clientDeviceId && typeof clientDeviceId === 'string' && clientDeviceId.length >= 32) {
+        console.log("[Beta Validate] No session, attempting inline device registration for:", clientDeviceId);
+        
+        // Try to find existing user by deviceId
+        let user = await storage.getUserByDeviceId(clientDeviceId);
+        
+        if (!user) {
+          // Create new user for this device
+          user = await storage.upsertUser({
+            deviceId: clientDeviceId,
+            deviceName: "Unknown Device",
+          });
+          console.log("[Beta Validate] Created new user:", user.id);
+        }
+        
+        // Set session for future requests
+        req.session.deviceId = clientDeviceId;
+        req.session.userId = user.id;
+        
+        userId = user.id;
+        deviceId = clientDeviceId;
+      }
+      
+      if (!userId || !deviceId) {
+        return res.status(401).json({ message: 'Device registration failed. Please refresh and try again.' });
       }
       
       const codeUpper = inputCode.toUpperCase().trim();
@@ -907,7 +939,6 @@ export async function registerRoutes(
       }
       
       // Check device limit (1 device per code)
-      const deviceId = getDeviceId(req);
       const allActivations = await storage.getAllActiveActivations();
       const codeActivations = allActivations.filter(a => a.inviteCodeId === inviteCode!.id);
       
