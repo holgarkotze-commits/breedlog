@@ -60,11 +60,25 @@ export const requireDeviceAuth = (req: Request, res: Response, next: NextFunctio
 
 // Middleware to require admin access (via ADMIN_PIN)
 export const requireAdminPin = (req: Request, res: Response, next: NextFunction) => {
-  console.log("[Admin Middleware] Session ID:", req.sessionID, "isAdmin:", req.session?.isAdmin);
-  if (!req.session?.isAdmin) {
-    return res.status(403).json({ message: "Admin access required" });
+  const authHeader = req.headers.authorization;
+  const adminPin = process.env.ADMIN_PIN;
+  
+  // Check Authorization header first (more reliable than session cookies)
+  if (authHeader && authHeader.startsWith("AdminPin ")) {
+    const pin = authHeader.substring(9);
+    if (pin === adminPin) {
+      console.log("[Admin Middleware] Authorized via header");
+      return next();
+    }
   }
-  next();
+  
+  // Fall back to session check
+  console.log("[Admin Middleware] Session ID:", req.sessionID, "isAdmin:", req.session?.isAdmin);
+  if (req.session?.isAdmin) {
+    return next();
+  }
+  
+  return res.status(403).json({ message: "Admin access required" });
 };
 
 // Register device auth routes

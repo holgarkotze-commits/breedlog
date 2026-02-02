@@ -33,16 +33,18 @@ interface InviteCodesResponse {
 
 const ADMIN_AUTH_KEY = "breedlog_admin_authed";
 const ADMIN_AUTH_TIME_KEY = "breedlog_admin_authed_at";
+const ADMIN_PIN_KEY = "breedlog_admin_pin";
 const ADMIN_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
 
 function checkAdminAuth(): boolean {
   try {
     const authed = localStorage.getItem(ADMIN_AUTH_KEY);
     const authedAt = localStorage.getItem(ADMIN_AUTH_TIME_KEY);
+    const pin = localStorage.getItem(ADMIN_PIN_KEY);
     
-    console.log("[Admin Guard] Checking auth:", { authed, authedAt });
+    console.log("[Admin Guard] Checking auth:", { authed, authedAt, hasPin: !!pin });
     
-    if (authed !== "true" || !authedAt) {
+    if (authed !== "true" || !authedAt || !pin) {
       console.log("[Admin Guard] Not authenticated - missing keys");
       return false;
     }
@@ -53,8 +55,7 @@ function checkAdminAuth(): boolean {
     
     if (elapsed > ADMIN_SESSION_DURATION_MS) {
       console.log("[Admin Guard] Session expired:", { elapsed, max: ADMIN_SESSION_DURATION_MS });
-      localStorage.removeItem(ADMIN_AUTH_KEY);
-      localStorage.removeItem(ADMIN_AUTH_TIME_KEY);
+      clearAdminAuth();
       return false;
     }
     
@@ -66,17 +67,48 @@ function checkAdminAuth(): boolean {
   }
 }
 
-function setAdminAuth(): void {
+function setAdminAuth(pin: string): void {
   const now = new Date().toISOString();
   localStorage.setItem(ADMIN_AUTH_KEY, "true");
   localStorage.setItem(ADMIN_AUTH_TIME_KEY, now);
+  localStorage.setItem(ADMIN_PIN_KEY, pin);
   console.log("[Admin Login] Auth stored:", { key: ADMIN_AUTH_KEY, time: now });
+}
+
+function getAdminPin(): string | null {
+  return localStorage.getItem(ADMIN_PIN_KEY);
 }
 
 function clearAdminAuth(): void {
   localStorage.removeItem(ADMIN_AUTH_KEY);
   localStorage.removeItem(ADMIN_AUTH_TIME_KEY);
+  localStorage.removeItem(ADMIN_PIN_KEY);
   console.log("[Admin Logout] Auth cleared");
+}
+
+async function adminApiRequest(method: string, url: string, body?: any): Promise<Response> {
+  const pin = getAdminPin();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  
+  if (pin) {
+    headers["Authorization"] = `AdminPin ${pin}`;
+  }
+  
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: "include",
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: "Request failed" }));
+    throw new Error(errorData.message || `Request failed: ${response.status}`);
+  }
+  
+  return response;
 }
 
 export default function AdminPage() {
@@ -118,7 +150,7 @@ export default function AdminPage() {
       console.log("[Admin Login] Server response:", data);
       
       if (data.success) {
-        setAdminAuth();
+        setAdminAuth(adminPin);
         setIsAuthenticated(true);
         setAdminPin("");
         console.log("[Admin Login] SUCCESS - user is now authenticated");
@@ -151,12 +183,16 @@ export default function AdminPage() {
   
   const { data: codesData, isLoading: loadingCodes, error } = useQuery<InviteCodesResponse>({
     queryKey: ["/api/admin/invite-codes"],
+    queryFn: async () => {
+      const response = await adminApiRequest("GET", "/api/admin/invite-codes");
+      return response.json();
+    },
     enabled: isAuthenticated === true,
   });
   
   const createCodeMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/admin/invite-codes", {
+      const response = await adminApiRequest("POST", "/api/admin/invite-codes", {
         notes: newCodeNotes || null,
         expiryDays: newCodeExpiry,
         maxUses: 1
@@ -183,7 +219,7 @@ export default function AdminPage() {
   
   const revokeCodeMutation = useMutation({
     mutationFn: async (id: number) => {
-      const response = await apiRequest("POST", `/api/admin/invite-codes/${id}/revoke`, {});
+      const response = await adminApiRequest("POST", `/api/admin/invite-codes/${id}/revoke`, {});
       return response.json();
     },
     onSuccess: () => {
