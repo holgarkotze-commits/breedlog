@@ -1614,6 +1614,7 @@ export default function Animals() {
               isLoading={isLoading}
               isExpanded={lambsExpanded}
               onToggle={() => setLambsExpanded(!lambsExpanded)}
+              onExport={() => exportHerdPDF("lambs")}
               classifyMutation={classifyMutation}
               confirmCullMutation={confirmCullMutation}
               moveToEwesMutation={moveToEwesMutation}
@@ -2335,6 +2336,7 @@ function LambsSection({
   isLoading,
   isExpanded,
   onToggle,
+  onExport,
   classifyMutation,
   confirmCullMutation,
   moveToEwesMutation,
@@ -2346,6 +2348,7 @@ function LambsSection({
   isLoading: boolean;
   isExpanded: boolean;
   onToggle: () => void;
+  onExport: () => void;
   classifyMutation: ReturnType<typeof useClassifyRamLamb>;
   confirmCullMutation: ReturnType<typeof useConfirmCull>;
   moveToEwesMutation: ReturnType<typeof useMoveToEwes>;
@@ -2462,6 +2465,19 @@ function LambsSection({
     return { label: "ACTIVE", variant: "default" };
   };
 
+  const exportButton = (
+    <Button 
+      variant="outline" 
+      size="sm"
+      onClick={onExport}
+      disabled={lambs.length === 0}
+      data-testid="button-export-lambs-section"
+    >
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  );
+
   return (
     <div className="mt-4" data-testid="lambs-section">
       <SectionRibbon
@@ -2469,6 +2485,7 @@ function LambsSection({
         count={lambs.length}
         isExpanded={isExpanded}
         onToggle={onToggle}
+        actions={exportButton}
         testId="ribbon-lambs"
       >
         {/* Filter buttons */}
