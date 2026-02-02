@@ -1,0 +1,32 @@
+ADD-ON REQUIREMENT: INDIVIDUAL EWE EXPORT MUST INCLUDE ALL “MY HERD → EWES” COLUMN FIELDS
+
+Problem:
+The Individual Animal Record (EWE) export PDF is missing key ewe-performance fields that are visible in the app under “My Herd → Ewes” list (e.g., ILP / Interlambing Period, number of lambs, etc.). The individual ewe export must combine:
+1) Existing Individual Animal Record fields (ID, DOB, parents, weights, status, etc.)
+AND
+2) ALL ewe performance/production fields that appear in the “My Herd → Ewes” table columns.
+
+Requirements:
+1) Identify every column currently displayed in the “My Herd → Ewes” list/table (including any that appear when scrolling horizontally).
+2) Add a new section in the Individual Ewe Export PDF called “EWE PERFORMANCE (FROM HERD VIEW)” and include ALL those column fields there.
+3) If a field has no value, display “—” or “Not recorded” (do not leave blank).
+4) Ensure the values in the PDF match exactly what the app shows for that ewe (same calculations, same wording, same units).
+5) Keep the layout clean and readable:
+   - Group related items together (e.g., Lambing history, Weaning performance, ILP).
+   - Use consistent units (days, kg, counts).
+6) Apply this ONLY to ewe individual exports (do not add to ram/lamb unless those have similar performance columns later).
+
+Acceptance Tests (must be executed and confirmed):
+A) Pick an ewe that has lambing/weaning data.
+   - Export Individual Ewe Record PDF.
+   - Confirm ILP (days), total lamb count, and all other Ewe-columns are present in the PDF and values match the “My Herd → Ewes” row.
+B) Pick an ewe with missing data.
+   - Export PDF.
+   - Confirm missing fields show “—/Not recorded” and PDF still formats properly.
+C) Confirm footer appears on every page and page breaks/padding still correct after adding the new section.
+
+Deliverable:
+Reply with:
+1) A list of “My Herd → Ewes” columns detected.
+2) Screenshot or short description of where in the PDF each field appears.
+3) PASS/FAIL for each acceptance test.

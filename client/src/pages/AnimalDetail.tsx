@@ -24,7 +24,8 @@ import { useAnimalBreedingEvents } from "@/hooks/use-breeding";
 import { Link } from "wouter";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 import { useToast } from "@/hooks/use-toast";
-import type { Animal, AnimalWithRelations } from "@shared/schema";
+import type { Animal, AnimalWithRelations, BreedingEvent } from "@shared/schema";
+import { calculateEweBreedingStats } from "@/lib/breeding-stats";
 
 function ZoomableImagePreview({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   const [scale, setScale] = useState(1);
@@ -803,6 +804,7 @@ function BreedingStatsView({ animal }: { animal: AnimalWithRelations }) {
 
 function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelations, farmSettings?: { farmName?: string | null, studName?: string | null, studPrefix?: string | null, ownerName?: string | null, ownerEmail?: string | null, ownerPhone?: string | null, farmLocation?: string | null, farmAddress?: string | null, membershipNumber?: string | null, registrationNumber?: string | null, logoUrl?: string | null, logoSize?: string | null, logoWidth?: number | null, logoHeight?: number | null } | null }) {
     const { data: breedingEvents } = useAnimalBreedingEvents(animal.id, animal.sex);
+    const { data: allAnimals } = useAnimals({});
     const { toast } = useToast();
     const createExportedDoc = useCreateExportedDocument();
     
@@ -1119,6 +1121,18 @@ ${data.notes || "No notes recorded."}
     <tr><td class="label">Owner</td><td class="value">${data.ownership.ownerName || "—"}</td></tr>
     <tr><td class="label">Farm</td><td class="value">${data.ownership.farmName || "—"}</td></tr>
     <tr><td class="label">Location</td><td class="value">${data.ownership.location || "—"}</td></tr>
+    ${animal.sex === 'ewe' ? (() => {
+      const eweStats = calculateEweBreedingStats(animal.id, breedingEvents || [], allAnimals || []);
+      const hasBreedingData = (breedingEvents && breedingEvents.length > 0) || (allAnimals && allAnimals.some(a => a.damId === animal.id));
+      return `
+    <tr><td class="section-header" colspan="2">EWE PERFORMANCE (FROM HERD VIEW)</td></tr>
+    <tr><td class="label">Total Lambs Born</td><td class="value">${hasBreedingData ? eweStats.totalLambs : "Not recorded"}</td></tr>
+    <tr><td class="label">First Lamb Date</td><td class="value">${eweStats.firstLambDate ? formatDate(eweStats.firstLambDate.toISOString()) : "—"}</td></tr>
+    <tr><td class="label">Average Inter-Lambing Period (ILP)</td><td class="value">${eweStats.avgILP > 0 ? eweStats.avgILP + " days" : "—"}</td></tr>
+    <tr><td class="label">Lambs Weaned</td><td class="value">${hasBreedingData ? eweStats.lambsWeaned : "Not recorded"}</td></tr>
+    <tr><td class="label">Average Weaning Weight</td><td class="value">${eweStats.avgWeanWeight > 0 ? eweStats.avgWeanWeight + " kg" : "—"}</td></tr>
+      `;
+    })() : ''}
   </table>
   
   <div class="footer">
