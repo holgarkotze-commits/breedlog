@@ -949,9 +949,43 @@ export async function registerRoutes(
   // Admin routes are now protected by ADMIN_PIN secret (no Replit auth)
   // Admin check is already registered in registerDeviceAuthRoutes
   
+  // Helper to set no-cache headers on admin responses
+  function setNoCacheHeaders(res: Response): void {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Surrogate-Control': 'no-store'
+    });
+  }
+  
+  // Database info endpoint for debugging environment mismatches
+  app.get("/api/admin/db-info", requireAdminPin, async (req, res) => {
+    try {
+      setNoCacheHeaders(res);
+      const codes = await storage.getInviteCodes();
+      const dbUrl = process.env.DATABASE_URL || '';
+      // Mask password in connection string
+      const maskedUrl = dbUrl.replace(/:([^:@]+)@/, ':****@');
+      const dbHost = maskedUrl.match(/@([^:\/]+)/)?.[1] || 'unknown';
+      const dbName = maskedUrl.match(/\/([^?]+)/)?.[1] || 'unknown';
+      
+      res.json({
+        env: process.env.NODE_ENV || 'unknown',
+        dbHost,
+        dbName,
+        totalCodesCount: codes.length,
+        codesList: codes.map(c => c.code).join(', ')
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+  
   // List all invite codes
   app.get("/api/admin/invite-codes", requireAdminPin, async (req, res) => {
     try {
+      setNoCacheHeaders(res);
       const codes = await storage.getInviteCodes();
       const activeTesters = await storage.getActiveTestersCount();
       res.json({ 

@@ -67,6 +67,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // NEVER cache admin, auth, beta, or device API routes - always go to network
+  if (url.pathname.startsWith('/api/admin/') || 
+      url.pathname.startsWith('/api/beta/') ||
+      url.pathname.startsWith('/api/device/') ||
+      url.pathname.startsWith('/api/auth/')) {
+    // Skip service worker entirely for these routes
+    return;
+  }
+
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirstStrategy(request));
     return;

@@ -31,6 +31,14 @@ interface InviteCodesResponse {
   maxTesters: number;
 }
 
+interface DbInfo {
+  env: string;
+  dbHost: string;
+  dbName: string;
+  totalCodesCount: number;
+  codesList: string;
+}
+
 const ADMIN_AUTH_KEY = "breedlog_admin_authed";
 const ADMIN_AUTH_TIME_KEY = "breedlog_admin_authed_at";
 const ADMIN_PIN_KEY = "breedlog_admin_pin";
@@ -90,6 +98,8 @@ async function adminApiRequest(method: string, url: string, body?: any): Promise
   const pin = getAdminPin();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
   };
   
   if (pin) {
@@ -101,6 +111,7 @@ async function adminApiRequest(method: string, url: string, body?: any): Promise
     headers,
     body: body ? JSON.stringify(body) : undefined,
     credentials: "include",
+    cache: "no-store",
   });
   
   if (!response.ok) {
@@ -185,6 +196,15 @@ export default function AdminPage() {
     queryKey: ["/api/admin/invite-codes"],
     queryFn: async () => {
       const response = await adminApiRequest("GET", "/api/admin/invite-codes");
+      return response.json();
+    },
+    enabled: isAuthenticated === true,
+  });
+  
+  const { data: dbInfo } = useQuery<DbInfo>({
+    queryKey: ["/api/admin/db-info"],
+    queryFn: async () => {
+      const response = await adminApiRequest("GET", "/api/admin/db-info");
       return response.json();
     },
     enabled: isAuthenticated === true,
@@ -352,6 +372,13 @@ export default function AdminPage() {
             Logout
           </Button>
         </div>
+        
+        {/* Database info for debugging */}
+        {dbInfo && (
+          <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-md mb-4">
+            DB: {dbInfo.env}/{dbInfo.dbName} @ {dbInfo.dbHost} | Codes: {dbInfo.totalCodesCount}
+          </div>
+        )}
         
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
