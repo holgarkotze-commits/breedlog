@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Lock, Shield, WifiOff, Loader2 } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, setDeviceToken, getDeviceToken } from "@/lib/queryClient";
 
 interface AccessStatus {
   hasAccess: boolean;
@@ -125,13 +125,33 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
     },
     onSuccess: (data) => {
       if (data.success) {
+        // Store device token for future API requests (more reliable than cookies)
+        if (data.token) {
+          setDeviceToken(data.token);
+          console.log("[BetaAccess] Token stored successfully");
+        }
         queryClient.invalidateQueries({ queryKey: ["/api/beta/access"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/device/info"] });
         storeAccess(data.expiresAt);
         setErrorMessage("");
       }
     },
     onError: (err: Error) => {
-      setErrorMessage(err.message || "Invalid access code");
+      // Extract user-friendly message from error
+      let message = err.message || "Invalid access code";
+      // Remove status code prefix if present (e.g., "400: {...")
+      if (message.includes('{"message":')) {
+        try {
+          const jsonStart = message.indexOf('{');
+          const json = JSON.parse(message.substring(jsonStart));
+          message = json.message || message;
+        } catch {
+          // Keep original message
+        }
+      } else if (message.match(/^\d{3}:/)) {
+        message = message.replace(/^\d{3}:\s*/, '');
+      }
+      setErrorMessage(message);
     }
   });
   

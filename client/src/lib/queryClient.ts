@@ -1,5 +1,51 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+// Device token storage keys
+const DEVICE_TOKEN_KEY = "breedlog_device_token";
+
+// Get stored device token for API authentication
+export function getDeviceToken(): string | null {
+  try {
+    return localStorage.getItem(DEVICE_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// Store device token after successful activation
+export function setDeviceToken(token: string): void {
+  try {
+    localStorage.setItem(DEVICE_TOKEN_KEY, token);
+  } catch (e) {
+    console.error("[Auth] Failed to store device token:", e);
+  }
+}
+
+// Clear device token on logout
+export function clearDeviceToken(): void {
+  try {
+    localStorage.removeItem(DEVICE_TOKEN_KEY);
+  } catch {
+    // Ignore
+  }
+}
+
+// Build headers including device token for authentication
+function getAuthHeaders(includeContentType: boolean = false): HeadersInit {
+  const headers: HeadersInit = {};
+  
+  const token = getDeviceToken();
+  if (token) {
+    headers["X-Device-Token"] = token;
+  }
+  
+  if (includeContentType) {
+    headers["Content-Type"] = "application/json";
+  }
+  
+  return headers;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -18,11 +64,18 @@ export async function apiRequest(
     throw new Error('OFFLINE: Operation queued for sync');
   }
   
+  // Determine if this is an auth/beta/device endpoint that needs no-cache
+  const isAuthEndpoint = url.includes('/api/device/') || 
+                          url.includes('/api/beta/') || 
+                          url.includes('/api/auth/') ||
+                          url.includes('/api/admin/');
+  
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers: getAuthHeaders(!!data),
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
+    cache: isAuthEndpoint ? "no-store" : undefined,
   });
 
   await throwIfResNotOk(res);
@@ -35,8 +88,18 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const url = queryKey.join("/") as string;
+    
+    // Determine if this is an auth/beta/device endpoint that needs no-cache
+    const isAuthEndpoint = url.includes('/api/device/') || 
+                            url.includes('/api/beta/') || 
+                            url.includes('/api/auth/') ||
+                            url.includes('/api/admin/');
+    
+    const res = await fetch(url, {
       credentials: "include",
+      headers: getAuthHeaders(false),
+      cache: isAuthEndpoint ? "no-store" : undefined,
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

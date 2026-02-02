@@ -808,6 +808,12 @@ export async function registerRoutes(
   
   // Check access status for authenticated user
   app.get("/api/beta/access", requireAuth, async (req, res) => {
+    // Always set no-cache headers for auth endpoints
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache'
+    });
+    
     try {
       const userId = getUserId(req);
       const activation = await storage.getUserActivation(userId);
@@ -876,66 +882,89 @@ export async function registerRoutes(
   
   // Validate and activate with invite code
   // Note: This endpoint handles device registration inline to avoid session cookie issues
+  // Returns a device token for localStorage-based auth
   app.post("/api/beta/validate", async (req, res) => {
+    // Always set no-cache headers for auth endpoints
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache'
+    });
+    
     try {
       const { code: inputCode, deviceId: clientDeviceId } = req.body;
       
       if (!inputCode || typeof inputCode !== 'string') {
-        return res.status(400).json({ message: 'Access code is required' });
+        return res.status(400).json({ message: 'Please enter an access code.' });
       }
       
-      // Try to get userId from session first, fallback to deviceId from request
-      let userId = getUserId(req);
-      let deviceId = getDeviceId(req);
+      if (!clientDeviceId || typeof clientDeviceId !== 'string' || clientDeviceId.length < 32) {
+        return res.status(400).json({ message: 'Device ID missing. Please refresh the page and try again.' });
+      }
       
-      // If no session, try to register/find device using deviceId from request body
-      if (!userId && clientDeviceId && typeof clientDeviceId === 'string' && clientDeviceId.length >= 32) {
-        console.log("[Beta Validate] No session, attempting inline device registration for:", clientDeviceId);
-        
-        // Try to find existing user by deviceId
-        let user = await storage.getUserByDeviceId(clientDeviceId);
-        
-        if (!user) {
-          // Create new user for this device
+      const codeUpper = inputCode.toUpperCase().trim();
+      
+      // STEP 1: Validate the invite code FIRST (before device registration)
+      const inviteCode = await storage.getInviteCodeByCode(codeUpper);
+      const validation = await isCodeValid(inviteCode);
+      
+      if (!validation.valid) {
+        // User-friendly error messages
+        let friendlyMessage = validation.reason || 'Invalid code';
+        if (friendlyMessage.includes('not found')) friendlyMessage = 'Code not found. Please check and try again.';
+        if (friendlyMessage.includes('expired')) friendlyMessage = 'This code has expired.';
+        if (friendlyMessage.includes('revoked')) friendlyMessage = 'This code has been revoked.';
+        if (friendlyMessage.includes('used')) friendlyMessage = 'This code has already been used.';
+        return res.status(400).json({ message: friendlyMessage });
+      }
+      
+      // STEP 2: Register/find device (atomic with activation)
+      let user = await storage.getUserByDeviceId(clientDeviceId);
+      
+      if (!user) {
+        try {
           user = await storage.upsertUser({
             deviceId: clientDeviceId,
             deviceName: "Unknown Device",
           });
           console.log("[Beta Validate] Created new user:", user.id);
+        } catch (err: any) {
+          // Handle race condition
+          if (err.code === '23505' || err.message?.includes('unique constraint')) {
+            user = await storage.getUserByDeviceId(clientDeviceId);
+          }
+          if (!user) {
+            return res.status(500).json({ message: 'Activation failed. Please refresh and try again.' });
+          }
         }
-        
-        // Set session for future requests
-        req.session.deviceId = clientDeviceId;
-        req.session.userId = user.id;
-        
-        userId = user.id;
-        deviceId = clientDeviceId;
       }
       
-      if (!userId || !deviceId) {
-        return res.status(401).json({ message: 'Device registration failed. Please refresh and try again.' });
-      }
+      const userId = user.id;
+      const deviceId = clientDeviceId;
       
-      const codeUpper = inputCode.toUpperCase().trim();
+      // Set session for future requests
+      req.session.deviceId = deviceId;
+      req.session.userId = userId;
+      
+      // Generate device token for localStorage-based auth
+      const { generateDeviceToken } = await import('./device-auth');
+      const token = generateDeviceToken(deviceId);
       
       // Check if user already has an activation
       const existingActivation = await storage.getUserActivation(userId);
       if (existingActivation && existingActivation.status === 'active') {
-        return res.json({ success: true, message: 'Already activated' });
-      }
-      
-      // Find the invite code
-      const inviteCode = await storage.getInviteCodeByCode(codeUpper);
-      const validation = await isCodeValid(inviteCode);
-      
-      if (!validation.valid) {
-        return res.status(400).json({ message: validation.reason });
+        return res.json({ 
+          success: true, 
+          message: 'Already activated',
+          token,
+          deviceId,
+          userId
+        });
       }
       
       // Check max testers limit
       const activeTesters = await storage.getActiveTestersCount();
       if (activeTesters >= BETA_CONFIG.MAX_TESTERS) {
-        return res.status(400).json({ message: 'Beta testing limit reached. No new testers can be added.' });
+        return res.status(400).json({ message: 'Beta testing is currently full. Please try again later.' });
       }
       
       // Check device limit (1 device per code)
@@ -943,14 +972,13 @@ export async function registerRoutes(
       const codeActivations = allActivations.filter(a => a.inviteCodeId === inviteCode!.id);
       
       if (codeActivations.length >= inviteCode!.maxDevices) {
-        // Check if it's the same device
         const sameDevice = codeActivations.find(a => a.deviceId === deviceId);
         if (!sameDevice) {
-          return res.status(400).json({ message: 'This code has already been used on another device' });
+          return res.status(400).json({ message: 'This code has already been used on another device.' });
         }
       }
       
-      // Create activation
+      // STEP 3: Create activation (atomic - only after all checks pass)
       await storage.createUserActivation({
         userId,
         inviteCodeId: inviteCode!.id,
@@ -958,21 +986,38 @@ export async function registerRoutes(
         status: 'active',
       });
       
-      // Increment uses count
+      // STEP 4: Increment uses count (only after activation created)
       await storage.incrementInviteCodeUses(inviteCode!.id);
+      
+      console.log("[Beta Validate] Activation success for device:", deviceId);
       
       res.json({ 
         success: true, 
         message: 'Access granted!',
-        expiresAt: inviteCode!.expiresAt
+        expiresAt: inviteCode!.expiresAt,
+        token,
+        deviceId,
+        userId
       });
     } catch (err: any) {
       console.error("Beta validation error:", err);
       if (err.message?.includes('unique constraint')) {
-        // User already has activation, this is fine
-        return res.json({ success: true, message: 'Already activated' });
+        // User already has activation - generate token and return success
+        try {
+          const { generateDeviceToken } = await import('./device-auth');
+          const { deviceId: clientDeviceId } = req.body;
+          const token = generateDeviceToken(clientDeviceId);
+          return res.json({ 
+            success: true, 
+            message: 'Already activated',
+            token,
+            deviceId: clientDeviceId
+          });
+        } catch {
+          return res.json({ success: true, message: 'Already activated' });
+        }
       }
-      res.status(500).json({ message: err.message });
+      res.status(500).json({ message: 'Activation failed. Please refresh and try again.' });
     }
   });
   

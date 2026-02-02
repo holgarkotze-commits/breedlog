@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ensureUserIsolation, clearAllOfflineData } from "@/lib/indexeddb";
 import { clearBetaAccessStorage } from "@/components/BetaAccessGate";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getDeviceToken, setDeviceToken, clearDeviceToken } from "@/lib/queryClient";
 
 // Generate or retrieve deviceId
 function getDeviceId(): string {
@@ -22,12 +22,21 @@ interface DeviceInfo {
   registered: boolean;
   userId?: string;
   deviceId?: string;
+  token?: string;
 }
 
 async function fetchDeviceInfo(): Promise<DeviceInfo> {
   try {
+    const token = getDeviceToken();
+    const headers: HeadersInit = {};
+    if (token) {
+      headers["X-Device-Token"] = token;
+    }
+    
     const response = await fetch("/api/device/info", {
       credentials: "include",
+      headers,
+      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -38,6 +47,11 @@ async function fetchDeviceInfo(): Promise<DeviceInfo> {
   } catch (error) {
     if (!navigator.onLine) {
       console.log('[Auth] Offline - using cached device data');
+      // If we have a token, assume still registered
+      const token = getDeviceToken();
+      if (token) {
+        return { registered: true };
+      }
       return { registered: false };
     }
     throw error;
@@ -51,6 +65,7 @@ async function registerDevice(): Promise<DeviceInfo> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
+    cache: "no-store",
     body: JSON.stringify({ 
       deviceId,
       deviceName: navigator.userAgent.substring(0, 100) 
@@ -61,7 +76,15 @@ async function registerDevice(): Promise<DeviceInfo> {
     throw new Error("Failed to register device");
   }
 
-  return response.json();
+  const data = await response.json();
+  
+  // Store the device token for future API requests
+  if (data.token) {
+    setDeviceToken(data.token);
+    console.log('[Auth] Device token stored');
+  }
+
+  return data;
 }
 
 export function useAuth() {
@@ -113,6 +136,7 @@ export function useAuth() {
     mutationFn: async () => {
       await clearAllOfflineData();
       clearBetaAccessStorage();
+      clearDeviceToken();
       await apiRequest("POST", "/api/device/logout", {});
     },
     onSuccess: () => {
