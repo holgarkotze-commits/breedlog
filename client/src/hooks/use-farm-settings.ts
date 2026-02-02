@@ -48,6 +48,7 @@ export function useSaveFarmSettings() {
       const existingId = existingSettings.length > 0 ? existingSettings[0].id : 1;
       const settingsWithId = { ...data, id: existingId } as FarmSettings;
       
+      // Always save to IndexedDB first for instant local persistence
       await putManyInStore(STORE_NAME, [settingsWithId]);
 
       if (!isOnline) {
@@ -60,24 +61,37 @@ export function useSaveFarmSettings() {
         return settingsWithId;
       }
 
-      const res = await apiRequest("POST", api.farmSettings.save.path, data);
-      const saved = await res.json();
-      
-      await putManyInStore(STORE_NAME, [saved]);
-      
-      return saved;
+      // Try to save to server, but don't fail the whole operation if it fails
+      // Data is already in IndexedDB and will sync later
+      try {
+        const res = await apiRequest("POST", api.farmSettings.save.path, data);
+        const saved = await res.json();
+        await putManyInStore(STORE_NAME, [saved]);
+        return saved;
+      } catch (serverError) {
+        console.warn('[useSaveFarmSettings] Server save failed, queuing for sync:', serverError);
+        // Queue for later sync
+        await addToSyncQueue({
+          entity: STORE_NAME,
+          action: 'update',
+          data: settingsWithId,
+        });
+        // Return local data - it's saved locally and will sync later
+        return settingsWithId;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.farmSettings.get.path] });
       toast({
         title: "Farm settings saved",
-        description: "Your farm details have been updated successfully.",
+        description: "Your farm details have been saved.",
       });
     },
     onError: (error: Error) => {
+      console.error('[useSaveFarmSettings] Critical error:', error);
       toast({
         title: "Failed to save",
-        description: error.message,
+        description: "Could not save settings. Please try again.",
         variant: "destructive",
       });
     },
