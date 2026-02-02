@@ -33,15 +33,23 @@ function ZoomableImagePreview({ src, alt, onClose }: { src: string; alt: string;
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [rotation, setRotation] = useState(0);
   const lastDistanceRef = useRef<number | null>(null);
+  const lastTapRef = useRef<number>(0);
   
   const getDistance = (touch1: React.Touch, touch2: React.Touch) => {
     return Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
   };
   
+  const resetView = () => { setScale(1); setPosition({ x: 0, y: 0 }); };
+  
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       lastDistanceRef.current = getDistance(e.touches[0], e.touches[1]);
     } else if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - lastTapRef.current < 300) {
+        resetView();
+      }
+      lastTapRef.current = now;
       setIsDragging(true);
       setStartPos({ x: e.touches[0].clientX - position.x, y: e.touches[0].clientY - position.y });
     }
@@ -64,7 +72,6 @@ function ZoomableImagePreview({ src, alt, onClose }: { src: string; alt: string;
   const handleMouseDown = (e: React.MouseEvent) => { if (scale > 1) { setIsDragging(true); setStartPos({ x: e.clientX - position.x, y: e.clientY - position.y }); } };
   const handleMouseMove = (e: React.MouseEvent) => { if (isDragging && scale > 1) { setPosition({ x: e.clientX - startPos.x, y: e.clientY - startPos.y }); } };
   const handleMouseUp = () => { setIsDragging(false); };
-  const resetView = () => { setScale(1); setPosition({ x: 0, y: 0 }); };
   
   return (
     <>

@@ -496,6 +496,7 @@ export default function Animals() {
     .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
     .animals-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
+    .row-num { width: 25px; text-align: center; color: #666; font-size: 7pt; }
     .animals-table tbody tr { height: auto; }
     .animals-table tr:nth-child(even) { background: #fafafa; }
     .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
@@ -670,6 +671,7 @@ export default function Animals() {
     .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
     .animals-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
+    .row-num { width: 25px; text-align: center; color: #666; font-size: 7pt; }
     .animals-table tbody tr { height: auto; }
     .animals-table tr:nth-child(even) { background: #fafafa; }
     .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
