@@ -60,6 +60,7 @@ export const requireDeviceAuth = (req: Request, res: Response, next: NextFunctio
 
 // Middleware to require admin access (via ADMIN_PIN)
 export const requireAdminPin = (req: Request, res: Response, next: NextFunction) => {
+  console.log("[Admin Middleware] Session ID:", req.sessionID, "isAdmin:", req.session?.isAdmin);
   if (!req.session?.isAdmin) {
     return res.status(403).json({ message: "Admin access required" });
   }
@@ -133,7 +134,14 @@ export function registerDeviceAuthRoutes(app: Express) {
     
     if (pin === adminPin) {
       req.session.isAdmin = true;
-      res.json({ success: true });
+      req.session.save((err) => {
+        if (err) {
+          console.error("[Admin Login] Session save error:", err);
+          return res.status(500).json({ message: "Session error" });
+        }
+        console.log("[Admin Login] Session saved, isAdmin:", req.session.isAdmin);
+        res.json({ success: true });
+      });
     } else {
       res.status(401).json({ message: "Invalid PIN" });
     }
