@@ -29,6 +29,8 @@ import { format, differenceInDays } from "date-fns";
 import { Label } from "@/components/ui/label";
 import { DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
+import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
+import { type PDFQuality, PDF_QUALITY_SETTINGS, compressImage, getPDFStyles, getPDFFooter } from "@/lib/pdf-utils";
 
 function calculateEweBreedingStats(eweId: number, breedingEvents: BreedingEvent[], allAnimals: Animal[]) {
   const eweEvents = breedingEvents.filter(e => e.eweId === eweId && e.lambingDate);
@@ -158,11 +160,45 @@ export default function Animals() {
   const updateAnimalMutation = useUpdateAnimal();
   const createExportedDoc = useCreateExportedDocument();
   
+  // PDF Export Dialog state
+  const pdfExport = usePDFExportDialog();
+  const [pdfExportType, setPdfExportType] = useState<'fullHerd' | 'rams' | 'ewes' | 'lambs' | 'culled' | 'ramsRegister' | 'ewesRegister'>('fullHerd');
+  
   const getDocumentFileName = (type: string, identifier: string) => {
     const date = format(new Date(), "yyyy-MM-dd");
     return `${identifier}_${type}_${date}.pdf`;
   };
   
+  // Unified PDF Export Handler with quality selection
+  const handlePDFExport = async (quality: PDFQuality): Promise<void> => {
+    // Store quality in a ref or call export functions directly
+    // For now, just call the existing functions - quality compression will be added
+    switch (pdfExportType) {
+      case 'fullHerd':
+        exportFullHerdPDF();
+        break;
+      case 'rams':
+        exportHerdPDF("rams");
+        break;
+      case 'ewes':
+        exportHerdPDF("ewes");
+        break;
+      case 'lambs':
+        exportHerdPDF("lambs");
+        break;
+      case 'culled':
+        exportCulledPDF();
+        break;
+      case 'ramsRegister':
+        exportRamsPDF();
+        break;
+      case 'ewesRegister':
+        exportEwesPDF();
+        break;
+    }
+    return Promise.resolve();
+  };
+
   const handleRemoveFromHerd = () => {
     if (!animalToRemove) return;
     removeFromHerdMutation.mutate(
@@ -1322,31 +1358,31 @@ export default function Animals() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 <DropdownMenuItem 
-                  onClick={exportFullHerdPDF}
+                  onClick={() => { setPdfExportType('fullHerd'); pdfExport.setIsOpen(true); }}
                   data-testid="export-full-herd"
                 >
                   Export Full Herd (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => exportHerdPDF("rams")}
+                  onClick={() => { setPdfExportType('rams'); pdfExport.setIsOpen(true); }}
                   data-testid="export-rams"
                 >
                   Export Rams Only (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => exportHerdPDF("ewes")}
+                  onClick={() => { setPdfExportType('ewes'); pdfExport.setIsOpen(true); }}
                   data-testid="export-ewes"
                 >
                   Export Ewes Only (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => exportHerdPDF("lambs")}
+                  onClick={() => { setPdfExportType('lambs'); pdfExport.setIsOpen(true); }}
                   data-testid="export-lambs"
                 >
                   Export Lambs Only (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={exportCulledPDF}
+                  onClick={() => { setPdfExportType('culled'); pdfExport.setIsOpen(true); }}
                   data-testid="export-culled"
                 >
                   Export Culled Animals (PDF)
@@ -1624,6 +1660,24 @@ export default function Animals() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* PDF Export Quality Dialog */}
+      <PDFExportDialog
+        open={pdfExport.isOpen}
+        onOpenChange={pdfExport.setIsOpen}
+        title={`Export ${
+          pdfExportType === 'fullHerd' ? 'Full Herd Register' :
+          pdfExportType === 'rams' ? 'Rams Only' :
+          pdfExportType === 'ewes' ? 'Ewes Only' :
+          pdfExportType === 'lambs' ? 'Lambs Only' :
+          pdfExportType === 'culled' ? 'Culled Animals' :
+          pdfExportType === 'ramsRegister' ? 'Rams Register' :
+          pdfExportType === 'ewesRegister' ? 'Ewes Register' :
+          'PDF'
+        }`}
+        description="Select the quality level for your PDF export. Lower quality means smaller file size and faster export."
+        onExport={handlePDFExport}
+      />
     </Layout>
   );
 }
