@@ -223,6 +223,13 @@ ${farmSettings?.logoUrl ? `<img src="${farmSettings.logoUrl}" style="width: 50px
 
 <div class="group-title">${g.name}</div>
 
+${g.ramPhoto ? `
+<div style="text-align: center; margin: 15px 0;">
+  <img src="${g.ramPhoto}" style="max-width: 150px; max-height: 120px; object-fit: contain; border: 2px solid #FFC300; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" alt="${g.ramTagId}" />
+  <p style="font-size: 10pt; font-weight: bold; color: #1a1a1a; margin-top: 8px;">Ram: ${g.ramTagId}${g.ramName ? ` (${g.ramName})` : ''}</p>
+</div>
+` : ''}
+
 <div class="section-title">MATING GROUP SUMMARY</div>
 <table class="summary-table">
 <tr>
