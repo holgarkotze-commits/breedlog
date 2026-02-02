@@ -96,11 +96,23 @@ export function registerDeviceAuthRoutes(app: Express) {
       let user = await storage.getUserByDeviceId(deviceId);
       
       if (!user) {
-        // Create new user for this device
-        user = await storage.upsertUser({
-          deviceId,
-          deviceName: deviceName || "Unknown Device",
-        });
+        try {
+          // Create new user for this device
+          user = await storage.upsertUser({
+            deviceId,
+            deviceName: deviceName || "Unknown Device",
+          });
+        } catch (err: any) {
+          // Handle race condition - device was registered by concurrent request
+          if (err.code === '23505' || err.message?.includes('unique constraint')) {
+            user = await storage.getUserByDeviceId(deviceId);
+            if (!user) {
+              throw new Error("Device registration failed after retry");
+            }
+          } else {
+            throw err;
+          }
+        }
       } else {
         // Update last seen
         await storage.updateUserLastSeen(user.id);
