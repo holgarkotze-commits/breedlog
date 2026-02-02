@@ -373,11 +373,18 @@ export default function AdminPage() {
           </Button>
         </div>
         
-        {/* Database info for debugging */}
+        {/* Database Identity - CRITICAL for verifying prod/dev consistency */}
         {dbInfo && (
-          <div className="text-xs text-muted-foreground bg-muted/50 px-3 py-1.5 rounded-md mb-4">
-            DB: {dbInfo.env}/{dbInfo.dbName} @ {dbInfo.dbHost} | Codes: {dbInfo.totalCodesCount}
-          </div>
+          <Alert className="mb-4 border-primary/50 bg-primary/10">
+            <ShieldCheck className="h-4 w-4 text-primary" />
+            <AlertDescription className="text-sm">
+              <span className="font-semibold">Database Identity:</span>{" "}
+              <Badge variant="outline" className="mx-1">{dbInfo.env}</Badge>
+              <span className="text-muted-foreground">{dbInfo.dbName} @ {dbInfo.dbHost}</span>
+              <span className="mx-2">|</span>
+              <span className="font-medium">{dbInfo.totalCodesCount} codes in DB</span>
+            </AlertDescription>
+          </Alert>
         )}
         
         <div className="grid gap-4 md:grid-cols-3">
