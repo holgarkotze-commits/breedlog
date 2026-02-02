@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,54 @@ interface InviteCodesResponse {
   maxTesters: number;
 }
 
+const ADMIN_AUTH_KEY = "breedlog_admin_authed";
+const ADMIN_AUTH_TIME_KEY = "breedlog_admin_authed_at";
+const ADMIN_SESSION_DURATION_MS = 24 * 60 * 60 * 1000;
+
+function checkAdminAuth(): boolean {
+  try {
+    const authed = localStorage.getItem(ADMIN_AUTH_KEY);
+    const authedAt = localStorage.getItem(ADMIN_AUTH_TIME_KEY);
+    
+    console.log("[Admin Guard] Checking auth:", { authed, authedAt });
+    
+    if (authed !== "true" || !authedAt) {
+      console.log("[Admin Guard] Not authenticated - missing keys");
+      return false;
+    }
+    
+    const authedTime = new Date(authedAt).getTime();
+    const now = Date.now();
+    const elapsed = now - authedTime;
+    
+    if (elapsed > ADMIN_SESSION_DURATION_MS) {
+      console.log("[Admin Guard] Session expired:", { elapsed, max: ADMIN_SESSION_DURATION_MS });
+      localStorage.removeItem(ADMIN_AUTH_KEY);
+      localStorage.removeItem(ADMIN_AUTH_TIME_KEY);
+      return false;
+    }
+    
+    console.log("[Admin Guard] Valid session, remaining:", Math.round((ADMIN_SESSION_DURATION_MS - elapsed) / 1000 / 60), "minutes");
+    return true;
+  } catch (err) {
+    console.error("[Admin Guard] Error checking auth:", err);
+    return false;
+  }
+}
+
+function setAdminAuth(): void {
+  const now = new Date().toISOString();
+  localStorage.setItem(ADMIN_AUTH_KEY, "true");
+  localStorage.setItem(ADMIN_AUTH_TIME_KEY, now);
+  console.log("[Admin Login] Auth stored:", { key: ADMIN_AUTH_KEY, time: now });
+}
+
+function clearAdminAuth(): void {
+  localStorage.removeItem(ADMIN_AUTH_KEY);
+  localStorage.removeItem(ADMIN_AUTH_TIME_KEY);
+  console.log("[Admin Logout] Auth cleared");
+}
+
 export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -39,29 +87,71 @@ export default function AdminPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [adminPin, setAdminPin] = useState("");
   const [pinError, setPinError] = useState("");
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   
-  const { data: adminCheck, isLoading: checkingAdmin, refetch: refetchAdmin } = useQuery<{ isAdmin: boolean }>({
-    queryKey: ["/api/admin/check"],
-  });
+  useEffect(() => {
+    const authed = checkAdminAuth();
+    console.log("[Admin Page] Initial auth check result:", authed);
+    setIsAuthenticated(authed);
+  }, []);
   
-  const loginMutation = useMutation({
-    mutationFn: async (pin: string) => {
-      const response = await apiRequest("POST", "/api/admin/login", { pin });
-      return response.json();
-    },
-    onSuccess: () => {
-      refetchAdmin();
-      setPinError("");
-      setAdminPin("");
-    },
-    onError: (err: Error) => {
-      setPinError(err.message || "Invalid PIN");
+  const handleLogin = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log("[Admin Login] Form submitted, PIN length:", adminPin.length);
+    
+    if (!adminPin.trim()) {
+      setPinError("Please enter a PIN");
+      return;
     }
-  });
+    
+    setIsLoggingIn(true);
+    setPinError("");
+    
+    try {
+      console.log("[Admin Login] Sending login request...");
+      const response = await apiRequest("POST", "/api/admin/login", { pin: adminPin });
+      const data = await response.json();
+      
+      console.log("[Admin Login] Server response:", data);
+      
+      if (data.success) {
+        setAdminAuth();
+        setIsAuthenticated(true);
+        setAdminPin("");
+        console.log("[Admin Login] SUCCESS - user is now authenticated");
+        toast({
+          title: "Welcome",
+          description: "Admin access granted",
+        });
+      } else {
+        console.log("[Admin Login] Failed - invalid response");
+        setPinError("Login failed");
+      }
+    } catch (err: any) {
+      console.error("[Admin Login] Error:", err);
+      setPinError(err.message || "Invalid PIN");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }, [adminPin, toast]);
+  
+  const handleLogout = useCallback(() => {
+    console.log("[Admin Logout] Logging out...");
+    clearAdminAuth();
+    setIsAuthenticated(false);
+    apiRequest("POST", "/api/admin/logout", {}).catch(() => {});
+    toast({
+      title: "Logged Out",
+      description: "You have been logged out of the admin panel.",
+    });
+  }, [toast]);
   
   const { data: codesData, isLoading: loadingCodes, error } = useQuery<InviteCodesResponse>({
     queryKey: ["/api/admin/invite-codes"],
-    enabled: adminCheck?.isAdmin === true,
+    enabled: isAuthenticated === true,
   });
   
   const createCodeMutation = useMutation({
@@ -111,27 +201,6 @@ export default function AdminPage() {
       });
     }
   });
-
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/admin/logout", {});
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/check"] });
-      toast({
-        title: "Logged Out",
-        description: "You have been logged out of the admin panel.",
-      });
-    },
-    onError: (err: Error) => {
-      toast({
-        title: "Error",
-        description: err.message,
-        variant: "destructive"
-      });
-    }
-  });
   
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -154,7 +223,7 @@ export default function AdminPage() {
     return <Badge variant="default">Active</Badge>;
   };
   
-  if (checkingAdmin) {
+  if (isAuthenticated === null) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -162,7 +231,7 @@ export default function AdminPage() {
     );
   }
   
-  if (!adminCheck?.isAdmin) {
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -176,7 +245,7 @@ export default function AdminPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={(e) => { e.preventDefault(); loginMutation.mutate(adminPin); }} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <Input
                   type="password"
@@ -186,6 +255,7 @@ export default function AdminPage() {
                   className="text-center text-lg tracking-widest"
                   data-testid="input-admin-pin"
                   autoFocus
+                  autoComplete="off"
                 />
               </div>
               
@@ -198,10 +268,10 @@ export default function AdminPage() {
               <Button 
                 type="submit" 
                 className="w-full" 
-                disabled={!adminPin.trim() || loginMutation.isPending}
+                disabled={!adminPin.trim() || isLoggingIn}
                 data-testid="button-admin-login"
               >
-                {loginMutation.isPending ? (
+                {isLoggingIn ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Key className="mr-2 h-4 w-4" />
@@ -239,15 +309,10 @@ export default function AdminPage() {
           </div>
           <Button 
             variant="outline" 
-            onClick={() => logoutMutation.mutate()}
-            disabled={logoutMutation.isPending}
+            onClick={handleLogout}
             data-testid="button-admin-logout"
           >
-            {logoutMutation.isPending ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <LogOut className="mr-2 h-4 w-4" />
-            )}
+            <LogOut className="mr-2 h-4 w-4" />
             Logout
           </Button>
         </div>
