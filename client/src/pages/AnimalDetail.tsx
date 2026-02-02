@@ -19,12 +19,84 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useRef, useEffect } from "react";
 import { format } from "date-fns";
-import { ArrowLeft, Dna, Syringe, Scale, FileText, Plus, Upload, Edit, Camera, Image, X, Download, Heart, LogOut } from "lucide-react";
+import { ArrowLeft, Dna, Syringe, Scale, FileText, Plus, Upload, Edit, Camera, Image, X, Download, Heart, LogOut, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
 import { useAnimalBreedingEvents } from "@/hooks/use-breeding";
 import { Link } from "wouter";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 import { useToast } from "@/hooks/use-toast";
 import type { Animal, AnimalWithRelations } from "@shared/schema";
+
+function ZoomableImagePreview({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  const [rotation, setRotation] = useState(0);
+  const lastDistanceRef = useRef<number | null>(null);
+  
+  const getDistance = (touch1: React.Touch, touch2: React.Touch) => {
+    return Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+  };
+  
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      lastDistanceRef.current = getDistance(e.touches[0], e.touches[1]);
+    } else if (e.touches.length === 1) {
+      setIsDragging(true);
+      setStartPos({ x: e.touches[0].clientX - position.x, y: e.touches[0].clientY - position.y });
+    }
+  };
+  
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && lastDistanceRef.current !== null) {
+      e.preventDefault();
+      const distance = getDistance(e.touches[0], e.touches[1]);
+      const delta = distance / lastDistanceRef.current;
+      lastDistanceRef.current = distance;
+      setScale(prev => Math.min(Math.max(0.5, prev * delta), 5));
+    } else if (e.touches.length === 1 && isDragging && scale > 1) {
+      setPosition({ x: e.touches[0].clientX - startPos.x, y: e.touches[0].clientY - startPos.y });
+    }
+  };
+  
+  const handleTouchEnd = () => { lastDistanceRef.current = null; setIsDragging(false); };
+  const handleWheel = (e: React.WheelEvent) => { e.preventDefault(); setScale(prev => Math.min(Math.max(0.5, prev * (e.deltaY > 0 ? 0.9 : 1.1)), 5)); };
+  const handleMouseDown = (e: React.MouseEvent) => { if (scale > 1) { setIsDragging(true); setStartPos({ x: e.clientX - position.x, y: e.clientY - position.y }); } };
+  const handleMouseMove = (e: React.MouseEvent) => { if (isDragging && scale > 1) { setPosition({ x: e.clientX - startPos.x, y: e.clientY - startPos.y }); } };
+  const handleMouseUp = () => { setIsDragging(false); };
+  const resetView = () => { setScale(1); setPosition({ x: 0, y: 0 }); };
+  
+  return (
+    <>
+      <div className="absolute top-2 right-2 z-50 flex gap-2">
+        <Button variant="outline" size="icon" onClick={() => setScale(s => Math.min(s * 1.25, 5))} className="bg-black/50 border-white/20 hover:bg-black/70" data-testid="button-zoom-in">
+          <ZoomIn className="h-4 w-4 text-white" />
+        </Button>
+        <Button variant="outline" size="icon" onClick={() => setScale(s => Math.max(s / 1.25, 0.5))} className="bg-black/50 border-white/20 hover:bg-black/70" data-testid="button-zoom-out">
+          <ZoomOut className="h-4 w-4 text-white" />
+        </Button>
+        <Button variant="outline" size="icon" onClick={() => setRotation(r => (r + 90) % 360)} className="bg-black/50 border-white/20 hover:bg-black/70" data-testid="button-rotate">
+          <RotateCw className="h-4 w-4 text-white" />
+        </Button>
+        <Button variant="outline" size="icon" onClick={onClose} className="bg-black/50 border-white/20 hover:bg-black/70" data-testid="button-close-image-preview">
+          <X className="h-4 w-4 text-white" />
+        </Button>
+      </div>
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 text-white/60 text-xs pointer-events-none">
+        Pinch to zoom • Double-tap to reset
+      </div>
+      <div className="w-full h-[90vh] flex items-center justify-center overflow-hidden touch-none"
+        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
+        onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}
+        onDoubleClick={resetView}>
+        <img src={src} alt={alt} className="max-w-full max-h-full object-contain transition-transform duration-100" draggable={false}
+          style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${scale}) rotate(${rotation}deg)`, cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'zoom-in' }}
+          data-testid="image-preview-full"
+        />
+      </div>
+    </>
+  );
+}
 
 export default function AnimalDetail() {
   const [match, params] = useRoute("/animals/:id");
@@ -150,28 +222,14 @@ export default function AnimalDetail() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Full-screen Image Preview */}
+        {/* Full-screen Image Preview with Zoom */}
         <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
-          <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none">
-            <div className="relative w-full h-full flex items-center justify-center min-h-[50vh]">
-              <Button
-                variant="outline"
-                size="icon"
-                className="absolute top-2 right-2 z-10"
-                onClick={() => setImagePreviewOpen(false)}
-                data-testid="button-close-image-preview"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-              {animal.photo && (
-                <img 
-                  src={animal.photo} 
-                  alt={animal.tagId}
-                  className="max-w-full max-h-[90vh] object-contain"
-                  data-testid="image-preview-full"
-                />
-              )}
-            </div>
+          <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-none overflow-hidden">
+            <ZoomableImagePreview 
+              src={animal.photo || ""} 
+              alt={animal.tagId} 
+              onClose={() => setImagePreviewOpen(false)} 
+            />
           </DialogContent>
         </Dialog>
 

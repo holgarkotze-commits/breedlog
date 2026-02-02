@@ -258,8 +258,10 @@ export default function Animals() {
         const startIdx = page * ramsPerPage;
         const pageRams = ramsWithStats.slice(startIdx, startIdx + ramsPerPage);
         
-        const tableRows = pageRams.map((ram) => {
+        const tableRows = pageRams.map((ram, idx) => {
+          const rowNum = startIdx + idx + 1;
           return `<tr>
+            <td class="row-num">${rowNum}</td>
             <td><strong>${ram.tagId}</strong></td>
             <td>${ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : '-'}</td>
             <td>${ram.stats.totalLambs || 0}</td>
@@ -293,6 +295,7 @@ export default function Animals() {
             <table class="animals-table">
               <thead>
                 <tr>
+                  <th class="row-num">#</th>
                   <th>Ram ID</th>
                   <th>DOB</th>
                   <th>Total Lambs</th>
@@ -334,8 +337,10 @@ export default function Animals() {
         const startIdx = page * ewesPerPage;
         const pageEwes = ewesWithStats.slice(startIdx, startIdx + ewesPerPage);
         
-        const tableRows = pageEwes.map((ewe) => {
+        const tableRows = pageEwes.map((ewe, idx) => {
+          const rowNum = startIdx + idx + 1;
           return `<tr>
+            <td class="row-num">${rowNum}</td>
             <td><strong>${ewe.tagId}</strong></td>
             <td>${ewe.birthDate ? format(new Date(ewe.birthDate), "dd/MM/yyyy") : '-'}</td>
             <td>${ewe.stats.firstLambDate ? format(new Date(ewe.stats.firstLambDate), "dd/MM/yyyy") : '-'}</td>
@@ -368,6 +373,7 @@ export default function Animals() {
             <table class="animals-table">
               <thead>
                 <tr>
+                  <th class="row-num">#</th>
                   <th>Ewe ID</th>
                   <th>Date of Birth</th>
                   <th>First Lamb Date</th>
@@ -403,8 +409,10 @@ export default function Animals() {
         const startIdx = page * lambsPerPage;
         const pageLambs = lambs.slice(startIdx, startIdx + lambsPerPage);
         
-        const tableRows = pageLambs.map((lamb) => {
+        const tableRows = pageLambs.map((lamb, idx) => {
+          const rowNum = startIdx + idx + 1;
           return `<tr>
+            <td class="row-num">${rowNum}</td>
             <td><strong>${lamb.tagId}</strong></td>
             <td>${lamb.name || '-'}</td>
             <td>${lamb.sex || '-'}</td>
@@ -436,6 +444,7 @@ export default function Animals() {
             <table class="animals-table">
               <thead>
                 <tr>
+                  <th class="row-num">#</th>
                   <th>Lamb ID</th>
                   <th>Name</th>
                   <th>Sex</th>
