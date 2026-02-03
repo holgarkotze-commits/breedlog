@@ -67,8 +67,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // NEVER cache admin, auth, beta, or device API routes - always go to network
-  if (url.pathname.startsWith('/api/admin/') || 
+  // NEVER cache admin pages or admin/auth/beta/device API routes - always go to network
+  if (url.pathname === '/admin' ||
+      url.pathname.startsWith('/admin/') ||
+      url.pathname.startsWith('/api/admin/') || 
       url.pathname.startsWith('/api/beta/') ||
       url.pathname.startsWith('/api/device/') ||
       url.pathname.startsWith('/api/auth/')) {

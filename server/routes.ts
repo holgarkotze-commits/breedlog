@@ -1037,9 +1037,10 @@ export async function registerRoutes(
   
   // Database info endpoint for debugging environment mismatches
   app.get("/api/admin/db-info", requireAdminPin, async (req, res) => {
+    setNoCacheHeaders(res);
     try {
-      setNoCacheHeaders(res);
       const codes = await storage.getInviteCodes();
+      const activationsCount = await storage.getActiveTestersCount();
       const dbUrl = process.env.DATABASE_URL || '';
       // Mask password in connection string
       const maskedUrl = dbUrl.replace(/:([^:@]+)@/, ':****@');
@@ -1051,6 +1052,7 @@ export async function registerRoutes(
         dbHost,
         dbName,
         totalCodesCount: codes.length,
+        activationsCount,
         codesList: codes.map(c => c.code).join(', ')
       });
     } catch (err: any) {
@@ -1091,6 +1093,44 @@ export async function registerRoutes(
       });
       
       res.status(201).json(code);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+  
+  // Delete invite code (only if unused)
+  app.delete("/api/admin/invite-codes/:id", requireAdminPin, async (req, res) => {
+    setNoCacheHeaders(res);
+    try {
+      const id = Number(req.params.id);
+      
+      // Check if code has any activations
+      const activations = await storage.getAllActiveActivations();
+      const hasActivations = activations.some(a => a.inviteCodeId === id);
+      
+      if (hasActivations) {
+        return res.status(400).json({ 
+          message: "Cannot delete code with existing activations. Use revoke instead." 
+        });
+      }
+      
+      // Check code exists and get uses count
+      const codes = await storage.getInviteCodes();
+      const code = codes.find(c => c.id === id);
+      
+      if (!code) {
+        return res.status(404).json({ message: "Code not found" });
+      }
+      
+      if (code.usesCount > 0) {
+        return res.status(400).json({ 
+          message: "Cannot delete a used code. Use revoke instead." 
+        });
+      }
+      
+      // Delete the code
+      await storage.deleteInviteCode(id);
+      res.json({ success: true, message: "Code deleted" });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

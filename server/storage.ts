@@ -116,6 +116,7 @@ export interface IStorage {
   getInviteCodeByCode(code: string): Promise<InviteCode | undefined>;
   createInviteCode(code: Omit<InsertInviteCode, 'status'>): Promise<InviteCode>;
   updateInviteCode(id: number, updates: Partial<InsertInviteCode>): Promise<InviteCode | undefined>;
+  deleteInviteCode(id: number): Promise<void>;
   incrementInviteCodeUses(id: number): Promise<void>;
   getActiveTestersCount(): Promise<number>;
   
@@ -417,6 +418,10 @@ export class DatabaseStorage implements IStorage {
   async updateInviteCode(id: number, updates: Partial<InsertInviteCode>): Promise<InviteCode | undefined> {
     const results = await db.update(inviteCodes).set(updates).where(eq(inviteCodes.id, id)).returning();
     return results[0];
+  }
+  
+  async deleteInviteCode(id: number): Promise<void> {
+    await db.delete(inviteCodes).where(eq(inviteCodes.id, id));
   }
   
   async incrementInviteCodeUses(id: number): Promise<void> {

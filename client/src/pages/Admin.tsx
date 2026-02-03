@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut } from "lucide-react";
+import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 
@@ -36,6 +36,7 @@ interface DbInfo {
   dbHost: string;
   dbName: string;
   totalCodesCount: number;
+  activationsCount: number;
   codesList: string;
 }
 
@@ -237,6 +238,56 @@ export default function AdminPage() {
     }
   });
   
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  const handleHardRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      // Force cache bust with timestamp
+      const timestamp = Date.now();
+      await Promise.all([
+        adminApiRequest("GET", `/api/admin/invite-codes?t=${timestamp}`),
+        adminApiRequest("GET", `/api/admin/db-info?t=${timestamp}`)
+      ]);
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/invite-codes"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/db-info"] });
+      toast({
+        title: "Data Refreshed",
+        description: "Loaded latest data from database",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Refresh Failed",
+        description: err.message,
+        variant: "destructive"
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [queryClient, toast]);
+  
+  const deleteCodeMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await adminApiRequest("DELETE", `/api/admin/invite-codes/${id}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invite-codes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/db-info"] });
+      toast({
+        title: "Code Deleted",
+        description: "The unused code has been permanently removed.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
   const revokeCodeMutation = useMutation({
     mutationFn: async (id: number) => {
       const response = await adminApiRequest("POST", `/api/admin/invite-codes/${id}/revoke`, {});
@@ -244,6 +295,7 @@ export default function AdminPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/invite-codes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/db-info"] });
       toast({
         title: "Code Revoked",
         description: "The access code has been revoked and all linked users have lost access.",
@@ -374,18 +426,38 @@ export default function AdminPage() {
         </div>
         
         {/* Database Identity - CRITICAL for verifying prod/dev consistency */}
-        {dbInfo && (
-          <Alert className="mb-4 border-primary/50 bg-primary/10">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            <AlertDescription className="text-sm">
-              <span className="font-semibold">Database Identity:</span>{" "}
-              <Badge variant="outline" className="mx-1">{dbInfo.env}</Badge>
-              <span className="text-muted-foreground">{dbInfo.dbName} @ {dbInfo.dbHost}</span>
-              <span className="mx-2">|</span>
-              <span className="font-medium">{dbInfo.totalCodesCount} codes in DB</span>
-            </AlertDescription>
-          </Alert>
-        )}
+        <Alert className="mb-4 border-primary/50 bg-primary/10">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <span className="text-sm">
+                <span className="font-semibold">Database:</span>{" "}
+                {dbInfo ? (
+                  <>
+                    <Badge variant="outline" className="mx-1">{dbInfo.env}</Badge>
+                    <span className="text-muted-foreground">{dbInfo.dbName} @ {dbInfo.dbHost}</span>
+                    <span className="mx-2">|</span>
+                    <span className="font-medium">{dbInfo.totalCodesCount} codes</span>
+                    <span className="mx-1">|</span>
+                    <span className="font-medium">{dbInfo.activationsCount} activations</span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">Loading...</span>
+                )}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleHardRefresh}
+              disabled={isRefreshing}
+              data-testid="button-hard-refresh"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Hard Refresh Data
+            </Button>
+          </div>
+        </Alert>
         
         <div className="grid gap-4 md:grid-cols-3">
           <Card>
@@ -558,13 +630,26 @@ export default function AdminPage() {
                             >
                               <Copy className="h-4 w-4" />
                             </Button>
-                            {code.status === "active" && (
+                            {code.status === "active" && code.usesCount === 0 && (
+                              <Button 
+                                size="icon" 
+                                variant="ghost"
+                                onClick={() => deleteCodeMutation.mutate(code.id)}
+                                disabled={deleteCodeMutation.isPending}
+                                data-testid={`button-delete-${code.id}`}
+                                title="Delete unused code"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {code.status === "active" && code.usesCount > 0 && (
                               <Button 
                                 size="icon" 
                                 variant="ghost"
                                 onClick={() => revokeCodeMutation.mutate(code.id)}
                                 disabled={revokeCodeMutation.isPending}
                                 data-testid={`button-revoke-${code.id}`}
+                                title="Revoke used code"
                               >
                                 <Ban className="h-4 w-4" />
                               </Button>
