@@ -1131,23 +1131,13 @@ export async function registerRoutes(
     }
   });
   
-  // Delete invite code (only if unused)
+  // Delete invite code (admin can force delete any code)
   app.delete("/api/admin/invite-codes/:id", requireAdminPin, async (req, res) => {
     setNoCacheHeaders(res);
     try {
       const id = Number(req.params.id);
       
-      // Check if code has any activations
-      const activations = await storage.getAllActiveActivations();
-      const hasActivations = activations.some(a => a.inviteCodeId === id);
-      
-      if (hasActivations) {
-        return res.status(400).json({ 
-          message: "Cannot delete code with existing activations. Use revoke instead." 
-        });
-      }
-      
-      // Check code exists and get uses count
+      // Check code exists
       const codes = await storage.getInviteCodes();
       const code = codes.find(c => c.id === id);
       
@@ -1155,13 +1145,10 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Code not found" });
       }
       
-      if (code.usesCount > 0) {
-        return res.status(400).json({ 
-          message: "Cannot delete a used code. Use revoke instead." 
-        });
-      }
+      // First, delete any activations linked to this code (handles FK constraint)
+      await storage.deleteActivationsByInviteCodeId(id);
       
-      // Delete the code
+      // Then delete the code itself
       await storage.deleteInviteCode(id);
       res.json({ success: true, message: "Code deleted" });
     } catch (err: any) {

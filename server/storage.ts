@@ -128,6 +128,7 @@ export interface IStorage {
   createUserActivation(activation: InsertUserActivation): Promise<UserActivation>;
   updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, 'id' | 'userId' | 'activatedAt'>>): Promise<UserActivation | undefined>;
   getAllActiveActivations(): Promise<UserActivation[]>;
+  deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void>;
   
   // Device-based Users
   getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string } | undefined>;
@@ -462,6 +463,10 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(userActivations).where(eq(userActivations.status, 'active'));
   }
   
+  async deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void> {
+    await db.delete(userActivations).where(eq(userActivations.inviteCodeId, inviteCodeId));
+  }
+
   async getActivationByDeviceId(deviceId: string): Promise<UserActivation | undefined> {
     const results = await db.select().from(userActivations).where(eq(userActivations.deviceId, deviceId));
     return results[0];
