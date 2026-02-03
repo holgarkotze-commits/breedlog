@@ -15,6 +15,7 @@ import {
   flockHealthTreatments,
   inviteCodes,
   userActivations,
+  systemSettings,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -45,6 +46,7 @@ import {
   type FlockHealthTreatment,
   type InviteCode,
   type UserActivation,
+  type SystemSetting,
 } from "@shared/schema";
 import { eq, desc, and, sql, lt, gte } from "drizzle-orm";
 
@@ -131,6 +133,10 @@ export interface IStorage {
   getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string } | undefined>;
   upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string }>;
   updateUserLastSeen(userId: string): Promise<void>;
+  
+  // System Settings (global app config)
+  getSystemSetting(key: string): Promise<string | undefined>;
+  setSystemSetting(key: string, value: string, description?: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -480,6 +486,23 @@ export class DatabaseStorage implements IStorage {
   async updateUserLastSeen(userId: string): Promise<void> {
     const { users } = await import("@shared/models/auth");
     await db.update(users).set({ lastSeenAt: new Date() }).where(eq(users.id, userId));
+  }
+  
+  // === SYSTEM SETTINGS ===
+  async getSystemSetting(key: string): Promise<string | undefined> {
+    const results = await db.select()
+      .from(systemSettings)
+      .where(eq(systemSettings.key, key));
+    return results[0]?.value;
+  }
+  
+  async setSystemSetting(key: string, value: string, description?: string): Promise<void> {
+    await db.insert(systemSettings)
+      .values({ key, value, description })
+      .onConflictDoUpdate({
+        target: systemSettings.key,
+        set: { value, updatedAt: new Date() }
+      });
   }
 }
 

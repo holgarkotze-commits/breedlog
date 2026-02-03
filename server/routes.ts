@@ -773,10 +773,15 @@ export async function registerRoutes(
 
   // === BETA ACCESS SYSTEM ===
   const BETA_CONFIG = {
-    MAX_TESTERS: 50,  // Increased from 10 to allow more testers
     DEFAULT_EXPIRY_DAYS: 30,
     OFFLINE_GRACE_DAYS: 7,
   };
+  
+  // Get max testers from database (single source of truth)
+  async function getMaxTesters(): Promise<number> {
+    const value = await storage.getSystemSetting('max_testers');
+    return value ? parseInt(value, 10) : 50; // Default to 50 if not set
+  }
   
   // Generate a secure random code
   function generateInviteCode(): string {
@@ -961,9 +966,10 @@ export async function registerRoutes(
         });
       }
       
-      // Check max testers limit
+      // Check max testers limit (from database)
       const activeTesters = await storage.getActiveTestersCount();
-      if (activeTesters >= BETA_CONFIG.MAX_TESTERS) {
+      const maxTesters = await getMaxTesters();
+      if (activeTesters >= maxTesters) {
         return res.status(400).json({ message: 'Beta testing is currently full. Please try again later.' });
       }
       
@@ -1092,10 +1098,11 @@ export async function registerRoutes(
       setNoCacheHeaders(res);
       const codes = await storage.getInviteCodes();
       const activeTesters = await storage.getActiveTestersCount();
+      const maxTesters = await getMaxTesters();
       res.json({ 
         codes, 
         activeTesters,
-        maxTesters: BETA_CONFIG.MAX_TESTERS
+        maxTesters
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -1190,11 +1197,26 @@ export async function registerRoutes(
   app.get("/api/admin/testers", requireAdminPin, async (req, res) => {
     try {
       const activations = await storage.getAllActiveActivations();
+      const maxTesters = await getMaxTesters();
       res.json({ 
         activations,
         count: activations.length,
-        max: BETA_CONFIG.MAX_TESTERS
+        max: maxTesters
       });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+  
+  // Update max testers limit (editable from Admin UI)
+  app.put("/api/admin/settings/max-testers", requireAdminPin, async (req, res) => {
+    try {
+      const { maxTesters } = req.body;
+      if (typeof maxTesters !== 'number' || maxTesters < 1) {
+        return res.status(400).json({ message: 'maxTesters must be a positive number' });
+      }
+      await storage.setSystemSetting('max_testers', String(maxTesters), 'Maximum number of active testers allowed in beta program');
+      res.json({ success: true, maxTesters });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
