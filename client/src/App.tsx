@@ -110,11 +110,51 @@ function AuthenticatedApp() {
   );
 }
 
+// Version stored locally to check against server
+const LOCAL_VERSION_KEY = "breedlog_app_version";
+
+async function checkAndReloadIfVersionMismatch() {
+  try {
+    const response = await fetch("/api/version", { 
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" }
+    });
+    if (response.ok) {
+      const { version } = await response.json();
+      const localVersion = localStorage.getItem(LOCAL_VERSION_KEY);
+      
+      if (localVersion && localVersion !== version) {
+        console.log(`[Version] Mismatch detected: local=${localVersion}, server=${version}. Reloading...`);
+        localStorage.setItem(LOCAL_VERSION_KEY, version);
+        // Force reload to get fresh assets
+        window.location.reload();
+        return true;
+      }
+      
+      // Store current version
+      localStorage.setItem(LOCAL_VERSION_KEY, version);
+    }
+  } catch (err) {
+    console.log("[Version] Check failed, continuing...", err);
+  }
+  return false;
+}
+
 function AppContent() {
   const { user, isLoading: authLoading, deviceId } = useAuth();
   const [location] = useLocation();
+  const [versionChecked, setVersionChecked] = useState(false);
   
-  if (authLoading) {
+  // Check version on startup
+  useEffect(() => {
+    checkAndReloadIfVersionMismatch().then(reloading => {
+      if (!reloading) {
+        setVersionChecked(true);
+      }
+    });
+  }, []);
+  
+  if (!versionChecked || authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">

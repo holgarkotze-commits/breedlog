@@ -84,9 +84,17 @@ export function setupDeviceAuth(app: Express) {
   }));
   
   // Token-based auth middleware - runs before routes
-  // Checks X-Device-Token header for token auth (more reliable than cookies on mobile)
+  // Checks Authorization: Bearer <token> or X-Device-Token header for token auth (more reliable than cookies on mobile)
   app.use(async (req: Request, res: Response, next: NextFunction) => {
-    const token = req.headers["x-device-token"] as string;
+    // Check Authorization: Bearer <token> first (standard format)
+    let token = "";
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7);
+    } else {
+      // Fallback to X-Device-Token header
+      token = req.headers["x-device-token"] as string || "";
+    }
     
     if (token) {
       const validation = validateDeviceToken(token);
@@ -162,7 +170,14 @@ export function registerDeviceAuthRoutes(app: Express) {
       "Pragma": "no-cache"
     });
     
-    const token = req.headers["x-device-token"] as string;
+    // Check Authorization: Bearer <token> or X-Device-Token
+    let token = "";
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7);
+    } else {
+      token = req.headers["x-device-token"] as string || "";
+    }
     const tokenValidation = token ? validateDeviceToken(token) : { valid: false };
     const userId = getUserId(req);
     const deviceId = getDeviceId(req);

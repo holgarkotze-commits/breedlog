@@ -31,12 +31,14 @@ export function clearDeviceToken(): void {
 }
 
 // Build headers including device token for authentication
+// Uses Authorization: Bearer <token> format (standard, more reliable than custom headers)
 function getAuthHeaders(includeContentType: boolean = false): HeadersInit {
   const headers: HeadersInit = {};
   
   const token = getDeviceToken();
   if (token) {
-    headers["X-Device-Token"] = token;
+    // Use standard Authorization: Bearer format for better compatibility
+    headers["Authorization"] = `Bearer ${token}`;
   }
   
   if (includeContentType) {

@@ -67,19 +67,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // NEVER cache admin pages or admin/auth/beta/device API routes - always go to network
+  // NEVER cache ANY API routes - always go to network
+  // This ensures admin, auth, beta, device, and all data endpoints are always fresh
   if (url.pathname === '/admin' ||
       url.pathname.startsWith('/admin/') ||
-      url.pathname.startsWith('/api/admin/') || 
-      url.pathname.startsWith('/api/beta/') ||
-      url.pathname.startsWith('/api/device/') ||
-      url.pathname.startsWith('/api/auth/')) {
-    // Skip service worker entirely for these routes
-    return;
-  }
-
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirstStrategy(request));
+      url.pathname.startsWith('/api/')) {
+    // Skip service worker entirely for these routes - let browser handle normally
     return;
   }
 

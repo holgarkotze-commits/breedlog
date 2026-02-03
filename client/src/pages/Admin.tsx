@@ -33,11 +33,14 @@ interface InviteCodesResponse {
 
 interface DbInfo {
   env: string;
+  isProduction: boolean;
   dbHost: string;
   dbName: string;
   totalCodesCount: number;
   activationsCount: number;
   codesList: string;
+  serverTime: string;
+  appVersion: string;
 }
 
 const ADMIN_AUTH_KEY = "breedlog_admin_authed";
@@ -434,12 +437,18 @@ export default function AdminPage() {
                 <span className="font-semibold">Database:</span>{" "}
                 {dbInfo ? (
                   <>
-                    <Badge variant="outline" className="mx-1">{dbInfo.env}</Badge>
+                    {dbInfo.isProduction ? (
+                      <Badge variant="default" className="mx-1 bg-green-600">PRODUCTION MODE</Badge>
+                    ) : (
+                      <Badge variant="outline" className="mx-1 border-amber-500 text-amber-500">DEVELOPMENT MODE</Badge>
+                    )}
                     <span className="text-muted-foreground">{dbInfo.dbName} @ {dbInfo.dbHost}</span>
                     <span className="mx-2">|</span>
                     <span className="font-medium">{dbInfo.totalCodesCount} codes</span>
                     <span className="mx-1">|</span>
                     <span className="font-medium">{dbInfo.activationsCount} activations</span>
+                    <span className="mx-1">|</span>
+                    <span className="text-xs text-muted-foreground">v{dbInfo.appVersion}</span>
                   </>
                 ) : (
                   <span className="text-muted-foreground">Loading...</span>

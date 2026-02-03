@@ -1,0 +1,145 @@
+YOU ARE WORKING ON PRODUCTION. READ THIS CAREFULLY.
+
+NON-NEGOTIABLE RULE:
+✅ Every change MUST be applied to PRODUCTION AND MUST BE VERIFIED ON THE PUBLISHED URL:
+   https://breedlog.replit.app
+NOT in the dev preview. NOT in “Run”. NOT “it works locally”. PRODUCTION ONLY.
+
+If you make a change and it is not visible/working on https://breedlog.replit.app after publishing, then the task is NOT DONE.
+
+========================
+GOAL
+Fix and harden the Beta Access / Invite Codes system so:
+- All invite codes are created + stored + used from ONE source of truth (PRODUCTION DB)
+- Admin fully controls codes (create, revoke, delete unused)
+- Testers always use PRODUCTION codes (never dev/test/mock codes)
+- Activation works reliably on mobile + desktop (no cookie/session flakiness)
+- Caching/service worker cannot serve stale data
+- Everything is verified end-to-end in PRODUCTION
+
+========================
+ROOT PROBLEM WE ARE SOLVING
+We keep seeing “dev vs production mismatch” and stale/cached responses:
+- Admin shows codes that don’t match what testers can use
+- Agent sometimes tests in dev environment and claims success
+- Service worker / cache causes stale lists and confusion
+
+We will permanently prevent this.
+
+========================
+MANDATORY IMPLEMENTATION REQUIREMENTS
+
+1) PRODUCTION ENFORCEMENT (HARD LOCK)
+- Ensure ALL environment variables used by the server (DATABASE_URL, etc.) point to the PRODUCTION DB for the PUBLISHED app.
+- Add a PRODUCTION identity block on /admin showing:
+  • Environment: PRODUCTION
+  • DB host (masked) + DB name
+  • Total codes count + activations count
+- Add a backend endpoint /api/admin/db-info that returns the above.
+- If the app is running in dev preview, show “DEVELOPMENT” clearly. If it’s production published, show “PRODUCTION”.
+- DO NOT EVER generate “test codes” that are not written to the PRODUCTION DB.
+
+2) SINGLE SOURCE OF TRUTH FOR CODES
+- The Admin panel table must ONLY display codes fetched live from PRODUCTION DB.
+- Remove/disable any seeded/mock/demo lists.
+- If a code is displayed in Admin, it MUST exist in the PRODUCTION DB.
+- If a code does not exist in PRODUCTION DB, it must never be suggested or shown anywhere.
+
+3) ADMIN CONTROLS (COMPLETE, NOT HALF)
+Admin must be able to:
+- Create invite code (with optional note + expiry + max uses)
+- Revoke USED code (so it can’t be used again)
+- Delete UNUSED code (permanently remove from PRODUCTION DB)
+- Hard Refresh button to re-fetch live data from PRODUCTION DB
+
+4) MAX TESTERS CONTROL (ADMIN-SET)
+- MAX_TESTERS must be editable in Admin UI (default 50).
+- Must be stored in PRODUCTION DB (or a durable server config store), not hardcoded.
+- Enforce this limit strictly at activation time in PRODUCTION.
+
+5) ACTIVATION MUST BE TOKEN-BASED (NO SESSION COOKIE RELIANCE)
+- Session cookie-based flows are unreliable on mobile browsers.
+- Activation flow must:
+  a) Ensure device gets a unique deviceId
+  b) Validate invite code
+  c) Create activation record linking deviceId + code
+  d) Issue device token
+  e) Store token in localStorage (or IndexedDB) and attach on every API call in headers
+- App must not randomly fail after refresh/reopen.
+- All device-protected endpoints must accept the token and not depend on session.
+
+6) SERVICE WORKER + CACHE HARD RULES (NO STALE ADMIN DATA)
+- Service worker MUST BYPASS entirely:
+  /admin/*
+  /api/admin/*
+  /api/beta/*
+  /api/device/*
+- Backend must return no-cache headers for these endpoints:
+  Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate
+  Pragma: no-cache
+  Expires: 0
+- Client fetch must also send cache-busting where needed.
+- Admin “Hard Refresh” button must append a timestamp param and refetch.
+
+7) OFFLINE/ONLINE BEHAVIOUR
+- After activation: user can use the app offline.
+- During activation: if offline, show a clear message “You must be online to activate”.
+- No random “device not authenticated” after a successful activation.
+
+8) LAMBS EXPORT PDF (MISSING FEATURE)
+- Add “Export PDF” button for Lambs section (same behaviour as Rams/Ewes export).
+- Confirm it exports only Lambs data and saves correctly.
+- This must be visible in PRODUCTION after publish.
+
+========================
+MANDATORY TESTING + ACCEPTANCE CRITERIA (PRODUCTION ONLY)
+
+You are NOT allowed to mark this task complete until ALL of these are done:
+
+A) PUBLISH TO PRODUCTION
+- Publish the app.
+- Open https://breedlog.replit.app/admin in an incognito window.
+
+B) VERIFY DB IDENTITY
+- Admin must show Environment: PRODUCTION
+- Admin must show DB identity block + correct counts.
+
+C) VERIFY CODES ARE REAL AND USABLE
+- Create 1 new code in Admin (note: “PROD TEST 1”).
+- Confirm the new code appears immediately in Admin list.
+- On a separate device or separate browser, go to https://breedlog.replit.app
+- Enter the code and activate.
+- Confirm activation succeeds (no 401/500 “device not registered/authenticated”).
+- Confirm Admin updates:
+  - tester count increments
+  - code usage updates correctly
+
+D) VERIFY DELETE/REVOKE
+- Create another code (“PROD TEST 2”) and DELETE it while unused.
+- Confirm it disappears from admin list AND is removed from DB.
+- Create another code (“PROD TEST 3”), activate it, then REVOKE it.
+- Confirm revoked code can’t be used again.
+
+E) VERIFY NO STALE CACHE
+- Hard refresh Admin page
+- Toggle airplane mode briefly (offline) then back online
+- Admin still shows correct live production list after coming online
+- “Hard Refresh” button forces live production fetch.
+
+F) VERIFY LAMBS EXPORT PDF
+- Open Lambs section and confirm “Export PDF” button exists in PRODUCTION.
+- Generate PDF successfully.
+
+========================
+DELIVERABLE
+When done, reply with:
+1) Confirmation you published to production
+2) The PRODUCTION /admin screenshot showing the DB identity block
+3) A short checklist: all acceptance criteria A–F passed
+4) Note any remaining risks (should be none)
+
+DO NOT:
+- Do not test only in dev preview
+- Do not claim “tests pass” without PRODUCTION verification
+- Do not create codes outside the DB
+- Do not leave any feature “for later”

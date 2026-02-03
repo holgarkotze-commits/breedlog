@@ -1021,6 +1021,20 @@ export async function registerRoutes(
     }
   });
   
+  // === VERSION ENDPOINT (for cache-busting) ===
+  // Returns current app version - client checks on startup and forces reload if mismatched
+  const APP_VERSION = "1.0.1"; // Increment on each deployment
+  app.get("/api/version", (req, res) => {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Pragma': 'no-cache'
+    });
+    res.json({ 
+      version: APP_VERSION,
+      serverTime: new Date().toISOString()
+    });
+  });
+  
   // === ADMIN ROUTES (require ADMIN_PIN for access) ===
   // Admin routes are now protected by ADMIN_PIN secret (no Replit auth)
   // Admin check is already registered in registerDeviceAuthRoutes
@@ -1047,13 +1061,25 @@ export async function registerRoutes(
       const dbHost = maskedUrl.match(/@([^:\/]+)/)?.[1] || 'unknown';
       const dbName = maskedUrl.match(/\/([^?]+)/)?.[1] || 'unknown';
       
+      // Detect production vs development
+      // Production is determined by: 
+      // 1. NODE_ENV=production OR
+      // 2. Being accessed from breedlog.replit.app
+      const isProduction = process.env.NODE_ENV === 'production' || 
+                           process.env.REPL_SLUG?.includes('breedlog') ||
+                           dbHost.includes('neon') || 
+                           dbHost.includes('prod');
+      
       res.json({
         env: process.env.NODE_ENV || 'unknown',
+        isProduction,
         dbHost,
         dbName,
         totalCodesCount: codes.length,
         activationsCount,
-        codesList: codes.map(c => c.code).join(', ')
+        codesList: codes.map(c => c.code).join(', '),
+        serverTime: new Date().toISOString(),
+        appVersion: APP_VERSION
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

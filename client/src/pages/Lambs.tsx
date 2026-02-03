@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Search, Filter, Scale, Tag, Trash2, UserMinus, ChevronRight } from "lucide-react";
+import { Search, Filter, Scale, Tag, Trash2, UserMinus, ChevronRight, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
 import { format, differenceInDays } from "date-fns";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
+import { type PDFQuality, getPDFStyles, getPDFFooter } from "@/lib/pdf-utils";
 import type { Animal } from "@shared/schema";
 
 function getAgeDays(birthDate: string | null): number {
@@ -84,6 +86,121 @@ export default function Lambs() {
   const [weightValue, setWeightValue] = useState("");
   const [weightType, setWeightType] = useState<"100" | "270">("100");
   const [selectedRamType, setSelectedRamType] = useState<"breeding_ram" | "stud_ram" | "commercial_ram">("breeding_ram");
+  
+  // PDF Export Dialog
+  const pdfExport = usePDFExportDialog();
+  
+  // Export Lambs PDF
+  const handlePDFExport = async (quality: PDFQuality): Promise<void> => {
+    if (!lambs || lambs.length === 0) {
+      toast({ title: "No lambs to export", description: "There are no lambs matching your current filters.", variant: "destructive" });
+      return;
+    }
+    
+    const fb = farmSettings;
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    const styles = getPDFStyles();
+    const footer = getPDFFooter(fb);
+    
+    const eweLambs = lambs.filter(a => a.sex === "ewe");
+    const ramLambs = lambs.filter(a => a.sex === "ram");
+    
+    const content = `
+      <html>
+      <head>
+        <style>${styles}</style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1>
+          <h2>Lambs Register</h2>
+          <p style="color: #666;">Exported: ${exportDate}</p>
+        </div>
+        
+        <h3 style="margin-top: 20px;">Ewe Lambs (${eweLambs.length})</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>Tag ID</th>
+              <th>Birth Date</th>
+              <th>Age (Days)</th>
+              <th>Dam</th>
+              <th>Sire</th>
+              <th>100-Day Wt</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${eweLambs.map((lamb, idx) => {
+              const ageDays = getAgeDays(lamb.birthDate);
+              return `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td><strong>${lamb.tagId}</strong></td>
+                  <td>${lamb.birthDate ? format(new Date(lamb.birthDate), "dd/MM/yyyy") : "-"}</td>
+                  <td>${ageDays}</td>
+                  <td>${lamb.externalDamInfo || "-"}</td>
+                  <td>${lamb.externalSireInfo || "-"}</td>
+                  <td>${lamb.weight100Day ? `${lamb.weight100Day} kg` : "-"}</td>
+                  <td>${getLambStatusBadge(lamb).label}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        
+        <h3 style="margin-top: 30px;">Ram Lambs (${ramLambs.length})</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 30px;">#</th>
+              <th>Tag ID</th>
+              <th>Birth Date</th>
+              <th>Age (Days)</th>
+              <th>Dam</th>
+              <th>Sire</th>
+              <th>100-Day Wt</th>
+              <th>270-Day Wt</th>
+              <th>Class</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${ramLambs.map((lamb, idx) => {
+              const ageDays = getAgeDays(lamb.birthDate);
+              return `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td><strong>${lamb.tagId}</strong></td>
+                  <td>${lamb.birthDate ? format(new Date(lamb.birthDate), "dd/MM/yyyy") : "-"}</td>
+                  <td>${ageDays}</td>
+                  <td>${lamb.externalDamInfo || "-"}</td>
+                  <td>${lamb.externalSireInfo || "-"}</td>
+                  <td>${lamb.weight100Day ? `${lamb.weight100Day} kg` : "-"}</td>
+                  <td>${lamb.weight270Day ? `${lamb.weight270Day} kg` : "-"}</td>
+                  <td>${lamb.ramLambClass || "Unclassified"}</td>
+                  <td>${getLambStatusBadge(lamb).label}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        
+        ${footer}
+      </body>
+      </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(content);
+      printWindow.document.close();
+      printWindow.print();
+    }
+    
+    toast({ title: "PDF Ready", description: "Lambs export opened for printing" });
+  };
 
   const lambs = (allAnimals || []).filter(animal => {
     if (!animal.birthDate) return false;
@@ -214,6 +331,17 @@ export default function Lambs() {
                 </SelectContent>
               </Select>
             )}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pdfExport.setIsOpen(true)}
+              disabled={!lambs || lambs.length === 0}
+              data-testid="button-export-lambs-pdf"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export PDF
+            </Button>
           </div>
         </div>
 
@@ -570,6 +698,14 @@ export default function Lambs() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        
+        <PDFExportDialog
+          open={pdfExport.isOpen}
+          onOpenChange={pdfExport.setIsOpen}
+          title="Export Lambs PDF"
+          description="Select the quality level for your PDF export. Lower quality means smaller file size and faster export."
+          onExport={handlePDFExport}
+        />
       </div>
     </Layout>
   );
