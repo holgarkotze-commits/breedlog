@@ -730,18 +730,16 @@ export default function AdminPage() {
                             >
                               <Copy className="h-4 w-4" />
                             </Button>
-                            {code.status === "active" && code.usesCount === 0 && (
-                              <Button 
-                                size="icon" 
-                                variant="ghost"
-                                onClick={() => deleteCodeMutation.mutate(code.id)}
-                                disabled={deleteCodeMutation.isPending}
-                                data-testid={`button-delete-${code.id}`}
-                                title="Delete unused code"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
+                            <Button 
+                              size="icon" 
+                              variant="ghost"
+                              onClick={() => deleteCodeMutation.mutate(code.id)}
+                              disabled={deleteCodeMutation.isPending}
+                              data-testid={`button-delete-${code.id}`}
+                              title="Delete code"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                             {code.status === "active" && code.usesCount > 0 && (
                               <Button 
                                 size="icon" 
