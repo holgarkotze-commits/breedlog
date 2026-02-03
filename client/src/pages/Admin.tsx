@@ -562,13 +562,13 @@ export default function AdminPage() {
                     Max: {codesData?.maxTesters ?? 50}
                   </p>
                   <Button
-                    size="icon"
+                    size="sm"
                     variant="ghost"
-                    className="h-6 w-6"
                     onClick={handleEditMaxTesters}
                     data-testid="button-edit-max-testers"
                   >
-                    <Pencil className="h-3 w-3" />
+                    <Pencil className="h-3 w-3 mr-1" />
+                    Edit
                   </Button>
                 </div>
               )}
