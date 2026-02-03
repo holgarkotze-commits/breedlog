@@ -773,7 +773,7 @@ export async function registerRoutes(
 
   // === BETA ACCESS SYSTEM ===
   const BETA_CONFIG = {
-    MAX_TESTERS: 10,
+    MAX_TESTERS: 50,  // Increased from 10 to allow more testers
     DEFAULT_EXPIRY_DAYS: 30,
     OFFLINE_GRACE_DAYS: 7,
   };
