@@ -30,6 +30,46 @@ export function clearDeviceToken(): void {
   }
 }
 
+// Robust connectivity check - pings actual API endpoint instead of relying on navigator.onLine
+// This catches cases where browser reports online but API is unreachable
+let lastConnectivityCheck = 0;
+let cachedConnectivity = true;
+const CONNECTIVITY_CACHE_MS = 5000; // Cache result for 5 seconds
+
+export async function isApiReachable(): Promise<boolean> {
+  // First quick check - if browser says offline, trust it
+  if (!navigator.onLine) return false;
+  
+  // Use cached result if recent enough
+  const now = Date.now();
+  if (now - lastConnectivityCheck < CONNECTIVITY_CACHE_MS) {
+    return cachedConnectivity;
+  }
+  
+  try {
+    // Hard ping the API version endpoint (lightweight, no auth required)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
+    
+    const response = await fetch('/api/version', {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    cachedConnectivity = response.ok;
+    lastConnectivityCheck = now;
+    return response.ok;
+  } catch (err) {
+    console.log('[Connectivity] API ping failed:', err);
+    cachedConnectivity = false;
+    lastConnectivityCheck = now;
+    return false;
+  }
+}
+
 // Build headers including device token for authentication
 // Uses Authorization: Bearer <token> format (standard, more reliable than custom headers)
 function getAuthHeaders(includeContentType: boolean = false): HeadersInit {

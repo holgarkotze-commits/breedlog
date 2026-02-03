@@ -3,14 +3,10 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useFarmSettings } from "@/hooks/use-farm-settings";
-import { useAnimals } from "@/hooks/use-animals";
 import { useAuth } from "@/hooks/use-auth";
 import { OfflineBanner } from "@/components/NetworkStatusIndicator";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
-import { OnboardingWizard } from "@/components/OnboardingWizard";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
-import { getOnboardingCompleted } from "@/lib/indexeddb";
 import { useState, useEffect, lazy, Suspense } from "react";
 
 import NotFound from "@/pages/not-found";
@@ -61,51 +57,11 @@ function Router() {
 }
 
 function AuthenticatedApp() {
-  const { data: farmSettings, isLoading: farmLoading } = useFarmSettings();
-  const { data: animals, isLoading: animalsLoading } = useAnimals();
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingChecked, setOnboardingChecked] = useState(false);
-
-  useEffect(() => {
-    async function checkOnboarding() {
-      if (farmLoading || animalsLoading) return;
-      
-      const onboardingCompleted = await getOnboardingCompleted();
-      
-      const hasNoAnimals = !animals || animals.length === 0;
-      const isFirstTimeUser = !onboardingCompleted && (!farmSettings || hasNoAnimals);
-      
-      setShowOnboarding(!!isFirstTimeUser);
-      setOnboardingChecked(true);
-    }
-    
-    checkOnboarding();
-  }, [farmSettings, farmLoading, animals, animalsLoading]);
-
-  const handleOnboardingComplete = () => {
-    setShowOnboarding(false);
-  };
-
-  if (!onboardingChecked && (farmLoading || animalsLoading)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading BreedLog...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       <OfflineBanner />
       <PWAInstallPrompt />
-      {showOnboarding ? (
-        <OnboardingWizard onComplete={handleOnboardingComplete} />
-      ) : (
-        <Router />
-      )}
+      <Router />
     </>
   );
 }

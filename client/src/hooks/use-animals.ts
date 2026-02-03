@@ -73,6 +73,12 @@ export function useCreateAnimal() {
 
   return useMutation({
     mutationFn: async (data: InsertAnimal) => {
+      // Use robust connectivity check (actual API ping, not just navigator.onLine)
+      const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
+      const isOnline = await isApiReachable();
+      
+      console.log("[useCreateAnimal] Connectivity check:", isOnline ? "ONLINE" : "OFFLINE");
+      
       // OFFLINE-FIRST: Always save locally first for instant response
       const tempId = -Date.now();
       const offlineAnimal = { 
@@ -86,15 +92,23 @@ export function useCreateAnimal() {
       await putInStore("animals", offlineAnimal);
       console.log("[useCreateAnimal] Saved locally with temp ID:", tempId);
       
-      // If online, try immediate server save (non-blocking for UI)
-      if (navigator.onLine) {
+      // If online, try immediate server save
+      if (isOnline) {
         try {
+          const token = getDeviceToken();
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          
+          console.log("[SYNC] Attempting to save animal. Data payload:", JSON.stringify(data));
+          
           const res = await fetch(api.animals.create.path, {
             method: api.animals.create.method,
-            headers: { "Content-Type": "application/json" },
+            headers,
             body: JSON.stringify(data),
             credentials: "include",
           });
+          
+          console.log("[SERVER] Response:", res.status, res.statusText);
           
           if (res.ok) {
             const created = api.animals.create.responses[201].parse(await res.json());
@@ -111,7 +125,8 @@ export function useCreateAnimal() {
             return created;
           }
           // Server error - fall through to queue for sync
-          console.log("[useCreateAnimal] Server returned error, queuing for sync");
+          const errorText = await res.text();
+          console.log("[useCreateAnimal] Server returned error:", res.status, errorText);
         } catch (err) {
           console.log("[useCreateAnimal] Network error, queuing for sync:", err);
         }
@@ -119,9 +134,10 @@ export function useCreateAnimal() {
       
       // Offline or server failed - queue for sync
       await addToSyncQueue({ action: "create", entity: "animals", data, tempId });
+      console.log("[useCreateAnimal] Queued for sync");
       
       // Trigger background sync (non-blocking)
-      if (navigator.onLine) {
+      if (isOnline) {
         syncManager.sync().catch(err => {
           console.log("[useCreateAnimal] Background sync failed, will retry later:", err);
         });
@@ -139,10 +155,9 @@ export function useCreateAnimal() {
       return { previousAnimals };
     },
     onSuccess: (data) => {
-      // Add to cache immediately
+      // Add to cache
       queryClient.setQueryData([api.animals.list.path], (old: AnimalWithRelations[] | undefined) => {
         if (!old) return [data];
-        // Check if already exists (server data), if so replace
         const exists = old.some(a => a.id === data.id);
         if (exists) {
           return old.map(a => a.id === data.id ? data : a);
@@ -150,12 +165,28 @@ export function useCreateAnimal() {
         return [data, ...old];
       });
       
-      const isOffline = (data.id as number) < 0;
-      toast({ 
-        title: isOffline ? "Saved Locally" : "Saved", 
-        description: isOffline ? "Will sync when online" : "Animal saved successfully",
-        variant: "default" 
-      });
+      // Check if actually saved to server (positive ID means server confirmed)
+      const serverConfirmed = (data.id as number) > 0;
+      
+      if (serverConfirmed) {
+        toast({ 
+          title: "Saved", 
+          description: "Animal saved to database",
+          variant: "default" 
+        });
+      } else {
+        // Only show offline message if truly offline
+        toast({ 
+          title: "Saved Locally", 
+          description: "Will sync when online",
+          variant: "default" 
+        });
+      }
+      
+      // Force refetch to get accurate counts from server
+      if (serverConfirmed) {
+        queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      }
     },
     onError: (error, _, context) => {
       // Rollback on error
@@ -173,6 +204,12 @@ export function useUpdateAnimal() {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: { id: number } & Partial<InsertAnimal>) => {
+      // Use robust connectivity check (actual API ping, not just navigator.onLine)
+      const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
+      const isOnline = await isApiReachable();
+      
+      console.log("[useUpdateAnimal] Connectivity check:", isOnline ? "ONLINE" : "OFFLINE");
+      
       // OFFLINE-FIRST: Always save locally first for instant response
       const existing = await getFromStore<AnimalWithRelations>("animals", id);
       const updated = existing 
@@ -186,15 +223,23 @@ export function useUpdateAnimal() {
       const isTempId = id < 0;
       
       // If online and not a temp ID, try immediate server update
-      if (navigator.onLine && !isTempId) {
+      if (isOnline && !isTempId) {
         try {
+          const token = getDeviceToken();
+          const headers: Record<string, string> = { "Content-Type": "application/json" };
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+          
+          console.log("[SYNC] Attempting to update animal ID:", id, "Data:", JSON.stringify(updates));
+          
           const url = buildUrl(api.animals.update.path, { id });
           const res = await fetch(url, {
             method: api.animals.update.method,
-            headers: { "Content-Type": "application/json" },
+            headers,
             body: JSON.stringify(updates),
             credentials: "include",
           });
+          
+          console.log("[SERVER] Response:", res.status, res.statusText);
           
           if (res.ok) {
             const serverData = api.animals.update.responses[200].parse(await res.json());
@@ -202,7 +247,8 @@ export function useUpdateAnimal() {
             console.log("[useUpdateAnimal] Server update succeeded");
             return serverData;
           }
-          console.log("[useUpdateAnimal] Server returned error, queuing for sync");
+          const errorText = await res.text();
+          console.log("[useUpdateAnimal] Server returned error:", res.status, errorText);
         } catch (err) {
           console.log("[useUpdateAnimal] Network error, queuing for sync:", err);
         }
@@ -215,9 +261,10 @@ export function useUpdateAnimal() {
         data: { id, ...updates },
         ...(isTempId ? { tempId: id } : {})
       });
+      console.log("[useUpdateAnimal] Queued for sync");
       
       // Trigger background sync (non-blocking)
-      if (navigator.onLine) {
+      if (isOnline) {
         syncManager.sync().catch(err => {
           console.log("[useUpdateAnimal] Background sync failed, will retry later:", err);
         });

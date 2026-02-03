@@ -1877,7 +1877,7 @@ function RamsSection({
             variant={ramTypeFilter === "all" ? "default" : "outline"} 
             size="sm"
             onClick={() => setRamTypeFilter("all")}
-            className="h-7 text-xs"
+            className="text-xs"
             data-testid="filter-rams-all"
           >
             All ({allRams.length})
@@ -1886,7 +1886,7 @@ function RamsSection({
             variant={ramTypeFilter === "breeding_ram" ? "default" : "outline"} 
             size="sm"
             onClick={() => setRamTypeFilter("breeding_ram")}
-            className="h-7 text-xs"
+            className="text-xs"
             data-testid="filter-rams-breeding"
           >
             Breeding ({breedingCount})
@@ -1895,7 +1895,7 @@ function RamsSection({
             variant={ramTypeFilter === "stud_ram" ? "default" : "outline"} 
             size="sm"
             onClick={() => setRamTypeFilter("stud_ram")}
-            className="h-7 text-xs"
+            className="text-xs"
             data-testid="filter-rams-stud"
           >
             Stud ({studCount})
@@ -1904,7 +1904,7 @@ function RamsSection({
             variant={ramTypeFilter === "commercial_ram" ? "default" : "outline"} 
             size="sm"
             onClick={() => setRamTypeFilter("commercial_ram")}
-            className="h-7 text-xs"
+            className="text-xs"
             data-testid="filter-rams-commercial"
           >
             Commercial ({commercialCount})
@@ -2094,6 +2094,7 @@ function EwesSection({
 }) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [eweTypeFilter, setEweTypeFilter] = useState<"all" | "stud" | "commercial">("all");
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [showWeightDialog, setShowWeightDialog] = useState(false);
   const [weightValue, setWeightValue] = useState("");
@@ -2143,6 +2144,15 @@ function EwesSection({
     !isLamb(a)
   );
   
+  // Filter ewes by type (stud, commercial)
+  const ewes = eweTypeFilter === "all" 
+    ? allEwes 
+    : allEwes.filter(e => e.classification === eweTypeFilter);
+  
+  // Count ewes by type
+  const studCount = allEwes.filter(e => e.classification === 'stud').length;
+  const commercialCount = allEwes.filter(e => e.classification === 'commercial').length;
+  
   if (isLoading) {
     return (
       <div className="mt-8 space-y-4">
@@ -2152,7 +2162,7 @@ function EwesSection({
     );
   }
   
-  const ewesWithStats = allEwes.map(ewe => {
+  const ewesWithStats = ewes.map(ewe => {
     const stats = calculateEweBreedingStats(ewe.id, breedingEvents, allAnimals);
     return { ...ewe, stats };
   });
@@ -2162,7 +2172,7 @@ function EwesSection({
       variant="outline" 
       size="sm"
       onClick={onExport}
-      disabled={allEwes.length === 0}
+      disabled={ewes.length === 0}
       data-testid="button-export-ewes-section"
     >
       <Download className="w-4 h-4 mr-2" />
@@ -2180,7 +2190,35 @@ function EwesSection({
         actions={exportButton}
         testId="ribbon-ewes"
       >
-        {allEwes.length === 0 ? (
+        {/* Filter buttons inside expanded section */}
+        <div className="flex items-center gap-1 mb-3 flex-wrap">
+          <Button 
+            variant={eweTypeFilter === "all" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setEweTypeFilter("all")}
+            data-testid="filter-ewes-all"
+          >
+            All ({allEwes.length})
+          </Button>
+          <Button 
+            variant={eweTypeFilter === "stud" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setEweTypeFilter("stud")}
+            data-testid="filter-ewes-stud"
+          >
+            Stud ({studCount})
+          </Button>
+          <Button 
+            variant={eweTypeFilter === "commercial" ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setEweTypeFilter("commercial")}
+            data-testid="filter-ewes-commercial"
+          >
+            Commercial ({commercialCount})
+          </Button>
+        </div>
+
+        {ewes.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
           <p>No ewes in your herd yet.</p>
         </div>
@@ -2495,7 +2533,7 @@ function LambsSection({
               variant={sexFilter === "all" ? "default" : "outline"} 
               size="sm"
               onClick={() => setSexFilter("all")}
-              className="h-7 text-xs"
+              className="text-xs"
               data-testid="filter-lambs-all"
             >
               All ({ramLambs.length + eweLambs.length})
@@ -2504,7 +2542,7 @@ function LambsSection({
               variant={sexFilter === "ram" ? "default" : "outline"} 
               size="sm"
               onClick={() => setSexFilter("ram")}
-              className="h-7 text-xs"
+              className="text-xs"
               data-testid="filter-lambs-ram"
             >
               Ram ({ramLambs.length})
@@ -2513,7 +2551,7 @@ function LambsSection({
               variant={sexFilter === "ewe" ? "default" : "outline"} 
               size="sm"
               onClick={() => setSexFilter("ewe")}
-              className="h-7 text-xs"
+              className="text-xs"
               data-testid="filter-lambs-ewe"
             >
               Ewe ({eweLambs.length})
