@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2 } from "lucide-react";
+import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2, Pencil, Check, X } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 
@@ -313,6 +313,52 @@ export default function AdminPage() {
     }
   });
   
+  // Max Testers editing state
+  const [isEditingMaxTesters, setIsEditingMaxTesters] = useState(false);
+  const [editMaxTestersValue, setEditMaxTestersValue] = useState("");
+  
+  const updateMaxTestersMutation = useMutation({
+    mutationFn: async (newMax: number) => {
+      const response = await adminApiRequest("PUT", "/api/admin/settings/max-testers", {
+        maxTesters: newMax
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invite-codes"] });
+      setIsEditingMaxTesters(false);
+      toast({
+        title: "Limit Updated",
+        description: `Max testers changed to ${data.maxTesters}`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  const handleEditMaxTesters = () => {
+    setEditMaxTestersValue(String(codesData?.maxTesters ?? 50));
+    setIsEditingMaxTesters(true);
+  };
+  
+  const handleSaveMaxTesters = () => {
+    const newMax = parseInt(editMaxTestersValue, 10);
+    if (isNaN(newMax) || newMax < 1) {
+      toast({
+        title: "Invalid Value",
+        description: "Please enter a positive number",
+        variant: "destructive"
+      });
+      return;
+    }
+    updateMaxTestersMutation.mutate(newMax);
+  };
+  
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     toast({
@@ -476,11 +522,56 @@ export default function AdminPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {codesData?.activeTesters ?? 0} / {codesData?.maxTesters ?? 10}
+                {codesData?.activeTesters ?? 0} / {codesData?.maxTesters ?? 50}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Maximum {codesData?.maxTesters ?? 10} testers allowed
-              </p>
+              {isEditingMaxTesters ? (
+                <div className="flex items-center gap-2 mt-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    value={editMaxTestersValue}
+                    onChange={(e) => setEditMaxTestersValue(e.target.value)}
+                    className="h-8 w-20"
+                    data-testid="input-max-testers"
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleSaveMaxTesters}
+                    disabled={updateMaxTestersMutation.isPending}
+                    data-testid="button-save-max-testers"
+                  >
+                    {updateMaxTestersMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4 text-green-500" />
+                    )}
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setIsEditingMaxTesters(false)}
+                    data-testid="button-cancel-max-testers"
+                  >
+                    <X className="h-4 w-4 text-red-500" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    Max: {codesData?.maxTesters ?? 50}
+                  </p>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={handleEditMaxTesters}
+                    data-testid="button-edit-max-testers"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
           
