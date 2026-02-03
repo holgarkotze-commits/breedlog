@@ -40,11 +40,17 @@ Preferred communication style: Simple, everyday language.
 - **Device-Based Authentication**: No user accounts required. Each device gets a unique UUID on first launch.
   - Device ID is generated client-side using `crypto.randomUUID()` and stored in localStorage.
   - Device is auto-registered on first launch, creating a user record in the database.
-  - PostgreSQL-backed sessions via connect-pg-simple.
+  - **Token-Based Auth**: All API calls use `Authorization: Bearer <deviceToken>` header (stored in localStorage as `breedlog_device_token`).
+  - PostgreSQL-backed sessions via connect-pg-simple (fallback).
 - **Beta Access Control**: Devices must enter an invite code to access the app.
   - Admin panel at `/admin` is protected by ADMIN_PIN environment variable (bypasses beta access gate).
   - Invite codes are single-use and bind to specific device IDs.
+  - Invite code fields: code, status, expiresAt, maxUses, usesCount, maxDevices, notes.
   - 7-day offline grace period for continued access without internet.
+- **Cache Busting**: 
+  - Service Worker bypasses ALL `/api/*` routes (no SW caching for API calls).
+  - `/api/version` endpoint returns app version; client auto-reloads on version mismatch.
+  - Admin panel shows PRODUCTION MODE or DEVELOPMENT MODE badge based on server environment.
 
 ### AI Integration
 - OpenAI API via Replit AI Integrations for image generation and text-to-speech/speech-to-text.
