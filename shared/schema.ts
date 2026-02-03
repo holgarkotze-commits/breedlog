@@ -438,6 +438,20 @@ export const insertFlockHealthTreatmentSchema = createInsertSchema(flockHealthTr
 export type FlockHealthTreatment = typeof flockHealthTreatments.$inferSelect;
 export type InsertFlockHealthTreatment = z.infer<typeof insertFlockHealthTreatmentSchema>;
 
+// === SYSTEM SETTINGS ===
+// Global application settings stored in database (not hardcoded)
+export const systemSettings = pgTable("system_settings", {
+  id: serial("id").primaryKey(),
+  key: varchar("key", { length: 64 }).notNull().unique(), // Setting key (e.g., "max_testers")
+  value: text("value").notNull(), // Setting value (stored as string, parsed by app)
+  description: text("description"), // Description of what this setting does
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({ id: true, updatedAt: true });
+export type SystemSetting = typeof systemSettings.$inferSelect;
+export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
+
 // === BETA ACCESS - INVITE CODES ===
 export const inviteCodes = pgTable("invite_codes", {
   id: serial("id").primaryKey(),
