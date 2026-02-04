@@ -24,7 +24,13 @@ export function useFarmSettings() {
         return cached.length > 0 ? cached[0] : null;
       }
 
-      const res = await fetch(api.farmSettings.get.path, { credentials: "include" });
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(api.farmSettings.get.path, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch farm settings");
       const data = await res.json() as FarmSettings | null;
       

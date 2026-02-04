@@ -335,6 +335,7 @@ export default function Lambs() {
             <Button
               variant="outline"
               size="sm"
+              className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
               onClick={() => pdfExport.setIsOpen(true)}
               disabled={!lambs || lambs.length === 0}
               data-testid="button-export-lambs-pdf"

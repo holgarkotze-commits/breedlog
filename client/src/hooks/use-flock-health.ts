@@ -19,7 +19,13 @@ export function useFlockHealthEvents() {
         return await getAllFromStore<FlockHealthEvent>('flockHealthEvents');
       }
 
-      const res = await fetch("/api/flock-health-events", { credentials: "include" });
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch("/api/flock-health-events", { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch flock health events");
       const data = await res.json();
       
@@ -46,7 +52,13 @@ export function useFlockHealthEvent(id: number) {
         return event as FlockHealthEventWithTreatments;
       }
 
-      const res = await fetch(`/api/flock-health-events/${id}`, { credentials: "include" });
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(`/api/flock-health-events/${id}`, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch flock health event");
       const data = await res.json();
       await putInStore('flockHealthEvents', data);

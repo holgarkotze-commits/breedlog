@@ -134,7 +134,8 @@ export default function Culled() {
             {displayName ? `${displayName} - Culled Archive` : "Culled Archive"}
           </h1>
           <Button 
-            variant="outline" 
+            variant="outline"
+            className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
             onClick={exportCulledPDF}
             disabled={culledAnimals.length === 0}
             data-testid="btn-export-culled"

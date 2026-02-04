@@ -1360,6 +1360,7 @@ export default function Animals() {
                 <Button 
                   variant="outline" 
                   size="sm"
+                  className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
                   disabled={!allAnimals || allAnimals.length === 0}
                   data-testid="button-export-herd"
                 >
@@ -1585,6 +1586,7 @@ export default function Animals() {
             <Button
               variant="outline"
               size="sm"
+              className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
               onClick={async (e) => {
                 e.stopPropagation();
                 // Check connectivity before PDF export
@@ -1895,6 +1897,7 @@ function RamsSection({
     <Button 
       variant="outline" 
       size="sm"
+      className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
       onClick={onExport}
       disabled={rams.length === 0}
       data-testid="button-export-rams-section"
@@ -2214,6 +2217,7 @@ function EwesSection({
     <Button 
       variant="outline" 
       size="sm"
+      className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
       onClick={onExport}
       disabled={ewes.length === 0}
       data-testid="button-export-ewes-section"
@@ -2550,6 +2554,7 @@ function LambsSection({
     <Button 
       variant="outline" 
       size="sm"
+      className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
       onClick={onExport}
       disabled={lambs.length === 0}
       data-testid="button-export-lambs-section"

@@ -22,7 +22,13 @@ export function useBreedingEvents() {
         return cached;
       }
 
-      const res = await fetch(api.breeding.list.path, { credentials: "include" });
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(api.breeding.list.path, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch breeding events");
       const data = api.breeding.list.responses[200].parse(await res.json());
       
@@ -103,7 +109,13 @@ export function useMatingGroups() {
         return cached;
       }
 
-      const res = await fetch(api.breeding.groups.list.path, { credentials: "include" });
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(api.breeding.groups.list.path, { credentials: "include", headers });
       if(!res.ok) throw new Error("Failed to fetch mating groups");
       const data = api.breeding.groups.list.responses[200].parse(await res.json());
       

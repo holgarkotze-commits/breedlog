@@ -17,7 +17,16 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
       if (filters?.sex) url.searchParams.append("sex", filters.sex);
 
       try {
-        const res = await fetch(url.toString(), { credentials: "include" });
+        // Include auth token for device-based authentication
+        const { getDeviceToken } = await import("@/lib/queryClient");
+        const token = getDeviceToken();
+        const headers: HeadersInit = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        
+        const res = await fetch(url.toString(), { 
+          credentials: "include",
+          headers 
+        });
         if (!res.ok) throw new Error("Failed to fetch animals");
         const data = api.animals.list.responses[200].parse(await res.json());
         await putManyInStore("animals", data);
@@ -49,7 +58,16 @@ export function useAnimal(id: number) {
     queryFn: async () => {
       const url = buildUrl(api.animals.get.path, { id });
       try {
-        const res = await fetch(url, { credentials: "include" });
+        // Include auth token for device-based authentication
+        const { getDeviceToken } = await import("@/lib/queryClient");
+        const token = getDeviceToken();
+        const headers: HeadersInit = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        
+        const res = await fetch(url, { 
+          credentials: "include",
+          headers 
+        });
         if (!res.ok) throw new Error("Failed to fetch animal details");
         const data = api.animals.get.responses[200].parse(await res.json());
         await putInStore("animals", data);
@@ -81,12 +99,15 @@ export function useCreateAnimal() {
       
       // OFFLINE-FIRST: Always save locally first for instant response
       const tempId = -Date.now();
+      // Get device user ID for offline storage
+      const deviceInfo = localStorage.getItem('breedlog_device_id');
       const offlineAnimal = { 
         ...data, 
         id: tempId, 
         createdAt: new Date(),
+        userId: deviceInfo || 'offline-user', // Will be replaced with server userId on sync
         synced: 0 // 0 = pending sync
-      } as AnimalWithRelations;
+      } as unknown as AnimalWithRelations;
       
       // Save to IndexedDB immediately for instant UI response
       await putInStore("animals", offlineAnimal);
@@ -314,7 +335,13 @@ export function useFamilyTree(id: number) {
     queryKey: [api.animals.familyTree.path, id],
     queryFn: async () => {
       const url = buildUrl(api.animals.familyTree.path, { id });
-      const res = await fetch(url, { credentials: "include" });
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
+      const res = await fetch(url, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch family tree");
       return api.animals.familyTree.responses[200].parse(await res.json());
     },
@@ -351,7 +378,13 @@ export function useAnimalImages(animalId: number) {
     queryKey: ["/api/animals", animalId, "images"],
     queryFn: async () => {
       try {
-        const res = await fetch(`/api/animals/${animalId}/images`, { credentials: "include" });
+        // Include auth token for device-based authentication
+        const { getDeviceToken } = await import("@/lib/queryClient");
+        const token = getDeviceToken();
+        const headers: HeadersInit = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        
+        const res = await fetch(`/api/animals/${animalId}/images`, { credentials: "include", headers });
         if (!res.ok) throw new Error("Failed to fetch images");
         const images = await res.json();
         for (const img of images) {

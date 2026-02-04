@@ -24,8 +24,14 @@ export function usePerformanceRecords(animalId: number) {
         return allRecords.filter(r => r.animalId === animalId);
       }
 
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const url = buildUrl(api.records.performance.list.path, { id: animalId });
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch records");
       const data = api.records.performance.list.responses[200].parse(await res.json());
       
@@ -94,8 +100,14 @@ export function useHealthRecords(animalId: number) {
         return allRecords.filter(r => r.animalId === animalId);
       }
 
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const url = buildUrl(api.records.health.list.path, { id: animalId });
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch health records");
       const data = api.records.health.list.responses[200].parse(await res.json());
       

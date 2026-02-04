@@ -21,7 +21,13 @@ export function useMatingGroups() {
         return await getAllFromStore<MatingGroup>('matingGroups');
       }
 
-      const res = await fetch("/api/mating-groups", { credentials: "include" });
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch("/api/mating-groups", { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch mating groups");
       const data = await res.json();
       
