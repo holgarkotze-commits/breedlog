@@ -56,6 +56,23 @@ export function useAnimal(id: number) {
   return useQuery({
     queryKey: [api.animals.get.path, id],
     queryFn: async () => {
+      // HYBRID FETCH: Check local IndexedDB first for temp IDs (negative) or as fallback
+      
+      // For temp IDs (negative numbers), ALWAYS use IndexedDB - server doesn't have them yet
+      if (id < 0) {
+        console.log("[useAnimal] Temp ID detected, fetching from IndexedDB:", id);
+        const cached = await getFromStore<AnimalWithRelations>("animals", id);
+        if (cached) return cached;
+        
+        // Also try to find by scanning all animals (in case ID mapping occurred)
+        const allAnimals = await getAllFromStore<AnimalWithRelations>("animals");
+        const found = allAnimals.find(a => a.id === id);
+        if (found) return found;
+        
+        throw new Error("Animal not found in local storage");
+      }
+      
+      // For positive IDs, try server first, then fallback to IndexedDB
       const url = buildUrl(api.animals.get.path, { id });
       try {
         // Include auth token for device-based authentication
@@ -68,20 +85,36 @@ export function useAnimal(id: number) {
           credentials: "include",
           headers 
         });
-        if (!res.ok) throw new Error("Failed to fetch animal details");
-        const data = api.animals.get.responses[200].parse(await res.json());
-        await putInStore("animals", data);
-        return data;
+        
+        if (res.ok) {
+          const data = api.animals.get.responses[200].parse(await res.json());
+          await putInStore("animals", data);
+          return data;
+        }
+        
+        // Server returned error (404, 500, etc.) - fallback to IndexedDB
+        console.log("[useAnimal] Server returned", res.status, "- checking IndexedDB");
+        const cached = await getFromStore<AnimalWithRelations>("animals", id);
+        if (cached) {
+          console.log("[useAnimal] Found in IndexedDB cache");
+          return cached;
+        }
+        
+        throw new Error("Animal not found");
       } catch (error) {
-        if (!navigator.onLine) {
-          console.log("[useAnimal] Offline, fetching from IndexedDB");
-          const cached = await getFromStore<AnimalWithRelations>("animals", id);
-          if (cached) return cached;
+        // Network error or any other failure - fallback to IndexedDB
+        console.log("[useAnimal] Fetch failed, checking IndexedDB:", error);
+        const cached = await getFromStore<AnimalWithRelations>("animals", id);
+        if (cached) {
+          console.log("[useAnimal] Found in IndexedDB cache");
+          return cached;
         }
         throw error;
       }
     },
     enabled: !!id,
+    retry: false, // Don't retry - we already have fallback logic
+    staleTime: 30000, // Consider data fresh for 30 seconds
   });
 }
 

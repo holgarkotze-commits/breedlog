@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { clearAllOfflineData, setOnboardingCompleted } from "@/lib/indexeddb";
+import { clearAllOfflineData, setOnboardingCompleted, getPendingSyncItems, type SyncQueueItem } from "@/lib/indexeddb";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -52,6 +52,34 @@ export default function Settings() {
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetConfirmPhrase, setResetConfirmPhrase] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  
+  // Debug sync state
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [debugPendingItems, setDebugPendingItems] = useState<SyncQueueItem[]>([]);
+  const [isLoadingDebug, setIsLoadingDebug] = useState(false);
+  
+  // Fetch pending sync items for debugging
+  const handleShowDebug = async () => {
+    if (showDebugInfo) {
+      setShowDebugInfo(false);
+      return;
+    }
+    
+    setIsLoadingDebug(true);
+    try {
+      const items = await getPendingSyncItems();
+      setDebugPendingItems(items);
+      setShowDebugInfo(true);
+    } catch (error) {
+      toast({
+        title: "Debug Error",
+        description: "Could not load pending sync items",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingDebug(false);
+    }
+  };
   
   // Handle Sync Now button
   const handleSyncNow = async () => {
@@ -1281,6 +1309,77 @@ export default function Settings() {
               <br />
               <strong>Reload Data View:</strong> Refreshes the UI from local storage without network calls (use when UI seems stuck).
             </p>
+            
+            {/* Debug Sync Section */}
+            <div className="border-t border-border pt-4 mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold text-sm">Sync Troubleshooting</h4>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={handleShowDebug}
+                  disabled={isLoadingDebug}
+                  data-testid="button-debug-sync"
+                >
+                  {isLoadingDebug ? (
+                    <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Loading...</>
+                  ) : showDebugInfo ? (
+                    <><X className="w-3 h-3 mr-1" /> Hide Debug</>
+                  ) : (
+                    <><AlertCircle className="w-3 h-3 mr-1" /> Debug Sync</>
+                  )}
+                </Button>
+              </div>
+              
+              {showDebugInfo && (
+                <div className="bg-secondary/50 border border-border rounded-md p-3 space-y-2 text-xs font-mono max-h-64 overflow-auto">
+                  <div className="flex justify-between items-center pb-2 border-b border-border">
+                    <span className="font-semibold text-foreground">Pending Sync Queue ({debugPendingItems.length} items)</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 text-[10px]"
+                      onClick={handleShowDebug}
+                      data-testid="button-refresh-debug"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                    </Button>
+                  </div>
+                  
+                  {debugPendingItems.length === 0 ? (
+                    <p className="text-muted-foreground py-2">No items pending sync. All data is synchronized.</p>
+                  ) : (
+                    debugPendingItems.map((item, idx) => (
+                      <div key={item.id || idx} className="bg-background/50 rounded p-2 space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-primary font-semibold">
+                            {item.action.toUpperCase()} {item.entity}
+                          </span>
+                          <span className="text-muted-foreground">
+                            ID: {String(item.tempId || (item.data as { id?: number })?.id || 'N/A')}
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground text-[10px] break-all">
+                          {item.data ? String(JSON.stringify(item.data, null, 0)).substring(0, 150) + '...' : 'No data'}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Synced: {item.synced ? 'Yes' : 'No'} | 
+                          Created: {item.timestamp ? new Date(item.timestamp).toLocaleString() : 'Unknown'}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  
+                  <div className="pt-2 border-t border-border text-muted-foreground">
+                    <p><strong>Sync Status:</strong> {syncState.status}</p>
+                    <p><strong>Backend Reachable:</strong> {syncState.backendReachable ? 'Yes' : 'No'}</p>
+                    <p><strong>Failed Items:</strong> {syncState.failedItems}</p>
+                    <p><strong>Last Sync:</strong> {syncState.lastSyncTime ? new Date(syncState.lastSyncTime).toLocaleString() : 'Never'}</p>
+                    {syncState.error && <p><strong>Error:</strong> {syncState.error}</p>}
+                  </div>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

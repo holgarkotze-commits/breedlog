@@ -135,7 +135,38 @@ export default function AnimalDetail() {
   };
 
   if (isLoading) return <DetailSkeleton />;
-  if (!animal) return <div className="p-8 text-center">Animal not found</div>;
+  
+  // Robust "Not Found" state with navigation back to My Herd
+  if (!animal) {
+    return (
+      <Layout>
+        <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-6 p-8">
+          <div className="text-center space-y-3">
+            <h2 className="text-xl font-semibold text-muted-foreground">Animal Not Found</h2>
+            <p className="text-sm text-muted-foreground max-w-md">
+              This animal may not have synced yet, or the record doesn't exist. 
+              If you just created this animal, please try again after syncing.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Link href="/animals">
+              <Button variant="default" data-testid="button-back-to-herd">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to My Herd
+              </Button>
+            </Link>
+            <Button 
+              variant="outline" 
+              onClick={() => window.history.back()}
+              data-testid="button-go-back"
+            >
+              Go Back
+            </Button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
