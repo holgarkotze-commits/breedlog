@@ -89,8 +89,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
         <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors">
-          <img src={logo} alt="BreedLog" className="w-32 h-32 object-contain" data-testid="logo-desktop" />
-          <p className="text-sm mt-3 font-medium tracking-normal text-primary/90 drop-shadow-[0_0_6px_rgba(255,195,0,0.4)]" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: '1.4' }}>
+          {/* Premium logo container matching mobile app design */}
+          <div className="relative p-4 rounded-xl bg-black border-2 border-primary/60 shadow-[0_0_25px_rgba(255,195,0,0.25),inset_0_0_20px_rgba(255,195,0,0.05)]">
+            {/* Inner glow effect */}
+            <div className="absolute inset-1 rounded-lg border border-primary/20" />
+            <img 
+              src={logo} 
+              alt="BreedLog" 
+              className="w-24 h-24 object-contain relative z-10 drop-shadow-[0_0_12px_rgba(255,195,0,0.5)]" 
+              data-testid="logo-desktop" 
+            />
+          </div>
+          {/* Text below logo - Breeding Livestock Management */}
+          <p className="text-sm mt-4 font-medium tracking-normal text-primary drop-shadow-[0_0_8px_rgba(255,195,0,0.5)]" style={{ fontFamily: "Calibri, 'Segoe UI', sans-serif", lineHeight: '1.4' }}>
             Breeding Livestock Management
           </p>
           <p className="text-xs mt-1 uppercase tracking-widest font-semibold text-muted-foreground">

@@ -1405,177 +1405,7 @@ export default function Animals() {
           </div>
         </div>
 
-        {/* Filters - Compact on mobile */}
-        <div className="flex flex-col md:flex-row gap-2 bg-card p-2.5 md:p-4 rounded-md border border-border shadow-sm">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Search Tag ID..." 
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 text-sm rugged-input"
-              data-testid="input-search"
-            />
-          </div>
-          <div className="flex gap-2">
-            <Select value={classificationFilter} onValueChange={setClassificationFilter}>
-              <SelectTrigger className="flex-1 md:w-[140px] text-sm rugged-input" data-testid="select-classification-filter">
-                <Tag className="w-4 h-4 mr-1" />
-                <SelectValue placeholder="Class" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Classes</SelectItem>
-                <SelectItem value="stud">Stud</SelectItem>
-                <SelectItem value="commercial">Commercial</SelectItem>
-                <SelectItem value="slaughter_cull">Slaughter/Cull</SelectItem>
-                <SelectItem value="unclassified">Unclassified</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="flex-1 md:w-[120px] text-sm rugged-input" data-testid="select-status-filter">
-                <Filter className="w-4 h-4 mr-1" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="archived">Archived</SelectItem>
-                <SelectItem value="sold">Sold</SelectItem>
-                <SelectItem value="dead">Dead</SelectItem>
-                <SelectItem value="culled">Culled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={sexFilter} onValueChange={setSexFilter}>
-              <SelectTrigger className="flex-1 md:w-[120px] text-sm rugged-input" data-testid="select-sex-filter">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="ewe">Ewes</SelectItem>
-                <SelectItem value="ram">Rams</SelectItem>
-                <SelectItem value="wether">Lambs</SelectItem>
-              </SelectContent>
-            </Select>
-            {/* View Mode Toggle */}
-            <div className="flex gap-1 border border-border rounded-md p-0.5">
-              <Button
-                size="icon"
-                variant={viewMode === "detailed" ? "default" : "ghost"}
-                className="h-8 w-8"
-                onClick={() => setViewMode("detailed")}
-                data-testid="button-view-detailed"
-                title="Detailed View"
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant={viewMode === "list" ? "default" : "ghost"}
-                className="h-8 w-8"
-                onClick={() => setViewMode("list")}
-                data-testid="button-view-list"
-                title="List View (No Photos)"
-              >
-                <List className="w-4 h-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant={viewMode === "thumbnail" ? "default" : "ghost"}
-                className="h-8 w-8"
-                onClick={() => setViewMode("thumbnail")}
-                data-testid="button-view-thumbnail"
-                title="Thumbnail Grid"
-              >
-                <Grid3X3 className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* List/Grid View */}
-        {isLoading ? (
-          <div className="space-y-1.5 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-4 md:space-y-0">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <Skeleton key={i} className="h-14 md:aspect-[4/3] rounded-md bg-secondary" />
-            ))}
-          </div>
-        ) : viewMode === "thumbnail" ? (
-          /* Thumbnail Grid View */
-          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
-            {filteredAnimals?.map(animal => (
-              <Link key={animal.id} href={`/animals/${animal.id}`}>
-                <div 
-                  className="aspect-square rounded-md bg-secondary overflow-hidden border-2 border-transparent hover:border-primary transition-all cursor-pointer"
-                  data-testid={`thumbnail-${animal.id}`}
-                >
-                  {animal.photo ? (
-                    <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-secondary">
-                      <img src={logo} className="w-8 h-8 grayscale opacity-30" />
-                    </div>
-                  )}
-                </div>
-                <p className="text-[10px] text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
-              </Link>
-            ))}
-            {filteredAnimals?.length === 0 && (
-              <div className="col-span-full py-12 text-center text-muted-foreground">
-                <p>No animals found matching your criteria.</p>
-              </div>
-            )}
-          </div>
-        ) : viewMode === "list" ? (
-          /* List View (No Photos) */
-          <div className="border border-border rounded-md overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-primary text-primary-foreground">
-                <tr>
-                  <th className="text-left p-2.5 font-semibold">Tag ID</th>
-                  <th className="text-left p-2.5 font-semibold hidden sm:table-cell">Name</th>
-                  <th className="text-left p-2.5 font-semibold">Sex</th>
-                  <th className="text-left p-2.5 font-semibold hidden md:table-cell">Breed</th>
-                  <th className="text-left p-2.5 font-semibold hidden lg:table-cell">DOB</th>
-                  <th className="text-left p-2.5 font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAnimals?.map((animal, idx) => (
-                  <ListRow key={animal.id} animal={animal} idx={idx} />
-                ))}
-              </tbody>
-            </table>
-            {filteredAnimals?.length === 0 && (
-              <div className="py-12 text-center text-muted-foreground">
-                <p>No animals found matching your criteria.</p>
-              </div>
-            )}
-          </div>
-        ) : isMobile ? (
-          <div className="space-y-1.5">
-            {filteredAnimals?.map(animal => (
-              <AnimalListRow key={animal.id} animal={animal} />
-            ))}
-            {filteredAnimals?.length === 0 && (
-              <div className="py-8 text-center text-muted-foreground text-xs">
-                <p>No animals found.</p>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {filteredAnimals?.map(animal => (
-              <AnimalCard key={animal.id} animal={animal} />
-            ))}
-            {filteredAnimals?.length === 0 && (
-              <div className="col-span-full py-12 text-center text-muted-foreground">
-                <p>No animals found matching your criteria.</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Total Herd Section - Shows ALL animals combined */}
+        {/* Total Herd Section - Primary browsing experience with search/filters inside */}
         <SectionRibbon
           title="Total Herd"
           count={(allAnimals || []).filter(a => a.status === 'active').length}
@@ -1589,7 +1419,6 @@ export default function Animals() {
               className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
               onClick={async (e) => {
                 e.stopPropagation();
-                // Check connectivity before PDF export
                 const { isApiReachable } = await import("@/lib/queryClient");
                 const isOnline = await isApiReachable();
                 if (!isOnline) {
@@ -1610,24 +1439,175 @@ export default function Animals() {
             </Button>
           }
         >
-          {/* Show ALL active animals in a flat list */}
-          {(() => {
-            const activeAnimals = (allAnimals || []).filter(a => a.status === 'active');
-            if (activeAnimals.length === 0) {
-              return (
-                <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
-                  <p>No active animals in your herd yet.</p>
-                </div>
-              );
-            }
-            return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {activeAnimals.map(animal => (
-                  <AnimalCard key={animal.id} animal={animal} />
-                ))}
+          {/* Search & Filters INSIDE the accordion */}
+          <div className="flex flex-col md:flex-row gap-2 bg-card p-2.5 md:p-4 rounded-md border border-border shadow-sm mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search Tag ID..." 
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 text-sm rugged-input"
+                data-testid="input-search"
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <Select value={classificationFilter} onValueChange={setClassificationFilter}>
+                <SelectTrigger className="flex-1 md:w-[140px] text-sm rugged-input" data-testid="select-classification-filter">
+                  <Tag className="w-4 h-4 mr-1" />
+                  <SelectValue placeholder="Class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Classes</SelectItem>
+                  <SelectItem value="stud">Stud</SelectItem>
+                  <SelectItem value="commercial">Commercial</SelectItem>
+                  <SelectItem value="slaughter_cull">Slaughter/Cull</SelectItem>
+                  <SelectItem value="unclassified">Unclassified</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="flex-1 md:w-[120px] text-sm rugged-input" data-testid="select-status-filter">
+                  <Filter className="w-4 h-4 mr-1" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                  <SelectItem value="sold">Sold</SelectItem>
+                  <SelectItem value="dead">Dead</SelectItem>
+                  <SelectItem value="culled">Culled</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sexFilter} onValueChange={setSexFilter}>
+                <SelectTrigger className="flex-1 md:w-[120px] text-sm rugged-input" data-testid="select-sex-filter">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="ewe">Ewes</SelectItem>
+                  <SelectItem value="ram">Rams</SelectItem>
+                  <SelectItem value="wether">Lambs</SelectItem>
+                </SelectContent>
+              </Select>
+              {/* View Mode Toggle */}
+              <div className="flex gap-1 border border-border rounded-md p-0.5">
+                <Button
+                  size="icon"
+                  variant={viewMode === "detailed" ? "default" : "ghost"}
+                  className="h-8 w-8"
+                  onClick={() => setViewMode("detailed")}
+                  data-testid="button-view-detailed"
+                  title="Detailed View"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  className="h-8 w-8"
+                  onClick={() => setViewMode("list")}
+                  data-testid="button-view-list"
+                  title="List View (No Photos)"
+                >
+                  <List className="w-4 h-4" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant={viewMode === "thumbnail" ? "default" : "ghost"}
+                  className="h-8 w-8"
+                  onClick={() => setViewMode("thumbnail")}
+                  data-testid="button-view-thumbnail"
+                  title="Thumbnail Grid"
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </Button>
               </div>
-            );
-          })()}
+            </div>
+          </div>
+
+          {/* Animal List/Grid INSIDE the accordion */}
+          {isLoading ? (
+            <div className="space-y-1.5 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-4 md:space-y-0">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <Skeleton key={i} className="h-14 md:aspect-[4/3] rounded-md bg-secondary" />
+              ))}
+            </div>
+          ) : viewMode === "thumbnail" ? (
+            /* Thumbnail Grid View */
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+              {filteredAnimals?.map(animal => (
+                <Link key={animal.id} href={`/animals/${animal.id}`}>
+                  <div 
+                    className="aspect-square rounded-md bg-secondary overflow-hidden border-2 border-transparent hover:border-primary transition-all cursor-pointer"
+                    data-testid={`thumbnail-${animal.id}`}
+                  >
+                    {animal.photo ? (
+                      <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-secondary">
+                        <img src={logo} className="w-8 h-8 grayscale opacity-30" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
+                </Link>
+              ))}
+              {filteredAnimals?.length === 0 && (
+                <div className="col-span-full py-12 text-center text-muted-foreground">
+                  <p>No animals found matching your criteria.</p>
+                </div>
+              )}
+            </div>
+          ) : viewMode === "list" ? (
+            /* List View (No Photos) */
+            <div className="border border-border rounded-md overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-primary text-primary-foreground">
+                  <tr>
+                    <th className="text-left p-2.5 font-semibold">Tag ID</th>
+                    <th className="text-left p-2.5 font-semibold hidden sm:table-cell">Name</th>
+                    <th className="text-left p-2.5 font-semibold">Sex</th>
+                    <th className="text-left p-2.5 font-semibold hidden md:table-cell">Breed</th>
+                    <th className="text-left p-2.5 font-semibold hidden lg:table-cell">DOB</th>
+                    <th className="text-left p-2.5 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAnimals?.map((animal, idx) => (
+                    <ListRow key={animal.id} animal={animal} idx={idx} />
+                  ))}
+                </tbody>
+              </table>
+              {filteredAnimals?.length === 0 && (
+                <div className="py-12 text-center text-muted-foreground">
+                  <p>No animals found matching your criteria.</p>
+                </div>
+              )}
+            </div>
+          ) : isMobile ? (
+            <div className="space-y-1.5">
+              {filteredAnimals?.map(animal => (
+                <AnimalListRow key={animal.id} animal={animal} />
+              ))}
+              {filteredAnimals?.length === 0 && (
+                <div className="py-8 text-center text-muted-foreground text-xs">
+                  <p>No animals found.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredAnimals?.map(animal => (
+                <AnimalCard key={animal.id} animal={animal} />
+              ))}
+              {filteredAnimals?.length === 0 && (
+                <div className="col-span-full py-12 text-center text-muted-foreground">
+                  <p>No animals found matching your criteria.</p>
+                </div>
+              )}
+            </div>
+          )}
         </SectionRibbon>
 
         {/* RAMS Section - Sibling to Total Herd */}
