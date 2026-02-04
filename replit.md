@@ -22,6 +22,13 @@ Preferred communication style: Simple, everyday language.
 - **Forms**: React Hook Form with Zod validation.
 - **PWA Features**: Service Worker for caching (NetworkFirst for API, CacheFirst for static assets, StaleWhileRevalidate for app shell), Web App Manifest for installability, IndexedDB for offline data storage (animals, breedingEvents, healthRecords, etc.), and a Sync Manager for offline queueing and background synchronization.
 - **Offline-First Architecture**: All create/update operations save to IndexedDB first for instant response, then attempt immediate server persistence when online, falling back to sync queue on failure. Sync manager uses exponential backoff (3 retries, 2-30 second delay). React Query caches are automatically invalidated after successful sync to refresh temp IDs.
+- **Manual Sync Controls**: 
+  - Global Refresh button in header/sidebar triggers `performFullSyncAction()` with lie-fi detection (5s timeout backend ping)
+  - Settings → Data & Sync section with "Sync Now (Online Only)" and "Reload Data View" buttons
+  - Status indicator badge (green=synced, yellow=pending/failed items, red=backend unreachable)
+  - Error classification: 4xx errors = permanent failures (removed from queue), 5xx/network = retryable (kept in queue)
+  - Toast feedback shows accurate sync state (SYNC_COMPLETE, SYNC_PARTIAL_ERROR, OFFLINE_MODE)
+- **Storage Resilience**: `checkStorageAvailability()` detects incognito/restricted storage mode with dismissible warning banner
 - **UI/UX**: Responsive design, custom branding with farm settings, and a consistent layout for PDF exports including specific font, spacing, and header styling. Pedigree/Family Tree view uses responsive CSS-based connectors.
 
 ### Backend
