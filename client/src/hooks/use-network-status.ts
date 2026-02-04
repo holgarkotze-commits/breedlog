@@ -61,6 +61,14 @@ export function useNetworkStatus() {
     return syncManager.isSyncing();
   };
 
+  // Purge stuck/failed sync items
+  const purgeFailedSyncs = async (maxAgeMs?: number): Promise<number> => {
+    const count = await syncManager.purgeFailedSyncs(maxAgeMs);
+    // Refresh caches after purging
+    queryClient.invalidateQueries({ queryKey: ['/api/animals'] });
+    return count;
+  };
+
   return {
     isOnline,
     syncState,
@@ -68,5 +76,6 @@ export function useNetworkStatus() {
     performFullSync,
     reloadLocalData,
     isSyncing,
+    purgeFailedSyncs,
   };
 }

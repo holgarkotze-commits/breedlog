@@ -224,6 +224,26 @@ export function useCreateAnimal() {
           description: "Will sync when online",
           variant: "default" 
         });
+        
+        // Schedule background refresh to confirm cloud sync status after delay
+        // This ensures temp ID animals get updated with server IDs once synced
+        setTimeout(async () => {
+          try {
+            const { isApiReachable } = await import("@/lib/queryClient");
+            const isOnline = await isApiReachable();
+            if (isOnline) {
+              console.log("[useCreateAnimal] Background refresh to confirm sync status");
+              queryClient.invalidateQueries({ 
+                predicate: (query) => {
+                  const key = query.queryKey;
+                  return Array.isArray(key) && key[0] === api.animals.list.path;
+                }
+              });
+            }
+          } catch (e) {
+            console.log("[useCreateAnimal] Background refresh failed:", e);
+          }
+        }, 5000); // 5 second delay for sync to complete
       }
       
       // Invalidate ALL animal list queries regardless of filters to trigger immediate refresh

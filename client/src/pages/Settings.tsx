@@ -37,9 +37,10 @@ export default function Settings() {
   const saveMutation = useSaveFarmSettings();
   
   // Data & Sync controls
-  const { syncState, performFullSync, reloadLocalData, isSyncing } = useNetworkStatus();
+  const { syncState, performFullSync, reloadLocalData, isSyncing, purgeFailedSyncs } = useNetworkStatus();
   const [isSyncingNow, setIsSyncingNow] = useState(false);
   const [isReloadingView, setIsReloadingView] = useState(false);
+  const [isPurgingSyncs, setIsPurgingSyncs] = useState(false);
 
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +79,37 @@ export default function Settings() {
       });
     } finally {
       setIsLoadingDebug(false);
+    }
+  };
+  
+  // Handle Purge Failed Syncs button
+  const handlePurgeFailedSyncs = async () => {
+    if (isPurgingSyncs) return;
+    
+    setIsPurgingSyncs(true);
+    try {
+      const purgedCount = await purgeFailedSyncs();
+      
+      // Refresh debug info if shown
+      if (showDebugInfo) {
+        const items = await getPendingSyncItems();
+        setDebugPendingItems(items);
+      }
+      
+      toast({
+        title: "Sync Queue Cleaned",
+        description: purgedCount > 0 
+          ? `Removed ${purgedCount} stuck/orphaned sync items`
+          : "No stuck items found - queue is clean",
+      });
+    } catch (error) {
+      toast({
+        title: "Purge Failed",
+        description: "Could not clean sync queue",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPurgingSyncs(false);
     }
   };
   
@@ -1314,21 +1346,37 @@ export default function Settings() {
             <div className="border-t border-border pt-4 mt-4">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-semibold text-sm">Sync Troubleshooting</h4>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={handleShowDebug}
-                  disabled={isLoadingDebug}
-                  data-testid="button-debug-sync"
-                >
-                  {isLoadingDebug ? (
-                    <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Loading...</>
-                  ) : showDebugInfo ? (
-                    <><X className="w-3 h-3 mr-1" /> Hide Debug</>
-                  ) : (
-                    <><AlertCircle className="w-3 h-3 mr-1" /> Debug Sync</>
-                  )}
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handlePurgeFailedSyncs}
+                    disabled={isPurgingSyncs}
+                    className="text-orange-400 border-orange-400/50 hover:border-orange-400"
+                    data-testid="button-purge-failed-syncs"
+                  >
+                    {isPurgingSyncs ? (
+                      <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Purging...</>
+                    ) : (
+                      <><Trash2 className="w-3 h-3 mr-1" /> Purge Failed Syncs</>
+                    )}
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={handleShowDebug}
+                    disabled={isLoadingDebug}
+                    data-testid="button-debug-sync"
+                  >
+                    {isLoadingDebug ? (
+                      <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Loading...</>
+                    ) : showDebugInfo ? (
+                      <><X className="w-3 h-3 mr-1" /> Hide Debug</>
+                    ) : (
+                      <><AlertCircle className="w-3 h-3 mr-1" /> Debug Sync</>
+                    )}
+                  </Button>
+                </div>
               </div>
               
               {showDebugInfo && (

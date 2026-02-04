@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { type Animal } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Heart, Shield, Baby, Scale, Calendar, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useDeleteAnimal } from "@/hooks/use-animals";
+import { tempIdInSyncQueue, animalExistsInCache } from "@/lib/indexeddb";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 
 export function AnimalCard({ animal }: { animal: Animal }) {
@@ -16,8 +17,37 @@ export function AnimalCard({ animal }: { animal: Animal }) {
   const isLamb = animal.birthDate && (Date.now() - new Date(animal.birthDate).getTime()) / (1000 * 60 * 60 * 24) < 365;
   const { mutate: deleteAnimal, isPending } = useDeleteAnimal();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isPhantom, setIsPhantom] = useState(false);
   
   const SexIcon = isLamb ? Baby : (isRam ? Shield : Heart);
+  
+  // Check if this is a phantom animal (temp ID not in sync queue or cache)
+  useEffect(() => {
+    let active = true; // Cancellation guard to prevent state updates after unmount
+    
+    const checkPhantomStatus = async () => {
+      // Only check for negative temp IDs
+      if (typeof animal.id === 'number' && animal.id < 0) {
+        const inQueue = await tempIdInSyncQueue(animal.id);
+        const inCache = await animalExistsInCache(animal.id);
+        
+        // It's a phantom if it has a temp ID but isn't in the queue or cache
+        if (active && !inQueue && !inCache) {
+          console.log(`[AnimalCard] Hiding phantom animal with temp ID: ${animal.id}`);
+          setIsPhantom(true);
+        }
+      }
+    };
+    
+    checkPhantomStatus();
+    
+    return () => { active = false; }; // Cleanup on unmount
+  }, [animal.id]);
+  
+  // Don't render phantom animals
+  if (isPhantom) {
+    return null;
+  }
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();

@@ -47,6 +47,7 @@ export interface SyncQueueItem {
   tempId?: number;
   timestamp: number;
   synced: number; // Use 0/1 instead of boolean for IndexedDB key compatibility
+  failedAttempts?: number; // Track number of failed sync attempts
 }
 
 let dbInstance: IDBDatabase | null = null;
@@ -367,6 +368,102 @@ export async function removeSyncedItems(): Promise<void> {
       resolve(); // Don't crash on cleanup errors
     }
   });
+}
+
+// Increment failure count for a sync queue item
+export async function incrementSyncItemFailures(id: string): Promise<void> {
+  const item = await getFromStore<SyncQueueItem>('syncQueue', id);
+  if (item) {
+    item.failedAttempts = (item.failedAttempts || 0) + 1;
+    await putInStore('syncQueue', item);
+    console.log(`[IndexedDB] Incremented failure count for ${id}: ${item.failedAttempts}`);
+  }
+}
+
+// Purge sync items that have failed more than maxFailures times
+// Also removes orphaned temp animals that no longer have valid sync queue entries
+export async function purgeStuckSyncItems(maxFailures: number = 3): Promise<number> {
+  const db = await openDatabase();
+  let purgedCount = 0;
+  
+  return new Promise((resolve, reject) => {
+    try {
+      const transaction = db.transaction(['syncQueue', 'animals'], 'readwrite');
+      const syncStore = transaction.objectStore('syncQueue');
+      const animalsStore = transaction.objectStore('animals');
+      
+      const allRequest = syncStore.getAll();
+      allRequest.onsuccess = async () => {
+        const items = allRequest.result || [];
+        
+        for (const item of items) {
+          let shouldPurge = false;
+          
+          // Rule 1: Delete items that have failed more than maxFailures times
+          if ((item.failedAttempts || 0) > maxFailures) {
+            shouldPurge = true;
+            console.log(`[IndexedDB] Purging failed sync item: ${item.id}, failures: ${item.failedAttempts}`);
+          }
+          
+          // Rule 2: Delete orphaned animal sync items where the temp animal doesn't exist
+          if (!shouldPurge && item.entity === 'animals' && item.tempId && item.tempId < 0) {
+            const animalRequest = animalsStore.get(item.tempId);
+            animalRequest.onsuccess = () => {
+              if (!animalRequest.result) {
+                // Temp animal doesn't exist anymore - orphaned sync item
+                syncStore.delete(item.id);
+                purgedCount++;
+                console.log(`[IndexedDB] Purging orphaned sync item: ${item.id}, tempId: ${item.tempId}`);
+              }
+            };
+          }
+          
+          if (shouldPurge) {
+            syncStore.delete(item.id);
+            purgedCount++;
+            
+            // Also clean up orphaned temp animals from the animals store
+            if (item.tempId && item.tempId < 0 && item.entity === 'animals') {
+              animalsStore.delete(item.tempId);
+              console.log(`[IndexedDB] Also purged orphaned temp animal: ${item.tempId}`);
+            }
+          }
+        }
+      };
+
+      transaction.oncomplete = () => {
+        console.log(`[IndexedDB] Purged ${purgedCount} stuck sync items`);
+        resolve(purgedCount);
+      };
+      transaction.onerror = () => reject(transaction.error);
+    } catch (error) {
+      console.error('[IndexedDB] purgeStuckSyncItems error:', error);
+      resolve(0);
+    }
+  });
+}
+
+// Check if an animal with given ID exists in IndexedDB
+export async function animalExistsInCache(animalId: number): Promise<boolean> {
+  try {
+    const animal = await getFromStore('animals', animalId);
+    return !!animal;
+  } catch {
+    return false;
+  }
+}
+
+// Check if a temp ID is in the pending sync queue
+export async function tempIdInSyncQueue(tempId: number): Promise<boolean> {
+  try {
+    const pending = await getPendingSyncItems();
+    return pending.some(item => 
+      item.tempId === tempId || 
+      (item.data as { id?: number })?.id === tempId
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function getLastSyncTime(): Promise<number | null> {

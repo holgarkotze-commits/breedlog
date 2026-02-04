@@ -2,6 +2,8 @@ import {
   getPendingSyncItems, 
   markSynced, 
   removeSyncedItems,
+  purgeStuckSyncItems,
+  incrementSyncItemFailures,
   putManyInStore,
   getAllFromStore,
   setLastSyncTime,
@@ -291,6 +293,9 @@ class SyncManager {
         const statusMatch = errorMessage.match(/^(\d{3}):/);
         const statusCode = statusMatch ? parseInt(statusMatch[1]) : 0;
         
+        // Increment failure count for this item
+        await incrementSyncItemFailures(item.id);
+        
         if (statusCode >= 400 && statusCode < 500) {
           // Permanent failure (validation, auth, etc.) - mark as failed, don't retry
           console.log(`[SyncManager] Permanent failure (${statusCode}) for item ${item.id}, marking as blocked`);
@@ -298,8 +303,8 @@ class SyncManager {
           await markSynced(item.id);
           failedCount++;
         } else {
-          // Network error or 5xx - keep in queue for retry
-          console.log(`[SyncManager] Retryable error for item ${item.id}, keeping in queue`);
+          // Network error or 5xx - keep in queue for retry (failure count incremented above)
+          console.log(`[SyncManager] Retryable error for item ${item.id}, keeping in queue with incremented failure count`);
           retryableCount++;
         }
       }
@@ -438,6 +443,15 @@ class SyncManager {
   // Check if sync is currently in progress (for debouncing)
   isSyncing(): boolean {
     return this.syncInProgress;
+  }
+
+  // Purge sync items that have failed more than maxFailures times (default 3)
+  async purgeFailedSyncs(maxFailures: number = 3): Promise<number> {
+    console.log('[SyncManager] Purging sync items with >' + maxFailures + ' failures...');
+    const purgedCount = await purgeStuckSyncItems(maxFailures);
+    await this.updatePendingCount();
+    this.notifySyncComplete();
+    return purgedCount;
   }
 
   // The robust manual sync function as per requirements
