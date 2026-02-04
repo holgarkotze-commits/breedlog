@@ -319,15 +319,49 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {recentVisits.map((visit, index) => {
                 const Icon = getIconForPath(visit.path);
+                // Check if this is an animal page and get the animal data
+                const isAnimalPage = visit.path.startsWith("/animals/");
+                const animalId = isAnimalPage ? parseInt(visit.path.split("/")[2]) : null;
+                const animal = animalId ? animals?.find(a => a.id === animalId) : null;
+                
+                // Get display label - prefer tagId over generic "Animal X"
+                const displayLabel = animal?.tagId || visit.label;
+                
+                // Get thumbnail URL - animal's photo field
+                const thumbnailUrl = animal?.photo || null;
+                
                 return (
                   <Link key={index} href={visit.path}>
-                    <Card className="rugged-card hover:border-primary/50 transition-colors cursor-pointer p-2 md:p-3">
+                    <Card className="rugged-card hover:border-primary/50 transition-colors cursor-pointer p-2 md:p-3" data-testid={`card-recent-visit-${index}`}>
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                          <Icon className="w-4 h-4 text-primary" />
-                        </div>
+                        {/* Thumbnail or icon */}
+                        {isAnimalPage && thumbnailUrl ? (
+                          <div className="w-10 h-10 rounded overflow-hidden shrink-0 border border-border">
+                            <img 
+                              src={thumbnailUrl} 
+                              alt={displayLabel}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                // On error, hide and show placeholder
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                              }}
+                            />
+                            <div className="hidden w-full h-full bg-primary/10 flex items-center justify-center">
+                              <Beef className="w-5 h-5 text-primary/60" />
+                            </div>
+                          </div>
+                        ) : isAnimalPage ? (
+                          <div className="w-10 h-10 rounded bg-primary/10 flex items-center justify-center shrink-0 border border-border">
+                            <Beef className="w-5 h-5 text-primary/60" />
+                          </div>
+                        ) : (
+                          <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                            <Icon className="w-4 h-4 text-primary" />
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs md:text-sm font-medium truncate">{visit.label}</p>
+                          <p className="text-xs md:text-sm font-medium truncate" data-testid={`text-recent-visit-label-${index}`}>{displayLabel}</p>
                           <p className="text-[10px] text-muted-foreground">
                             {format(new Date(visit.timestamp), "HH:mm")}
                           </p>

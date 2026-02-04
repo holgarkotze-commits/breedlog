@@ -1574,55 +1574,98 @@ export default function Animals() {
           </div>
         )}
 
-        {/* Total Herd Collapsible */}
+        {/* Total Herd Section - Shows ALL animals combined */}
         <SectionRibbon
           title="Total Herd"
           count={(allAnimals || []).filter(a => a.status === 'active').length}
           isExpanded={totalHerdExpanded}
           onToggle={() => setTotalHerdExpanded(!totalHerdExpanded)}
           testId="ribbon-total-herd"
+          actions={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async (e) => {
+                e.stopPropagation();
+                // Check connectivity before PDF export
+                const { isApiReachable } = await import("@/lib/queryClient");
+                const isOnline = await isApiReachable();
+                if (!isOnline) {
+                  toast({ 
+                    title: "Offline", 
+                    description: "You must be online to export PDF",
+                    variant: "destructive" 
+                  });
+                  return;
+                }
+                setPdfExportType('fullHerd');
+                pdfExport.openDialog('fullHerd');
+              }}
+              data-testid="btn-export-total-herd"
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Export PDF
+            </Button>
+          }
         >
-          <div className="space-y-2">
-            {/* Dedicated RAMS Section */}
-            <RamsSection 
-              allAnimals={allAnimals || []} 
-              breedingEvents={breedingEvents || []} 
-              onExport={exportRamsPDF}
-              isLoading={isLoading}
-              isExpanded={ramsExpanded}
-              onToggle={() => setRamsExpanded(!ramsExpanded)}
-              updateAnimalMutation={updateAnimalMutation}
-              classifyMutation={classifyMutation}
-            />
-
-            {/* Dedicated EWES Section */}
-            <EwesSection 
-              allAnimals={allAnimals || []} 
-              breedingEvents={breedingEvents || []} 
-              onExport={exportEwesPDF}
-              isLoading={isLoading}
-              isExpanded={ewesExpanded}
-              onToggle={() => setEwesExpanded(!ewesExpanded)}
-              updateAnimalMutation={updateAnimalMutation}
-              classifyMutation={classifyMutation}
-            />
-
-            {/* Dedicated LAMBS Section */}
-            <LambsSection 
-              allAnimals={allAnimals || []} 
-              breedingEvents={breedingEvents || []}
-              isLoading={isLoading}
-              isExpanded={lambsExpanded}
-              onToggle={() => setLambsExpanded(!lambsExpanded)}
-              onExport={() => exportHerdPDF("lambs")}
-              classifyMutation={classifyMutation}
-              confirmCullMutation={confirmCullMutation}
-              moveToEwesMutation={moveToEwesMutation}
-              moveToRamsMutation={moveToRamsMutation}
-              updateAnimalMutation={updateAnimalMutation}
-            />
-          </div>
+          {/* Show ALL active animals in a flat list */}
+          {(() => {
+            const activeAnimals = (allAnimals || []).filter(a => a.status === 'active');
+            if (activeAnimals.length === 0) {
+              return (
+                <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
+                  <p>No active animals in your herd yet.</p>
+                </div>
+              );
+            }
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {activeAnimals.map(animal => (
+                  <AnimalCard key={animal.id} animal={animal} />
+                ))}
+              </div>
+            );
+          })()}
         </SectionRibbon>
+
+        {/* RAMS Section - Sibling to Total Herd */}
+        <RamsSection 
+          allAnimals={allAnimals || []} 
+          breedingEvents={breedingEvents || []} 
+          onExport={exportRamsPDF}
+          isLoading={isLoading}
+          isExpanded={ramsExpanded}
+          onToggle={() => setRamsExpanded(!ramsExpanded)}
+          updateAnimalMutation={updateAnimalMutation}
+          classifyMutation={classifyMutation}
+        />
+
+        {/* EWES Section - Sibling to Total Herd */}
+        <EwesSection 
+          allAnimals={allAnimals || []} 
+          breedingEvents={breedingEvents || []} 
+          onExport={exportEwesPDF}
+          isLoading={isLoading}
+          isExpanded={ewesExpanded}
+          onToggle={() => setEwesExpanded(!ewesExpanded)}
+          updateAnimalMutation={updateAnimalMutation}
+          classifyMutation={classifyMutation}
+        />
+
+        {/* LAMBS Section - Sibling to Total Herd */}
+        <LambsSection 
+          allAnimals={allAnimals || []} 
+          breedingEvents={breedingEvents || []}
+          isLoading={isLoading}
+          isExpanded={lambsExpanded}
+          onToggle={() => setLambsExpanded(!lambsExpanded)}
+          onExport={() => exportHerdPDF("lambs")}
+          classifyMutation={classifyMutation}
+          confirmCullMutation={confirmCullMutation}
+          moveToEwesMutation={moveToEwesMutation}
+          moveToRamsMutation={moveToRamsMutation}
+          updateAnimalMutation={updateAnimalMutation}
+        />
 
         {/* Encouraging message */}
         <div className="text-center py-6 px-4 border-t border-border/30 mt-4">

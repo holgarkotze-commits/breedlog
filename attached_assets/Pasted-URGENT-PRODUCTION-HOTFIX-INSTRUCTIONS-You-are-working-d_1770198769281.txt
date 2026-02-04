@@ -1,0 +1,89 @@
+URGENT PRODUCTION HOTFIX INSTRUCTIONS ⚠️
+You are working directly on the LIVE PRODUCTION environment of the BREEDLOG app.
+
+CRITICAL RULES OF ENGAGEMENT:
+
+NO MOCKS: Do not use mock data, seed files, or development-only toggles. You must work against the real production database schema and data.
+
+NO DEV-ONLY FIXES: If a change looks good in the "Preview" window but fails on a real mobile device or in offline mode, the task is FAILED.
+
+OFFLINE FIRST: Every UI change must gracefully handle offline states. Do not break existing sync capabilities.
+
+PERFORMANCE: The final result must be optimized for speed on both mobile and desktop.
+
+EXECUTION PLAN
+Execute the following four parts sequentially. Do not proceed to the next part until the previous one is verified.
+
+PART 1: MY HERD SCREEN — STRUCTURE & EXPORT FIX
+Current Production Status (BROKEN): The "My Herd" screen incorrectly nests RAMS, EWES, and LAMBS inside the TOTAL HERD section. TOTAL HERD lacks a PDF export button.
+
+Required Actions:
+
+Refactor Tab Structure: Locate the MyHerd page/component. Immediately refactor the structure so there are exactly FOUR sibling accordions/tabs at the same hierarchy level:
+
+[ ] TOTAL HERD
+
+[ ] RAMS
+
+[ ] EWES
+
+[ ] LAMBS
+
+Fix TOTAL HERD Behavior: Ensure the TOTAL HERD accordion, when expanded, renders a list of ALL animals combined. Do not render category sub-headers inside it.
+
+Implement TOTAL HERD Export:
+
+Add an "Export PDF" button to the TOTAL HERD section.
+
+Reuse the exact existing PDF generation logic used by the other tabs.
+
+Ensure it generates a PDF containing all animals.
+
+Offline Handling (Export): Add a check before generating the PDF. If the device is offline and client-side generation isn't possible, display a clear error toast (e.g., "You must be online to export PDF") instead of failing silently or crashing.
+
+PART 2: HOME SCREEN — "RECENTLY VISITED" REWORK
+Current Production Status (BROKEN): The section shows meaningless internal IDs like "Animal 26".
+
+Required Actions:
+
+Update Data Fetching: Modify the query for "Recently Visited" items to fetch the animal's Thumbnail Image URL and their Tag ID (e.g., "UK-12345").
+
+Update UI Card: Redesign the "Recently Visited" items to display:
+
+Left: A thumbnail of the animal's primary image.
+
+Center/Right: The Tag ID as the main bold text.
+
+Image Handling (Crucial for Production):
+
+Implement a clean, branded placeholder image to display if an animal has no image or if the image fails to load.
+
+Ensure these thumbnails are cached by the service worker so they appear correctly in offline mode if previously loaded.
+
+PART 3: DATA CONSISTENCY & OPTIMIZATION
+Required Actions:
+
+Audit State: Ensure that adding, editing, or deleting an animal anywhere in the app instantly updates the counts shown on the four "My Herd" tabs without requiring a manual refresh.
+
+Optimize Queries: Review the database queries used for these screens. Ensure there are no N+1 query issues slowing down the production app.
+
+General Optimization: Ensure the application bundle size and rendering performance are optimized for speed on mobile devices with varying network conditions.
+
+DELIVERABLES & VERIFICATION
+Do not claim this task is complete until you provide:
+
+A written confirmation that these changes are deployed to the LIVE production URL.
+
+Screenshot 1 (Mobile View): The fixed "My Herd" screen showing the four sibling tabs, with "Total Herd" expanded showing a list of mixed animals and the new Export button.
+
+Screenshot 2 (Mobile View): The "Home Screen" showing "Recently Visited" items with real thumbnails and real Tag IDs.
+
+Final Checklist Confirmation:
+
+[ ] Tested on Mobile (iOS/Android browsers)
+
+[ ] Tested on Desktop Web
+
+[ ] Verified Online Mode functionality
+
+[ ] Verified Offline Mode functionality (thumbnails load from cache, PDF shows offline message)

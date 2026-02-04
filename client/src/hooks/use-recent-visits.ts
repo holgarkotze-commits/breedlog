@@ -4,6 +4,10 @@ export interface RecentVisit {
   path: string;
   label: string;
   timestamp: number;
+  // Animal-specific fields for enhanced display
+  tagId?: string;
+  thumbnailUrl?: string | null;
+  animalId?: number;
 }
 
 const STORAGE_KEY = "breedlog_recent_visits";
@@ -23,13 +27,16 @@ export function useRecentVisits() {
     }
   }, []);
 
-  const addVisit = useCallback((path: string, label: string) => {
+  const addVisit = useCallback((path: string, label: string, animalData?: { tagId: string; thumbnailUrl?: string | null; animalId: number }) => {
     if (path === "/") return;
     
     const newVisit: RecentVisit = {
       path,
       label,
       timestamp: Date.now(),
+      tagId: animalData?.tagId,
+      thumbnailUrl: animalData?.thumbnailUrl,
+      animalId: animalData?.animalId,
     };
 
     setVisits((prev) => {
