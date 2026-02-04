@@ -68,9 +68,15 @@ export function useCreatePerformanceRecord() {
         return tempRecord;
       }
 
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(api.records.performance.create.path, {
         method: api.records.performance.create.method,
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(data),
         credentials: "include",
       });
@@ -144,9 +150,15 @@ export function useCreateHealthRecord() {
         return tempRecord;
       }
 
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(api.records.health.create.path, {
         method: api.records.health.create.method,
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(data),
         credentials: "include",
       });

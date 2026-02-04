@@ -356,8 +356,14 @@ export function useDeleteAnimal() {
   return useMutation({
     mutationFn: async (id: number) => {
       const url = buildUrl(api.animals.delete.path, { id });
+      // Include auth token for device-based authentication
+      const token = getDeviceToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(url, {
         method: api.animals.delete.method,
+        headers,
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to delete animal");
@@ -429,9 +435,14 @@ export function useUploadAnimalImage() {
       // If online, try immediate server upload
       if (navigator.onLine) {
         try {
+          // Include auth token for device-based authentication
+          const token = getDeviceToken();
+          const uploadHeaders: Record<string, string> = { "Content-Type": "application/json" };
+          if (token) uploadHeaders["Authorization"] = `Bearer ${token}`;
+          
           const res = await fetch(`/api/animals/${animalId}/images`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: uploadHeaders,
             body: JSON.stringify({ imageData, fileName, caption }),
             credentials: "include",
           });
@@ -502,8 +513,14 @@ export function useDeleteAnimalImage() {
 
   return useMutation({
     mutationFn: async ({ animalId, imageId }: { animalId: number; imageId: number }) => {
+      // Include auth token for device-based authentication
+      const token = getDeviceToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(`/api/animals/${animalId}/images/${imageId}`, {
         method: "DELETE",
+        headers,
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to delete image");
@@ -526,9 +543,14 @@ export function useClassifyRamLamb() {
 
   return useMutation({
     mutationFn: async ({ id, ramLambClass }: { id: number; ramLambClass: string }) => {
+      // Include auth token for device-based authentication
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(`/api/animals/${id}/classify-ram-lamb`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ ramLambClass }),
         credentials: "include",
       });
@@ -552,8 +574,14 @@ export function useMoveToEwes() {
 
   return useMutation({
     mutationFn: async (id: number) => {
+      // Include auth token for device-based authentication
+      const token = getDeviceToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(`/api/animals/${id}/move-to-ewes`, {
         method: "PATCH",
+        headers,
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to move ewe lamb to ewes");
@@ -576,9 +604,14 @@ export function useMoveToRams() {
 
   return useMutation({
     mutationFn: async ({ id, ramType }: { id: number; ramType: string }) => {
+      // Include auth token for device-based authentication
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(`/api/animals/${id}/move-to-rams`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ ramType }),
         credentials: "include",
       });
@@ -602,9 +635,14 @@ export function useConfirmCull() {
 
   return useMutation({
     mutationFn: async ({ id, cullReason }: { id: number; cullReason?: string }) => {
+      // Include auth token for device-based authentication
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(`/api/animals/${id}/confirm-cull`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ cullReason }),
         credentials: "include",
       });
@@ -628,9 +666,14 @@ export function useRemoveFromHerd() {
 
   return useMutation({
     mutationFn: async ({ id, reason, notes }: { id: number; reason: string; notes?: string }) => {
+      // Include auth token for device-based authentication
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(`/api/animals/${id}/remove-from-herd`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ reason, notes }),
         credentials: "include",
       });

@@ -74,9 +74,15 @@ export function useCreateBreedingEvent() {
         return tempRecord;
       }
 
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(api.breeding.create.path, {
         method: api.breeding.create.method,
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(data),
         credentials: "include",
       });
@@ -151,9 +157,15 @@ export function useCreateMatingGroup() {
         return tempRecord;
       }
 
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(api.breeding.groups.create.path, {
         method: api.breeding.groups.create.method,
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(data),
         credentials: "include"
       });
@@ -192,8 +204,15 @@ export function useDeleteBreedingEvent() {
         return { id: eventId };
       }
 
+      // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      
       const res = await fetch(`/api/breeding/${eventId}`, {
         method: "DELETE",
+        headers,
         credentials: "include"
       });
       if (!res.ok) throw new Error("Failed to delete breeding event");
