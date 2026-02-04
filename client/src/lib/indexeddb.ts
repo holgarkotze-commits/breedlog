@@ -1,6 +1,44 @@
 const DB_NAME = 'breedlog-offline';
 const DB_VERSION = 4; // Updated to fix boolean key issue in syncQueue
 
+// Storage availability state for incognito mode detection
+let storageAvailable = true;
+let storageWarningShown = false;
+
+// Check if IndexedDB is available (fails in incognito/private mode)
+export async function checkStorageAvailability(): Promise<boolean> {
+  try {
+    const testDbName = 'breedlog-storage-test';
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open(testDbName, 1);
+      request.onerror = () => reject(new Error('IndexedDB not available'));
+      request.onsuccess = () => {
+        request.result.close();
+        indexedDB.deleteDatabase(testDbName);
+        resolve();
+      };
+    });
+    storageAvailable = true;
+    return true;
+  } catch (error) {
+    console.warn('[IndexedDB] Storage not available (likely incognito mode):', error);
+    storageAvailable = false;
+    return false;
+  }
+}
+
+export function isStorageAvailable(): boolean {
+  return storageAvailable;
+}
+
+export function markStorageWarningShown(): void {
+  storageWarningShown = true;
+}
+
+export function hasStorageWarningBeenShown(): boolean {
+  return storageWarningShown;
+}
+
 export interface SyncQueueItem {
   id: string;
   action: 'create' | 'update' | 'delete';

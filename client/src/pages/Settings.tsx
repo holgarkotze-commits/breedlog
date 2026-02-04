@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle, AlertTriangle, RotateCcw, ShieldCheck } from "lucide-react";
+import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle, AlertTriangle, RotateCcw, ShieldCheck, RefreshCw, CloudOff, Database } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,6 +23,7 @@ import { format } from "date-fns";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { clearAllOfflineData, setOnboardingCompleted } from "@/lib/indexeddb";
+import { useNetworkStatus } from "@/hooks/use-network-status";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function Settings() {
@@ -34,6 +35,11 @@ export default function Settings() {
   const { toast } = useToast();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const saveMutation = useSaveFarmSettings();
+  
+  // Data & Sync controls
+  const { syncState, performFullSync, reloadLocalData, isSyncing } = useNetworkStatus();
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
+  const [isReloadingView, setIsReloadingView] = useState(false);
 
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -46,6 +52,68 @@ export default function Settings() {
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetConfirmPhrase, setResetConfirmPhrase] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  
+  // Handle Sync Now button
+  const handleSyncNow = async () => {
+    if (isSyncingNow || isSyncing()) return;
+    
+    setIsSyncingNow(true);
+    try {
+      const result = await performFullSync();
+      
+      switch (result) {
+        case 'SYNC_COMPLETE':
+          toast({
+            title: "Data synced",
+            description: "All data synchronized successfully",
+          });
+          break;
+        case 'OFFLINE_MODE':
+          toast({
+            title: "Backend unreachable",
+            description: "Reloaded local data. Changes saved to device.",
+          });
+          break;
+        case 'SYNC_PARTIAL_ERROR':
+          toast({
+            title: "Sync complete with warnings",
+            description: "Some items failed to sync",
+            variant: "destructive",
+          });
+          break;
+      }
+    } catch (error) {
+      toast({
+        title: "Sync failed",
+        description: "Unable to sync data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingNow(false);
+    }
+  };
+  
+  // Handle Reload Data View button
+  const handleReloadView = async () => {
+    if (isReloadingView) return;
+    
+    setIsReloadingView(true);
+    try {
+      await reloadLocalData();
+      toast({
+        title: "View refreshed",
+        description: "Data reloaded from local storage",
+      });
+    } catch (error) {
+      toast({
+        title: "Reload failed",
+        description: "Unable to reload data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReloadingView(false);
+    }
+  };
 
   const { data: documents, isLoading: docsLoading } = useQuery<any[]>({
     queryKey: ['/api/documents'],
@@ -1148,6 +1216,71 @@ export default function Settings() {
                 <p className="text-sm">No documents uploaded yet</p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Data & Sync Section */}
+        <Card className="rugged-card">
+          <CardHeader>
+            <CardTitle className="uppercase flex items-center gap-2">
+              <Database className="w-5 h-5 text-primary" /> Data & Sync
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Manually sync your data with the server or refresh the current view from local storage.
+            </p>
+            
+            {/* Sync status indicator */}
+            <div className="flex items-center gap-2 text-sm">
+              <div className={`w-2.5 h-2.5 rounded-full ${
+                !syncState.backendReachable ? 'bg-red-500' :
+                syncState.pendingCount > 0 || syncState.failedItems > 0 ? 'bg-yellow-500' :
+                'bg-green-500'
+              }`} />
+              <span className="text-muted-foreground">
+                {!syncState.backendReachable ? 'Backend unreachable' :
+                 syncState.failedItems > 0 ? `${syncState.failedItems} failed items` :
+                 syncState.pendingCount > 0 ? `${syncState.pendingCount} pending` :
+                 'All synced'}
+              </span>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button 
+                variant="outline" 
+                onClick={handleSyncNow}
+                disabled={isSyncingNow || syncState.status === 'syncing'}
+                className="flex-1"
+                data-testid="button-sync-now"
+              >
+                {isSyncingNow || syncState.status === 'syncing' ? (
+                  <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Syncing...</>
+                ) : (
+                  <><RefreshCw className="w-4 h-4 mr-2" /> Sync Now (Online Only)</>
+                )}
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                onClick={handleReloadView}
+                disabled={isReloadingView}
+                className="flex-1"
+                data-testid="button-reload-view"
+              >
+                {isReloadingView ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Reloading...</>
+                ) : (
+                  <><CloudOff className="w-4 h-4 mr-2" /> Reload Data View</>
+                )}
+              </Button>
+            </div>
+            
+            <p className="text-xs text-muted-foreground">
+              <strong>Sync Now:</strong> Attempts to connect to the server, push local changes, and pull fresh data.
+              <br />
+              <strong>Reload Data View:</strong> Refreshes the UI from local storage without network calls (use when UI seems stuck).
+            </p>
           </CardContent>
         </Card>
 

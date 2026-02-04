@@ -2,8 +2,110 @@ import { useState, useEffect, useRef } from 'react';
 import { useNetworkStatus } from '@/hooks/use-network-status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Wifi, WifiOff, RefreshCw, Check, AlertCircle, Cloud, CloudOff, X } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, Check, AlertCircle, Cloud, CloudOff, X, HardDrive } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import { checkStorageAvailability, isStorageAvailable, markStorageWarningShown, hasStorageWarningBeenShown } from '@/lib/indexeddb';
+
+// Status indicator badge (green/yellow/red dot)
+export function SyncStatusBadge() {
+  const { syncState } = useNetworkStatus();
+  
+  // Determine dot color based on state
+  const getDotColor = () => {
+    if (!syncState.backendReachable) {
+      return 'bg-red-500'; // Red: Backend unreachable
+    }
+    if (syncState.pendingCount > 0 || syncState.failedItems > 0) {
+      return 'bg-yellow-500'; // Yellow: Items waiting in queue
+    }
+    return 'bg-green-500'; // Green: Backend reachable + queues empty
+  };
+
+  const getTooltip = () => {
+    if (!syncState.backendReachable) {
+      return 'Backend unreachable';
+    }
+    if (syncState.failedItems > 0) {
+      return `${syncState.failedItems} failed items`;
+    }
+    if (syncState.pendingCount > 0) {
+      return `${syncState.pendingCount} pending`;
+    }
+    return 'Synced';
+  };
+
+  return (
+    <div 
+      className={cn("w-2.5 h-2.5 rounded-full", getDotColor())}
+      title={getTooltip()}
+      data-testid="sync-status-dot"
+    />
+  );
+}
+
+// Global refresh button for header
+export function GlobalRefreshButton({ location = 'header' }: { location?: 'header' | 'sidebar' }) {
+  const { syncState, performFullSync, isSyncing } = useNetworkStatus();
+  const { toast } = useToast();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    if (isRefreshing || isSyncing()) return;
+    
+    setIsRefreshing(true);
+    try {
+      const result = await performFullSync();
+      
+      switch (result) {
+        case 'SYNC_COMPLETE':
+          toast({
+            title: "Data synced",
+            description: "All data synchronized successfully",
+          });
+          break;
+        case 'OFFLINE_MODE':
+          toast({
+            title: "Backend unreachable",
+            description: "Reloaded local data. Changes saved to device.",
+            variant: "default",
+          });
+          break;
+        case 'SYNC_PARTIAL_ERROR':
+          toast({
+            title: "Sync complete with warnings",
+            description: "Some items failed to sync",
+            variant: "destructive",
+          });
+          break;
+      }
+    } catch (error) {
+      toast({
+        title: "Sync failed",
+        description: "Unable to sync data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const isBusy = isRefreshing || syncState.status === 'syncing';
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleRefresh}
+      disabled={isBusy}
+      className="flex items-center gap-1.5"
+      data-testid={`button-refresh-${location}`}
+    >
+      <RefreshCw className={cn("w-4 h-4", isBusy && "animate-spin")} />
+      <span className="hidden sm:inline text-xs">Refresh</span>
+    </Button>
+  );
+}
 
 export function NetworkStatusIndicator() {
   const { isOnline, syncState, triggerSync } = useNetworkStatus();
@@ -46,6 +148,7 @@ export function NetworkStatusIndicator() {
 
   return (
     <div className="flex items-center gap-2" data-testid="network-status">
+      <SyncStatusBadge />
       <Badge 
         variant={getStatusVariant()}
         className={cn(
@@ -198,6 +301,52 @@ export function OfflineBanner() {
           onClick={handleCollapse}
           className="h-6 w-6 ml-2"
           data-testid="button-collapse-banner"
+        >
+          <X className="w-3 h-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Storage warning banner for incognito/private mode
+export function StorageWarningBanner() {
+  const [isVisible, setIsVisible] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
+
+  useEffect(() => {
+    // Check storage availability on mount
+    const checkStorage = async () => {
+      const available = await checkStorageAvailability();
+      if (!available && !hasStorageWarningBeenShown()) {
+        setIsVisible(true);
+      }
+    };
+    checkStorage();
+  }, []);
+
+  const handleDismiss = () => {
+    setIsDismissed(true);
+    markStorageWarningShown();
+    setIsVisible(false);
+  };
+
+  if (!isVisible || isDismissed) return null;
+
+  return (
+    <div 
+      className="fixed top-0 left-0 right-0 z-50 py-3 px-4 text-center text-sm font-medium bg-amber-900/95 text-amber-100 animate-in slide-in-from-top duration-300"
+      data-testid="storage-warning-banner"
+    >
+      <div className="flex items-center justify-center gap-2 max-w-2xl mx-auto">
+        <HardDrive className="w-4 h-4 flex-shrink-0" />
+        <span>Browser storage restricted. Offline data may not be saved. Use a regular browser window for full functionality.</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleDismiss}
+          className="h-6 w-6 ml-2 flex-shrink-0 text-amber-100 hover:text-white hover:bg-amber-800"
+          data-testid="button-dismiss-storage-warning"
         >
           <X className="w-3 h-3" />
         </Button>

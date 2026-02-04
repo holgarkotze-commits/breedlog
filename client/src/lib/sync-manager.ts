@@ -45,11 +45,16 @@ async function getServerIdForTemp(tempId: number, entity: string): Promise<numbe
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
 
+// Result types for performFullSyncAction
+export type FullSyncResult = 'SYNC_COMPLETE' | 'SYNC_PARTIAL_ERROR' | 'OFFLINE_MODE';
+
 export interface SyncState {
   status: SyncStatus;
   pendingCount: number;
   lastSyncTime: number | null;
   error: string | null;
+  failedItems: number; // Items that failed permanently (4xx errors)
+  backendReachable: boolean; // True connectivity status based on ping
 }
 
 type SyncCallback = (state: SyncState) => void;
@@ -59,6 +64,29 @@ const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY = 2000; // 2 seconds
 const MAX_RETRY_DELAY = 30000; // 30 seconds
 
+// Robust backend ping with timeout (the "Lie-Fi" check)
+async function pingBackend(timeoutMs: number = 5000): Promise<boolean> {
+  // First check browser status
+  if (!navigator.onLine) return false;
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    const response = await fetch('/api/version', {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    return response.ok;
+  } catch (err) {
+    console.log('[SyncManager] Backend ping failed:', err);
+    return false;
+  }
+}
+
 class SyncManager {
   private listeners: Set<SyncCallback> = new Set();
   private syncCompleteListeners: Set<SyncCompleteCallback> = new Set();
@@ -67,6 +95,8 @@ class SyncManager {
     pendingCount: 0,
     lastSyncTime: null,
     error: null,
+    failedItems: 0,
+    backendReachable: navigator.onLine,
   };
   private syncInProgress = false;
   private retryCount = 0;
@@ -173,7 +203,10 @@ class SyncManager {
     this.updateState({ status: 'syncing', error: null });
 
     try {
-      await this.pushChanges();
+      const pushResult = await this.pushChanges();
+      if (pushResult.retryableCount > 0) {
+        throw new Error(`${pushResult.retryableCount} items could not be synced`);
+      }
       await this.pullData();
       await removeSyncedItems();
       
@@ -237,19 +270,42 @@ class SyncManager {
     }
   }
 
-  private async pushChanges(): Promise<void> {
+  private async pushChanges(): Promise<{ successCount: number; failedCount: number; retryableCount: number }> {
     const pendingItems = await getPendingSyncItems();
     console.log(`[SyncManager] Pushing ${pendingItems.length} changes`);
+
+    let successCount = 0;
+    let failedCount = 0; // Permanent failures (4xx)
+    let retryableCount = 0; // Network/server errors (5xx, timeout)
 
     for (const item of pendingItems) {
       try {
         await this.processSyncItem(item);
         await markSynced(item.id);
+        successCount++;
       } catch (error) {
         console.error(`[SyncManager] Failed to sync item ${item.id}:`, error);
-        throw error;
+        
+        // Classify the error
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const statusMatch = errorMessage.match(/^(\d{3}):/);
+        const statusCode = statusMatch ? parseInt(statusMatch[1]) : 0;
+        
+        if (statusCode >= 400 && statusCode < 500) {
+          // Permanent failure (validation, auth, etc.) - mark as failed, don't retry
+          console.log(`[SyncManager] Permanent failure (${statusCode}) for item ${item.id}, marking as blocked`);
+          // Mark as synced to remove from queue but log the failure
+          await markSynced(item.id);
+          failedCount++;
+        } else {
+          // Network error or 5xx - keep in queue for retry
+          console.log(`[SyncManager] Retryable error for item ${item.id}, keeping in queue`);
+          retryableCount++;
+        }
       }
     }
+
+    return { successCount, failedCount, retryableCount };
   }
 
   private async processSyncItem(item: SyncQueueItem): Promise<void> {
@@ -311,8 +367,17 @@ class SyncManager {
     }
   }
 
-  private async pullData(): Promise<void> {
+  private async pullData(): Promise<{ successCount: number; failedCount: number }> {
     console.log('[SyncManager] Pulling latest data from server');
+    
+    // Get auth token for API calls
+    const token = localStorage.getItem('breedlog_device_token');
+    const headers: HeadersInit = {
+      'Accept': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
     const endpoints = [
       { url: '/api/animals', store: 'animals' },
@@ -324,25 +389,160 @@ class SyncManager {
       { url: '/api/documents', store: 'documents' },
     ];
 
+    let successCount = 0;
+    let failedCount = 0;
+
     // Pull data in parallel for faster sync
     await Promise.all(endpoints.map(async ({ url, store }) => {
       try {
-        const response = await fetch(url, { credentials: 'include' });
-        if (response.ok) {
-          const data = await response.json();
-          const items = Array.isArray(data) ? data : data ? [data] : [];
-          if (items.length > 0) {
-            await putManyInStore(store, items);
-          }
+        const response = await fetch(url, { 
+          credentials: 'include',
+          headers 
+        });
+        
+        // Check content type before parsing
+        const contentType = response.headers.get('content-type');
+        if (!response.ok || !contentType?.includes('application/json')) {
+          console.warn(`[SyncManager] Pull ${store}: Non-JSON response or error (status: ${response.status})`);
+          failedCount++;
+          return;
         }
+        
+        const data = await response.json();
+        const items = Array.isArray(data) ? data : data ? [data] : [];
+        if (items.length > 0) {
+          await putManyInStore(store, items);
+        }
+        successCount++;
       } catch (error) {
         console.warn(`[SyncManager] Failed to pull ${store}:`, error);
+        failedCount++;
       }
     }));
+    
+    return { successCount, failedCount };
   }
 
   async getOfflineData<T>(storeName: string): Promise<T[]> {
     return getAllFromStore<T>(storeName);
+  }
+
+  // Reload data from local IndexedDB cache without network calls
+  async reloadLocalData(): Promise<void> {
+    console.log('[SyncManager] Reloading data from local cache');
+    await this.updatePendingCount();
+    // Notify complete to trigger query invalidation
+    this.notifySyncComplete();
+  }
+
+  // Check if sync is currently in progress (for debouncing)
+  isSyncing(): boolean {
+    return this.syncInProgress;
+  }
+
+  // The robust manual sync function as per requirements
+  async performFullSyncAction(): Promise<FullSyncResult> {
+    console.log('[SyncManager] performFullSyncAction() initiated');
+    
+    // Prevent duplicate sync calls (debouncing)
+    if (this.syncInProgress) {
+      console.log('[SyncManager] Sync already in progress, aborting');
+      return this.state.backendReachable ? 'SYNC_COMPLETE' : 'OFFLINE_MODE';
+    }
+
+    // STEP A: ROBUST NETWORK REACHABILITY CHECK
+    // A1: Browser check first
+    if (!navigator.onLine) {
+      console.log('[SyncManager] Browser reports offline');
+      this.updateState({ status: 'offline', backendReachable: false });
+      await this.reloadLocalData();
+      return 'OFFLINE_MODE';
+    }
+
+    // A2: Backend ping (the "Lie-Fi" check)
+    console.log('[SyncManager] Performing backend ping...');
+    const backendReachable = await pingBackend(5000);
+    this.updateState({ backendReachable });
+
+    if (!backendReachable) {
+      // A3: Treat as offline
+      console.log('[SyncManager] Backend ping failed - treating as offline');
+      this.updateState({ status: 'offline' });
+      await this.reloadLocalData();
+      return 'OFFLINE_MODE';
+    }
+
+    // STEP B: ONLINE SYNC CYCLE
+    this.syncInProgress = true;
+    this.updateState({ status: 'syncing', error: null });
+
+    try {
+      // B1: PUSH (upstream with error classification)
+      const pushResult = await this.pushChanges();
+      console.log('[SyncManager] Push results:', pushResult);
+
+      // B2: PULL & REFRESH (downstream)
+      const pullResult = await this.pullData();
+      console.log('[SyncManager] Pull results:', pullResult);
+      
+      await removeSyncedItems();
+
+      const now = Date.now();
+      await setLastSyncTime(now);
+
+      // Update pending count to reflect retryable items
+      await this.updatePendingCount();
+      
+      this.retryCount = 0;
+
+      // Update failed items count in state for accurate status badge
+      this.updateState({ failedItems: pushResult.failedCount });
+
+      // Determine result based on push AND pull phases
+      const hasErrors = pushResult.failedCount > 0 || pullResult.failedCount > 0;
+      
+      if (hasErrors) {
+        const errorParts = [];
+        if (pushResult.failedCount > 0) {
+          errorParts.push(`${pushResult.failedCount} item(s) failed to push`);
+        }
+        if (pullResult.failedCount > 0) {
+          errorParts.push(`${pullResult.failedCount} endpoint(s) failed to pull`);
+        }
+        
+        this.updateState({
+          status: 'synced',
+          lastSyncTime: now,
+          error: errorParts.join('; ')
+        });
+        this.notifySyncComplete();
+        return 'SYNC_PARTIAL_ERROR';
+      }
+
+      this.updateState({
+        status: 'synced',
+        lastSyncTime: now,
+        error: null
+      });
+
+      console.log('[SyncManager] Full sync completed successfully');
+      this.notifySyncComplete();
+      return 'SYNC_COMPLETE';
+
+    } catch (error) {
+      console.error('[SyncManager] Full sync failed:', error);
+      
+      // On complete failure, still reload from local
+      this.updateState({
+        status: 'error',
+        error: 'Sync failed - data reloaded from local cache'
+      });
+      await this.reloadLocalData();
+      return 'SYNC_PARTIAL_ERROR';
+      
+    } finally {
+      this.syncInProgress = false;
+    }
   }
 }
 

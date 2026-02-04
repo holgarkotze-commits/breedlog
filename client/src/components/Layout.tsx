@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useRecentVisits } from "@/hooks/use-recent-visits";
-import { NetworkStatusIndicator } from "@/components/NetworkStatusIndicator";
+import { NetworkStatusIndicator, GlobalRefreshButton, SyncStatusBadge, StorageWarningBanner } from "@/components/NetworkStatusIndicator";
 
 function ScrambleText({ text, className }: { text: string; className?: string }) {
   const [displayText, setDisplayText] = useState("");
@@ -83,6 +83,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row pb-14 md:pb-0 font-sans">
+      {/* Storage warning banner for incognito mode */}
+      <StorageWarningBanner />
+      
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
         <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors">
@@ -110,8 +113,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="p-4 border-t border-border">
-          <div className="bg-secondary/50 p-3 rounded-md">
-            <p className="text-xs text-muted-foreground font-mono mb-2">BreedLog v1.0.0</p>
+          <div className="bg-secondary/50 p-3 rounded-md space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground font-mono">BreedLog v1.0.0</p>
+              <div className="flex items-center gap-1">
+                <SyncStatusBadge />
+                <GlobalRefreshButton location="sidebar" />
+              </div>
+            </div>
             <NetworkStatusIndicator />
           </div>
         </div>
@@ -122,6 +131,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         "md:hidden bg-background sticky top-0 z-40 transition-all duration-300",
         isScrolled ? "py-2" : "py-4"
       )}>
+        {/* Mobile header controls row */}
+        <div className="absolute right-2 top-2 flex items-center gap-1">
+          <SyncStatusBadge />
+          <GlobalRefreshButton />
+        </div>
         <Link href="/" className="flex flex-col items-center px-4">
           {/* Logo with box frame */}
           <div className={cn(
