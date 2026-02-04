@@ -176,16 +176,6 @@ export function useCreateAnimal() {
       return { previousAnimals };
     },
     onSuccess: (data) => {
-      // Add to cache
-      queryClient.setQueryData([api.animals.list.path], (old: AnimalWithRelations[] | undefined) => {
-        if (!old) return [data];
-        const exists = old.some(a => a.id === data.id);
-        if (exists) {
-          return old.map(a => a.id === data.id ? data : a);
-        }
-        return [data, ...old];
-      });
-      
       // Check if actually saved to server (positive ID means server confirmed)
       const serverConfirmed = (data.id as number) > 0;
       
@@ -196,7 +186,6 @@ export function useCreateAnimal() {
           variant: "default" 
         });
       } else {
-        // Only show offline message if truly offline
         toast({ 
           title: "Saved Locally", 
           description: "Will sync when online",
@@ -204,10 +193,14 @@ export function useCreateAnimal() {
         });
       }
       
-      // Force refetch to get accurate counts from server
-      if (serverConfirmed) {
-        queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
-      }
+      // Invalidate ALL animal list queries regardless of filters to trigger immediate refresh
+      // Using predicate to match any query starting with the animals list path
+      queryClient.invalidateQueries({ 
+        predicate: (query) => {
+          const key = query.queryKey;
+          return Array.isArray(key) && key[0] === api.animals.list.path;
+        }
+      });
     },
     onError: (error, _, context) => {
       // Rollback on error
@@ -357,6 +350,7 @@ export function useDeleteAnimal() {
     mutationFn: async (id: number) => {
       const url = buildUrl(api.animals.delete.path, { id });
       // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
       const token = getDeviceToken();
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -369,7 +363,10 @@ export function useDeleteAnimal() {
       if (!res.ok) throw new Error("Failed to delete animal");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      // Invalidate all animal queries to refresh UI immediately
+      queryClient.invalidateQueries({ 
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === api.animals.list.path
+      });
       toast({ title: "Deleted", description: "Animal record deleted permanently", variant: "default" });
     },
     onError: (error) => {
@@ -436,6 +433,7 @@ export function useUploadAnimalImage() {
       if (navigator.onLine) {
         try {
           // Include auth token for device-based authentication
+          const { getDeviceToken } = await import("@/lib/queryClient");
           const token = getDeviceToken();
           const uploadHeaders: Record<string, string> = { "Content-Type": "application/json" };
           if (token) uploadHeaders["Authorization"] = `Bearer ${token}`;
@@ -514,6 +512,7 @@ export function useDeleteAnimalImage() {
   return useMutation({
     mutationFn: async ({ animalId, imageId }: { animalId: number; imageId: number }) => {
       // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
       const token = getDeviceToken();
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -544,6 +543,7 @@ export function useClassifyRamLamb() {
   return useMutation({
     mutationFn: async ({ id, ramLambClass }: { id: number; ramLambClass: string }) => {
       // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
       const token = getDeviceToken();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -558,7 +558,10 @@ export function useClassifyRamLamb() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      // Invalidate all animal queries to refresh UI immediately
+      queryClient.invalidateQueries({ 
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === api.animals.list.path
+      });
       queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
       toast({ title: "Ram Lamb Classified", description: `Classification set to ${data.ramLambClass}` });
     },
@@ -575,6 +578,7 @@ export function useMoveToEwes() {
   return useMutation({
     mutationFn: async (id: number) => {
       // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
       const token = getDeviceToken();
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -588,7 +592,10 @@ export function useMoveToEwes() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      // Invalidate all animal queries to refresh UI immediately
+      queryClient.invalidateQueries({ 
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === api.animals.list.path
+      });
       queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
       toast({ title: "Ewe Lamb Moved", description: "Ewe lamb moved to Ewes section" });
     },
@@ -605,6 +612,7 @@ export function useMoveToRams() {
   return useMutation({
     mutationFn: async ({ id, ramType }: { id: number; ramType: string }) => {
       // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
       const token = getDeviceToken();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -619,7 +627,10 @@ export function useMoveToRams() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      // Invalidate all animal queries to refresh UI immediately
+      queryClient.invalidateQueries({ 
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === api.animals.list.path
+      });
       queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
       toast({ title: "Ram Lamb Promoted", description: `Ram lamb moved to Rams section as ${data.ramType}` });
     },
@@ -636,6 +647,7 @@ export function useConfirmCull() {
   return useMutation({
     mutationFn: async ({ id, cullReason }: { id: number; cullReason?: string }) => {
       // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
       const token = getDeviceToken();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -650,7 +662,10 @@ export function useConfirmCull() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      // Invalidate all animal queries to refresh UI immediately
+      queryClient.invalidateQueries({ 
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === api.animals.list.path
+      });
       queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
       toast({ title: "Cull Confirmed", description: "Animal removed from active herd and archived" });
     },
@@ -667,6 +682,7 @@ export function useRemoveFromHerd() {
   return useMutation({
     mutationFn: async ({ id, reason, notes }: { id: number; reason: string; notes?: string }) => {
       // Include auth token for device-based authentication
+      const { getDeviceToken } = await import("@/lib/queryClient");
       const token = getDeviceToken();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -681,7 +697,10 @@ export function useRemoveFromHerd() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [api.animals.list.path] });
+      // Invalidate all animal queries to refresh UI immediately
+      queryClient.invalidateQueries({ 
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === api.animals.list.path
+      });
       queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
       toast({ title: "Removed from Herd", description: `Animal archived as ${data.removalReason}` });
     },
