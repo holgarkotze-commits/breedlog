@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Beef, Dna, FileText, Settings, Archive, Syringe } from "lucide-react";
 import { cn } from "@/lib/utils";
-import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
+import { Logo } from "@/components/ui/logo";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useRecentVisits } from "@/hooks/use-recent-visits";
 import { NetworkStatusIndicator, GlobalRefreshButton, SyncStatusBadge, StorageWarningBanner } from "@/components/NetworkStatusIndicator";
@@ -88,25 +88,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
-        <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors">
-          {/* Premium logo container matching mobile app design */}
-          <div className="relative p-4 rounded-xl bg-black border-2 border-primary/60 shadow-[0_0_25px_rgba(255,195,0,0.25),inset_0_0_20px_rgba(255,195,0,0.05)]">
-            {/* Inner glow effect */}
-            <div className="absolute inset-1 rounded-lg border border-primary/20" />
-            <img 
-              src={logo} 
-              alt="BreedLog" 
-              className="w-24 h-24 object-contain relative z-10 drop-shadow-[0_0_12px_rgba(255,195,0,0.5)]" 
-              data-testid="logo-desktop" 
-            />
-          </div>
-          {/* Text below logo - Breeding Livestock Management */}
-          <p className="text-sm mt-4 font-medium tracking-normal text-primary drop-shadow-[0_0_8px_rgba(255,195,0,0.5)]" style={{ fontFamily: "Calibri, 'Segoe UI', sans-serif", lineHeight: '1.4' }}>
-            Breeding Livestock Management
-          </p>
-          <p className="text-xs mt-1 uppercase tracking-widest font-semibold text-muted-foreground">
-            Breed Smart. Farm Better.
-          </p>
+        <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors bg-black">
+          <Logo size="lg" showTagline />
         </Link>
         
         <nav className="flex-1 p-4 space-y-2">
@@ -132,7 +115,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <GlobalRefreshButton location="sidebar" />
               </div>
             </div>
-            <NetworkStatusIndicator />
+            <div className="flex items-center gap-2">
+              <NetworkStatusIndicator />
+            </div>
+            <p className="text-[10px] text-primary/80 font-medium tracking-wide text-center" style={{ fontFamily: "Calibri, 'Segoe UI', sans-serif" }}>
+              Breeding Livestock Management
+            </p>
           </div>
         </div>
       </aside>
@@ -148,20 +136,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <GlobalRefreshButton />
         </div>
         <Link href="/" className="flex flex-col items-center px-4">
-          {/* Logo with box frame */}
           <div className={cn(
-            "relative flex items-center justify-center transition-all duration-300 rounded-lg border-2 border-primary/50 bg-gradient-to-br from-primary/10 via-transparent to-primary/5 shadow-[0_0_20px_rgba(255,195,0,0.15)]",
-            isScrolled ? "w-12 h-12 p-1" : "w-28 h-28 p-3"
+            "transition-all duration-300",
+            isScrolled ? "scale-[0.4] -my-6" : "scale-100"
           )}>
-            <img 
-              src={logo} 
-              alt="BreedLog" 
-              className="w-full h-full object-contain drop-shadow-[0_0_12px_rgba(255,195,0,0.4)]" 
-              data-testid="logo-mobile" 
-            />
+            <Logo size={isScrolled ? "sm" : "md"} />
           </div>
           
-          {/* Tagline - hidden when scrolled */}
           <div className={cn(
             "flex flex-col items-center overflow-hidden transition-all duration-300",
             isScrolled ? "max-h-0 opacity-0 mt-0" : "max-h-20 opacity-100 mt-3"

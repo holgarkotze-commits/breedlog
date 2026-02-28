@@ -41,6 +41,7 @@ Preferred communication style: Simple, everyday language.
 - **ORM**: Drizzle ORM (PostgreSQL dialect).
 - **Database**: PostgreSQL.
 - **Schema**: Defined in `shared/schema.ts`.
+- **Sync Hardening**: `animals`, `breedingEvents`, and `documents` tables include `clientId` (unique varchar for dedup), `vectorClock` (jsonb for conflict resolution), and `lastSyncedAt` (timestamp for sync tracking).
 - **Migrations**: Managed via drizzle-kit.
 
 ### Authentication

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, date, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, date, varchar, jsonb } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -104,6 +104,11 @@ export const animals = pgTable("animals", {
   
   // Timestamps
   createdAt: timestamp("created_at").defaultNow(),
+  
+  // Sync Hardening
+  clientId: varchar("client_id", { length: 64 }).unique(),
+  vectorClock: jsonb("vector_clock"),
+  lastSyncedAt: timestamp("last_synced_at"),
 });
 
 export const animalsRelations = relations(animals, ({ one, many }) => ({
@@ -128,7 +133,7 @@ export const animalsRelations = relations(animals, ({ one, many }) => ({
   images: many(animalImages),
 }));
 
-export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, userId: true, createdAt: true });
+export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, userId: true, createdAt: true, clientId: true, vectorClock: true, lastSyncedAt: true });
 
 
 // === ANIMAL IMAGES ===
@@ -167,6 +172,11 @@ export const breedingEvents = pgTable("breeding_events", {
   lambingDate: date("lambing_date"),
   lambCount: integer("lamb_count"),
   notes: text("notes"),
+  
+  // Sync Hardening
+  clientId: varchar("client_id", { length: 64 }).unique(),
+  vectorClock: jsonb("vector_clock"),
+  lastSyncedAt: timestamp("last_synced_at"),
 });
 
 export const breedingEventsRelations = relations(breedingEvents, ({ one, many }) => ({
@@ -187,7 +197,7 @@ export const breedingEventsRelations = relations(breedingEvents, ({ one, many })
   offspring: many(offspring),
 }));
 
-export const insertBreedingEventSchema = createInsertSchema(breedingEvents).omit({ id: true, userId: true });
+export const insertBreedingEventSchema = createInsertSchema(breedingEvents).omit({ id: true, userId: true, clientId: true, vectorClock: true, lastSyncedAt: true });
 
 
 // === OFFSPRING ===
@@ -368,9 +378,14 @@ export const documents = pgTable("documents", {
   description: text("description"),
   animalId: integer("animal_id").references(() => animals.id),
   createdAt: timestamp("created_at").defaultNow(),
+  
+  // Sync Hardening
+  clientId: varchar("client_id", { length: 64 }).unique(),
+  vectorClock: jsonb("vector_clock"),
+  lastSyncedAt: timestamp("last_synced_at"),
 });
 
-export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, userId: true, createdAt: true });
+export const insertDocumentSchema = createInsertSchema(documents).omit({ id: true, userId: true, createdAt: true, clientId: true, vectorClock: true, lastSyncedAt: true });
 export type Document = typeof documents.$inferSelect;
 export type InsertDocument = z.infer<typeof insertDocumentSchema>;
 
