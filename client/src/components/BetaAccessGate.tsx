@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Lock, Shield, WifiOff, Loader2 } from "lucide-react";
+import { Lock, Shield, WifiOff, Loader2, RefreshCw } from "lucide-react";
 import { apiRequest, setDeviceToken, getDeviceToken } from "@/lib/queryClient";
 
 interface AccessStatus {
@@ -55,10 +55,14 @@ export function useBetaAccess(deviceId?: string) {
     };
   }, []);
   
+  // Always try the server query - don't gate on navigator.onLine
+  // navigator.onLine is unreliable on mobile (reports false even with 4G)
+  // If the fetch fails, React Query error handling + offline fallback kicks in
   const { data: accessStatus, isLoading, error, refetch } = useQuery<AccessStatus>({
     queryKey: ["/api/beta/access"],
-    enabled: isOnline && !!deviceId,
-    retry: false,
+    enabled: !!deviceId,
+    retry: 1,
+    retryDelay: 2000,
     staleTime: 1000 * 60 * 5,
   });
   
@@ -82,23 +86,29 @@ export function useBetaAccess(deviceId?: string) {
     return { hasAccess: true };
   };
   
+  // Determine if we actually got a server response
+  const serverReachable = !!accessStatus && !error;
+  
   useEffect(() => {
-    if (accessStatus?.hasAccess && isOnline) {
+    if (accessStatus?.hasAccess && serverReachable) {
       storeAccess(accessStatus.expiresAt);
     }
-  }, [accessStatus, isOnline]);
+  }, [accessStatus, serverReachable]);
   
-  const effectiveStatus = isOnline 
-    ? (accessStatus || { hasAccess: false, needsCode: true })
-    : getOfflineAccess();
+  // Use server response if available; fall back to offline check only on actual failure
+  const effectiveStatus = serverReachable
+    ? accessStatus!
+    : (error || (!isLoading && !accessStatus))
+      ? getOfflineAccess()
+      : { hasAccess: false, needsCode: true };
   
   return {
     hasAccess: effectiveStatus.hasAccess,
     needsCode: effectiveStatus.needsCode,
     reason: effectiveStatus.reason,
     offlineGraceExpired: effectiveStatus.offlineGraceExpired,
-    isLoading: isOnline && isLoading,
-    isOnline,
+    isLoading: isLoading,
+    isOnline: isOnline || serverReachable,
     refetch,
     queryClient
   };
@@ -114,6 +124,37 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
   const { hasAccess, needsCode, reason, offlineGraceExpired, isLoading, isOnline, refetch } = useBetaAccess(deviceId);
   const [code, setCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isRetrying, setIsRetrying] = useState(false);
+  
+  const handleRetryConnection = async () => {
+    setIsRetrying(true);
+    setErrorMessage("");
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const response = await fetch("/api/version", { 
+        signal: controller.signal,
+        cache: "no-store" 
+      });
+      clearTimeout(timeout);
+      if (response.ok) {
+        // Server is reachable - refetch beta access status
+        // This will either grant access (if activation exists) or show invite code screen
+        const result = await refetch();
+        if (result.data?.hasAccess) {
+          storeAccess(result.data.expiresAt);
+        }
+        // Force reload to reset all state cleanly
+        window.location.reload();
+      } else {
+        setErrorMessage("Server responded with an error. Please try again.");
+      }
+    } catch {
+      setErrorMessage("Could not reach the server. Please check your internet connection and try again.");
+    } finally {
+      setIsRetrying(false);
+    }
+  };
   
   const validateMutation = useMutation({
     mutationFn: async (inputCode: string) => {
@@ -190,18 +231,36 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
               Your offline access period has expired. Please connect to the internet to continue using BreedLog.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <Alert>
               <AlertDescription>
                 BreedLog works offline for up to {OFFLINE_GRACE_DAYS} days. After that, you need to reconnect to verify your access.
               </AlertDescription>
             </Alert>
+            
+            {errorMessage && (
+              <Alert variant="destructive">
+                <AlertDescription>{errorMessage}</AlertDescription>
+              </Alert>
+            )}
+            
             <Button 
-              onClick={() => refetch()} 
-              className="w-full mt-4"
-              disabled={!isOnline}
+              onClick={handleRetryConnection} 
+              className="w-full"
+              disabled={isRetrying}
+              data-testid="button-retry-connection"
             >
-              {isOnline ? "Retry Connection" : "Waiting for Internet..."}
+              {isRetrying ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Checking Connection...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Retry Connection
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>
