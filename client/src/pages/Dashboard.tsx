@@ -29,33 +29,33 @@ export default function Dashboard() {
   };
 
   // Calculate simple stats using age-based counting (consistent with My Herd page)
-  // Lambs = animals under 1 year old (365 days)
-  // Ewes = female animals 1 year or older
-  // Rams = male animals 1 year or older
+  // Lambs = animals under 8 months old (240 days)
+  // Ewes = female animals 8 months or older and active
+  // Rams = male animals 8 months or older and active
   const activeAnimals = animals?.filter(a => a.status === 'active').length || 0;
   const soldAnimals = animals?.filter(a => a.status === 'sold').length || 0;
   const deadAnimals = animals?.filter(a => a.status === 'dead').length || 0;
   const culledAnimals = animals?.filter(a => a.status === 'culled').length || 0;
   
-  // Helper function to check if animal is under 1 year old
+  // Helper function to check if animal is under 8 months old (240 days)
   const isLamb = (animal: { birthDate?: string | null; status?: string | null }) => {
     if (!animal.birthDate || animal.status !== 'active') return false;
     const birthDate = new Date(animal.birthDate);
     const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
-    return ageInDays <= 365;
+    return ageInDays <= 240;
   };
   
-  // Lambs are active animals under 1 year old
+  // Lambs are active animals under 8 months old
   const lambs = animals?.filter(a => isLamb(a)).length || 0;
   
-  // Ewes are female animals 1 year or older and active
+  // Ewes are female animals 8+ months old and active
   const activeEwes = animals?.filter(a => 
     a.sex === 'ewe' && 
     a.status === 'active' && 
     !isLamb(a)
   ).length || 0;
   
-  // Rams are male animals 1 year or older and active
+  // Rams are male animals 8+ months old and active
   const activeRams = animals?.filter(a => 
     a.sex === 'ram' && 
     a.status === 'active' && 

@@ -146,6 +146,7 @@ export default function Animals() {
   const [ramsExpanded, setRamsExpanded] = useState(false);
   const [ewesExpanded, setEwesExpanded] = useState(false);
   const [lambsExpanded, setLambsExpanded] = useState(false);
+  const [culledExpanded, setCulledExpanded] = useState(false);
   
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [animalToRemove, setAnimalToRemove] = useState<Animal | null>(null);
@@ -227,7 +228,7 @@ export default function Animals() {
       if (!a.birthDate) return false;
       const birthDate = new Date(a.birthDate);
       const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
-      return ageInDays <= 365;
+      return ageInDays <= 240 && a.status !== 'culled' && a.status !== 'sold' && a.status !== 'dead';
     });
     
     if (rams.length === 0 && ewes.length === 0 && lambs.length === 0) {
@@ -563,10 +564,10 @@ export default function Animals() {
           if (!a.birthDate) return false;
           const birthDate = new Date(a.birthDate);
           const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
-          return ageInDays <= 365;
+          return ageInDays <= 240 && a.status !== 'culled' && a.status !== 'sold' && a.status !== 'dead';
         });
         exportTitle = "Lambs Register";
-        exportSubtitle = "Animals Under 1 Year";
+        exportSubtitle = "Animals Under 8 Months";
         break;
     }
     
@@ -1338,11 +1339,11 @@ export default function Animals() {
     
     if (sexFilter !== "all" && animal.sex?.toLowerCase() !== sexFilter) return false;
     
-    // Age filter for lambs (under 1 year old)
+    // Age filter for lambs (under 8 months / 240 days)
     if (ageFilter === "lamb" && animal.birthDate) {
       const birthDate = new Date(animal.birthDate);
       const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
-      if (ageInDays > 365) return false;
+      if (ageInDays > 240) return false;
     }
     return true;
   });
@@ -1487,7 +1488,6 @@ export default function Animals() {
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="ewe">Ewes</SelectItem>
                   <SelectItem value="ram">Rams</SelectItem>
-                  <SelectItem value="wether">Lambs</SelectItem>
                 </SelectContent>
               </Select>
               {/* View Mode Toggle */}
@@ -1647,6 +1647,15 @@ export default function Animals() {
           moveToEwesMutation={moveToEwesMutation}
           moveToRamsMutation={moveToRamsMutation}
           updateAnimalMutation={updateAnimalMutation}
+        />
+
+        {/* CULLED Section - Archive of removed animals */}
+        <CulledSection 
+          allAnimals={allAnimals || []} 
+          isLoading={isLoading}
+          isExpanded={culledExpanded}
+          onToggle={() => setCulledExpanded(!culledExpanded)}
+          onExport={exportCulledPDF}
         />
 
         {/* Encouraging message */}
@@ -1834,15 +1843,15 @@ function RamsSection({
     });
   };
   
-  // Helper: check if animal is under 1 year old (lamb)
+  // Helper: check if animal is under 8 months old (240 days = lamb)
   const isLamb = (animal: Animal) => {
     if (!animal.birthDate) return false;
     const birthDate = new Date(animal.birthDate);
     const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
-    return ageInDays <= 365;
+    return ageInDays <= 240;
   };
   
-  // Adult rams only (1 year or older, active status) - consistent with Dashboard counting
+  // Adult rams only (8+ months old, active status) - consistent with Dashboard counting
   const allRams = allAnimals.filter(a => 
     a.sex?.toLowerCase() === "ram" && 
     a.status === 'active' &&
@@ -2155,15 +2164,15 @@ function EwesSection({
     });
   };
   
-  // Helper: check if animal is under 1 year old (lamb)
+  // Helper: check if animal is under 8 months old (240 days = lamb)
   const isLamb = (animal: Animal) => {
     if (!animal.birthDate) return false;
     const birthDate = new Date(animal.birthDate);
     const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
-    return ageInDays <= 365;
+    return ageInDays <= 240;
   };
   
-  // Adult ewes only (1 year or older, active status) - consistent with Dashboard counting
+  // Adult ewes only (8+ months old, active status) - consistent with Dashboard counting
   const allEwes = allAnimals.filter(a => 
     a.sex?.toLowerCase() === "ewe" && 
     a.status === 'active' &&
@@ -2434,12 +2443,12 @@ function LambsSection({
   const [weightType, setWeightType] = useState<"100" | "270" | "current">("100");
   const [selectedRamType, setSelectedRamType] = useState<"breeding_ram" | "stud_ram" | "commercial_ram">("breeding_ram");
   
-  // Lambs are active animals under 365 days old - consistent with Dashboard counting
-  // Once an animal reaches 365+ days, they automatically appear in Rams/Ewes section
+  // Lambs are active animals under 240 days old (8 months) - consistent with Dashboard counting
+  // Once an animal reaches 240+ days, they automatically appear in Rams/Ewes section
   const lambs = allAnimals.filter(animal => {
     if (!animal.birthDate) return false;
     const ageDays = getAgeDays(animal.birthDate);
-    if (ageDays > 365) return false; // Auto-promote at 12 months
+    if (ageDays > 240) return false; // Auto-promote at 8 months
     if (animal.status !== 'active') return false; // Only active animals
     
     if (sexFilter !== "all" && animal.sex !== sexFilter) return false;
@@ -2451,9 +2460,9 @@ function LambsSection({
     return true;
   });
   
-  // Count for filter buttons - active lambs only
-  const ramLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 365 && a.sex === 'ram' && a.status === 'active');
-  const eweLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 365 && a.sex === 'ewe' && a.status === 'active');
+  // Count for filter buttons - active lambs only (under 240 days)
+  const ramLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 240 && a.sex === 'ram' && a.status === 'active');
+  const eweLambs = allAnimals.filter(a => a.birthDate && getAgeDays(a.birthDate) <= 240 && a.sex === 'ewe' && a.status === 'active');
   
   if (isLoading) {
     return (
@@ -2890,6 +2899,128 @@ function LambsSection({
   );
 }
 
+function CulledSection({
+  allAnimals,
+  isLoading,
+  isExpanded,
+  onToggle,
+  onExport
+}: {
+  allAnimals: Animal[];
+  isLoading: boolean;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onExport: () => void;
+}) {
+  const [, setLocation] = useLocation();
+  const [culledSearch, setCulledSearch] = useState("");
+
+  const culledAnimals = allAnimals.filter(a => 
+    a.status === 'culled' || a.cullConfirmed === true
+  ).filter(a =>
+    culledSearch === "" || a.tagId.toLowerCase().includes(culledSearch.toLowerCase())
+  );
+
+  const allCulled = allAnimals.filter(a => a.status === 'culled' || a.cullConfirmed === true);
+
+  const exportButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
+      onClick={onExport}
+      disabled={allCulled.length === 0}
+      data-testid="button-export-culled-section"
+    >
+      <Download className="w-4 h-4 mr-2" />
+      Export PDF
+    </Button>
+  );
+
+  if (isLoading) {
+    return (
+      <div className="mt-4 space-y-4">
+        <Skeleton className="h-12 w-full rounded-md" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4" data-testid="culled-section">
+      <SectionRibbon
+        title="Culled Archive"
+        count={allCulled.length}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        actions={exportButton}
+        testId="ribbon-culled"
+      >
+        {/* Search inside section */}
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search culled animals..."
+            value={culledSearch}
+            onChange={(e) => setCulledSearch(e.target.value)}
+            className="pl-9 text-sm rugged-input"
+            data-testid="input-search-culled-section"
+          />
+        </div>
+
+        {culledAnimals.length === 0 ? (
+          <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
+            <p>{allCulled.length === 0 ? "No culled animals in archive." : "No results match your search."}</p>
+          </div>
+        ) : (
+          <div className="border border-border rounded-md overflow-x-auto">
+            <table className="w-full text-sm min-w-[600px]">
+              <thead className="bg-primary text-primary-foreground">
+                <tr>
+                  <th className="text-left p-2.5 font-semibold">Animal ID</th>
+                  <th className="text-left p-2.5 font-semibold">Sex</th>
+                  <th className="text-left p-2.5 font-semibold">DOB</th>
+                  <th className="text-left p-2.5 font-semibold">Cull Date</th>
+                  <th className="text-left p-2.5 font-semibold">Cull Reason</th>
+                  <th className="text-left p-2.5 font-semibold">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {culledAnimals.map((animal, idx) => (
+                  <tr
+                    key={animal.id}
+                    className={cn(
+                      "hover:bg-secondary/50 cursor-pointer transition-colors",
+                      idx % 2 === 0 ? "bg-card" : "bg-secondary/20"
+                    )}
+                    onClick={() => setLocation(`/animals/${animal.id}`)}
+                    data-testid={`culled-row-${animal.id}`}
+                  >
+                    <td className="p-2.5 font-semibold">
+                      <div className="flex items-center gap-2">
+                        {animal.tagId}
+                        <Badge variant="outline" className="text-[10px] px-1.5 border-yellow-500/50 text-yellow-500">CULLED</Badge>
+                      </div>
+                    </td>
+                    <td className="p-2.5 capitalize">{animal.sex || "—"}</td>
+                    <td className="p-2.5">
+                      {animal.birthDate ? format(new Date(animal.birthDate), "dd/MM/yyyy") : "—"}
+                    </td>
+                    <td className="p-2.5">
+                      {animal.cullDate ? format(new Date(animal.cullDate), "dd/MM/yyyy") : "—"}
+                    </td>
+                    <td className="p-2.5 text-muted-foreground">{animal.cullReason || "—"}</td>
+                    <td className="p-2.5 text-muted-foreground text-xs max-w-[150px] truncate">{animal.notes || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionRibbon>
+    </div>
+  );
+}
+
 function ListRow({ animal, idx }: { animal: Animal; idx: number }) {
   const [, setLocation] = useLocation();
   
@@ -3222,7 +3353,6 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                       <SelectContent>
                         <SelectItem value="ram">Ram</SelectItem>
                         <SelectItem value="ewe">Ewe</SelectItem>
-                        <SelectItem value="wether">Lamb</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
