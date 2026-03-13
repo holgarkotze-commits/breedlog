@@ -47,6 +47,7 @@
   body {
     @apply bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-black;
     font-size: 14px;
+    overflow-x: hidden;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display font-bold tracking-tight;

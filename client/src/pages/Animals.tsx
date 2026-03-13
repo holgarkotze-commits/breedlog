@@ -1952,19 +1952,19 @@ function RamsSection({
         </div>
       ) : (
         <div className="border border-border rounded-md overflow-x-auto">
-          <table className="w-full text-sm min-w-[800px]">
+          <table className="w-full text-sm min-w-[400px]">
             <thead className="bg-primary text-primary-foreground">
               <tr>
                 <th className="text-left p-2.5 font-semibold w-14">Photo</th>
                 <th className="text-left p-2.5 font-semibold">Ram ID</th>
-                <th className="text-left p-2.5 font-semibold">Type</th>
-                <th className="text-left p-2.5 font-semibold">DOB</th>
-                <th className="text-left p-2.5 font-semibold">Total Lambs</th>
-                <th className="text-left p-2.5 font-semibold">Avg Birth (kg)</th>
-                <th className="text-left p-2.5 font-semibold">Avg 100-Day (kg)</th>
-                <th className="text-left p-2.5 font-semibold">Avg 270-Day (kg)</th>
-                <th className="text-left p-2.5 font-semibold">Twin Count</th>
-                <th className="text-left p-2.5 font-semibold">Avg Wean (kg)</th>
+                <th className="text-left p-2.5 font-semibold hidden sm:table-cell">Type</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">DOB</th>
+                <th className="text-left p-2.5 font-semibold">Lambs</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">Birth (kg)</th>
+                <th className="text-left p-2.5 font-semibold hidden sm:table-cell">100-Day</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">270-Day</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">Twins</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">Wean (kg)</th>
                 <th className="text-left p-2.5 font-semibold">Status</th>
                 <th className="text-left p-2.5 font-semibold">Actions</th>
               </tr>
@@ -1992,22 +1992,22 @@ function RamsSection({
                     </div>
                   </td>
                   <td className="p-2.5 font-semibold">{ram.tagId}</td>
-                  <td className="p-2.5">
+                  <td className="p-2.5 hidden sm:table-cell">
                     <Badge variant="outline" className="text-[10px]">
                       {ram.ramType === 'breeding_ram' ? 'Breeding' : 
                        ram.ramType === 'stud_ram' ? 'Stud' : 
                        ram.ramType === 'commercial_ram' ? 'Commercial' : '—'}
                     </Badge>
                   </td>
-                  <td className="p-2.5">
+                  <td className="p-2.5 hidden md:table-cell">
                     {ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : "—"}
                   </td>
                   <td className="p-2.5 text-center">{ram.stats.totalLambs}</td>
-                  <td className="p-2.5 text-center">{ram.stats.avgBirthWeight || "—"}</td>
-                  <td className="p-2.5 text-center">{ram.stats.avgWeight100Day || "—"}</td>
-                  <td className="p-2.5 text-center">{ram.stats.avgWeight270Day || "—"}</td>
-                  <td className="p-2.5 text-center">{ram.stats.twinCount}</td>
-                  <td className="p-2.5 text-center">{ram.stats.avgWeanWeight || "—"}</td>
+                  <td className="p-2.5 text-center hidden md:table-cell">{ram.stats.avgBirthWeight || "—"}</td>
+                  <td className="p-2.5 text-center hidden sm:table-cell">{ram.stats.avgWeight100Day || "—"}</td>
+                  <td className="p-2.5 text-center hidden md:table-cell">{ram.stats.avgWeight270Day || "—"}</td>
+                  <td className="p-2.5 text-center hidden md:table-cell">{ram.stats.twinCount}</td>
+                  <td className="p-2.5 text-center hidden md:table-cell">{ram.stats.avgWeanWeight || "—"}</td>
                   <td className="p-2.5">
                     <Badge variant="secondary" className={cn(
                       "text-[10px] px-1.5",
@@ -2260,17 +2260,17 @@ function EwesSection({
         </div>
       ) : (
         <div className="border border-border rounded-md overflow-x-auto">
-          <table className="w-full text-sm min-w-[800px]">
+          <table className="w-full text-sm min-w-[380px]">
             <thead className="bg-primary text-primary-foreground">
               <tr>
                 <th className="text-left p-2.5 font-semibold w-14">Photo</th>
                 <th className="text-left p-2.5 font-semibold">Ewe ID</th>
-                <th className="text-left p-2.5 font-semibold">DOB</th>
-                <th className="text-left p-2.5 font-semibold"># Lambs</th>
-                <th className="text-left p-2.5 font-semibold">First Lamb</th>
-                <th className="text-left p-2.5 font-semibold">Avg ILP</th>
-                <th className="text-left p-2.5 font-semibold">Lambs Weaned</th>
-                <th className="text-left p-2.5 font-semibold">Avg Wean (kg)</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">DOB</th>
+                <th className="text-left p-2.5 font-semibold">Lambs</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">1st Lamb</th>
+                <th className="text-left p-2.5 font-semibold hidden sm:table-cell">Avg ILP</th>
+                <th className="text-left p-2.5 font-semibold hidden sm:table-cell">Weaned</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">Wean (kg)</th>
                 <th className="text-left p-2.5 font-semibold">Status</th>
                 <th className="text-left p-2.5 font-semibold">Actions</th>
               </tr>
@@ -2298,16 +2298,16 @@ function EwesSection({
                     </div>
                   </td>
                   <td className="p-2.5 font-semibold" data-testid={`text-ewe-tagid-${ewe.id}`}>{ewe.tagId}</td>
-                  <td className="p-2.5" data-testid={`text-ewe-dob-${ewe.id}`}>
+                  <td className="p-2.5 hidden md:table-cell" data-testid={`text-ewe-dob-${ewe.id}`}>
                     {ewe.birthDate ? format(new Date(ewe.birthDate), "dd/MM/yyyy") : "—"}
                   </td>
                   <td className="p-2.5 text-center" data-testid={`text-ewe-lambs-${ewe.id}`}>{ewe.stats.totalLambs}</td>
-                  <td className="p-2.5" data-testid={`text-ewe-firstlamb-${ewe.id}`}>
+                  <td className="p-2.5 hidden md:table-cell" data-testid={`text-ewe-firstlamb-${ewe.id}`}>
                     {ewe.stats.firstLambDate ? format(ewe.stats.firstLambDate, "dd/MM/yyyy") : "—"}
                   </td>
-                  <td className="p-2.5 text-center" data-testid={`text-ewe-ilp-${ewe.id}`}>{ewe.stats.avgILP || "—"}</td>
-                  <td className="p-2.5 text-center" data-testid={`text-ewe-weaned-${ewe.id}`}>{ewe.stats.lambsWeaned}</td>
-                  <td className="p-2.5 text-center" data-testid={`text-ewe-weanweight-${ewe.id}`}>{ewe.stats.avgWeanWeight || "—"}</td>
+                  <td className="p-2.5 text-center hidden sm:table-cell" data-testid={`text-ewe-ilp-${ewe.id}`}>{ewe.stats.avgILP || "—"}</td>
+                  <td className="p-2.5 text-center hidden sm:table-cell" data-testid={`text-ewe-weaned-${ewe.id}`}>{ewe.stats.lambsWeaned}</td>
+                  <td className="p-2.5 text-center hidden md:table-cell" data-testid={`text-ewe-weanweight-${ewe.id}`}>{ewe.stats.avgWeanWeight || "—"}</td>
                   <td className="p-2.5">
                     <Badge 
                       variant={ewe.status === 'active' ? "default" : "secondary"}
@@ -2613,17 +2613,17 @@ function LambsSection({
         </div>
       ) : (
         <div className="border border-border rounded-md overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
+          <table className="w-full text-sm min-w-[360px]">
             <thead className="bg-primary text-primary-foreground">
               <tr>
                 <th className="text-left p-2.5 font-semibold w-14">Photo</th>
                 <th className="text-left p-2.5 font-semibold">Lamb ID</th>
                 <th className="text-left p-2.5 font-semibold">Sex</th>
-                <th className="text-left p-2.5 font-semibold">DOB</th>
+                <th className="text-left p-2.5 font-semibold hidden sm:table-cell">DOB</th>
                 <th className="text-left p-2.5 font-semibold">Age</th>
-                <th className="text-left p-2.5 font-semibold">Birth Wt</th>
-                <th className="text-left p-2.5 font-semibold">100-Day</th>
-                <th className="text-left p-2.5 font-semibold">270-Day</th>
+                <th className="text-left p-2.5 font-semibold hidden sm:table-cell">Birth Wt</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">100-Day</th>
+                <th className="text-left p-2.5 font-semibold hidden md:table-cell">270-Day</th>
                 <th className="text-left p-2.5 font-semibold">Status</th>
                 <th className="text-left p-2.5 font-semibold">Actions</th>
               </tr>
@@ -2665,12 +2665,12 @@ function LambsSection({
                         {lamb.sex}
                       </span>
                     </td>
-                    <td className="p-2.5" data-testid={`text-lamb-dob-${lamb.id}`}>
+                    <td className="p-2.5 hidden sm:table-cell" data-testid={`text-lamb-dob-${lamb.id}`}>
                       {lamb.birthDate ? format(new Date(lamb.birthDate), "dd/MM/yyyy") : "—"}
                     </td>
-                    <td className="p-2.5" data-testid={`text-lamb-age-${lamb.id}`}>{ageDays} days</td>
-                    <td className="p-2.5" data-testid={`text-lamb-birthweight-${lamb.id}`}>{lamb.birthWeight ? `${lamb.birthWeight} kg` : "—"}</td>
-                    <td className="p-2.5" data-testid={`text-lamb-100day-${lamb.id}`}>
+                    <td className="p-2.5" data-testid={`text-lamb-age-${lamb.id}`}>{ageDays}d</td>
+                    <td className="p-2.5 hidden sm:table-cell" data-testid={`text-lamb-birthweight-${lamb.id}`}>{lamb.birthWeight ? `${lamb.birthWeight} kg` : "—"}</td>
+                    <td className="p-2.5 hidden md:table-cell" data-testid={`text-lamb-100day-${lamb.id}`}>
                       {lamb.weight100Day ? (
                         `${lamb.weight100Day} kg`
                       ) : needs100Day ? (
@@ -2679,7 +2679,7 @@ function LambsSection({
                         </Badge>
                       ) : "—"}
                     </td>
-                    <td className="p-2.5" data-testid={`text-lamb-270day-${lamb.id}`}>
+                    <td className="p-2.5 hidden md:table-cell" data-testid={`text-lamb-270day-${lamb.id}`}>
                       {lamb.weight270Day ? (
                         `${lamb.weight270Day} kg`
                       ) : needs270Day ? (
@@ -2973,15 +2973,15 @@ function CulledSection({
           </div>
         ) : (
           <div className="border border-border rounded-md overflow-x-auto">
-            <table className="w-full text-sm min-w-[600px]">
+            <table className="w-full text-sm min-w-[320px]">
               <thead className="bg-primary text-primary-foreground">
                 <tr>
                   <th className="text-left p-2.5 font-semibold">Animal ID</th>
-                  <th className="text-left p-2.5 font-semibold">Sex</th>
-                  <th className="text-left p-2.5 font-semibold">DOB</th>
+                  <th className="text-left p-2.5 font-semibold hidden sm:table-cell">Sex</th>
+                  <th className="text-left p-2.5 font-semibold hidden sm:table-cell">DOB</th>
                   <th className="text-left p-2.5 font-semibold">Cull Date</th>
-                  <th className="text-left p-2.5 font-semibold">Cull Reason</th>
-                  <th className="text-left p-2.5 font-semibold">Notes</th>
+                  <th className="text-left p-2.5 font-semibold hidden sm:table-cell">Reason</th>
+                  <th className="text-left p-2.5 font-semibold hidden md:table-cell">Notes</th>
                 </tr>
               </thead>
               <tbody>
@@ -2996,20 +2996,20 @@ function CulledSection({
                     data-testid={`culled-row-${animal.id}`}
                   >
                     <td className="p-2.5 font-semibold">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {animal.tagId}
                         <Badge variant="outline" className="text-[10px] px-1.5 border-yellow-500/50 text-yellow-500">CULLED</Badge>
                       </div>
                     </td>
-                    <td className="p-2.5 capitalize">{animal.sex || "—"}</td>
-                    <td className="p-2.5">
+                    <td className="p-2.5 capitalize hidden sm:table-cell">{animal.sex || "—"}</td>
+                    <td className="p-2.5 hidden sm:table-cell">
                       {animal.birthDate ? format(new Date(animal.birthDate), "dd/MM/yyyy") : "—"}
                     </td>
                     <td className="p-2.5">
                       {animal.cullDate ? format(new Date(animal.cullDate), "dd/MM/yyyy") : "—"}
                     </td>
-                    <td className="p-2.5 text-muted-foreground">{animal.cullReason || "—"}</td>
-                    <td className="p-2.5 text-muted-foreground text-xs max-w-[150px] truncate">{animal.notes || "—"}</td>
+                    <td className="p-2.5 text-muted-foreground hidden sm:table-cell">{animal.cullReason || "—"}</td>
+                    <td className="p-2.5 text-muted-foreground text-xs max-w-[150px] truncate hidden md:table-cell">{animal.notes || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -3317,7 +3317,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
           <Plus className="w-5 h-5 mr-2" /> Add Animal
         </Button>
       </DialogTrigger>
-      <DialogContent className="bg-card border-border max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-card border-border w-full max-w-lg max-h-[90vh] overflow-y-auto mx-2 sm:mx-auto">
         <DialogHeader>
           <DialogTitle className="font-display uppercase text-2xl">New Animal Entry</DialogTitle>
         </DialogHeader>

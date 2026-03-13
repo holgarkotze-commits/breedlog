@@ -427,6 +427,12 @@ export async function registerRoutes(
     const records = await storage.getPerformanceRecords(userId, Number(req.params.id));
     res.json(records);
   });
+
+  app.get('/api/performance-records', requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    const records = await storage.getAllPerformanceRecords(userId);
+    res.json(records);
+  });
   
   app.post(api.records.performance.create.path, requireAuth, async (req, res) => {
     try {
@@ -448,6 +454,12 @@ export async function registerRoutes(
   app.get(api.records.health.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const records = await storage.getHealthRecords(userId, Number(req.params.id));
+    res.json(records);
+  });
+
+  app.get('/api/health-records', requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    const records = await storage.getAllHealthRecords(userId);
     res.json(records);
   });
 

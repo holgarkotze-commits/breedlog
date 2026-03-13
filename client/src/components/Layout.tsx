@@ -82,7 +82,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const displayName = farmSettings?.studName || farmSettings?.farmName || null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row pb-14 md:pb-0 font-sans">
+    <div className="min-h-screen bg-background flex flex-col md:flex-row pb-14 md:pb-0 font-sans overflow-x-hidden">
       {/* Storage warning banner for incognito mode */}
       <StorageWarningBanner />
       

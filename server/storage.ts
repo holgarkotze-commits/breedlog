@@ -73,8 +73,10 @@ export interface IStorage {
 
   // Records
   getPerformanceRecords(userId: string, animalId: number): Promise<PerformanceRecord[]>;
+  getAllPerformanceRecords(userId: string): Promise<PerformanceRecord[]>;
   createPerformanceRecord(userId: string, record: Omit<InsertPerformanceRecord, 'userId'>): Promise<PerformanceRecord>;
   getHealthRecords(userId: string, animalId: number): Promise<HealthRecord[]>;
+  getAllHealthRecords(userId: string): Promise<HealthRecord[]>;
   createHealthRecord(userId: string, record: Omit<InsertHealthRecord, 'userId'>): Promise<HealthRecord>;
 
   // Evaluations
@@ -241,6 +243,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(performanceRecords.date));
   }
 
+  async getAllPerformanceRecords(userId: string): Promise<PerformanceRecord[]> {
+    return await db.select().from(performanceRecords)
+      .where(eq(performanceRecords.userId, userId))
+      .orderBy(desc(performanceRecords.date));
+  }
+
   async createPerformanceRecord(userId: string, record: Omit<InsertPerformanceRecord, 'userId'>): Promise<PerformanceRecord> {
     const [newRecord] = await db.insert(performanceRecords).values({ ...record, userId }).returning();
     return newRecord;
@@ -249,6 +257,12 @@ export class DatabaseStorage implements IStorage {
   async getHealthRecords(userId: string, animalId: number): Promise<HealthRecord[]> {
     return await db.select().from(healthRecords)
       .where(and(eq(healthRecords.animalId, animalId), eq(healthRecords.userId, userId)))
+      .orderBy(desc(healthRecords.date));
+  }
+
+  async getAllHealthRecords(userId: string): Promise<HealthRecord[]> {
+    return await db.select().from(healthRecords)
+      .where(eq(healthRecords.userId, userId))
       .orderBy(desc(healthRecords.date));
   }
 
