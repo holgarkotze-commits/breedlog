@@ -4,24 +4,86 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* =========================================================
+   LIGHT THEME (default — outdoor-optimised, high contrast)
+   ========================================================= */
+:root,
+.light {
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Chivo', sans-serif;
 
-  /* Modern Soft Dark Theme - Lighter charcoal with warmth */
-  --background: 220 12% 14%; /* Lighter soft blue-gray */
-  --foreground: 220 5% 85%; /* Softer off-white text */
+  --background: 210 17% 97%;       /* #F6F8FA — off-white, reduces glare */
+  --foreground: 217 33% 17%;       /* #1E293B — deep slate, max readability */
 
-  --card: 220 10% 18%; /* Lighter card */
+  --card: 0 0% 100%;               /* #FFFFFF */
+  --card-foreground: 217 33% 17%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 217 33% 17%;
+
+  --primary: 220 76% 48%;          /* #1E4ED8 — agri-tech blue, high visibility */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 214 32% 91%;        /* #E2E8F0 — light slate panel */
+  --secondary-foreground: 217 33% 17%;
+
+  --muted: 210 40% 96%;            /* #F1F5F9 */
+  --muted-foreground: 215 25% 27%; /* #334155 */
+
+  --accent: 143 72% 29%;           /* #15803D — agricultural green */
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 72% 51%;        /* #DC2626 — clear red for culled/danger */
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 214 32% 84%;           /* #CBD5E1 */
+  --input: 0 0% 100%;
+  --ring: 220 76% 48%;             /* #1E4ED8 */
+
+  --radius: 0.5rem;
+
+  /* Chart colours — remain vivid in both themes */
+  --chart-1: 220 76% 48%;
+  --chart-2: 143 72% 29%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 0 72% 51%;
+  --chart-5: 271 76% 53%;
+
+  /* Sidebar — slightly darker than body for visual grouping */
+  --sidebar: 213 27% 84%;
+  --sidebar-foreground: 217 33% 17%;
+  --sidebar-border: 214 32% 78%;
+  --sidebar-ring: 220 76% 48%;
+  --sidebar-primary: 220 76% 48%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 214 32% 91%;
+  --sidebar-accent-foreground: 217 33% 17%;
+
+  /* Table stripe */
+  --table-row-even: 210 40% 98%;
+  --table-header-bg: 214 32% 90%;
+}
+
+/* =========================================================
+   DARK THEME (existing BreedLog rugged dark)
+   ========================================================= */
+.dark {
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Chivo', sans-serif;
+
+  --background: 220 12% 14%;
+  --foreground: 220 5% 85%;
+
+  --card: 220 10% 18%;
   --card-foreground: 220 5% 85%;
 
   --popover: 220 10% 16%;
   --popover-foreground: 220 5% 85%;
 
-  --primary: 45 100% 50%; /* #FFC300 */
+  --primary: 45 100% 50%;          /* #FFC300 — yellow brand colour */
   --primary-foreground: 0 0% 0%;
 
-  --secondary: 220 8% 22%; /* Lighter secondary */
+  --secondary: 220 8% 22%;
   --secondary-foreground: 0 0% 98%;
 
   --muted: 220 8% 20%;
@@ -38,6 +100,24 @@
   --ring: 45 100% 50%;
 
   --radius: 0.5rem;
+
+  --chart-1: 45 100% 50%;
+  --chart-2: 142 71% 45%;
+  --chart-3: 200 80% 50%;
+  --chart-4: 0 62% 50%;
+  --chart-5: 271 76% 60%;
+
+  --sidebar: 220 10% 18%;
+  --sidebar-foreground: 220 5% 85%;
+  --sidebar-border: 220 8% 28%;
+  --sidebar-ring: 45 100% 50%;
+  --sidebar-primary: 45 100% 50%;
+  --sidebar-primary-foreground: 0 0% 0%;
+  --sidebar-accent: 220 8% 22%;
+  --sidebar-accent-foreground: 220 5% 85%;
+
+  --table-row-even: 220 10% 20%;
+  --table-header-bg: 220 10% 23%;
 }
 
 @layer base {
@@ -45,28 +125,43 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-black;
+    @apply bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-primary-foreground;
     font-size: 14px;
     overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display font-bold tracking-tight;
   }
-  
-  /* Mobile-first elegant typography */
+
+  /* Mobile-first typography */
   @media (max-width: 768px) {
     body {
       font-size: 13px;
     }
-    h1 {
-      @apply text-xl;
-    }
-    h2 {
-      @apply text-lg;
-    }
-    h3, h4, h5, h6 {
-      @apply text-base;
-    }
+    h1 { @apply text-xl; }
+    h2 { @apply text-lg; }
+    h3, h4, h5, h6 { @apply text-base; }
+  }
+
+  /* Light-mode table stripe — applied via .light class */
+  .light table tbody tr:nth-child(even) {
+    background-color: hsl(var(--table-row-even));
+  }
+  .light table thead tr {
+    background-color: hsl(var(--table-header-bg));
+  }
+  .light table thead th {
+    @apply font-bold;
+    color: hsl(var(--foreground));
+  }
+
+  /* Dark-mode table stripe */
+  .dark table tbody tr:nth-child(even) {
+    background-color: hsl(var(--table-row-even));
+  }
+  .dark table thead tr {
+    background-color: hsl(var(--table-header-bg));
   }
 }
 
@@ -74,11 +169,11 @@
   .rugged-btn {
     @apply font-bold uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] rounded-sm;
   }
-  
+
   .rugged-card {
     @apply border border-border shadow-md bg-card rounded-md relative overflow-hidden;
   }
-  
+
   .rugged-card::after {
     content: '';
     @apply absolute top-0 left-0 w-1 h-full bg-primary opacity-0 transition-opacity duration-300;
@@ -89,10 +184,10 @@
   }
 
   .rugged-input {
-    @apply bg-secondary border-border focus:border-primary focus:ring-1 focus:ring-primary rounded-sm placeholder:text-muted-foreground/50;
+    @apply bg-input border-border focus:border-primary focus:ring-1 focus:ring-primary rounded-sm placeholder:text-muted-foreground/50;
   }
 
-  /* Custom Scrollbar for dark theme */
+  /* Scrollbar — adapts per theme */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -106,13 +201,13 @@
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-primary;
   }
-  
+
   /* Abstract background flashes */
   .abstract-bg {
     position: relative;
     overflow: hidden;
   }
-  
+
   .abstract-bg::before {
     content: '';
     position: absolute;
@@ -120,15 +215,23 @@
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(ellipse at 20% 30%, hsl(45 100% 50% / 0.06) 0%, transparent 50%),
+    background: radial-gradient(ellipse at 20% 30%, hsl(var(--primary) / 0.06) 0%, transparent 50%),
                 radial-gradient(ellipse at 80% 70%, hsl(220 50% 60% / 0.04) 0%, transparent 40%),
-                radial-gradient(ellipse at 60% 20%, hsl(45 80% 60% / 0.03) 0%, transparent 35%);
+                radial-gradient(ellipse at 60% 20%, hsl(var(--primary) / 0.03) 0%, transparent 35%);
     pointer-events: none;
     z-index: 0;
   }
-  
+
   .abstract-bg > * {
     position: relative;
     z-index: 1;
+  }
+
+  /* Light-mode sidebar logo area stays dark (logo has black baked in) */
+  .sidebar-logo-area {
+    background-color: #111827;
+  }
+  .light .sidebar-logo-area {
+    background-color: #111827;
   }
 }

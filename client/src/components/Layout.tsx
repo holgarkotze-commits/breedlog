@@ -88,7 +88,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       
       {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
-        <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors bg-black">
+        <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors sidebar-logo-area">
           <Logo size="lg" showTagline />
         </Link>
         

@@ -30,6 +30,7 @@ Preferred communication style: Simple, everyday language.
   - Toast feedback shows accurate sync state (SYNC_COMPLETE, SYNC_PARTIAL_ERROR, OFFLINE_MODE)
 - **Storage Resilience**: `checkStorageAvailability()` detects incognito/restricted storage mode with dismissible warning banner
 - **UI/UX**: Responsive design, custom branding with farm settings, and a consistent layout for PDF exports including specific font, spacing, and header styling. Pedigree/Family Tree view uses responsive CSS-based connectors.
+- **Theme System**: Light/Dark/System switcher with persistent localStorage preference (`breedlog_theme`). `ThemeProvider` (`client/src/components/ThemeProvider.tsx`) applies `.light` or `.dark` class to `<html>`. Default is Light Mode (outdoor-optimised: #F6F8FA background, #1E4ED8 blue primary, high contrast). Dark mode retains original yellow (#FFC300) branding. Toggle available in Settings → Appearance section. Dashboard charts also adapt colors per theme.
 
 ### Backend
 - **Runtime**: Node.js with Express.

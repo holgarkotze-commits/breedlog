@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle, AlertTriangle, RotateCcw, ShieldCheck, RefreshCw, CloudOff, Database } from "lucide-react";
+import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle, AlertTriangle, RotateCcw, ShieldCheck, RefreshCw, CloudOff, Database, Sun, Moon, Monitor } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,6 +24,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { clearAllOfflineData, setOnboardingCompleted, getPendingSyncItems, type SyncQueueItem } from "@/lib/indexeddb";
 import { useNetworkStatus } from "@/hooks/use-network-status";
+import { useTheme, type ThemeMode } from "@/components/ThemeProvider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function Settings() {
@@ -36,6 +37,9 @@ export default function Settings() {
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const saveMutation = useSaveFarmSettings();
   
+  // Appearance / theme
+  const { theme, setTheme } = useTheme();
+
   // Data & Sync controls
   const { syncState, performFullSync, reloadLocalData, isSyncing, purgeFailedSyncs } = useNetworkStatus();
   const [isSyncingNow, setIsSyncingNow] = useState(false);
@@ -1276,6 +1280,42 @@ export default function Settings() {
                 <p className="text-sm">No documents uploaded yet</p>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Appearance Section */}
+        <Card className="rugged-card">
+          <CardHeader>
+            <CardTitle className="uppercase flex items-center gap-2">
+              <Sun className="w-5 h-5 text-primary" /> Appearance
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Choose your preferred display theme. Light Mode is optimised for outdoor use in bright sunlight.
+            </p>
+            <div className="grid grid-cols-3 gap-3" data-testid="theme-selector">
+              {([ 
+                { value: "light", label: "Light", Icon: Sun, desc: "Outdoor-optimised" },
+                { value: "dark",  label: "Dark",  Icon: Moon, desc: "Original dark mode" },
+                { value: "system",label: "Auto",  Icon: Monitor, desc: "Follows device" },
+              ] as { value: ThemeMode; label: string; Icon: React.FC<{className?: string}>; desc: string }[]).map(({ value, label, Icon, desc }) => (
+                <button
+                  key={value}
+                  onClick={() => setTheme(value)}
+                  data-testid={`theme-option-${value}`}
+                  className={`flex flex-col items-center gap-2 p-3 rounded-md border-2 transition-all cursor-pointer min-h-[80px] justify-center ${
+                    theme === value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="text-sm font-bold uppercase tracking-wide">{label}</span>
+                  <span className="text-[10px] opacity-70 text-center leading-tight">{desc}</span>
+                </button>
+              ))}
+            </div>
           </CardContent>
         </Card>
 

@@ -400,8 +400,8 @@ ${g.notes ? `<p style="margin-top: 12px; font-size: 9pt; color: #555; padding: 0
                   <Badge 
                     variant="outline" 
                     className={group.status === 'active' 
-                      ? "bg-green-900/30 text-green-400 border-green-700 mt-1" 
-                      : "bg-gray-900/30 text-gray-400 border-gray-700 mt-1"
+                      ? "bg-green-600/20 text-green-600 dark:text-green-400 border-green-500 dark:border-green-700 mt-1" 
+                      : "bg-secondary text-muted-foreground border-border mt-1"
                     }
                   >
                     {(group.status || "active").toUpperCase()}

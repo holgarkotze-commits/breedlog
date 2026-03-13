@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { OfflineBanner } from "@/components/NetworkStatusIndicator";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { useState, useEffect, lazy, Suspense } from "react";
 
 import NotFound from "@/pages/not-found";
@@ -140,12 +141,14 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <AppContent />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <AppContent />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 

@@ -2,6 +2,7 @@ import { useAnimals } from "@/hooks/use-animals";
 import { useBreedingEvents } from "@/hooks/use-breeding";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useRecentVisits } from "@/hooks/use-recent-visits";
+import { useTheme } from "@/components/ThemeProvider";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
@@ -14,6 +15,12 @@ import { Link } from "wouter";
 import { format } from "date-fns";
 
 export default function Dashboard() {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
+
+  const chartGrid = isDark ? "#333" : "#e2e8f0";
+  const chartAxis = isDark ? "#666" : "#64748b";
+
   const { data: animals, isLoading: loadingAnimals } = useAnimals();
   const { data: breeding, isLoading: loadingBreeding } = useBreedingEvents();
   const { data: farmSettings } = useFarmSettings();
@@ -384,9 +391,9 @@ export default function Dashboard() {
           <CardContent className="h-[200px] md:h-[280px] w-full p-2 md:p-6 pt-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={herdGrowthData} stackOffset="sign">
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                <XAxis dataKey="month" stroke="#666" fontSize={10} tickLine={false} axisLine={false} />
-                <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} width={30} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} vertical={false} />
+                <XAxis dataKey="month" stroke={chartAxis} fontSize={10} tickLine={false} axisLine={false} />
+                <YAxis stroke={chartAxis} fontSize={10} tickLine={false} axisLine={false} width={30} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
                   itemStyle={{ color: '#fff' }}
@@ -420,9 +427,9 @@ export default function Dashboard() {
                         <stop offset="95%" stopColor="#FFC300" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                    <XAxis dataKey="month" stroke="#666" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} unit="kg" width={35} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} vertical={false} />
+                    <XAxis dataKey="month" stroke={chartAxis} fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis stroke={chartAxis} fontSize={10} tickLine={false} axisLine={false} unit="kg" width={35} />
                     <Tooltip 
                       contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
                       itemStyle={{ color: '#fff' }}
@@ -447,9 +454,9 @@ export default function Dashboard() {
               <CardContent className="h-[180px] md:h-[300px] w-full p-2 md:p-6 pt-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={birthRatioData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                    <XAxis dataKey="month" stroke="#666" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#666" fontSize={10} tickLine={false} axisLine={false} width={25} allowDecimals={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} vertical={false} />
+                    <XAxis dataKey="month" stroke={chartAxis} fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis stroke={chartAxis} fontSize={10} tickLine={false} axisLine={false} width={25} allowDecimals={false} />
                     <Tooltip 
                       contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', borderRadius: '4px', fontSize: '12px' }}
                       itemStyle={{ color: '#fff' }}
