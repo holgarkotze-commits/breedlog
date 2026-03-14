@@ -248,43 +248,43 @@ export default function Dashboard() {
         {/* Key Metrics Grid - 2x2 on mobile */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
           {/* Total Herd with itemized status */}
-          <Link href="/animals?status=all">
+          <Link href="/animals?section=total">
             <Card className="rugged-card bg-card hover:-translate-y-0.5 md:hover:-translate-y-1 transition-transform cursor-pointer hover:border-primary/50">
               <CardContent className="p-3 md:p-6">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total Herd</p>
+                    <p className="text-xs md:text-sm font-semibold text-muted-foreground uppercase tracking-wide">Total Herd</p>
                     {loadingAnimals ? (
-                      <Skeleton className="h-6 md:h-10 w-12 md:w-20 mt-1 md:mt-2 bg-secondary" />
+                      <Skeleton className="h-7 md:h-10 w-12 md:w-20 mt-1 md:mt-2 bg-secondary" />
                     ) : (
-                      <h3 className="text-xl md:text-3xl font-bold mt-0.5 md:mt-2 text-foreground">{totalAnimals}</h3>
+                      <h3 className="text-2xl md:text-4xl font-bold mt-0.5 md:mt-2 text-foreground">{totalAnimals}</h3>
                     )}
                   </div>
                   <div className="p-1.5 md:p-3 bg-secondary rounded-sm text-primary border border-border">
-                    <Beef className="w-4 h-4 md:w-5 md:h-5" />
+                    <Beef className="w-4 h-4 md:w-6 md:h-6" />
                   </div>
                 </div>
                 {!loadingAnimals && (
-                  <div className="mt-2 md:mt-3 pt-2 border-t border-border/50 grid grid-cols-2 gap-1 text-[9px] md:text-xs">
+                  <div className="mt-2 md:mt-3 pt-2 border-t border-border/50 grid grid-cols-2 gap-1 text-[10px] md:text-xs">
                     <div className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                      <span className="w-2 h-2 rounded-full bg-green-500 shrink-0"></span>
                       <span className="text-muted-foreground">Active:</span>
-                      <span className="font-semibold text-foreground">{activeAnimals}</span>
+                      <span className="font-bold text-foreground">{activeAnimals}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
                       <span className="text-muted-foreground">Sold:</span>
-                      <span className="font-semibold text-foreground">{soldAnimals}</span>
+                      <span className="font-bold text-foreground">{soldAnimals}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                      <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
                       <span className="text-muted-foreground">Dead:</span>
-                      <span className="font-semibold text-foreground">{deadAnimals}</span>
+                      <span className="font-bold text-foreground">{deadAnimals}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                      <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0"></span>
                       <span className="text-muted-foreground">Culled:</span>
-                      <span className="font-semibold text-foreground">{culledAnimals}</span>
+                      <span className="font-bold text-foreground">{culledAnimals}</span>
                     </div>
                   </div>
                 )}
@@ -297,7 +297,7 @@ export default function Dashboard() {
             loading={loadingAnimals} 
             icon={Heart} 
             className="border-l-2 md:border-l-4 border-l-pink-500"
-            href="/animals?status=active&sex=ewe"
+            href="/animals?section=ewes"
           />
           <StatCard 
             title="Rams" 
@@ -305,7 +305,7 @@ export default function Dashboard() {
             loading={loadingAnimals} 
             icon={Shield} 
             className="border-l-2 md:border-l-4 border-l-blue-500"
-            href="/animals?status=active&sex=ram"
+            href="/animals?section=rams"
           />
           <StatCard 
             title="Lambs" 
@@ -313,15 +313,15 @@ export default function Dashboard() {
             loading={loadingAnimals} 
             icon={Baby} 
             className="border-l-2 md:border-l-4 border-l-yellow-500"
-            href="/animals?status=active&age=lamb"
+            href="/animals?section=lambs"
           />
         </div>
 
         {/* Recently Visited */}
         {recentVisits.length > 0 && (
           <div className="space-y-2">
-            <h3 className="text-xs md:text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5" /> Recently Visited
+            <h3 className="text-sm md:text-base font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Clock className="w-4 h-4" /> Recently Visited
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {recentVisits.map((visit, index) => {

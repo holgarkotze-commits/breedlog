@@ -20,20 +20,20 @@ export function StatCard({ title, value, icon: Icon, trend, loading, className, 
       <CardContent className="p-3 md:p-6">
         <div className="flex justify-between items-start">
           <div>
-            <p className="text-[10px] md:text-xs font-semibold text-muted-foreground uppercase tracking-wide">{title}</p>
+            <p className="text-xs md:text-sm font-semibold text-muted-foreground uppercase tracking-wide">{title}</p>
             {loading ? (
-              <Skeleton className="h-6 md:h-10 w-12 md:w-20 mt-1 md:mt-2 bg-secondary" />
+              <Skeleton className="h-7 md:h-10 w-12 md:w-20 mt-1 md:mt-2 bg-secondary" />
             ) : (
-              <h3 className="text-xl md:text-3xl font-bold mt-0.5 md:mt-2 text-foreground">{value}</h3>
+              <h3 className="text-2xl md:text-4xl font-bold mt-0.5 md:mt-2 text-foreground">{value}</h3>
             )}
           </div>
           <div className="p-1.5 md:p-3 bg-secondary rounded-sm text-primary border border-border">
-            <Icon className="w-4 h-4 md:w-5 md:h-5" />
+            <Icon className="w-4 h-4 md:w-6 md:h-6" />
           </div>
         </div>
         {trend && (
-          <p className="text-[10px] md:text-xs font-medium text-primary mt-2 md:mt-4 flex items-center gap-1">
-            <TrendingUp className="w-2.5 h-2.5 md:w-3 md:h-3" /> {trend}
+          <p className="text-xs md:text-sm font-medium text-primary mt-2 md:mt-4 flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 md:w-3.5 md:h-3.5" /> {trend}
           </p>
         )}
       </CardContent>

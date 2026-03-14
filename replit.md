@@ -83,7 +83,7 @@ Preferred communication style: Simple, everyday language.
 - **Farm Branding & Settings**: Customizable farm details (name, stud, owner) stored and integrated into exports and UI.
 - **Documents Management**: Upload, view, and delete various document types with optional animal linking.
 - **CSV Import**: Bulk animal import with flexible column mapping and validation.
-- **My Herd View**: Multiple view modes (Detailed, List, Thumbnail) and advanced filtering. Collapsible section ribbons with lazy rendering (Total Herd wrapper with Rams/Ewes/Lambs/Culled Archive subsections).
+- **My Herd View**: Multiple view modes (Detailed, List, Thumbnail) and advanced filtering. Collapsible section ribbons with lazy rendering (Total Herd wrapper with Rams/Ewes/Lambs/Culled Archive subsections). Supports `?section=total/rams/ewes/lambs/culled` URL param to auto-expand a section on load (used by Dashboard deep-links).
 - **Culled Archive Section**: Dedicated "Culled Archive" collapsible section in My Herd (alongside Rams/Ewes/Lambs) showing animals with status='culled' or cullConfirmed=true. Includes searchable table with cull date/reason, and PDF export.
 - **PDF Exports**: Professional PDF generation for individual animal profiles, full herd, rams, ewes, lambs, mating groups, and ewe breeding statistics. Features include:
   - Row numbering for list exports

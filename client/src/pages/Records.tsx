@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useAnimals } from "@/hooks/use-animals";
 import { useBreedingEvents } from "@/hooks/use-breeding";
+import { useMatingGroups } from "@/hooks/use-mating-groups";
 import { useExportedDocuments, useCreateExportedDocument, useDeleteExportedDocument } from "@/hooks/use-exported-documents";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { Card } from "@/components/ui/card";
@@ -52,8 +53,10 @@ export default function Records() {
   const [docToDelete, setDocToDelete] = useState<{id: number, name: string} | null>(null);
   const { data: allAnimals, isLoading } = useAnimals({});
   const { data: breedingEvents } = useBreedingEvents();
+  const { data: matingGroups } = useMatingGroups();
   const { data: farmSettings } = useFarmSettings();
   const { data: exportedDocs } = useExportedDocuments(activeSubfolder || undefined);
+  const { data: allExportedDocs } = useExportedDocuments();
   const createExportedDoc = useCreateExportedDocument();
   const deleteExportedDoc = useDeleteExportedDocument();
   const { toast } = useToast();
@@ -105,15 +108,15 @@ export default function Records() {
       icon: FileText, 
       label: "Exported Documents", 
       description: "All generated PDF exports and reports",
-      count: 0,
+      count: allExportedDocs?.length || 0,
       color: "text-yellow-400"
     },
     { 
       id: "productivity" as FolderType, 
       icon: BarChart3, 
       label: "Productivity Logs", 
-      description: "Weight logs, lambing outcomes, mating history",
-      count: 0,
+      description: "Breeding events, mating groups, and performance records",
+      count: (breedingEvents?.length || 0) + (matingGroups?.length || 0),
       color: "text-green-400"
     },
   ];

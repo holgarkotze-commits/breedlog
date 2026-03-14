@@ -1310,13 +1310,43 @@ export default function Animals() {
     toast({ title: "PDF Ready", description: "Culled Animals export opened for printing" });
   };
 
-  // Update filters when URL changes
+  // Update filters AND expand the right section when URL changes
   useEffect(() => {
     const params = new URLSearchParams(searchParams);
     setStatusFilter(params.get("status") || "active");
     setClassificationFilter(params.get("classification") || "all");
     setSexFilter(params.get("sex") || "all");
     setAgeFilter(params.get("age") || "all");
+
+    // Deep-link: open the correct collapsible section based on ?section= param
+    const section = params.get("section");
+    if (section === "rams") {
+      setRamsExpanded(true);
+      setTotalHerdExpanded(false);
+      setEwesExpanded(false);
+      setLambsExpanded(false);
+      setCulledExpanded(false);
+    } else if (section === "ewes") {
+      setEwesExpanded(true);
+      setTotalHerdExpanded(false);
+      setRamsExpanded(false);
+      setLambsExpanded(false);
+      setCulledExpanded(false);
+    } else if (section === "lambs") {
+      setLambsExpanded(true);
+      setTotalHerdExpanded(false);
+      setRamsExpanded(false);
+      setEwesExpanded(false);
+      setCulledExpanded(false);
+    } else if (section === "culled") {
+      setCulledExpanded(true);
+      setTotalHerdExpanded(false);
+      setRamsExpanded(false);
+      setEwesExpanded(false);
+      setLambsExpanded(false);
+    } else if (section === "total" || section === null || section === "") {
+      setTotalHerdExpanded(true);
+    }
   }, [searchParams]);
 
   const filteredAnimals = allAnimals?.filter(animal => {
