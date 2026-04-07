@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { pool } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -68,7 +69,37 @@ app.use((req, res, next) => {
   next();
 });
 
+async function runStartupMigrations() {
+  const client = await pool.connect();
+  try {
+    // Add shared_user_id to users table (added for shared workspace feature)
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS shared_user_id varchar;
+    `);
+    // Add device_type to user_activations table (added for 1-desktop+1-mobile slot model)
+    await client.query(`
+      ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS device_type varchar DEFAULT 'unknown';
+    `);
+    // Add system_settings table for admin settings (max_testers, etc.)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key varchar PRIMARY KEY,
+        value text NOT NULL,
+        description text,
+        updated_at timestamp DEFAULT now()
+      );
+    `);
+    console.log("[Startup] Schema migrations applied successfully");
+  } catch (err) {
+    console.error("[Startup] Migration error:", err);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 (async () => {
+  await runStartupMigrations();
   await registerRoutes(httpServer, app);
 
   // Global error handler - always returns JSON
