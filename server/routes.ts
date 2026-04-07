@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAdminPin, getUserId as getDeviceUserId } from "./device-auth";
+import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAdminPin, getUserId as getDeviceUserId, getDeviceId } from "./device-auth";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAudioRoutes } from "./replit_integrations/audio/routes";
@@ -905,6 +905,31 @@ export async function registerRoutes(
         offlineGraceStart: null 
       });
       
+      // WORKSPACE HEALING: If this user has no sharedUserId set yet but another active
+      // device is using the same invite code, link them to the same data workspace.
+      // Uses the activation's own deviceId (not the request's session deviceId) to avoid
+      // any session/cookie ambiguity in the middleware chain.
+      try {
+        const currentUser = await storage.getUserByDeviceId(activation.deviceId);
+        if (currentUser && !currentUser.sharedUserId) {
+          const allActivations = await storage.getAllActiveActivations();
+          const codeActivations = allActivations.filter(
+            a => a.inviteCodeId === activation.inviteCodeId && a.status === 'active'
+          );
+          const otherActivation = codeActivations.find(a => a.deviceId !== activation.deviceId);
+          if (otherActivation) {
+            const otherUser = await storage.getUserByDeviceId(otherActivation.deviceId);
+            if (otherUser) {
+              const primaryUserId = otherUser.sharedUserId || otherUser.id;
+              await storage.setSharedUserId(currentUser.id, primaryUserId);
+              console.log(`[Beta Access] Healed workspace: user ${currentUser.id} → ${primaryUserId}`);
+            }
+          }
+        }
+      } catch (healErr) {
+        console.error("[Beta Access] Healing error (non-fatal):", healErr);
+      }
+      
       res.json({ 
         hasAccess: true,
         activatedAt: activation.activatedAt,
@@ -978,10 +1003,6 @@ export async function registerRoutes(
       const userId = user.id;
       const deviceId = clientDeviceId;
       
-      // Set session for future requests
-      req.session.deviceId = deviceId;
-      req.session.userId = userId;
-      
       // Generate device token for localStorage-based auth
       const { generateDeviceToken } = await import('./device-auth');
       const token = generateDeviceToken(deviceId);
@@ -989,12 +1010,38 @@ export async function registerRoutes(
       // Check if user already has an activation
       const existingActivation = await storage.getUserActivation(userId);
       if (existingActivation && existingActivation.status === 'active') {
+        // HEALING: If sharedUserId is missing, check if another device used the same code earlier
+        // and set sharedUserId so this device resolves to the shared workspace.
+        if (!user.sharedUserId) {
+          const allActivations = await storage.getAllActiveActivations();
+          const codeActivations = allActivations.filter(a => a.inviteCodeId === existingActivation.inviteCodeId && a.status === 'active');
+          const otherActivation = codeActivations.find(a => a.deviceId !== deviceId);
+          if (otherActivation) {
+            // Find the other device's user to get their effective workspace ID
+            const { users } = await import("@shared/models/auth");
+            const { db } = await import("./db");
+            const { eq } = await import("drizzle-orm");
+            const otherUsers = await db.select().from(users).where(eq(users.id, otherActivation.userId));
+            const otherUser = otherUsers[0];
+            if (otherUser) {
+              // The primary workspace is: their sharedUserId (if set) or their own id
+              const primaryUserId = otherUser.sharedUserId || otherUser.id;
+              await storage.setSharedUserId(userId, primaryUserId);
+              user = { ...user, sharedUserId: primaryUserId };
+              console.log(`[Beta Validate] Healed sharedUserId for ${userId} → ${primaryUserId}`);
+            }
+          }
+        }
+        // Use the effective userId (sharedUserId takes priority) for the session
+        const effectiveUserId = user.sharedUserId || userId;
+        req.session.deviceId = deviceId;
+        req.session.userId = effectiveUserId;
         return res.json({ 
           success: true, 
           message: 'Already activated',
           token,
           deviceId,
-          userId
+          userId: effectiveUserId
         });
       }
       
@@ -1045,6 +1092,34 @@ export async function registerRoutes(
         }
       }
       
+      // STEP 2b: Workspace sharing — if another device already activated this code,
+      // link this device to the same data workspace (shared_user_id = primary userId).
+      // This is what makes both devices see the same animals, breeding records, etc.
+      const existingCodeActivations = codeActivations.filter(a => a.status === 'active');
+      let effectiveUserId = userId;
+      
+      if (existingCodeActivations.length > 0) {
+        // There's already an active device for this code — find their workspace ID
+        const firstActivation = existingCodeActivations[0];
+        const { users } = await import("@shared/models/auth");
+        const { db } = await import("./db");
+        const { eq } = await import("drizzle-orm");
+        const primaryUsers = await db.select().from(users).where(eq(users.id, firstActivation.userId));
+        const primaryUser = primaryUsers[0];
+        if (primaryUser) {
+          // The workspace owner is: their sharedUserId (if they're also secondary) or their own id
+          const primaryUserId = primaryUser.sharedUserId || primaryUser.id;
+          // Link this new device to the same workspace
+          await storage.setSharedUserId(userId, primaryUserId);
+          effectiveUserId = primaryUserId;
+          console.log(`[Beta Validate] Linked device ${deviceId} (user ${userId}) to shared workspace ${primaryUserId}`);
+        }
+      }
+      
+      // Set session using the effective workspace userId
+      req.session.deviceId = deviceId;
+      req.session.userId = effectiveUserId;
+      
       // STEP 3: Create activation (atomic - only after all checks pass)
       await storage.createUserActivation({
         userId,
@@ -1065,7 +1140,7 @@ export async function registerRoutes(
         expiresAt: inviteCode!.expiresAt,
         token,
         deviceId,
-        userId
+        userId: effectiveUserId
       });
     } catch (err: any) {
       console.error("Beta validation error:", err);

@@ -133,8 +133,9 @@ export interface IStorage {
   deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void>;
   
   // Device-based Users
-  getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string } | undefined>;
-  upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string }>;
+  getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null } | undefined>;
+  upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null }>;
+  setSharedUserId(userId: string, sharedUserId: string): Promise<void>;
   updateUserLastSeen(userId: string): Promise<void>;
   
   // System Settings (global app config)
@@ -487,19 +488,25 @@ export class DatabaseStorage implements IStorage {
   }
   
   // === DEVICE-BASED USERS ===
-  async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string } | undefined> {
+  async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null } | undefined> {
     const { users } = await import("@shared/models/auth");
     const results = await db.select().from(users).where(eq(users.deviceId, deviceId));
-    return results[0] ? { id: results[0].id, deviceId: results[0].deviceId! } : undefined;
+    if (!results[0]) return undefined;
+    return { id: results[0].id, deviceId: results[0].deviceId!, sharedUserId: results[0].sharedUserId ?? null };
   }
   
-  async upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string }> {
+  async upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null }> {
     const { users } = await import("@shared/models/auth");
     const results = await db.insert(users).values({
       deviceId: data.deviceId,
       deviceName: data.deviceName || null,
     }).returning();
-    return { id: results[0].id, deviceId: results[0].deviceId! };
+    return { id: results[0].id, deviceId: results[0].deviceId!, sharedUserId: results[0].sharedUserId ?? null };
+  }
+  
+  async setSharedUserId(userId: string, sharedUserId: string): Promise<void> {
+    const { users } = await import("@shared/models/auth");
+    await db.update(users).set({ sharedUserId }).where(eq(users.id, userId));
   }
   
   async updateUserLastSeen(userId: string): Promise<void> {

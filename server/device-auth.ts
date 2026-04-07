@@ -102,14 +102,17 @@ export function setupDeviceAuth(app: Express) {
         // Look up user by deviceId
         const user = await storage.getUserByDeviceId(validation.deviceId);
         if (user) {
+          // If this device shares a workspace with another device (same invite code),
+          // use that device's userId so both devices read/write the same data.
+          const effectiveUserId = user.sharedUserId || user.id;
           req.deviceAuth = {
-            userId: user.id,
+            userId: effectiveUserId,
             deviceId: validation.deviceId,
             token
           };
           // Also sync to session for backwards compatibility
           req.session.deviceId = validation.deviceId;
-          req.session.userId = user.id;
+          req.session.userId = effectiveUserId;
         }
       }
     }
