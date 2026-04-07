@@ -492,6 +492,7 @@ export const userActivations = pgTable("user_activations", {
   userId: varchar("user_id").notNull().references(() => users.id).unique(), // One activation per user
   inviteCodeId: integer("invite_code_id").notNull().references(() => inviteCodes.id),
   deviceId: varchar("device_id", { length: 64 }).notNull(), // Unique device identifier
+  deviceType: varchar("device_type", { length: 20 }).notNull().default("desktop"), // 'desktop' or 'mobile'
   status: text("status").notNull().default("active"), // active, revoked, expired
   activatedAt: timestamp("activated_at").notNull().defaultNow(),
   lastOnlineCheck: timestamp("last_online_check").notNull().defaultNow(), // Last successful online validation

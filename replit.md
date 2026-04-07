@@ -97,7 +97,12 @@ Preferred communication style: Simple, everyday language.
 - **First-Time User Onboarding**: 4-step wizard guides new users through farm setup, first animal entry, and app tips. Detects first-time users via IndexedDB metadata.
 - **Production Reset**: Settings → Advanced → Reset All Data allows complete database wipe with confirmation phrase ("RESET BREEDLOG"). Clears both server database and IndexedDB offline stores.
 - **Empty State UX**: Dashboard and My Herd show friendly empty states with action buttons when no animals exist.
-- **Beta Access Control**: Controlled access via invite codes with expiry (default 30 days), max 10 testers, single-device-per-code restriction, 7-day offline grace period, and admin panel for code management. Beta access query always attempts server contact (not gated by `navigator.onLine` since it's unreliable on mobile). "Retry Connection" button is always enabled and performs a real server ping.
+- **Beta Access Control**: Controlled access via invite codes with expiry (default 30 days), 7-day offline grace period, and admin panel for code management. Beta access query always attempts server contact (not gated by `navigator.onLine` since it's unreliable on mobile). "Retry Connection" button is always enabled and performs a real server ping.
+  - Each code allows **1 desktop + 1 mobile device** (2 total, tracked separately via `device_type` column in `user_activations` table)
+  - Device type detected from User-Agent header (mobile = Android/iPhone/iPad/Mobile keywords)
+  - Admin can reset individual device slots (desktop or mobile) without deleting farm data
+  - **Code Diagnostic Lookup** tool in admin panel — type any code to instantly verify if it exists in DB and see which slots are taken/free
+  - Non-existent codes display clearly as "not found in database" with actionable hints
 - **User Data Isolation**: All data tables have userId columns ensuring complete separation between users' farm data.
 
 ## External Dependencies

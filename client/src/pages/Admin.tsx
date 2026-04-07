@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2, Pencil, Check, X } from "lucide-react";
+import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2, Pencil, Check, X, Monitor, Smartphone, Search } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 
@@ -23,6 +23,10 @@ interface InviteCode {
   usesCount: number;
   notes: string | null;
   createdAt: string;
+  slots?: {
+    desktop: { taken: boolean; activatedAt?: string };
+    mobile: { taken: boolean; activatedAt?: string };
+  };
 }
 
 interface InviteCodesResponse {
@@ -359,6 +363,41 @@ export default function AdminPage() {
     updateMaxTestersMutation.mutate(newMax);
   };
   
+  // Diagnostic code lookup state
+  const [lookupCode, setLookupCode] = useState("");
+  const [lookupResult, setLookupResult] = useState<any>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+
+  const handleLookupCode = async () => {
+    if (!lookupCode.trim()) return;
+    setLookupLoading(true);
+    setLookupResult(null);
+    try {
+      const response = await adminApiRequest("GET", `/api/admin/invite-codes/lookup/${lookupCode.trim().toUpperCase()}`);
+      const data = await response.json();
+      setLookupResult({ ...data, error: false });
+    } catch (err: any) {
+      setLookupResult({ error: true, message: err.message });
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  // Reset a device slot for a code
+  const resetSlotMutation = useMutation({
+    mutationFn: async ({ id, slotType }: { id: number; slotType: string }) => {
+      const response = await adminApiRequest("POST", `/api/admin/invite-codes/${id}/reset-slot`, { slotType });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invite-codes"] });
+      toast({ title: "Slot Reset", description: data.message });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  });
+
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);
     toast({
@@ -606,11 +645,78 @@ export default function AdminPage() {
           </Card>
         </div>
         
+        {/* Diagnostic Code Lookup */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><Search className="h-4 w-4" /> Code Diagnostic Lookup</CardTitle>
+            <CardDescription>Verify if a code exists in the database and check its activation slots</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter code to check (e.g. PM3YAMEK)"
+                value={lookupCode}
+                onChange={(e) => setLookupCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && handleLookupCode()}
+                className="font-mono"
+                data-testid="input-lookup-code"
+              />
+              <Button onClick={handleLookupCode} disabled={lookupLoading || !lookupCode.trim()} data-testid="button-lookup-code">
+                {lookupLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              </Button>
+            </div>
+            {lookupResult && (
+              <div className="mt-3">
+                {lookupResult.error ? (
+                  <Alert>
+                    <AlertDescription className="text-destructive font-mono text-sm">{lookupResult.message}</AlertDescription>
+                  </Alert>
+                ) : !lookupResult.found ? (
+                  <Alert>
+                    <AlertDescription>
+                      <div className="font-semibold text-destructive">Code not found in database</div>
+                      <div className="text-sm mt-1">{lookupResult.hint}</div>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="border rounded p-3 space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-base">{lookupResult.code?.code}</span>
+                      <Badge variant={lookupResult.validation?.valid ? "default" : "destructive"}>
+                        {lookupResult.validation?.valid ? "Valid & Redeemable" : `Not Valid: ${lookupResult.validation?.reason}`}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className={`flex items-center gap-2 p-2 rounded border ${lookupResult.slots?.desktop?.taken ? 'border-blue-500/40 bg-blue-500/10' : 'border-border'}`}>
+                        <Monitor className="h-4 w-4 text-blue-400" />
+                        <div>
+                          <div className="font-medium">Desktop</div>
+                          <div className="text-xs text-muted-foreground">{lookupResult.slots?.desktop?.taken ? `Taken (activated ${lookupResult.slots.desktop.activatedAt ? format(new Date(lookupResult.slots.desktop.activatedAt), 'MMM d, HH:mm') : ''})` : 'Free — can activate'}</div>
+                        </div>
+                      </div>
+                      <div className={`flex items-center gap-2 p-2 rounded border ${lookupResult.slots?.mobile?.taken ? 'border-green-500/40 bg-green-500/10' : 'border-border'}`}>
+                        <Smartphone className="h-4 w-4 text-green-400" />
+                        <div>
+                          <div className="font-medium">Mobile</div>
+                          <div className="text-xs text-muted-foreground">{lookupResult.slots?.mobile?.taken ? `Taken (activated ${lookupResult.slots.mobile.activatedAt ? format(new Date(lookupResult.slots.mobile.activatedAt), 'MMM d, HH:mm') : ''})` : 'Free — can activate'}</div>
+                        </div>
+                      </div>
+                    </div>
+                    {lookupResult.code?.expiresAt && (
+                      <div className="text-xs text-muted-foreground">Expires: {format(new Date(lookupResult.code.expiresAt), 'MMM d, yyyy')}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
             <div>
               <CardTitle>Invite Codes</CardTitle>
-              <CardDescription>Manage beta access codes for testers</CardDescription>
+              <CardDescription>Manage beta access codes for testers. Each code allows 1 desktop + 1 mobile device.</CardDescription>
             </div>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
@@ -696,10 +802,9 @@ export default function AdminPage() {
                     <TableRow>
                       <TableHead>Code</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Device Slots</TableHead>
                       <TableHead>Notes</TableHead>
-                      <TableHead>Uses</TableHead>
                       <TableHead>Expires</TableHead>
-                      <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -710,23 +815,45 @@ export default function AdminPage() {
                           {code.code}
                         </TableCell>
                         <TableCell>{getStatusBadge(code)}</TableCell>
-                        <TableCell className="max-w-[200px] truncate">
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {/* Desktop slot */}
+                            <div className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border ${code.slots?.desktop.taken ? 'bg-blue-500/10 border-blue-500/40 text-blue-400' : 'border-border text-muted-foreground'}`} title={code.slots?.desktop.taken ? `Desktop activated ${code.slots.desktop.activatedAt ? format(new Date(code.slots.desktop.activatedAt), 'MMM d') : ''}` : 'Desktop slot free'}>
+                              <Monitor className="h-3 w-3" />
+                              <span>{code.slots?.desktop.taken ? '✓' : '—'}</span>
+                            </div>
+                            {/* Mobile slot */}
+                            <div className={`flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border ${code.slots?.mobile.taken ? 'bg-green-500/10 border-green-500/40 text-green-400' : 'border-border text-muted-foreground'}`} title={code.slots?.mobile.taken ? `Mobile activated ${code.slots.mobile.activatedAt ? format(new Date(code.slots.mobile.activatedAt), 'MMM d') : ''}` : 'Mobile slot free'}>
+                              <Smartphone className="h-3 w-3" />
+                              <span>{code.slots?.mobile.taken ? '✓' : '—'}</span>
+                            </div>
+                            {/* Reset slot buttons */}
+                            {code.slots?.desktop.taken && (
+                              <Button size="icon" variant="ghost" className="h-5 w-5" title="Reset desktop slot" onClick={() => resetSlotMutation.mutate({ id: code.id, slotType: 'desktop' })} disabled={resetSlotMutation.isPending}>
+                                <X className="h-3 w-3 text-blue-400" />
+                              </Button>
+                            )}
+                            {code.slots?.mobile.taken && (
+                              <Button size="icon" variant="ghost" className="h-5 w-5" title="Reset mobile slot" onClick={() => resetSlotMutation.mutate({ id: code.id, slotType: 'mobile' })} disabled={resetSlotMutation.isPending}>
+                                <X className="h-3 w-3 text-green-400" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="max-w-[160px] truncate">
                           {code.notes || "-"}
                         </TableCell>
-                        <TableCell>{code.usesCount} / {code.maxUses}</TableCell>
                         <TableCell>
                           {format(new Date(code.expiresAt), "MMM d, yyyy")}
                         </TableCell>
-                        <TableCell>
-                          {format(new Date(code.createdAt), "MMM d, yyyy")}
-                        </TableCell>
                         <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex justify-end gap-1">
                             <Button 
                               size="icon" 
                               variant="ghost"
                               onClick={() => copyCode(code.code)}
                               data-testid={`button-copy-${code.id}`}
+                              title="Copy code"
                             >
                               <Copy className="h-4 w-4" />
                             </Button>
@@ -747,7 +874,7 @@ export default function AdminPage() {
                                 onClick={() => revokeCodeMutation.mutate(code.id)}
                                 disabled={revokeCodeMutation.isPending}
                                 data-testid={`button-revoke-${code.id}`}
-                                title="Revoke used code"
+                                title="Revoke code"
                               >
                                 <Ban className="h-4 w-4" />
                               </Button>

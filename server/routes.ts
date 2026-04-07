@@ -804,6 +804,25 @@ export async function registerRoutes(
     }
     return code;
   }
+
+  // Detect device type from User-Agent string
+  function detectDeviceType(userAgent: string): 'mobile' | 'desktop' {
+    const ua = userAgent.toLowerCase();
+    // Check for mobile indicators
+    if (
+      ua.includes('android') ||
+      ua.includes('iphone') ||
+      ua.includes('ipad') ||
+      ua.includes('ipod') ||
+      ua.includes('blackberry') ||
+      ua.includes('windows phone') ||
+      ua.includes('mobile') ||
+      ua.includes('tablet')
+    ) {
+      return 'mobile';
+    }
+    return 'desktop';
+  }
   
   // Helper to generate device ID from user agent + some user data
   function getDeviceId(req: Request): string {
@@ -920,18 +939,19 @@ export async function registerRoutes(
       
       const codeUpper = inputCode.toUpperCase().trim();
       
-      // STEP 1: Validate the invite code FIRST (before device registration)
+      // STEP 1: Look up code and check basic eligibility (exists, not revoked, not expired)
+      // NOTE: maxUses check is done AFTER slot checks below so we can give better error messages
       const inviteCode = await storage.getInviteCodeByCode(codeUpper);
-      const validation = await isCodeValid(inviteCode);
       
-      if (!validation.valid) {
-        // User-friendly error messages
-        let friendlyMessage = validation.reason || 'Invalid code';
-        if (friendlyMessage.includes('not found')) friendlyMessage = 'Code not found. Please check and try again.';
-        if (friendlyMessage.includes('expired')) friendlyMessage = 'This code has expired.';
-        if (friendlyMessage.includes('revoked')) friendlyMessage = 'This code has been revoked.';
-        if (friendlyMessage.includes('used')) friendlyMessage = 'This code has already been used.';
-        return res.status(400).json({ message: friendlyMessage });
+      if (!inviteCode) {
+        console.log(`[Beta Validate] Code not found in DB: "${codeUpper}"`);
+        return res.status(400).json({ message: 'Code not found. Please check and try again.' });
+      }
+      if (inviteCode.status === 'revoked') {
+        return res.status(400).json({ message: 'This code has been revoked.' });
+      }
+      if (inviteCode.status === 'expired' || new Date(inviteCode.expiresAt) < new Date()) {
+        return res.status(400).json({ message: 'This code has expired.' });
       }
       
       // STEP 2: Register/find device (atomic with activation)
@@ -985,14 +1005,45 @@ export async function registerRoutes(
         return res.status(400).json({ message: 'Beta testing is currently full. Please try again later.' });
       }
       
-      // Check device limit (1 device per code)
+      // Detect device type from User-Agent
+      const userAgent = req.headers['user-agent'] || '';
+      const deviceType = detectDeviceType(userAgent);
+      console.log(`[Beta Validate] Device type detected: ${deviceType} (UA: ${userAgent.substring(0, 60)})`);
+
+      // Check device slot limits (1 desktop + 1 mobile per code)
       const allActivations = await storage.getAllActiveActivations();
       const codeActivations = allActivations.filter(a => a.inviteCodeId === inviteCode!.id);
       
-      if (codeActivations.length >= inviteCode!.maxDevices) {
-        const sameDevice = codeActivations.find(a => a.deviceId === deviceId);
-        if (!sameDevice) {
-          return res.status(400).json({ message: 'This code has already been used on another device.' });
+      // Check if this exact device already has a (revoked/expired) activation for this code
+      const sameDeviceActivation = codeActivations.find(a => a.deviceId === deviceId);
+      
+      if (!sameDeviceActivation) {
+        // New device trying to activate — check the slot for this device type FIRST
+        // (before maxUses check so we give specific slot-full messages)
+        const desktopActivations = codeActivations.filter(a => a.deviceType === 'desktop' && a.status === 'active');
+        const mobileActivations = codeActivations.filter(a => a.deviceType === 'mobile' && a.status === 'active');
+        
+        if (deviceType === 'desktop' && desktopActivations.length >= 1) {
+          console.log(`[Beta Validate] Desktop slot full for code ${inviteCode.id}`);
+          return res.status(400).json({ 
+            message: 'The desktop slot for this code is already taken. One desktop and one mobile device are allowed per code. Contact the admin to reset your desktop slot.' 
+          });
+        }
+        if (deviceType === 'mobile' && mobileActivations.length >= 1) {
+          console.log(`[Beta Validate] Mobile slot full for code ${inviteCode.id}`);
+          return res.status(400).json({ 
+            message: 'The mobile slot for this code is already taken. One desktop and one mobile device are allowed per code. Contact the admin to reset your mobile slot.' 
+          });
+        }
+        
+        // Now check maxUses (applies when both slots are somehow taken by edge-case legacy devices)
+        if (inviteCode.usesCount >= inviteCode.maxUses) {
+          return res.status(400).json({ message: 'This code has been fully used. Contact the admin for a new code.' });
+        }
+        
+        // Total device cap as final safety net
+        if (codeActivations.filter(a => a.status === 'active').length >= inviteCode.maxDevices) {
+          return res.status(400).json({ message: 'This code has reached its maximum device limit.' });
         }
       }
       
@@ -1001,6 +1052,7 @@ export async function registerRoutes(
         userId,
         inviteCodeId: inviteCode!.id,
         deviceId,
+        deviceType,
         status: 'active',
       });
       
@@ -1104,15 +1156,31 @@ export async function registerRoutes(
     }
   });
   
-  // List all invite codes
+  // List all invite codes with device slot info
   app.get("/api/admin/invite-codes", requireAdminPin, async (req, res) => {
     try {
       setNoCacheHeaders(res);
       const codes = await storage.getInviteCodes();
       const activeTesters = await storage.getActiveTestersCount();
       const maxTesters = await getMaxTesters();
+      const allActivations = await storage.getAllActiveActivations();
+      
+      // Attach slot info to each code
+      const codesWithSlots = codes.map(code => {
+        const codeActivations = allActivations.filter(a => a.inviteCodeId === code.id);
+        const desktopSlot = codeActivations.find(a => a.deviceType === 'desktop' && a.status === 'active');
+        const mobileSlot = codeActivations.find(a => a.deviceType === 'mobile' && a.status === 'active');
+        return {
+          ...code,
+          slots: {
+            desktop: desktopSlot ? { taken: true, activatedAt: desktopSlot.activatedAt } : { taken: false },
+            mobile: mobileSlot ? { taken: true, activatedAt: mobileSlot.activatedAt } : { taken: false },
+          }
+        };
+      });
+      
       res.json({ 
-        codes, 
+        codes: codesWithSlots, 
         activeTesters,
         maxTesters
       });
@@ -1124,7 +1192,7 @@ export async function registerRoutes(
   // Create new invite code
   app.post("/api/admin/invite-codes", requireAdminPin, async (req, res) => {
     try {
-      const { notes, expiryDays = BETA_CONFIG.DEFAULT_EXPIRY_DAYS, maxUses = 1 } = req.body;
+      const { notes, expiryDays = BETA_CONFIG.DEFAULT_EXPIRY_DAYS, maxUses = 2 } = req.body;
       
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + expiryDays);
@@ -1133,11 +1201,83 @@ export async function registerRoutes(
         code: generateInviteCode(),
         expiresAt,
         maxUses,
-        maxDevices: 1,
+        maxDevices: 2, // 1 desktop slot + 1 mobile slot
         notes,
       });
       
       res.status(201).json(code);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Lookup a code by value (admin diagnostic)
+  app.get("/api/admin/invite-codes/lookup/:code", requireAdminPin, async (req, res) => {
+    setNoCacheHeaders(res);
+    try {
+      const codeUpper = req.params.code.toUpperCase().trim();
+      const inviteCode = await storage.getInviteCodeByCode(codeUpper);
+      
+      if (!inviteCode) {
+        return res.status(404).json({ 
+          found: false, 
+          message: `Code "${codeUpper}" not found in database.`,
+          hint: 'The code does not exist. Create a new code in the admin panel and share it with your tester.'
+        });
+      }
+      
+      const allActivations = await storage.getAllActiveActivations();
+      const codeActivations = allActivations.filter(a => a.inviteCodeId === inviteCode.id);
+      const desktopSlot = codeActivations.find(a => a.deviceType === 'desktop' && a.status === 'active');
+      const mobileSlot = codeActivations.find(a => a.deviceType === 'mobile' && a.status === 'active');
+      
+      const validation = await isCodeValid(inviteCode);
+      
+      res.json({
+        found: true,
+        code: inviteCode,
+        validation,
+        slots: {
+          desktop: desktopSlot ? { taken: true, deviceId: desktopSlot.deviceId, activatedAt: desktopSlot.activatedAt } : { taken: false },
+          mobile: mobileSlot ? { taken: true, deviceId: mobileSlot.deviceId, activatedAt: mobileSlot.activatedAt } : { taken: false },
+        },
+        totalActivations: codeActivations.length,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Reset a specific device slot for a code (admin can free up desktop or mobile slot)
+  app.post("/api/admin/invite-codes/:id/reset-slot", requireAdminPin, async (req, res) => {
+    setNoCacheHeaders(res);
+    try {
+      const id = Number(req.params.id);
+      const { slotType } = req.body; // 'desktop' or 'mobile'
+      
+      if (!slotType || !['desktop', 'mobile'].includes(slotType)) {
+        return res.status(400).json({ message: 'slotType must be "desktop" or "mobile"' });
+      }
+      
+      const allActivations = await storage.getAllActiveActivations();
+      const slotActivation = allActivations.find(
+        a => a.inviteCodeId === id && a.deviceType === slotType && a.status === 'active'
+      );
+      
+      if (!slotActivation) {
+        return res.json({ success: true, message: `${slotType} slot is already empty.` });
+      }
+      
+      await storage.updateUserActivation(slotActivation.userId, { status: 'revoked' });
+      // Decrement uses count
+      const codes = await storage.getInviteCodes();
+      const code = codes.find(c => c.id === id);
+      if (code && code.usesCount > 0) {
+        await storage.updateInviteCode(id, { usesCount: code.usesCount - 1 });
+      }
+      
+      const slotLabel = slotType.charAt(0).toUpperCase() + slotType.slice(1);
+      res.json({ success: true, message: `${slotLabel} slot has been reset. The device can now re-activate with the same code.` });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
