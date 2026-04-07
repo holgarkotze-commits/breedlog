@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Beef, Dna, FileText, Settings, Archive, Syringe } from "lucide-react";
+import { LayoutDashboard, Beef, Dna, FileText, Settings, Syringe, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useRecentVisits } from "@/hooks/use-recent-visits";
 import { NetworkStatusIndicator, GlobalRefreshButton, SyncStatusBadge, StorageWarningBanner } from "@/components/NetworkStatusIndicator";
+import { performLogout } from "@/lib/queryClient";
 
 function ScrambleText({ text, className }: { text: string; className?: string }) {
   const [displayText, setDisplayText] = useState("");
@@ -106,7 +107,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-border">
+        <div className="p-4 border-t border-border space-y-2">
+          <button
+            onClick={() => void performLogout()}
+            data-testid="button-logout-desktop"
+            className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Log Out
+          </button>
           <div className="bg-secondary/50 p-3 rounded-md space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground font-mono">BreedLog v1.0.0</p>
@@ -134,6 +143,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="absolute right-2 top-2 flex items-center gap-1">
           <SyncStatusBadge />
           <GlobalRefreshButton />
+          <button
+            onClick={() => void performLogout()}
+            data-testid="button-logout-mobile"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            aria-label="Log out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
         <Link href="/" className="flex flex-col items-center px-4">
           <div className={cn(

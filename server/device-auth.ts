@@ -274,6 +274,24 @@ export function registerDeviceAuthRoutes(app: Express) {
     });
   });
   
+  // Logout — destroys the server session so the beta access check fails on next load.
+  // The client also clears the device token and beta_access cache from localStorage.
+  // The device ID is NOT cleared so the same device can re-activate with the same code.
+  app.post("/api/beta/logout", (req, res) => {
+    res.set({
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      "Pragma": "no-cache"
+    });
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("[Logout] Session destroy error:", err);
+        // Still return success — client will clear its own storage
+      }
+      res.clearCookie("connect.sid");
+      res.json({ success: true });
+    });
+  });
+
   // Admin PIN authentication
   app.post("/api/admin/login", (req, res) => {
     const { pin } = req.body;

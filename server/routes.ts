@@ -1036,14 +1036,12 @@ export async function registerRoutes(
           });
         }
         
-        // Now check maxUses (applies when both slots are somehow taken by edge-case legacy devices)
-        if (inviteCode.usesCount >= inviteCode.maxUses) {
-          return res.status(400).json({ message: 'This code has been fully used. Contact the admin for a new code.' });
-        }
-        
-        // Total device cap as final safety net
-        if (codeActivations.filter(a => a.status === 'active').length >= inviteCode.maxDevices) {
-          return res.status(400).json({ message: 'This code has reached its maximum device limit.' });
+        // Final safety: count ACTIVE slots (1 desktop + 1 mobile = max 2 devices per code).
+        // Using actual active-slot count instead of usesCount avoids blocking the mobile slot
+        // when desktop has already activated (which was a bug for old codes with maxUses=1).
+        const activeDeviceCount = codeActivations.filter(a => a.status === 'active').length;
+        if (activeDeviceCount >= 2) {
+          return res.status(400).json({ message: 'This code already has both device slots occupied (one desktop + one mobile). Contact the admin to reset a slot.' });
         }
       }
       

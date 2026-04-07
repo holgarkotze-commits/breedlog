@@ -30,6 +30,34 @@ export function clearDeviceToken(): void {
   }
 }
 
+// Logout: destroy server session, clear client token and beta-access cache, then
+// immediately update the React Query cache so BetaAccessGate shows the code entry
+// screen without requiring a full page reload.
+// The device ID is kept so the same device can re-activate with the same invite code
+// without consuming a new slot.
+export async function performLogout(): Promise<void> {
+  // 1. Destroy server session (best-effort, fire-and-forget)
+  fetch("/api/beta/logout", { method: "POST", credentials: "include" }).catch(() => {});
+
+  // 2. Clear localStorage (keep breedlog_device_id for same-device re-login)
+  try {
+    localStorage.removeItem(DEVICE_TOKEN_KEY);
+    localStorage.removeItem("breedlog_beta_access");
+  } catch {
+    // Ignore storage errors
+  }
+
+  // 3. Immediately push a "logged out" state into the React Query cache.
+  //    BetaAccessGate reacts to this and shows the code entry screen right away.
+  //    When the user re-activates, validateMutation.onSuccess invalidates this
+  //    query and re-fetches with the new token, restoring the dashboard.
+  queryClient.setQueryData(["/api/beta/access"], {
+    hasAccess: false,
+    needsCode: true,
+    reason: "You have been logged out.",
+  });
+}
+
 // Robust connectivity check - pings actual API endpoint instead of relying on navigator.onLine
 // This catches cases where browser reports online but API is unreachable
 let lastConnectivityCheck = 0;

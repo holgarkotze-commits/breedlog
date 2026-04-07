@@ -100,6 +100,9 @@ Preferred communication style: Simple, everyday language.
 - **Beta Access Control**: Controlled access via invite codes with expiry (default 30 days), 7-day offline grace period, and admin panel for code management. Beta access query always attempts server contact (not gated by `navigator.onLine` since it's unreliable on mobile). "Retry Connection" button is always enabled and performs a real server ping.
   - Each code allows **1 desktop + 1 mobile device** (2 total, tracked separately via `device_type` column in `user_activations` table)
   - Device type detected from User-Agent header (mobile = Android/iPhone/iPad/Mobile keywords)
+  - Slot enforcement uses actual active-slot count (not usesCount), so old codes with maxUses=1 no longer block the mobile slot
+  - **Logout**: `Layout.tsx` has logout button in desktop sidebar (data-testid=button-logout-desktop) and mobile header (button-logout-mobile). Logout calls POST `/api/beta/logout` (destroys server session), clears `breedlog_device_token` and `breedlog_beta_access` from localStorage, then uses `queryClient.setQueryData` to immediately show the code entry screen without a page reload. `breedlog_device_id` is kept so the same device can re-login with the same code.
+  - **Same-device re-login**: After logout, the device's activation remains `active` on the server. Re-entering the same code returns "Already activated" + a fresh token — no new slot consumed.
   - Admin can reset individual device slots (desktop or mobile) without deleting farm data
   - **Code Diagnostic Lookup** tool in admin panel — type any code to instantly verify if it exists in DB and see which slots are taken/free
   - Non-existent codes display clearly as "not found in database" with actionable hints
