@@ -10,6 +10,7 @@ import {
   farmSettings,
   documents,
   animalImages,
+  eidScanEvents,
   exportedDocuments,
   flockHealthEvents,
   flockHealthTreatments,
@@ -26,6 +27,7 @@ import {
   type InsertFarmSettings,
   type InsertDocument,
   type InsertAnimalImage,
+  type InsertEidScanEvent,
   type InsertExportedDocument,
   type InsertFlockHealthEvent,
   type InsertFlockHealthTreatment,
@@ -41,6 +43,7 @@ import {
   type FarmSettings,
   type Document,
   type AnimalImage,
+  type EidScanEvent,
   type ExportedDocument,
   type FlockHealthEvent,
   type FlockHealthTreatment,
@@ -48,7 +51,14 @@ import {
   type UserActivation,
   type SystemSetting,
 } from "@shared/schema";
-import { eq, desc, and, sql, lt, gte } from "drizzle-orm";
+import { eq, desc, and, sql, lt, gte, ilike, or, ne, inArray } from "drizzle-orm";
+
+export class DuplicateElectronicIdError extends Error {
+  constructor(public electronicId: string) {
+    super(`Electronic ID "${electronicId}" is already assigned to another animal`);
+    this.name = "DuplicateElectronicIdError";
+  }
+}
 
 export interface IStorage {
   // Animals - ALL methods now require userId for data isolation
@@ -57,6 +67,7 @@ export interface IStorage {
   createAnimal(userId: string, animal: Omit<InsertAnimal, 'userId'>): Promise<Animal>;
   updateAnimal(userId: string, id: number, animal: Partial<Omit<InsertAnimal, 'userId'>>): Promise<Animal>;
   deleteAnimal(userId: string, id: number): Promise<void>;
+  getAnimalByElectronicId(userId: string, electronicId: string): Promise<Animal | undefined>;
 
   // Breeding
   getBreedingEvents(userId: string): Promise<BreedingEvent[]>;
@@ -96,6 +107,7 @@ export interface IStorage {
   getAnimalImages(userId: string, animalId: number): Promise<AnimalImage[]>;
   createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>): Promise<AnimalImage>;
   deleteAnimalImage(userId: string, id: number): Promise<void>;
+  createEidScanEvent(userId: string, event: Omit<InsertEidScanEvent, 'userId'>): Promise<EidScanEvent>;
   
   // Exported Documents
   getExportedDocuments(userId: string, subfolder?: string): Promise<ExportedDocument[]>;
@@ -144,12 +156,46 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private normalizeElectronicId(electronicId?: string | null): string | null {
+    const trimmed = electronicId?.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  private async assertUniqueElectronicId(userId: string, electronicId?: string | null, excludeAnimalId?: number): Promise<void> {
+    const normalized = this.normalizeElectronicId(electronicId);
+    if (!normalized) return;
+
+    const conditions = [eq(animals.userId, userId), eq(animals.electronicId, normalized)];
+    if (excludeAnimalId !== undefined) {
+      conditions.push(ne(animals.id, excludeAnimalId));
+    }
+
+    const [existing] = await db.select().from(animals).where(and(...conditions)).limit(1);
+    if (existing) {
+      throw new DuplicateElectronicIdError(normalized);
+    }
+  }
+
   // Animals - ALL queries now filter by userId
   async getAnimals(userId: string, filters?: { search?: string; status?: string; sex?: string }): Promise<Animal[]> {
     let conditions = [eq(animals.userId, userId)];
     
     if (filters?.status) {
       conditions.push(eq(animals.status, filters.status));
+    }
+
+    if (filters?.sex) {
+      conditions.push(eq(animals.sex, filters.sex));
+    }
+
+    const searchTerm = filters?.search?.trim();
+    if (searchTerm) {
+      const pattern = `%${searchTerm}%`;
+      conditions.push(or(
+        ilike(animals.tagId, pattern),
+        ilike(animals.name, pattern),
+        ilike(animals.electronicId, pattern),
+      )!);
     }
     
     const results = await db.select().from(animals).where(and(...conditions));
@@ -163,12 +209,37 @@ export class DatabaseStorage implements IStorage {
     return animal;
   }
 
+  async getAnimalByElectronicId(userId: string, electronicId: string): Promise<Animal | undefined> {
+    const normalized = this.normalizeElectronicId(electronicId);
+    if (!normalized) return undefined;
+
+    const [animal] = await db.select().from(animals).where(
+      and(eq(animals.userId, userId), eq(animals.electronicId, normalized))
+    );
+    return animal;
+  }
+
   async createAnimal(userId: string, animal: Omit<InsertAnimal, 'userId'>): Promise<Animal> {
-    const [newAnimal] = await db.insert(animals).values({ ...animal, userId }).returning();
+    const normalizedElectronicId = this.normalizeElectronicId(animal.electronicId);
+    await this.assertUniqueElectronicId(userId, normalizedElectronicId);
+
+    const [newAnimal] = await db.insert(animals).values({
+      ...animal,
+      electronicId: normalizedElectronicId,
+      userId,
+    }).returning();
     return newAnimal;
   }
 
   async updateAnimal(userId: string, id: number, updates: Partial<Omit<InsertAnimal, 'userId'>>): Promise<Animal> {
+    if (Object.prototype.hasOwnProperty.call(updates, "electronicId")) {
+      updates = {
+        ...updates,
+        electronicId: this.normalizeElectronicId(updates.electronicId),
+      };
+      await this.assertUniqueElectronicId(userId, updates.electronicId, id);
+    }
+
     const [updatedAnimal] = await db
       .update(animals)
       .set(updates)
@@ -342,6 +413,11 @@ export class DatabaseStorage implements IStorage {
       and(eq(animalImages.id, id), eq(animalImages.userId, userId))
     );
   }
+
+  async createEidScanEvent(userId: string, event: Omit<InsertEidScanEvent, 'userId'>): Promise<EidScanEvent> {
+    const [newEvent] = await db.insert(eidScanEvents).values({ ...event, userId }).returning();
+    return newEvent;
+  }
   
   // Exported Documents
   async getExportedDocuments(userId: string, subfolder?: string): Promise<ExportedDocument[]> {
@@ -399,7 +475,38 @@ export class DatabaseStorage implements IStorage {
   // Bulk import
   async bulkCreateAnimals(userId: string, animalsList: Omit<InsertAnimal, 'userId'>[]): Promise<Animal[]> {
     if (animalsList.length === 0) return [];
-    const animalsWithUserId = animalsList.map(a => ({ ...a, userId }));
+
+    const normalizedAnimals = animalsList.map((animal) => ({
+      ...animal,
+      electronicId: this.normalizeElectronicId(animal.electronicId),
+    }));
+
+    const providedElectronicIds = normalizedAnimals
+      .map((animal) => animal.electronicId)
+      .filter((electronicId): electronicId is string => !!electronicId);
+
+    const duplicateInPayload = providedElectronicIds.find((electronicId, index) =>
+      providedElectronicIds.indexOf(electronicId) !== index
+    );
+    if (duplicateInPayload) {
+      throw new DuplicateElectronicIdError(duplicateInPayload);
+    }
+
+    if (providedElectronicIds.length > 0) {
+      const existingMatches = await db.select({
+        electronicId: animals.electronicId,
+      }).from(animals).where(and(
+        eq(animals.userId, userId),
+        inArray(animals.electronicId, providedElectronicIds)
+      ));
+
+      const existingElectronicId = existingMatches[0]?.electronicId;
+      if (existingElectronicId) {
+        throw new DuplicateElectronicIdError(existingElectronicId);
+      }
+    }
+
+    const animalsWithUserId = normalizedAnimals.map(a => ({ ...a, userId }));
     const created = await db.insert(animals).values(animalsWithUserId).returning();
     return created;
   }
@@ -411,6 +518,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(exportedDocuments).where(eq(exportedDocuments.userId, userId));
     await db.delete(documents).where(eq(documents.userId, userId));
     await db.delete(animalImages).where(eq(animalImages.userId, userId));
+    await db.delete(eidScanEvents).where(eq(eidScanEvents.userId, userId));
     await db.delete(evaluations).where(eq(evaluations.userId, userId));
     await db.delete(healthRecords).where(eq(healthRecords.userId, userId));
     await db.delete(performanceRecords).where(eq(performanceRecords.userId, userId));

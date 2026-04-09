@@ -333,6 +333,7 @@ export default function Records() {
     return animals.filter(a => 
       a.tagId?.toLowerCase().includes(s) ||
       a.name?.toLowerCase().includes(s) ||
+      a.electronicId?.toLowerCase().includes(s) ||
       a.sex?.toLowerCase().includes(s)
     );
   };

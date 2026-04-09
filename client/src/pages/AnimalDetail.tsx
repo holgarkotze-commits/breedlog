@@ -1491,6 +1491,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
             weight100Day: formData.weight100Day || null,
             birthStatus: formData.birthStatus || null,
             weaningStatus: formData.weaningStatus || null,
+            electronicId: formData.electronicId?.trim() || null,
         };
         
         mutate({ id: animal.id, ...cleanedData }, {

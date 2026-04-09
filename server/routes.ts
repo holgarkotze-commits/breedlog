@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
+import { DuplicateElectronicIdError } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAdminPin, getUserId as getDeviceUserId, getDeviceId } from "./device-auth";
@@ -110,6 +111,12 @@ export async function registerRoutes(
           field: err.errors[0].path.join("."),
         });
       }
+      if (err instanceof DuplicateElectronicIdError) {
+        return res.status(400).json({
+          message: err.message,
+          field: "electronicId",
+        });
+      }
       throw err;
     }
   });
@@ -125,6 +132,12 @@ export async function registerRoutes(
         return res.status(400).json({
           message: err.errors[0].message,
           field: err.errors[0].path.join("."),
+        });
+      }
+      if (err instanceof DuplicateElectronicIdError) {
+        return res.status(400).json({
+          message: err.message,
+          field: "electronicId",
         });
       }
       throw err;
@@ -625,7 +638,7 @@ export async function registerRoutes(
           birthWeight: record.birthWeight || record.birth_weight || record['Birth Weight'] || null,
           currentWeight: record.currentWeight || record.current_weight || record['Current Weight'] || null,
           notes: record.notes || record.Notes || null,
-          tattoo: record.tattoo || record.Tattoo || null,
+          tattooId: record.tattooId || record.tattoo_id || record.tattoo || record.Tattoo || null,
           electronicId: record.electronicId || record.electronic_id || record['Electronic ID'] || null,
         });
       }
@@ -638,8 +651,51 @@ export async function registerRoutes(
         errors 
       });
     } catch (err: any) {
+      if (err instanceof DuplicateElectronicIdError) {
+        return res.status(400).json({ message: err.message, field: "electronicId" });
+      }
       console.error("CSV Import error:", err);
       res.status(500).json({ message: err.message || "Failed to import CSV" });
+    }
+  });
+
+  app.post(api.eid.scan.path, requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const input = api.eid.scan.input.parse(req.body);
+      const electronicIdRaw = input.electronicIdRaw.trim();
+
+      if (!electronicIdRaw) {
+        return res.status(400).json({ message: "electronicIdRaw is required", field: "electronicIdRaw" });
+      }
+
+      const animal = await storage.getAnimalByElectronicId(userId, electronicIdRaw);
+      const scanEvent = await storage.createEidScanEvent(userId, {
+        animalId: animal?.id ?? null,
+        electronicIdRaw,
+        readerSource: input.readerSource ?? null,
+        readerSessionId: input.readerSessionId ?? null,
+        scannedAt: new Date(),
+        matched: !!animal,
+        matchMethod: animal ? "electronicId" : null,
+        payload: input.payload ?? null,
+      });
+
+      return res.json({
+        matched: !!animal,
+        animal: animal ?? null,
+        scanEvent,
+        status: animal ? "matched" : "unassigned",
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join("."),
+        });
+      }
+      console.error("EID scan error:", err);
+      return res.status(500).json({ message: "Failed to process EID scan" });
     }
   });
 

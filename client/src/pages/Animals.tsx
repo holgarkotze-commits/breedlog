@@ -31,6 +31,7 @@ import { DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
 import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
 import { type PDFQuality, PDF_QUALITY_SETTINGS, compressImage, getPDFStyles, getPDFFooter } from "@/lib/pdf-utils";
+import { api } from "@shared/routes";
 
 function calculateEweBreedingStats(eweId: number, breedingEvents: BreedingEvent[], allAnimals: Animal[]) {
   const eweEvents = breedingEvents.filter(e => e.eweId === eweId && e.lambingDate);
@@ -138,6 +139,8 @@ export default function Animals() {
   const { toast } = useToast();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isScanDialogOpen, setIsScanDialogOpen] = useState(false);
+  const [prefillElectronicId, setPrefillElectronicId] = useState<string | undefined>(undefined);
   const [viewMode, setViewMode] = useState<"detailed" | "list" | "thumbnail">("detailed");
   const isMobile = useIsMobile();
   
@@ -1432,7 +1435,24 @@ export default function Animals() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <CreateAnimalDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
+            <EidScanDialog
+              open={isScanDialogOpen}
+              onOpenChange={setIsScanDialogOpen}
+              onCreateFromEid={(electronicId) => {
+                setPrefillElectronicId(electronicId);
+                setIsDialogOpen(true);
+              }}
+            />
+            <CreateAnimalDialog
+              open={isDialogOpen}
+              onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) {
+                  setPrefillElectronicId(undefined);
+                }
+              }}
+              initialElectronicId={prefillElectronicId}
+            />
           </div>
         </div>
 
@@ -3212,7 +3232,15 @@ function AnimalListRow({ animal }: { animal: Animal }) {
   );
 }
 
-function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
+function CreateAnimalDialog({
+  open,
+  onOpenChange,
+  initialElectronicId,
+}: {
+  open: boolean,
+  onOpenChange: (open: boolean) => void,
+  initialElectronicId?: string,
+}) {
   const { mutate, isPending } = useCreateAnimal();
   const { toast } = useToast();
   const { data: allAnimals } = useAnimals({});
@@ -3229,6 +3257,7 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
     resolver: zodResolver(insertAnimalSchema),
     defaultValues: {
       tagId: "",
+      electronicId: "",
       sex: "ewe",
       breed: "Meatmaster",
       status: "active",
@@ -3315,7 +3344,10 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
   };
 
   const onSubmit = (data: any) => {
-    mutate(data, {
+    mutate({
+      ...data,
+      electronicId: data.electronicId?.trim() || null,
+    }, {
       onSuccess: () => {
         onOpenChange(false);
         resetForm();
@@ -3338,6 +3370,12 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
     }
     onOpenChange(isOpen);
   };
+
+  useEffect(() => {
+    if (open && initialElectronicId) {
+      form.setValue("electronicId", initialElectronicId);
+    }
+  }, [form, initialElectronicId, open]);
 
   return (
     <>
@@ -3390,6 +3428,26 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="electronicId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Electronic ID</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Optional RFID / EID"
+                      className="rugged-input"
+                      data-testid="input-electronic-id"
+                      {...field}
+                      value={field.value || ""}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
@@ -3871,5 +3929,168 @@ function CreateAnimalDialog({ open, onOpenChange }: { open: boolean, onOpenChang
       </DialogContent>
     </Dialog>
     </>
+  );
+}
+
+function EidScanDialog({
+  open,
+  onOpenChange,
+  onCreateFromEid,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreateFromEid: (electronicId: string) => void;
+}) {
+  const { toast } = useToast();
+  const [electronicIdRaw, setElectronicIdRaw] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [result, setResult] = useState<{
+    matched: boolean;
+    status: "matched" | "unassigned";
+    animal: Animal | null;
+  } | null>(null);
+
+  const resetState = () => {
+    setElectronicIdRaw("");
+    setResult(null);
+    setIsSubmitting(false);
+  };
+
+  const handleDialogChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      resetState();
+    }
+    onOpenChange(isOpen);
+  };
+
+  const handleScan = async () => {
+    const normalized = electronicIdRaw.trim();
+    if (!normalized) {
+      toast({ title: "EID required", description: "Enter an electronic ID to continue", variant: "destructive" });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const res = await fetch(api.eid.scan.path, {
+        method: api.eid.scan.method,
+        headers,
+        credentials: "include",
+        body: JSON.stringify({ electronicIdRaw: normalized }),
+      });
+
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.message || "Failed to process EID scan");
+      }
+
+      setResult(body);
+    } catch (error: any) {
+      toast({
+        title: "Scan failed",
+        description: error.message || "Unable to process EID scan",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleDialogChange}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          className="rugged-btn border-white/70 text-white hover:border-white [&_svg]:text-primary"
+          data-testid="button-open-eid-scan"
+        >
+          <Tag className="w-4 h-4 mr-2" />
+          Scan EID
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bg-card border-border w-full max-w-md mx-2 sm:mx-auto">
+        <DialogHeader>
+          <DialogTitle className="font-display uppercase text-xl">EID Intake</DialogTitle>
+          <DialogDescription>Enter an RFID / EID value to look up an existing animal.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="eid-scan-input">Electronic ID</Label>
+            <Input
+              id="eid-scan-input"
+              value={electronicIdRaw}
+              onChange={(e) => setElectronicIdRaw(e.target.value)}
+              placeholder="Enter scanned EID"
+              data-testid="input-eid-scan"
+            />
+          </div>
+
+          {result && (
+            <Card className="border-border bg-secondary/30">
+              <div className="p-4 space-y-2">
+                <p className="text-sm font-semibold uppercase text-muted-foreground">
+                  {result.matched ? "Matched Animal" : "Unassigned EID"}
+                </p>
+                {result.matched && result.animal ? (
+                  <>
+                    <p className="text-lg font-bold">{result.animal.tagId}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {result.animal.name || "Unnamed"} • {result.animal.sex} • {result.animal.breed}
+                    </p>
+                    <Link href={`/animals/${result.animal.id}`}>
+                      <Button
+                        className="w-full mt-2"
+                        variant="default"
+                        onClick={() => handleDialogChange(false)}
+                        data-testid="button-view-matched-animal"
+                      >
+                        View Animal
+                      </Button>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      No animal is currently assigned to <span className="font-mono">{electronicIdRaw.trim()}</span>.
+                    </p>
+                    <Button
+                      className="w-full mt-2 bg-primary text-black"
+                      onClick={() => {
+                        const normalized = electronicIdRaw.trim();
+                        handleDialogChange(false);
+                        onCreateFromEid(normalized);
+                      }}
+                      data-testid="button-create-animal-from-eid"
+                    >
+                      Create New Animal From This EID
+                    </Button>
+                  </>
+                )}
+              </div>
+            </Card>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => handleDialogChange(false)}>
+              Close
+            </Button>
+            <Button
+              onClick={handleScan}
+              disabled={isSubmitting}
+              className="bg-primary text-black"
+              data-testid="button-submit-eid-scan"
+            >
+              {isSubmitting ? "Checking..." : "Check EID"}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -135,6 +135,34 @@ export const animalsRelations = relations(animals, ({ one, many }) => ({
 
 export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, userId: true, createdAt: true, clientId: true, vectorClock: true, lastSyncedAt: true });
 
+// === EID SCAN EVENTS ===
+export const eidScanEvents = pgTable("eid_scan_events", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  animalId: integer("animal_id").references(() => animals.id),
+  electronicIdRaw: text("electronic_id_raw").notNull(),
+  readerSource: text("reader_source"),
+  readerSessionId: text("reader_session_id"),
+  scannedAt: timestamp("scanned_at").notNull().defaultNow(),
+  matched: boolean("matched").notNull().default(false),
+  matchMethod: text("match_method"),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const eidScanEventsRelations = relations(eidScanEvents, ({ one }) => ({
+  animal: one(animals, {
+    fields: [eidScanEvents.animalId],
+    references: [animals.id],
+  }),
+}));
+
+export const insertEidScanEventSchema = createInsertSchema(eidScanEvents).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+});
+
 
 // === ANIMAL IMAGES ===
 // Stores multiple images per animal in their dedicated "Images" folder
@@ -331,6 +359,8 @@ export type Evaluation = typeof evaluations.$inferSelect;
 export type InsertEvaluation = z.infer<typeof insertEvaluationSchema>;
 export type AiValuation = typeof aiValuations.$inferSelect;
 export type InsertAiValuation = z.infer<typeof insertAiValuationSchema>;
+export type EidScanEvent = typeof eidScanEvents.$inferSelect;
+export type InsertEidScanEvent = z.infer<typeof insertEidScanEventSchema>;
 
 export type AnimalWithRelations = Animal & {
   dam?: Animal | null;

@@ -9,6 +9,7 @@ import {
   insertMatingGroupSchema,
   insertFarmSettingsSchema,
   insertDocumentSchema,
+  insertEidScanEventSchema,
   animals,
   breedingEvents,
   performanceRecords,
@@ -263,6 +264,27 @@ export const api = {
       path: '/api/import/csv',
       responses: {
         200: z.object({ imported: z.number(), errors: z.array(z.string()) }),
+        400: errorSchemas.validation,
+      },
+    },
+  },
+  eid: {
+    scan: {
+      method: 'POST' as const,
+      path: '/api/eid/scan',
+      input: insertEidScanEventSchema.pick({
+        electronicIdRaw: true,
+        readerSource: true,
+        readerSessionId: true,
+        payload: true,
+      }),
+      responses: {
+        200: z.object({
+          matched: z.boolean(),
+          animal: z.custom<typeof animals.$inferSelect>().nullable(),
+          scanEvent: z.custom<any>(),
+          status: z.enum(['matched', 'unassigned']),
+        }),
         400: errorSchemas.validation,
       },
     },

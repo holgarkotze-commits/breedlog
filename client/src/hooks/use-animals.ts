@@ -39,7 +39,8 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
             const searchLower = filters.search.toLowerCase();
             animals = animals.filter(a => 
               a.tagId.toLowerCase().includes(searchLower) || 
-              a.name?.toLowerCase().includes(searchLower)
+              a.name?.toLowerCase().includes(searchLower) ||
+              a.electronicId?.toLowerCase().includes(searchLower)
             );
           }
           if (filters?.status) animals = animals.filter(a => a.status === filters.status);
@@ -178,10 +179,29 @@ export function useCreateAnimal() {
             console.log("[useCreateAnimal] Server save succeeded, ID:", created.id);
             return created;
           }
-          // Server error - fall through to queue for sync
           const errorText = await res.text();
+          if (res.status >= 400 && res.status < 500) {
+            try {
+              const { deleteFromStore } = await import("@/lib/indexeddb");
+              await deleteFromStore("animals", tempId);
+            } catch (e) {
+              console.log("[useCreateAnimal] Could not remove temp entry after validation error:", e);
+            }
+            let message = "Failed to save animal";
+            try {
+              const parsed = JSON.parse(errorText);
+              message = parsed.message || message;
+            } catch {
+              message = errorText || message;
+            }
+            throw new Error(message);
+          }
+          // Server error - fall through to queue for sync
           console.log("[useCreateAnimal] Server returned error:", res.status, errorText);
         } catch (err) {
+          if (err instanceof Error && !/Network error/i.test(err.message)) {
+            throw err;
+          }
           console.log("[useCreateAnimal] Network error, queuing for sync:", err);
         }
       }
@@ -279,9 +299,12 @@ export function useUpdateAnimal() {
       
       // OFFLINE-FIRST: Always save locally first for instant response
       const existing = await getFromStore<AnimalWithRelations>("animals", id);
+      const normalizedUpdates = Object.prototype.hasOwnProperty.call(updates, "electronicId")
+        ? { ...updates, electronicId: updates.electronicId?.trim() || null }
+        : updates;
       const updated = existing 
-        ? { ...existing, ...updates, id, synced: 0 } as AnimalWithRelations
-        : { ...updates, id, synced: 0, createdAt: new Date() } as unknown as AnimalWithRelations;
+        ? { ...existing, ...normalizedUpdates, id, synced: 0 } as AnimalWithRelations
+        : { ...normalizedUpdates, id, synced: 0, createdAt: new Date() } as unknown as AnimalWithRelations;
       
       // Save to IndexedDB immediately for instant UI response
       await putInStore("animals", updated);
@@ -296,13 +319,13 @@ export function useUpdateAnimal() {
           const headers: Record<string, string> = { "Content-Type": "application/json" };
           if (token) headers["Authorization"] = `Bearer ${token}`;
           
-          console.log("[SYNC] Attempting to update animal ID:", id, "Data:", JSON.stringify(updates));
+          console.log("[SYNC] Attempting to update animal ID:", id, "Data:", JSON.stringify(normalizedUpdates));
           
           const url = buildUrl(api.animals.update.path, { id });
           const res = await fetch(url, {
             method: api.animals.update.method,
             headers,
-            body: JSON.stringify(updates),
+            body: JSON.stringify(normalizedUpdates),
             credentials: "include",
           });
           
@@ -315,8 +338,24 @@ export function useUpdateAnimal() {
             return serverData;
           }
           const errorText = await res.text();
+          if (res.status >= 400 && res.status < 500) {
+            if (existing) {
+              await putInStore("animals", existing);
+            }
+            let message = "Failed to update animal";
+            try {
+              const parsed = JSON.parse(errorText);
+              message = parsed.message || message;
+            } catch {
+              message = errorText || message;
+            }
+            throw new Error(message);
+          }
           console.log("[useUpdateAnimal] Server returned error:", res.status, errorText);
         } catch (err) {
+          if (err instanceof Error && !/Network error/i.test(err.message)) {
+            throw err;
+          }
           console.log("[useUpdateAnimal] Network error, queuing for sync:", err);
         }
       }
@@ -325,7 +364,7 @@ export function useUpdateAnimal() {
       await addToSyncQueue({ 
         action: "update", 
         entity: "animals", 
-        data: { id, ...updates },
+        data: { id, ...normalizedUpdates },
         ...(isTempId ? { tempId: id } : {})
       });
       console.log("[useUpdateAnimal] Queued for sync");
