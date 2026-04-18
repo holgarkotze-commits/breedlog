@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
+import createMemoryStore from "memorystore";
 import crypto from "crypto";
 import { storage } from "./storage";
 
@@ -62,16 +63,19 @@ export function validateDeviceToken(token: string): { valid: boolean; deviceId?:
 // Setup device-based session management
 export function setupDeviceAuth(app: Express) {
   const sessionTtl = 30 * 24 * 60 * 60 * 1000; // 30 days
-  const pgStore = connectPg(session);
-  const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
-    ttl: sessionTtl,
-    tableName: "sessions",
-  });
+  const sessionStore = process.env.DATABASE_URL
+    ? new (connectPg(session))({
+        conString: process.env.DATABASE_URL,
+        createTableIfMissing: false,
+        ttl: sessionTtl,
+        tableName: "sessions",
+      })
+    : new (createMemoryStore(session))({
+        checkPeriod: 24 * 60 * 60 * 1000,
+      });
   
   app.use(session({
-    secret: process.env.SESSION_SECRET!,
+    secret: process.env.SESSION_SECRET || "breedlog-dev-session-secret",
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
@@ -86,6 +90,18 @@ export function setupDeviceAuth(app: Express) {
   // Token-based auth middleware - runs before routes
   // Checks Authorization: Bearer <token> or X-Device-Token header for token auth (more reliable than cookies on mobile)
   app.use(async (req: Request, res: Response, next: NextFunction) => {
+    // Test-mode auth bypass for automated runtime certification.
+    if (process.env.NODE_ENV === "test") {
+      const testUserId = req.headers["x-test-user-id"] as string | undefined;
+      const testDeviceId = req.headers["x-test-device-id"] as string | undefined;
+      if (testUserId && testDeviceId) {
+        req.deviceAuth = { userId: testUserId, deviceId: testDeviceId, token: "test-bypass-token" };
+        req.session.userId = testUserId;
+        req.session.deviceId = testDeviceId;
+        return next();
+      }
+    }
+
     // Check Authorization: Bearer <token> first (standard format)
     let token = "";
     const authHeader = req.headers.authorization;

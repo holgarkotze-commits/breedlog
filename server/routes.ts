@@ -835,9 +835,12 @@ export async function registerRoutes(
   });
 
   // === DEBUG TEST ROUTE ===
-  app.get("/api/debug/test", (req, res) => {
-    res.json({ success: true, timestamp: new Date().toISOString() });
-  });
+  // Only available in non-production + admin-authenticated contexts.
+  if (process.env.NODE_ENV !== "production") {
+    app.get("/api/debug/test", requireAdminPin, (req, res) => {
+      res.json({ success: true, timestamp: new Date().toISOString() });
+    });
+  }
 
   // === BETA ACCESS SYSTEM ===
   const BETA_CONFIG = {
