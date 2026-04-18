@@ -1,0 +1,297 @@
+BREEDLOG — REPLIT AGENT FULL EXECUTION INSTRUCTION
+
+You are working inside the BreedLog Replit workspace that is connected to GitHub.
+
+Important operating rule:
+Treat this instruction as a strict autonomous execution order.
+Do not stop after one subtask.
+Do not reply early with partial completion.
+Complete the full chain of work from sync through verification as far as the environment allows.
+
+Your job is to do ALL of the following in one continuous execution:
+
+1. Sync this Replit workspace to the latest changes already pushed by Codex to GitHub
+2. Install and prepare everything needed in Replit that Codex could not complete in its restricted environment
+3. Run the remaining real browser-based certification work if Replit supports it
+4. Fix any defects found during that process
+5. Re-run the full validation stack
+6. Return a final honest release verdict
+
+This is not only a git pull task.
+It is a sync-and-continue-release task.
+
+==================================================
+PHASE 1 — SYNC REPLIT WITH THE LATEST GITHUB CHANGES
+==================================================
+
+First inspect repo state:
+
+- git branch
+- git remote -v
+- git status
+
+Determine the current branch and use it unless there is a clear repo reason not to.
+
+If the working tree has local uncommitted changes:
+- stash them safely:
+  git stash push -m "replit-backup-before-sync"
+
+Then sync from GitHub:
+
+- git fetch origin
+- git pull origin <current-branch>
+
+If merge conflicts happen:
+- resolve them cleanly
+- prefer the latest Codex/GitHub version unless a local Replit environment fix must be preserved
+- do not leave the repository in a conflicted state
+
+If a stash was created:
+- git stash pop
+- resolve any pop conflicts cleanly
+- preserve the intended latest code state
+
+Then confirm final sync status:
+- git status
+
+Goal:
+This Replit workspace must now reflect the latest Codex changes from GitHub.
+
+==================================================
+PHASE 2 — INSTALL AND PREPARE THE ENVIRONMENT
+==================================================
+
+After sync, continue immediately.
+
+Run:
+- npm install
+
+Then inspect whether Playwright is already installed.
+
+If Playwright is missing:
+- npm i -D @playwright/test
+
+Then install Chromium for Playwright:
+- npx playwright install chromium
+
+If Replit requires any additional supported setup for browser execution, perform it.
+
+Then inspect the certification files already added by Codex, including:
+
+- docs/release/offline-sync-certification.md
+- artifacts/browser-certification/RESULT.json
+- scripts/release-gate.sh
+- tests/browser-cert/playwright.config.ts.template
+- tests/browser-cert/specs.offline-sync.spec.ts.template
+
+If the browser-cert files are still only templates, convert them into runnable files.
+Create the actual config/spec files needed for execution.
+Keep changes minimal and directly tied to certification.
+
+Ensure the runtime/env setup needed for certification is configured correctly inside Replit, including values such as:
+
+- NODE_ENV
+- USE_IN_MEMORY_STORAGE
+- SESSION_SECRET
+- ADMIN_PIN
+
+Use the repo’s documented certification mode if present.
+
+==================================================
+PHASE 3 — START THE APP AND PREPARE FOR REAL CERTIFICATION
+==================================================
+
+Start the app in the correct mode for certification.
+
+Make sure the browser automation can actually reach the running app.
+
+Do not fake browser proof.
+Do not substitute code inspection for browser execution if Replit supports real execution.
+
+==================================================
+PHASE 4 — RUN REAL BROWSER CERTIFICATION
+==================================================
+
+Run the following real browser scenarios against the actual running app:
+
+A. ONLINE CRUD FLOW
+- launch app
+- create animal
+- verify it renders
+- edit animal
+- verify update persists
+- delete animal if supported
+- verify deletion consistency
+- refresh page
+- verify final state remains correct
+
+B. TRUE OFFLINE CREATE FLOW
+- start online
+- disable network at browser level
+- create animal offline
+- verify it appears immediately in UI
+- verify local persistence behavior
+- reload while still offline
+- verify record still exists
+- verify no crash and no forced online dependency
+
+C. RECONNECT + SYNC FLOW
+- re-enable network
+- verify reconnect triggers sync
+- verify queue drains correctly
+- verify no duplicate record is created
+- verify server receives the intended final record
+- verify temp/local state resolves correctly
+- verify final UI state matches synced state
+
+D. MULTI-RECORD OFFLINE WORKFLOW
+- go offline
+- create multiple records offline
+- edit at least one offline
+- reload offline
+- verify records are still present
+- reconnect
+- verify all sync correctly
+- verify no duplication
+- verify no data loss
+- verify final state consistency
+
+E. FINAL CONSISTENCY FLOW
+- compare final local/browser state and server state
+- verify no ghost records
+- verify no stale UI residue
+- verify no temp-ID leftovers
+- verify no queue corruption remains
+
+F. SECURITY / RELEASE SANITY
+- verify no exposed debug path
+- verify no dev-only leak into release-cert path
+
+==================================================
+PHASE 5 — FIX ANY DEFECTS FOUND
+==================================================
+
+If anything fails, fix it immediately.
+
+Fix only real production blockers such as:
+- offline persistence failures
+- IndexedDB reload failures
+- reconnect sync failures
+- duplicate sync creation
+- queue corruption
+- temp ID mapping failures
+- stale UI after sync
+- hidden online-only dependency
+- broken browser harness/config
+- release gate integration issues
+
+Do not add new features.
+Do not redesign the app.
+Do not add cosmetic extras.
+
+After each fix, verify again.
+
+==================================================
+PHASE 6 — RE-RUN FULL VALIDATION STACK
+==================================================
+
+When fixes are complete, run all of the following:
+
+- npm run check
+- npm run build
+- npm run test:cert
+- browser certification suite
+- npm run release:gate
+
+If browser certification genuinely passes, update:
+- artifacts/browser-certification/RESULT.json
+
+Do not mark it passed unless it was truly proven.
+
+==================================================
+PHASE 7 — FINAL RELEASE DECISION
+==================================================
+
+Only declare READY FOR RELEASE if all of the following are true:
+
+- GitHub sync completed successfully
+- dependencies installed correctly
+- Playwright/browser environment works in Replit
+- app runs in Replit
+- browser offline tests passed
+- reconnect sync tests passed
+- no duplicate/data-loss/temp-ID/state-consistency blocker remains
+- runtime/build/test stack passes
+- release gate passes truthfully
+- no critical or high blocker remains
+
+If any of those fail, verdict must remain NOT READY FOR RELEASE.
+
+==================================================
+REQUIRED OUTPUT FORMAT
+==================================================
+
+Return exactly this structure:
+
+1. SYNC RESULT
+- branch used
+- whether stash was used
+- whether conflicts occurred
+- whether Replit now matches latest GitHub/Codex state
+
+2. ENVIRONMENT PREPARATION
+- dependencies installed
+- Playwright installed or already present
+- browser binary installed
+- files created/converted from template
+- env/runtime setup used
+
+3. BROWSER CERTIFICATION RESULTS
+- Online CRUD Flow: PASS/FAIL
+- Offline Create Flow: PASS/FAIL
+- Reconnect Sync Flow: PASS/FAIL
+- Multi-Record Offline Flow: PASS/FAIL
+- Final Consistency Flow: PASS/FAIL
+- Security/Release Sanity Flow: PASS/FAIL
+
+4. DEFECTS FOUND AND FIXED
+For each:
+- defect
+- cause
+- fix
+- files changed
+- verification result
+
+5. FULL TEST RESULTS
+- npm run check
+- npm run build
+- npm run test:cert
+- browser suite
+- npm run release:gate
+
+6. FINAL STATUS TABLE
+- Git Sync Status: VERIFIED/FAILED
+- Runtime Status: VERIFIED/FAILED
+- Build Status: VERIFIED/FAILED
+- Browser Offline Status: VERIFIED/FAILED
+- Browser Sync Status: VERIFIED/FAILED
+- Data Integrity Status: VERIFIED/FAILED
+- Security Status: VERIFIED/FAILED
+- Release Gate Status: VERIFIED/FAILED
+
+7. FINAL MARKET VERDICT
+- READY FOR RELEASE
+or
+- NOT READY FOR RELEASE
+
+8. REMAINING BLOCKERS
+Only real blockers that still prevent release.
+If none, say:
+- None. BreedLog has passed release certification.
+
+9. COMMIT OUTPUT
+- commit hash
+- short commit title
+- exact files changed
+
+Begin now.
