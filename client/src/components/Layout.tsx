@@ -74,6 +74,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Home" },
     { href: "/animals", icon: Beef, label: "My Herd" },
+    { href: "/lambs", icon: Beef, label: "Lambs" },
     { href: "/breeding", icon: Dna, label: "Breeding" },
     { href: "/health", icon: Syringe, label: "Health" },
     { href: "/records", icon: FileText, label: "Records" },
