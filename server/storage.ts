@@ -1,4 +1,5 @@
 import { db } from "./db";
+import crypto from "crypto";
 import {
   animals,
   breedingEvents,
@@ -131,7 +132,7 @@ export interface IStorage {
   getInviteCodes(): Promise<InviteCode[]>;
   getInviteCodeByCode(code: string): Promise<InviteCode | undefined>;
   createInviteCode(code: Omit<InsertInviteCode, 'status'>): Promise<InviteCode>;
-  updateInviteCode(id: number, updates: Partial<InsertInviteCode>): Promise<InviteCode | undefined>;
+  updateInviteCode(id: number, updates: Partial<InviteCode>): Promise<InviteCode | undefined>;
   deleteInviteCode(id: number): Promise<void>;
   incrementInviteCodeUses(id: number): Promise<void>;
   getActiveTestersCount(): Promise<number>;
@@ -545,7 +546,7 @@ export class DatabaseStorage implements IStorage {
     return results[0];
   }
   
-  async updateInviteCode(id: number, updates: Partial<InsertInviteCode>): Promise<InviteCode | undefined> {
+  async updateInviteCode(id: number, updates: Partial<InviteCode>): Promise<InviteCode | undefined> {
     const results = await db.update(inviteCodes).set(updates).where(eq(inviteCodes.id, id)).returning();
     return results[0];
   }
@@ -640,4 +641,166 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+class InMemoryStorage implements IStorage {
+  private animalSeq = 1;
+  private breedingSeq = 1;
+  private matingSeq = 1;
+  private recordSeq = 1;
+  private genericSeq = 1;
+  private inviteSeq = 1;
+  private activationSeq = 1;
+  private users = new Map<string, { id: string; deviceId: string; sharedUserId: string | null; deviceName?: string }>();
+  private animals = new Map<number, Animal>();
+  private breedingEvents = new Map<number, BreedingEvent>();
+  private matingGroups = new Map<number, MatingGroup>();
+  private performanceRecords = new Map<number, PerformanceRecord>();
+  private healthRecords = new Map<number, HealthRecord>();
+  private evaluations = new Map<number, Evaluation>();
+  private farmSettings = new Map<string, FarmSettings>();
+  private documents = new Map<number, Document>();
+  private animalImages = new Map<number, AnimalImage>();
+  private eidEvents = new Map<number, EidScanEvent>();
+  private exportedDocuments = new Map<number, ExportedDocument>();
+  private flockEvents = new Map<number, FlockHealthEvent>();
+  private flockTreatments = new Map<number, FlockHealthTreatment>();
+  private inviteCodes = new Map<number, InviteCode>();
+  private activations = new Map<number, UserActivation>();
+  private settings = new Map<string, string>();
+
+  private now() { return new Date(); }
+  private nextId(counter: "animalSeq" | "breedingSeq" | "matingSeq" | "recordSeq" | "genericSeq" | "inviteSeq" | "activationSeq") {
+    const next = this[counter];
+    this[counter] += 1;
+    return next;
+  }
+
+  async getAnimals(userId: string, filters?: { search?: string; status?: string; sex?: string }): Promise<Animal[]> {
+    let list = [...this.animals.values()].filter(a => a.userId === userId);
+    if (filters?.status) list = list.filter(a => a.status === filters.status);
+    if (filters?.sex) list = list.filter(a => a.sex === filters.sex);
+    if (filters?.search) {
+      const s = filters.search.toLowerCase();
+      list = list.filter(a => a.tagId.toLowerCase().includes(s) || (a.name ?? "").toLowerCase().includes(s) || (a.electronicId ?? "").toLowerCase().includes(s));
+    }
+    return list;
+  }
+  async getAnimal(userId: string, id: number): Promise<Animal | undefined> { const a = this.animals.get(id); return a?.userId === userId ? a : undefined; }
+  async createAnimal(userId: string, animal: Omit<InsertAnimal, "userId">): Promise<Animal> {
+    if (animal.electronicId) {
+      const duplicate = [...this.animals.values()].find(a => a.userId === userId && a.electronicId === animal.electronicId);
+      if (duplicate) throw new DuplicateElectronicIdError(animal.electronicId);
+    }
+    const id = this.nextId("animalSeq");
+    const rec = { id, ...animal, userId, createdAt: this.now() } as Animal;
+    this.animals.set(id, rec);
+    return rec;
+  }
+  async updateAnimal(userId: string, id: number, animal: Partial<Omit<InsertAnimal, "userId">>): Promise<Animal> {
+    const existing = await this.getAnimal(userId, id);
+    if (!existing) throw new Error("Animal not found");
+    if (animal.electronicId) {
+      const duplicate = [...this.animals.values()].find(a => a.userId === userId && a.electronicId === animal.electronicId && a.id !== id);
+      if (duplicate) throw new DuplicateElectronicIdError(animal.electronicId);
+    }
+    const updated = { ...existing, ...animal } as Animal;
+    this.animals.set(id, updated);
+    return updated;
+  }
+  async deleteAnimal(userId: string, id: number): Promise<void> { const a = await this.getAnimal(userId, id); if (a) this.animals.delete(id); }
+  async getAnimalByElectronicId(userId: string, electronicId: string): Promise<Animal | undefined> { return [...this.animals.values()].find(a => a.userId === userId && a.electronicId === electronicId); }
+  async getBreedingEvents(userId: string): Promise<BreedingEvent[]> { return [...this.breedingEvents.values()].filter(e => e.userId === userId); }
+  async createBreedingEvent(userId: string, event: Omit<InsertBreedingEvent, "userId">): Promise<BreedingEvent> { const id = this.nextId("breedingSeq"); const v = { id, ...event, userId } as BreedingEvent; this.breedingEvents.set(id, v); return v; }
+  async deleteBreedingEvent(userId: string, id: number): Promise<void> { const e = this.breedingEvents.get(id); if (e?.userId === userId) this.breedingEvents.delete(id); }
+  async getOffspringByBreedingEvent(_userId: string, _eventId: number): Promise<Offspring[]> { return []; }
+  async createOffspring(_userId: string, newOffspring: Omit<InsertOffspring, "userId">): Promise<Offspring> { return { id: this.nextId("genericSeq"), ...newOffspring, userId: "in-memory" } as Offspring; }
+  async getMatingGroups(userId: string): Promise<MatingGroup[]> { return [...this.matingGroups.values()].filter(g => g.userId === userId); }
+  async createMatingGroup(userId: string, group: Omit<InsertMatingGroup, "userId">): Promise<MatingGroup> { const id = this.nextId("matingSeq"); const v = { id, ...group, userId } as MatingGroup; this.matingGroups.set(id, v); return v; }
+  async updateMatingGroup(userId: string, id: number, updates: Partial<Omit<InsertMatingGroup, "userId">>): Promise<MatingGroup | null> { const g = this.matingGroups.get(id); if (!g || g.userId !== userId) return null; const v = { ...g, ...updates } as MatingGroup; this.matingGroups.set(id, v); return v; }
+  async deleteMatingGroup(userId: string, id: number): Promise<boolean> { const g = this.matingGroups.get(id); if (!g || g.userId !== userId) return false; this.matingGroups.delete(id); return true; }
+  async getPerformanceRecords(userId: string, animalId: number): Promise<PerformanceRecord[]> { return [...this.performanceRecords.values()].filter(r => r.userId === userId && r.animalId === animalId); }
+  async getAllPerformanceRecords(userId: string): Promise<PerformanceRecord[]> { return [...this.performanceRecords.values()].filter(r => r.userId === userId); }
+  async createPerformanceRecord(userId: string, record: Omit<InsertPerformanceRecord, "userId">): Promise<PerformanceRecord> { const id = this.nextId("recordSeq"); const v = { id, ...record, userId } as PerformanceRecord; this.performanceRecords.set(id, v); return v; }
+  async getHealthRecords(userId: string, animalId: number): Promise<HealthRecord[]> { return [...this.healthRecords.values()].filter(r => r.userId === userId && r.animalId === animalId); }
+  async getAllHealthRecords(userId: string): Promise<HealthRecord[]> { return [...this.healthRecords.values()].filter(r => r.userId === userId); }
+  async createHealthRecord(userId: string, record: Omit<InsertHealthRecord, "userId">): Promise<HealthRecord> { const id = this.nextId("recordSeq"); const v = { id, ...record, userId } as HealthRecord; this.healthRecords.set(id, v); return v; }
+  async getEvaluations(userId: string, animalId: number): Promise<Evaluation[]> { return [...this.evaluations.values()].filter(e => e.userId === userId && e.animalId === animalId); }
+  async createEvaluation(userId: string, evaluation: Omit<InsertEvaluation, "userId">): Promise<Evaluation> { const id = this.nextId("genericSeq"); const v = { id, ...evaluation, userId } as Evaluation; this.evaluations.set(id, v); return v; }
+  async getFarmSettings(userId: string): Promise<FarmSettings | undefined> { return this.farmSettings.get(userId); }
+  async saveFarmSettings(userId: string, settings: Omit<InsertFarmSettings, "userId">): Promise<FarmSettings> { const existing = this.farmSettings.get(userId); const value = { id: existing?.id ?? this.nextId("genericSeq"), ...settings, userId } as FarmSettings; this.farmSettings.set(userId, value); return value; }
+  async getDocuments(userId: string): Promise<Document[]> { return [...this.documents.values()].filter(d => d.userId === userId); }
+  async createDocument(userId: string, doc: Omit<InsertDocument, "userId">): Promise<Document> {
+    const id = this.nextId("genericSeq");
+    const v = {
+      id,
+      ...doc,
+      userId,
+      createdAt: this.now(),
+      clientId: null,
+      vectorClock: null,
+      lastSyncedAt: null,
+    } as Document;
+    this.documents.set(id, v);
+    return v;
+  }
+  async deleteDocument(userId: string, id: number): Promise<void> { const d = this.documents.get(id); if (d?.userId === userId) this.documents.delete(id); }
+  async getAnimalImages(userId: string, animalId: number): Promise<AnimalImage[]> { return [...this.animalImages.values()].filter(i => i.userId === userId && i.animalId === animalId); }
+  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, "userId">): Promise<AnimalImage> { const id = this.nextId("genericSeq"); const v = { id, ...image, userId, uploadedAt: this.now() } as AnimalImage; this.animalImages.set(id, v); return v; }
+  async deleteAnimalImage(userId: string, id: number): Promise<void> { const i = this.animalImages.get(id); if (i?.userId === userId) this.animalImages.delete(id); }
+  async createEidScanEvent(userId: string, event: Omit<InsertEidScanEvent, "userId">): Promise<EidScanEvent> { const id = this.nextId("genericSeq"); const v = { id, ...event, userId, createdAt: this.now(), scannedAt: this.now() } as EidScanEvent; this.eidEvents.set(id, v); return v; }
+  async getExportedDocuments(userId: string, subfolder?: string): Promise<ExportedDocument[]> { return [...this.exportedDocuments.values()].filter(d => d.userId === userId && (!subfolder || d.subfolder === subfolder)); }
+  async createExportedDocument(userId: string, doc: Omit<InsertExportedDocument, "userId">): Promise<ExportedDocument> {
+    const id = this.nextId("genericSeq");
+    const v = { id, ...doc, userId, exportedAt: this.now() } as ExportedDocument;
+    this.exportedDocuments.set(id, v);
+    return v;
+  }
+  async deleteExportedDocument(userId: string, id: number): Promise<void> { const d = this.exportedDocuments.get(id); if (d?.userId === userId) this.exportedDocuments.delete(id); }
+  async clearAllData(userId: string): Promise<void> { for (const [id, a] of this.animals.entries()) if (a.userId === userId) this.animals.delete(id); }
+  async getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]> { return [...this.flockEvents.values()].filter(e => e.userId === userId); }
+  async getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined> { const e = this.flockEvents.get(id); return e?.userId === userId ? e : undefined; }
+  async createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, "userId">): Promise<FlockHealthEvent> { const id = this.nextId("genericSeq"); const v = { id, ...event, userId, createdAt: this.now() } as FlockHealthEvent; this.flockEvents.set(id, v); return v; }
+  async getFlockHealthTreatments(userId: string, eventId: number): Promise<FlockHealthTreatment[]> { return [...this.flockTreatments.values()].filter(t => t.userId === userId && t.eventId === eventId); }
+  async createFlockHealthTreatments(userId: string, treatments: Omit<InsertFlockHealthTreatment, "userId">[]): Promise<FlockHealthTreatment[]> { return treatments.map(t => { const id = this.nextId("genericSeq"); const v = { id, ...t, userId } as FlockHealthTreatment; this.flockTreatments.set(id, v); return v; }); }
+  async bulkCreateAnimals(userId: string, animalsList: Omit<InsertAnimal, "userId">[]): Promise<Animal[]> { const created: Animal[] = []; for (const a of animalsList) created.push(await this.createAnimal(userId, a)); return created; }
+  async getInviteCodes(): Promise<InviteCode[]> { return [...this.inviteCodes.values()]; }
+  async getInviteCodeByCode(code: string): Promise<InviteCode | undefined> { return [...this.inviteCodes.values()].find(c => c.code === code); }
+  async createInviteCode(input: Omit<InsertInviteCode, "status">): Promise<InviteCode> { const id = this.nextId("inviteSeq"); const v = { id, ...input, status: "active", usesCount: 0, createdAt: this.now(), lastValidatedAt: null } as InviteCode; this.inviteCodes.set(id, v); return v; }
+  async updateInviteCode(id: number, updates: Partial<InviteCode>): Promise<InviteCode | undefined> { const c = this.inviteCodes.get(id); if (!c) return undefined; const v = { ...c, ...updates } as InviteCode; this.inviteCodes.set(id, v); return v; }
+  async deleteInviteCode(id: number): Promise<void> { this.inviteCodes.delete(id); }
+  async incrementInviteCodeUses(id: number): Promise<void> { const c = this.inviteCodes.get(id); if (!c) return; this.inviteCodes.set(id, { ...c, usesCount: (c.usesCount ?? 0) + 1, lastValidatedAt: this.now() } as InviteCode); }
+  async getActiveTestersCount(): Promise<number> { return [...this.activations.values()].filter(a => a.status === "active").length; }
+  async getUserActivation(userId: string): Promise<UserActivation | undefined> { return [...this.activations.values()].find(a => a.userId === userId); }
+  async getActivationByDeviceId(deviceId: string): Promise<UserActivation | undefined> { return [...this.activations.values()].find(a => a.deviceId === deviceId); }
+  async createUserActivation(activation: InsertUserActivation): Promise<UserActivation> {
+    const id = this.nextId("activationSeq");
+    const v = {
+      id,
+      ...activation,
+      activatedAt: this.now(),
+      lastOnlineCheck: this.now(),
+      offlineGraceStart: null,
+    } as UserActivation;
+    this.activations.set(id, v);
+    return v;
+  }
+  async updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, "id" | "userId" | "activatedAt">>): Promise<UserActivation | undefined> { const a = [...this.activations.values()].find(v => v.userId === userId); if (!a) return undefined; const v = { ...a, ...updates } as UserActivation; this.activations.set(v.id, v); return v; }
+  async getAllActiveActivations(): Promise<UserActivation[]> { return [...this.activations.values()].filter(a => a.status === "active"); }
+  async deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void> { for (const [id, a] of this.activations.entries()) if (a.inviteCodeId === inviteCodeId) this.activations.delete(id); }
+  async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null } | undefined> { return [...this.users.values()].find(u => u.deviceId === deviceId); }
+  async upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null }> {
+    const existing = await this.getUserByDeviceId(data.deviceId);
+    if (existing) return existing;
+    const id = crypto.randomUUID();
+    const user = { id, deviceId: data.deviceId, sharedUserId: null, deviceName: data.deviceName };
+    this.users.set(id, user);
+    return user;
+  }
+  async setSharedUserId(userId: string, sharedUserId: string): Promise<void> { const user = this.users.get(userId); if (user) this.users.set(userId, { ...user, sharedUserId }); }
+  async updateUserLastSeen(_userId: string): Promise<void> {}
+  async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
+  async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }
+}
+
+export const storage = process.env.USE_IN_MEMORY_STORAGE === "1"
+  ? new InMemoryStorage()
+  : new DatabaseStorage();

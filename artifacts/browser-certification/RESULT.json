@@ -1,0 +1,5 @@
+{
+  "passed": false,
+  "reason": "Browser-level offline/sync certification has not yet been executed in this environment.",
+  "runbook": "docs/release/offline-sync-certification.md"
+}

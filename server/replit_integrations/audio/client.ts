@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import { spawn } from "child_process";
 
 export const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "local-test-key",
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 

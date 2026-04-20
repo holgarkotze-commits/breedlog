@@ -50,6 +50,64 @@ export interface SyncQueueItem {
   failedAttempts?: number; // Track number of failed sync attempts
 }
 
+export type PendingSyncInput = Omit<SyncQueueItem, 'id' | 'timestamp' | 'synced'>;
+
+function getTargetId(item: { action: SyncQueueItem['action']; data: unknown; tempId?: number }): number | undefined {
+  if (typeof item.tempId === "number") return item.tempId;
+  const maybe = item.data as { id?: unknown };
+  return typeof maybe?.id === "number" ? maybe.id : undefined;
+}
+
+export function mergePendingSyncItems(existing: SyncQueueItem[], incoming: PendingSyncInput): {
+  deleteIds: string[];
+  upsertExisting?: SyncQueueItem;
+  skipInsert: boolean;
+} {
+  const targetId = getTargetId(incoming);
+  const related = existing.filter((item) => item.entity === incoming.entity);
+  const relatedSameTarget = typeof targetId === "number"
+    ? related.filter((item) => getTargetId(item) === targetId)
+    : [];
+
+  // Deduplicate creates with same tempId
+  if (incoming.action === "create" && typeof incoming.tempId === "number") {
+    const dupCreate = relatedSameTarget.find((item) => item.action === "create");
+    if (dupCreate) return { deleteIds: [], skipInsert: true };
+  }
+
+  // Collapse multiple updates for the same target
+  if (incoming.action === "update" && relatedSameTarget.length > 0) {
+    const latestUpdate = relatedSameTarget
+      .filter((item) => item.action === "update")
+      .sort((a, b) => b.timestamp - a.timestamp)[0];
+    if (latestUpdate) {
+      return {
+        deleteIds: relatedSameTarget
+          .filter((item) => item.action === "update" && item.id !== latestUpdate.id)
+          .map((item) => item.id),
+        upsertExisting: {
+          ...latestUpdate,
+          data: { ...(latestUpdate.data as object), ...(incoming.data as object) },
+          tempId: incoming.tempId ?? latestUpdate.tempId,
+          timestamp: Date.now(),
+        },
+        skipInsert: true,
+      };
+    }
+  }
+
+  // Delete supersedes pending updates and duplicate deletes for same target
+  if (incoming.action === "delete" && relatedSameTarget.length > 0) {
+    const toDelete = relatedSameTarget.filter((item) => item.action === "update" || item.action === "delete");
+    return {
+      deleteIds: toDelete.map((item) => item.id),
+      skipInsert: false,
+    };
+  }
+
+  return { deleteIds: [], skipInsert: false };
+}
+
 let dbInstance: IDBDatabase | null = null;
 
 export function openDatabase(): Promise<IDBDatabase> {
@@ -284,7 +342,22 @@ export async function clearStore(storeName: string): Promise<void> {
   });
 }
 
-export async function addToSyncQueue(item: Omit<SyncQueueItem, 'id' | 'timestamp' | 'synced'>): Promise<void> {
+export async function addToSyncQueue(item: PendingSyncInput): Promise<void> {
+  const pending = await getPendingSyncItems();
+  const mergeResult = mergePendingSyncItems(pending, item);
+
+  for (const id of mergeResult.deleteIds) {
+    await deleteFromStore('syncQueue', id);
+  }
+
+  if (mergeResult.upsertExisting) {
+    await putInStore('syncQueue', mergeResult.upsertExisting);
+  }
+
+  if (mergeResult.skipInsert) {
+    return;
+  }
+
   const queueItem: SyncQueueItem = {
     ...item,
     id: crypto.randomUUID(),
@@ -313,9 +386,10 @@ export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
 
       request.onsuccess = () => {
         // Filter to only get unsynced items (handles both boolean and number values)
-        const items = (request.result || []).filter(item => 
+        const items = (request.result || []).filter(item =>
           item.synced === 0 || item.synced === false
         );
+        items.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
         resolve(items);
       };
       
