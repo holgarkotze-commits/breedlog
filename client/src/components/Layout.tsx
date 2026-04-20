@@ -11,7 +11,7 @@ import { performLogout } from "@/lib/queryClient";
 function ScrambleText({ text, className }: { text: string; className?: string }) {
   const [displayText, setDisplayText] = useState("");
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*";
-  
+
   const scramble = useCallback(() => {
     let iteration = 0;
     const interval = setInterval(() => {
@@ -19,7 +19,7 @@ function ScrambleText({ text, className }: { text: string; className?: string })
         text
           .split("")
           .map((char, index) => {
-            if (char === " " || char === ".") return char;
+            if (char === " " || char === "." || char === ",") return char;
             if (index < iteration) return text[index];
             return chars[Math.floor(Math.random() * chars.length)];
           })
@@ -49,21 +49,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { addVisit } = useRecentVisits();
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Track page visits
   useEffect(() => {
     const pageLabels: Record<string, string> = {
       "/animals": "My Herd",
       "/breeding": "Breeding",
       "/settings": "Settings",
     };
-    // Also track animal detail pages
     if (location.startsWith("/animals/")) {
       addVisit(location, `Animal ${location.split("/")[2]}`);
     } else if (pageLabels[location]) {
@@ -83,116 +79,97 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const displayName = farmSettings?.studName || farmSettings?.farmName || null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row pb-14 md:pb-0 font-sans overflow-x-hidden">
-      {/* Storage warning banner for incognito mode */}
+    <div className="min-h-screen bg-background abstract-bg flex flex-col pb-14 md:flex-row md:pb-0">
       <StorageWarningBanner />
-      
-      {/* Sidebar (Desktop) */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card fixed h-full z-50">
-        <Link href="/" className="p-6 border-b border-border flex flex-col items-center cursor-pointer hover:bg-secondary/30 transition-colors sidebar-logo-area">
+
+      <aside className="hidden md:fixed md:z-50 md:flex h-full w-72 flex-col border-r border-sidebar-border bg-[linear-gradient(175deg,#1f2a44_0%,#1e3350_42%,#111827_100%)] text-sidebar-foreground shadow-2xl">
+        <Link href="/" className="sidebar-logo-area border-b border-white/10 px-4 py-5 transition-colors hover:bg-white/5">
           <Logo size="lg" showTagline />
         </Link>
-        
-        <nav className="flex-1 p-4 space-y-2">
+
+        <nav className="flex-1 space-y-2 px-4 py-5">
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href} data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`} className={cn(
-              "flex items-center gap-3 px-4 py-3 rounded-md transition-all duration-200 font-medium uppercase tracking-wide text-sm",
-              location === item.href 
-                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20 font-bold" 
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-            )}>
-              <item.icon className="w-5 h-5" />
+            <Link
+              key={item.href}
+              href={item.href}
+              data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+              className={cn(
+                "flex items-center gap-3 rounded-xl border px-4 py-3 text-[1.05rem] font-semibold uppercase tracking-[0.02em] transition-all duration-200",
+                location === item.href
+                  ? "border-cyan-300/40 bg-cyan-500/22 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_10px_24px_rgba(14,116,144,0.35)]"
+                  : "border-transparent text-slate-100/88 hover:border-white/15 hover:bg-white/10 hover:text-white"
+              )}
+            >
+              <item.icon className="h-5 w-5" />
               {item.label}
+              {location === item.href && <span className="ml-auto h-2.5 w-2.5 rounded-full bg-cyan-300" />}
             </Link>
           ))}
         </nav>
 
-        <div className="p-4 border-t border-border space-y-2">
+        <div className="space-y-2 border-t border-white/10 px-4 pb-4 pt-3">
           <button
             onClick={() => void performLogout()}
             data-testid="button-logout-desktop"
-            className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            className="flex w-full items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm font-medium text-slate-200/85 transition-colors hover:bg-white/10 hover:text-white"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="h-4 w-4" />
             Log Out
           </button>
-          <div className="bg-secondary/50 p-3 rounded-md space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-muted-foreground font-mono">BreedLog v1.0.0</p>
+          <div className="rounded-lg border border-white/10 bg-black/20 p-3 backdrop-blur-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-mono text-slate-100/75">BreedLog v1.0.0</p>
               <div className="flex items-center gap-1">
                 <SyncStatusBadge />
                 <GlobalRefreshButton location="sidebar" />
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <NetworkStatusIndicator />
-            </div>
-            <p className="text-[10px] text-primary/80 font-medium tracking-wide text-center" style={{ fontFamily: "Calibri, 'Segoe UI', sans-serif" }}>
-              Breeding Livestock Management
-            </p>
+            <NetworkStatusIndicator />
+            <p className="mt-2 text-center text-[10px] font-medium tracking-wide text-cyan-100/70">Breeding Livestock Management</p>
           </div>
         </div>
       </aside>
 
-      {/* Mobile Header - Collapses to icon on scroll */}
-      <header className={cn(
-        "md:hidden bg-background sticky top-0 z-40 transition-all duration-300",
-        isScrolled ? "py-2" : "py-4"
-      )}>
-        {/* Mobile header controls row */}
+      <header className={cn("sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur md:hidden", isScrolled ? "py-2" : "py-4")}>
         <div className="absolute right-2 top-2 flex items-center gap-1">
           <SyncStatusBadge />
           <GlobalRefreshButton />
           <button
             onClick={() => void performLogout()}
             data-testid="button-logout-mobile"
-            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             aria-label="Log out"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="h-4 w-4" />
           </button>
         </div>
         <Link href="/" className="flex flex-col items-center px-4">
-          <div className={cn(
-            "transition-all duration-300",
-            isScrolled ? "scale-[0.4] -my-6" : "scale-100"
-          )}>
+          <div className={cn("transition-all duration-300", isScrolled ? "scale-75" : "scale-100")}>
             <Logo size={isScrolled ? "sm" : "md"} />
           </div>
-          
-          <div className={cn(
-            "flex flex-col items-center overflow-hidden transition-all duration-300",
-            isScrolled ? "max-h-0 opacity-0 mt-0" : "max-h-20 opacity-100 mt-3"
-          )}>
-            <p className="text-xs tracking-normal font-medium text-primary drop-shadow-[0_0_8px_rgba(255,195,0,0.6)]">
-              Breeding Livestock Management
-            </p>
-            <ScrambleText 
-              text="Breed Smart. Farm Better." 
-              className="text-[10px] mt-1 uppercase tracking-widest font-semibold text-muted-foreground"
-            />
+          <div className={cn("overflow-hidden transition-all duration-300", isScrolled ? "max-h-0 opacity-0" : "mt-2 max-h-20 opacity-100")}>
+            <ScrambleText text={displayName || "Breed Smart, Farm Better"} className="text-xs font-medium text-muted-foreground" />
           </div>
         </Link>
       </header>
 
-      {/* Main Content - Compact padding on mobile */}
-      <main className="flex-1 md:ml-64 p-2.5 md:p-8 overflow-y-auto min-h-[calc(100vh-4rem)] md:min-h-screen">
-        <div className="max-w-7xl mx-auto">
-          {children}
-        </div>
+      <main className="min-h-[calc(100vh-4rem)] flex-1 overflow-y-auto p-2.5 md:ml-72 md:min-h-screen md:p-8">
+        <div className="mx-auto max-w-7xl">{children}</div>
       </main>
 
-      {/* Bottom Nav (Mobile) - Compact but readable */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border h-14 flex items-center justify-around z-50 px-1 pb-safe">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-14 items-center justify-around border-t border-border bg-card px-1 md:hidden">
         {navItems.map((item) => (
-          <Link key={item.href} href={item.href} data-testid={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`} className={cn(
-            "flex flex-col items-center justify-center p-1 rounded-md transition-colors w-full h-full",
-            location === item.href 
-              ? "text-primary" 
-              : "text-muted-foreground hover:text-primary"
-          )}>
-            <item.icon className={cn("w-5 h-5", location === item.href ? "text-primary fill-current" : "text-white")} />
-            <span className="text-[10px] font-semibold uppercase mt-0.5 text-primary">{item.label}</span>
+          <Link
+            key={item.href}
+            href={item.href}
+            data-testid={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+            className={cn(
+              "flex h-full w-full flex-col items-center justify-center rounded-md p-1 transition-colors",
+              location === item.href ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-primary"
+            )}
+          >
+            <item.icon className="h-5 w-5" />
+            <span className="mt-0.5 text-[10px] font-semibold uppercase">{item.label}</span>
           </Link>
         ))}
       </nav>

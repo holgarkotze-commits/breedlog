@@ -28,7 +28,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { format, differenceInDays } from "date-fns";
 import { Label } from "@/components/ui/label";
 import { DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
+import logo from "@/assets/breedlog-logo-mark.png";
 import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
 import { type PDFQuality, PDF_QUALITY_SETTINGS, compressImage, getPDFStyles, getPDFFooter } from "@/lib/pdf-utils";
 import { api } from "@shared/routes";

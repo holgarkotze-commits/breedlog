@@ -199,44 +199,44 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="space-y-4 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-2 md:gap-4">
+      <div className="space-y-5 md:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="flex flex-col justify-between gap-2 md:flex-row md:items-end md:gap-4">
           <div>
-            <h1 className="text-lg md:text-3xl font-bold text-foreground tracking-tight" data-testid="page-title">
+            <h1 className="text-2xl md:text-5xl font-bold text-foreground tracking-tight" data-testid="page-title">
               {displayName ? `${displayName}` : "Dashboard"}
             </h1>
-            <p className="text-muted-foreground text-xs md:text-base mt-0.5">Daily digest and performance metrics</p>
+            <p className="mt-1 text-sm text-muted-foreground md:text-base">Daily digest and performance metrics</p>
           </div>
-          <div className="bg-secondary/50 px-2.5 py-1 md:px-4 md:py-2 rounded border border-border font-mono text-[10px] md:text-sm text-primary">
+          <div className="rounded-xl border border-accent/55 bg-card/85 px-3 py-1.5 font-display text-sm font-semibold text-primary shadow-sm md:px-5 md:py-2 md:text-sm">
             {new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
           </div>
         </div>
 
         {/* Empty State - Show when no animals */}
         {!loadingAnimals && totalAnimals === 0 && (
-          <Card className="rugged-card border-primary/30 bg-primary/5">
+          <Card className="rugged-card border-accent/70 bg-card">
             <CardContent className="p-6 md:p-8 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-accent/60 bg-primary/10">
                 <Beef className="w-8 h-8 text-primary" />
               </div>
-              <h3 className="text-lg font-bold mb-2">No animals yet</h3>
+              <h3 className="mb-2 text-3xl font-bold">No animals yet.</h3>
               <p className="text-muted-foreground text-sm mb-4 max-w-md mx-auto">
                 Add your first ram, ewe, or lamb to start tracking your herd. 
                 All your data will sync automatically and work offline.
               </p>
-              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              <div className="flex flex-col justify-center gap-3 sm:flex-row">
                 <Link href="/animals?add=ram">
-                  <Button variant="outline" className="w-full sm:w-auto" data-testid="button-add-ram-empty">
+                  <Button variant="default" className="w-full sm:w-auto" data-testid="button-add-ram-empty">
                     <PlusCircle className="w-4 h-4 mr-2" /> Add Ram
                   </Button>
                 </Link>
                 <Link href="/animals?add=ewe">
-                  <Button variant="outline" className="w-full sm:w-auto" data-testid="button-add-ewe-empty">
+                  <Button variant="default" className="w-full sm:w-auto" data-testid="button-add-ewe-empty">
                     <PlusCircle className="w-4 h-4 mr-2" /> Add Ewe
                   </Button>
                 </Link>
                 <Link href="/animals?add=lamb">
-                  <Button variant="outline" className="w-full sm:w-auto" data-testid="button-add-lamb-empty">
+                  <Button variant="default" className="w-full sm:w-auto" data-testid="button-add-lamb-empty">
                     <PlusCircle className="w-4 h-4 mr-2" /> Add Lamb
                   </Button>
                 </Link>
@@ -246,10 +246,10 @@ export default function Dashboard() {
         )}
 
         {/* Key Metrics Grid - 2x2 on mobile */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 md:gap-5">
           {/* Total Herd with itemized status */}
           <Link href="/animals?section=total">
-            <Card className="rugged-card bg-card hover:-translate-y-0.5 md:hover:-translate-y-1 transition-transform cursor-pointer hover:border-primary/50">
+            <Card className="rugged-card cursor-pointer bg-card transition-transform hover:-translate-y-0.5 hover:border-accent/80 md:hover:-translate-y-1">
               <CardContent className="p-3 md:p-6">
                 <div className="flex justify-between items-start">
                   <div>
@@ -260,7 +260,7 @@ export default function Dashboard() {
                       <h3 className="text-2xl md:text-4xl font-bold mt-0.5 md:mt-2 text-foreground">{totalAnimals}</h3>
                     )}
                   </div>
-                  <div className="p-1.5 md:p-3 bg-secondary rounded-sm text-primary border border-border">
+                  <div className="rounded-xl border border-accent/45 bg-secondary/70 p-1.5 text-primary md:p-3">
                     <Beef className="w-4 h-4 md:w-6 md:h-6" />
                   </div>
                 </div>
@@ -339,7 +339,7 @@ export default function Dashboard() {
                 
                 return (
                   <Link key={index} href={visit.path}>
-                    <Card className="rugged-card hover:border-primary/50 transition-colors cursor-pointer p-2 md:p-3" data-testid={`card-recent-visit-${index}`}>
+                    <Card className="rugged-card cursor-pointer p-2 transition-colors hover:border-accent/80 md:p-3" data-testid={`card-recent-visit-${index}`}>
                       <div className="flex items-center gap-2">
                         {/* Thumbnail or icon */}
                         {isAnimalPage && thumbnailUrl ? (
@@ -483,7 +483,7 @@ export default function Dashboard() {
         </div>
 
         {/* Encouraging message */}
-        <div className="text-center py-6 px-4 border-t border-border/30 mt-4">
+        <div className="mt-4 border-t border-accent/30 px-4 py-6 text-center">
           <p className="text-sm text-muted-foreground italic max-w-md mx-auto">
             Every record you add builds a stronger genetic foundation. 
             <span className="text-primary font-medium"> BreedLog</span> helps you make smarter breeding decisions for healthier, more productive flocks.

@@ -22,7 +22,7 @@ import { format } from "date-fns";
 import { ArrowLeft, Dna, Syringe, Scale, FileText, Plus, Upload, Edit, Camera, Image, X, Download, Heart, LogOut, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
 import { useAnimalBreedingEvents } from "@/hooks/use-breeding";
 import { Link } from "wouter";
-import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
+import logo from "@/assets/breedlog-logo-mark.png";
 import { useToast } from "@/hooks/use-toast";
 import type { Animal, AnimalWithRelations, BreedingEvent } from "@shared/schema";
 import { calculateEweBreedingStats } from "@/lib/breeding-stats";

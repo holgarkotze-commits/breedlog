@@ -12,7 +12,7 @@ import { Link } from "wouter";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import type { Animal } from "@shared/schema";
-import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
+import logo from "@/assets/breedlog-logo-mark.png";
 
 export default function Culled() {
   const [search, setSearch] = useState("");

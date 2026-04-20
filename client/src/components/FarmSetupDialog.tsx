@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSaveFarmSettings } from "@/hooks/use-farm-settings";
 import { Loader2, Building2 } from "lucide-react";
-import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
+import logo from "@/assets/breedlog-logo-mark.png";
 
 interface FarmSetupDialogProps {
   open: boolean;

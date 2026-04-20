@@ -10,7 +10,7 @@ import { Heart, Shield, Baby, Scale, Calendar, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { useDeleteAnimal } from "@/hooks/use-animals";
 import { tempIdInSyncQueue, animalExistsInCache } from "@/lib/indexeddb";
-import logo from "@assets/BREEDLOG_LOGO_1768730745128.png";
+import logo from "@/assets/breedlog-logo-mark.png";
 
 export function AnimalCard({ animal }: { animal: Animal }) {
   const isRam = animal.sex.toLowerCase() === 'ram';
