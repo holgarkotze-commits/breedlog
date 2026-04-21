@@ -944,21 +944,10 @@ export async function registerRoutes(
         });
       }
       
-      // Check offline grace period
-      const lastOnline = new Date(activation.lastOnlineCheck);
-      const graceDays = BETA_CONFIG.OFFLINE_GRACE_DAYS;
-      const graceEnd = new Date(lastOnline.getTime() + graceDays * 24 * 60 * 60 * 1000);
-      
-      if (new Date() > graceEnd) {
-        return res.json({ 
-          hasAccess: false, 
-          reason: 'Offline grace period expired. Please connect to the internet.',
-          needsCode: false,
-          offlineGraceExpired: true
-        });
-      }
-      
-      // Update last online check
+      // The 7-day offline grace window is enforced CLIENT-SIDE only (via localStorage
+      // lastCheck in BetaAccessGate.tsx). If a request reaches THIS endpoint, the
+      // device is online and reaching the server — by definition not in offline mode.
+      // Refresh lastOnlineCheck unconditionally so future offline windows start fresh.
       await storage.updateUserActivation(userId, { 
         lastOnlineCheck: new Date(),
         offlineGraceStart: null 

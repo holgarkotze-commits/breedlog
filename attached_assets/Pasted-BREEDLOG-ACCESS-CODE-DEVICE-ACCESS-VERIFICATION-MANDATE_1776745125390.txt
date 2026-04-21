@@ -1,0 +1,219 @@
+BREEDLOG — ACCESS CODE / DEVICE ACCESS VERIFICATION MANDATE
+
+You are not allowed to redesign, restyle, refactor, or change any unrelated part of the app.
+
+This task is ONLY about the admin-generated access codes, device access behavior, and the related online/offline access pipeline.
+
+Do NOT change:
+- UI/graphics/theme/logo
+- layout
+- unrelated app logic
+- data model unrelated to access codes
+- dashboard/pages/components not involved in access/auth/offline access validation
+- anything else outside this access-code/device-access/offline-authentication scope
+
+MISSION
+You must thoroughly inspect, test, and fix the access-code system so that it works exactly as intended.
+
+INTENDED REQUIRED BEHAVIOR
+1. One generated access code must work for:
+   - one mobile phone
+   - one computer
+
+2. That same code must continue to work on that same phone and that same computer for the full validity period set when the code was generated (for example 30 or 60 days).
+
+3. The same approved device must be able to:
+   - log out
+   - log back in
+   - reuse the same valid code
+   - continue working for as long as the code has not expired
+
+4. Going offline and later reconnecting must not wrongly invalidate that valid device/code combination.
+
+5. If internet is available, the app must not falsely show:
+   - “Connection required”
+   - “Your offline access period is expired”
+   when the device is actually online and the code is still valid.
+
+6. Offline-first behavior and sync must still work correctly:
+   - animal changes made offline must persist
+   - animal changes must sync correctly after reconnect
+   - reconnect must not lock the user out incorrectly
+   - device access state must remain valid after reconnect if the code is still valid
+
+CURRENT PROBLEM TO INVESTIGATE
+The phone gets locked out and cannot re-enter correctly using the same valid code, even though:
+- the code should still be valid
+- the phone is connected to the internet
+- reconnect should restore access
+
+The message shown is effectively:
+- “Connection required”
+- “Your offline access period is expired”
+- “BreedLog works offline for up to seven days. After that, you need to reconnect to verify your access.”
+
+This behavior must be investigated properly and fixed if the fault is real.
+
+STRICT EXECUTION RULES
+- First inspect and understand the current code path for:
+  - code generation
+  - code redemption
+  - device binding
+  - mobile/computer registration
+  - logout/login reuse
+  - offline access validation
+  - reconnect verification
+  - sync/auth interaction
+- Then test thoroughly
+- Only make code changes if a real defect is confirmed
+- If any change outside this exact scope seems necessary, stop and report it before doing it
+- Do not do “nice-to-have” improvements
+- Do not touch unrelated app areas
+
+TESTING REQUIREMENTS
+You must perform repeated and thorough testing, not a single pass.
+
+Test at minimum all of the following:
+
+A. CODE GENERATION
+- Generate a valid access code from admin
+- Test both 30-day and 60-day style validity behavior if supported
+
+B. COMPUTER DEVICE FLOW
+- Login on one computer using the code
+- Logout
+- Login again with the same code
+- Confirm it still works
+- Repeat multiple times
+- Confirm validity is respected correctly
+
+C. MOBILE DEVICE FLOW
+- Login on one mobile device or mobile view using the same code
+- Logout
+- Login again with the same code
+- Confirm it still works
+- Repeat multiple times
+- Confirm validity is respected correctly
+
+D. ONE CODE / TWO DEVICES RULE
+- Confirm one code works for exactly:
+  - one computer
+  - one mobile phone
+- Confirm the intended device limit is enforced correctly
+- Confirm valid existing approved devices are not wrongly rejected
+
+E. OFFLINE ACCESS TEST
+- Login successfully
+- Go offline
+- Use the app
+- Make a meaningful change such as adding or editing an animal
+- Confirm local/offline persistence behaves correctly
+- Confirm the app does not incorrectly lock out a still-valid approved device during normal offline use
+
+F. RECONNECT TEST
+- After offline use, reconnect to the internet
+- Confirm sync happens correctly
+- Confirm the app does not falsely report expired offline access
+- Confirm the user stays able to enter the app with the same valid code/device
+- Confirm reconnect does not break approved device status
+
+G. FALSE CONNECTION-REQUIRED BUG TEST
+- Specifically reproduce and trace the bug where the app says connection is required even while online
+- Determine whether the cause is:
+  - stale auth state
+  - failed verification call
+  - wrong offline-expiry calculation
+  - bad device binding lookup
+  - broken reconnect check
+  - sync pipeline conflict
+  - cached stale state
+  - another real defect
+- Fix the real root cause if found
+
+H. REPEATABILITY
+- Run multiple cycles, not one:
+  - login
+  - logout
+  - login again
+  - offline
+  - reconnect
+  - sync
+  - logout
+  - login again
+- Confirm the result is stable and repeatable
+
+DIAGNOSTIC REQUIREMENT
+Trace the full access/auth/offline pipeline carefully:
+- admin code creation
+- stored validity period
+- device recognition/binding
+- access verification
+- offline grace/access window logic
+- reconnect verification logic
+- post-reconnect session restoration
+- interaction with sync pipeline
+
+You must identify exactly where the failure happens if there is one.
+
+ALLOWED CHANGES
+You may only change code inside the exact scope needed to fix:
+- access code validation
+- approved device behavior
+- mobile/computer reuse of same code
+- offline access validation
+- reconnect access recovery
+- related auth/sync boundary bugs directly causing this problem
+
+You may not change anything else.
+
+OUTPUT REQUIRED
+Return exactly:
+
+1. ACCESS CODE SYSTEM ANALYSIS
+- how the current flow works
+- what the intended rule currently is in code
+- where the defect was found, if any
+
+2. TEST MATRIX EXECUTED
+List every scenario tested:
+- computer login/logout/login
+- mobile login/logout/login
+- one code across one phone and one computer
+- offline use
+- reconnect
+- sync after offline edit
+- repeated reuse testing
+
+3. BUGS FOUND
+For each:
+- exact bug
+- root cause
+- impact
+
+4. FIXES APPLIED
+For each:
+- exact files changed
+- exact issue fixed
+- why the fix was necessary
+
+5. VERIFICATION RESULTS
+State clearly whether all of the following now work:
+- one code for one mobile phone and one computer
+- repeated logout/login on approved devices
+- validity period respected correctly
+- offline access behaves correctly
+- reconnect restores/retains valid access correctly
+- sync after offline use works correctly
+
+6. FINAL STATUS
+One of:
+- VERIFIED AND FIXED
+- VERIFIED NO DEFECT FOUND
+- NOT FULLY RESOLVED
+
+FINAL INSTRUCTION
+Be extremely strict.
+Do not wander outside scope.
+Do not change any other part of the app.
+Test thoroughly, repeatedly, and properly.
+Only fix real defects in the access-code/device-access/offline-access pipeline.
