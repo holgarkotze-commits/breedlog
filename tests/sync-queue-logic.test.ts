@@ -8,6 +8,7 @@ function makeItem(partial: Partial<SyncQueueItem>): SyncQueueItem {
     action: partial.action ?? 'update',
     entity: partial.entity ?? 'animals',
     data: partial.data ?? { id: 1 },
+    operationId: partial.operationId,
     tempId: partial.tempId,
     timestamp: partial.timestamp ?? Date.now(),
     synced: 0,
@@ -44,6 +45,23 @@ test('mergePendingSyncItems deduplicates create for same tempId', () => {
     entity: 'animals',
     tempId: -123,
     data: { tagId: 'A-1' },
+  });
+
+  assert.equal(result.skipInsert, true);
+  assert.deepEqual(result.deleteIds, []);
+});
+
+test('mergePendingSyncItems deduplicates create for same operationId', () => {
+  const existing = [
+    makeItem({ id: 'c-op-1', action: 'create', operationId: 'op-123', tempId: -999, data: { tagId: 'A-9' }, timestamp: 100 }),
+  ];
+
+  const result = mergePendingSyncItems(existing, {
+    action: 'create',
+    entity: 'animals',
+    operationId: 'op-123',
+    tempId: -1000,
+    data: { tagId: 'A-9' },
   });
 
   assert.equal(result.skipInsert, true);

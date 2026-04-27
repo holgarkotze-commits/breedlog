@@ -23,6 +23,7 @@ const Health = lazy(() => import("@/pages/Health"));
 const HealthEventDetail = lazy(() => import("@/pages/HealthEventDetail"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Lambs = lazy(() => import("@/pages/Lambs"));
+const Analysis = lazy(() => import("@/pages/Analysis"));
 const Records = lazy(() => import("@/pages/Records"));
 const Admin = lazy(() => import("@/pages/Admin"));
 
@@ -42,6 +43,7 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/animals" component={Animals} />
         <Route path="/animals/:id" component={AnimalDetail} />
+        <Route path="/analysis" component={Analysis} />
         <Route path="/lambs" component={Lambs} />
         <Route path="/breeding" component={Breeding} />
         <Route path="/breeding/groups/:id" component={MatingGroupDetail} />
@@ -71,11 +73,18 @@ function AuthenticatedApp() {
 const LOCAL_VERSION_KEY = "breedlog_app_version";
 
 async function checkAndReloadIfVersionMismatch() {
+  if (!navigator.onLine) {
+    return false;
+  }
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
     const response = await fetch("/api/version", { 
       cache: "no-store",
-      headers: { "Cache-Control": "no-cache" }
+      headers: { "Cache-Control": "no-cache" },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
     if (response.ok) {
       const { version } = await response.json();
       const localVersion = localStorage.getItem(LOCAL_VERSION_KEY);

@@ -2,8 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertAnimal, type AnimalWithRelations } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue } from "@/lib/indexeddb";
+import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue, findPendingSyncItemByOperationId } from "@/lib/indexeddb";
 import { syncManager } from "@/lib/sync-manager";
+import { clearExpiredOperationCache, getOrCreateOperationId } from "@/lib/idempotency";
 
 export function useAnimals(filters?: { search?: string; status?: string; sex?: string }) {
   const queryKey = [api.animals.list.path, filters];
@@ -125,6 +126,17 @@ export function useCreateAnimal() {
 
   return useMutation({
     mutationFn: async (data: InsertAnimal) => {
+      clearExpiredOperationCache();
+      const operationId = getOrCreateOperationId("animals", data as Record<string, unknown>);
+      data = { ...data, clientId: operationId };
+      const existingPending = await findPendingSyncItemByOperationId("animals", operationId);
+      if (existingPending?.tempId) {
+        const existingAnimal = await getFromStore<AnimalWithRelations>("animals", existingPending.tempId);
+        if (existingAnimal) {
+          return existingAnimal;
+        }
+      }
+
       // Use robust connectivity check (actual API ping, not just navigator.onLine)
       const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
       const isOnline = await isApiReachable();
@@ -135,11 +147,12 @@ export function useCreateAnimal() {
       const tempId = -Date.now();
       // Get device user ID for offline storage
       const deviceInfo = localStorage.getItem('breedlog_device_id');
-      const offlineAnimal = { 
+      const offlineAnimal = {
         ...data, 
         id: tempId, 
         createdAt: new Date(),
         userId: deviceInfo || 'offline-user', // Will be replaced with server userId on sync
+        clientId: operationId,
         synced: 0 // 0 = pending sync
       } as unknown as AnimalWithRelations;
       
@@ -158,8 +171,8 @@ export function useCreateAnimal() {
           
           const res = await fetch(api.animals.create.path, {
             method: api.animals.create.method,
-            headers,
-            body: JSON.stringify(data),
+            headers: { ...headers, "X-Idempotency-Key": operationId },
+            body: JSON.stringify({ ...data, clientId: operationId }),
             credentials: "include",
           });
           

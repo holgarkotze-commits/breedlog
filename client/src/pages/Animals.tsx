@@ -32,6 +32,7 @@ import logo from "@/assets/breedlog-logo-mark.png";
 import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
 import { type PDFQuality, PDF_QUALITY_SETTINGS, compressImage, getPDFStyles, getPDFFooter } from "@/lib/pdf-utils";
 import { api } from "@shared/routes";
+import { ImageCropDialog } from "@/components/ImageCropDialog";
 
 function calculateEweBreedingStats(eweId: number, breedingEvents: BreedingEvent[], allAnimals: Animal[]) {
   const eweEvents = breedingEvents.filter(e => e.eweId === eweId && e.lambingDate);
@@ -3284,6 +3285,9 @@ function CreateAnimalDialog({
   const rams = allAnimals?.filter(a => a.sex === "ram") || [];
 
   const [isCompressing, setIsCompressing] = useState(false);
+  const [submitLocked, setSubmitLocked] = useState(false);
+  const [cropSourceImage, setCropSourceImage] = useState<string | null>(null);
+  const [showCropDialog, setShowCropDialog] = useState(false);
 
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -3298,12 +3302,12 @@ function CreateAnimalDialog({
         toast({ title: "Optimising image...", description: "Please wait" });
         const { compressImageWithFeedback, formatFileSize } = await import("@/lib/image-compression");
         const result = await compressImageWithFeedback(file, { maxWidth: 1600, quality: 0.75 });
-        setPhotoPreview(result.base64);
-        form.setValue("photo", result.base64);
+        setCropSourceImage(result.base64);
+        setShowCropDialog(true);
         const reduction = Math.round((1 - result.compressedSize / result.originalSize) * 100);
         toast({ 
           title: "Photo ready", 
-          description: `Optimised to ${formatFileSize(result.compressedSize)} (${reduction}% smaller)` 
+          description: `Optimised to ${formatFileSize(result.compressedSize)} (${reduction}% smaller). Crop before saving.` 
         });
       } catch (error) {
         toast({ title: "Photo error", description: "Failed to process image", variant: "destructive" });
@@ -3344,6 +3348,8 @@ function CreateAnimalDialog({
   };
 
   const onSubmit = (data: any) => {
+    if (submitLocked) return;
+    setSubmitLocked(true);
     mutate({
       ...data,
       electronicId: data.electronicId?.trim() || null,
@@ -3352,6 +3358,9 @@ function CreateAnimalDialog({
         onOpenChange(false);
         resetForm();
         toast({ title: "Animal added", description: "New animal record created successfully" });
+      },
+      onSettled: () => {
+        setTimeout(() => setSubmitLocked(false), 500);
       }
     });
   };
@@ -3362,6 +3371,7 @@ function CreateAnimalDialog({
     setEvalDocPreview(null);
     setUseCustomDam(false);
     setUseCustomSire(false);
+    setSubmitLocked(false);
   };
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -3864,6 +3874,21 @@ function CreateAnimalDialog({
               className="hidden"
               data-testid="input-eval-doc"
             />
+
+            <ImageCropDialog
+              open={showCropDialog}
+              imageSrc={cropSourceImage}
+              onCancel={() => {
+                setShowCropDialog(false);
+                setCropSourceImage(null);
+              }}
+              onConfirm={(cropped) => {
+                setPhotoPreview(cropped);
+                form.setValue("photo", cropped);
+                setShowCropDialog(false);
+                setCropSourceImage(null);
+              }}
+            />
             
             {evalDocPreview ? (
               <div className="flex items-center justify-between p-3 bg-secondary rounded-md border border-border">
@@ -3893,8 +3918,8 @@ function CreateAnimalDialog({
               </Button>
             )}
 
-            <Button type="submit" disabled={isPending} data-testid="button-save-animal" className="w-full rugged-btn bg-primary text-black">
-              {isPending ? "Saving..." : "Save Record"}
+            <Button type="submit" disabled={isPending || submitLocked} data-testid="button-save-animal" className="w-full rugged-btn bg-primary text-black">
+              {isPending || submitLocked ? "Saving..." : "Save Record"}
             </Button>
           </form>
         </Form>

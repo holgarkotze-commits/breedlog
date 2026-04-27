@@ -26,6 +26,7 @@ import logo from "@/assets/breedlog-logo-mark.png";
 import { useToast } from "@/hooks/use-toast";
 import type { Animal, AnimalWithRelations, BreedingEvent } from "@shared/schema";
 import { calculateEweBreedingStats } from "@/lib/breeding-stats";
+import { ImageCropDialog } from "@/components/ImageCropDialog";
 
 function ZoomableImagePreview({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   const [scale, setScale] = useState(1);
@@ -1419,6 +1420,8 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
     const [evalDocName, setEvalDocName] = useState<string | null>(animal.evaluationDocument ? "Existing Document" : null);
     const [useCustomDam, setUseCustomDam] = useState(!!animal.externalDamInfo);
     const [useCustomSire, setUseCustomSire] = useState(!!animal.externalSireInfo);
+    const [cropSourceImage, setCropSourceImage] = useState<string | null>(null);
+    const [showCropDialog, setShowCropDialog] = useState(false);
     
     // Reset form data when animal changes or dialog opens
     useEffect(() => {
@@ -1448,12 +1451,12 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                 toast({ title: "Optimising image...", description: "Please wait" });
                 const { compressImageWithFeedback, formatFileSize } = await import("@/lib/image-compression");
                 const result = await compressImageWithFeedback(file, { maxWidth: 1600, quality: 0.75 });
-                setPhotoPreview(result.base64);
-                setFormData(prev => ({ ...prev, photo: result.base64 }));
+                setCropSourceImage(result.base64);
+                setShowCropDialog(true);
                 const reduction = Math.round((1 - result.compressedSize / result.originalSize) * 100);
                 toast({ 
                     title: "Photo ready", 
-                    description: `Optimised to ${formatFileSize(result.compressedSize)} (${reduction}% smaller)` 
+                    description: `Optimised to ${formatFileSize(result.compressedSize)} (${reduction}% smaller). Crop before saving.` 
                 });
             } catch {
                 toast({ title: "Error", description: "Failed to process image", variant: "destructive" });
@@ -1517,6 +1520,20 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                     {/* Photo Section - Compact */}
                     <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoCapture} className="hidden" />
                     <input ref={galleryInputRef} type="file" accept="image/*" onChange={handlePhotoCapture} className="hidden" />
+                    <ImageCropDialog
+                        open={showCropDialog}
+                        imageSrc={cropSourceImage}
+                        onCancel={() => {
+                            setShowCropDialog(false);
+                            setCropSourceImage(null);
+                        }}
+                        onConfirm={(cropped) => {
+                            setPhotoPreview(cropped);
+                            setFormData(prev => ({ ...prev, photo: cropped }));
+                            setShowCropDialog(false);
+                            setCropSourceImage(null);
+                        }}
+                    />
                     
                     {photoPreview ? (
                         <div className="relative">
