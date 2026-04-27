@@ -6,7 +6,7 @@ import { useTheme } from "@/components/ThemeProvider";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
-import { Clock, Beef, Dna, Settings, ChevronRight, Heart, Shield, Baby, PlusCircle } from "lucide-react";
+import { Clock, Beef, Dna, Settings, ChevronRight, Heart, Shield, BarChart3, PlusCircle } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -51,9 +51,6 @@ export default function Dashboard() {
     const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
     return ageInDays <= 240;
   };
-  
-  // Lambs are active animals under 8 months old
-  const lambs = animals?.filter(a => isLamb(a)).length || 0;
   
   // Ewes are female animals 8+ months old and active
   const activeEwes = animals?.filter(a => 
@@ -308,12 +305,12 @@ export default function Dashboard() {
             href="/animals?section=rams"
           />
           <StatCard 
-            title="Lambs" 
-            value={lambs} 
+            title="Analysis" 
+            value="Open" 
             loading={loadingAnimals} 
-            icon={Baby} 
+            icon={BarChart3} 
             className="border-l-2 md:border-l-4 border-l-yellow-500"
-            href="/animals?section=lambs"
+            href="/analysis"
           />
         </div>
 

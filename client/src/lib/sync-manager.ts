@@ -332,7 +332,14 @@ class SyncManager {
 
     switch (item.action) {
       case 'create':
-        const response = await apiRequest('POST', endpoint, item.data);
+        const payloadData = item.data as Record<string, unknown>;
+        const idempotencyKey = item.operationId || (typeof payloadData.clientId === "string" ? payloadData.clientId : undefined);
+        const payload = idempotencyKey
+          ? { ...payloadData, clientId: idempotencyKey }
+          : payloadData;
+        const response = await apiRequest('POST', endpoint, payload, {
+          headers: idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : undefined,
+        });
         const created = await response.json();
         if (item.tempId && created.id) {
           console.log(`[SyncManager] ID reconciliation: temp ${item.tempId} -> server ${created.id}`);

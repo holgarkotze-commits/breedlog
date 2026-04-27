@@ -60,6 +60,7 @@ function getLambStatusBadge(animal: Animal): { label: string; variant: "default"
 }
 
 export default function Lambs() {
+  const LAMB_MAX_AGE_DAYS = 365;
   const [search, setSearch] = useState("");
   const [sexFilter, setSexFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
@@ -205,7 +206,7 @@ export default function Lambs() {
   const lambs = (allAnimals || []).filter(animal => {
     if (!animal.birthDate) return false;
     const ageDays = getAgeDays(animal.birthDate);
-    if (ageDays > 365) return false;
+    if (ageDays > LAMB_MAX_AGE_DAYS) return false;
     
     if (animal.lambStatus === 'moved_to_ewes' || animal.lambStatus === 'moved_to_rams') return false;
     if (animal.status === 'culled' || animal.lambStatus === 'culled') return false;
@@ -289,8 +290,11 @@ export default function Lambs() {
       <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col gap-2">
           <h1 className="text-lg md:text-3xl font-bold tracking-tight leading-tight" data-testid="page-title">
-            {displayName ? `${displayName} - Lambs` : "Lambs"}
+            {displayName ? `${displayName} - Lamb Workflow` : "Lamb Workflow"}
           </h1>
+          <p className="text-xs md:text-sm text-muted-foreground">
+            This is a filtered lifecycle view of Animals (birth to {LAMB_MAX_AGE_DAYS} days). Lambs leave this view when moved to Ewes/Rams, sold/deceased/culled, or aged out.
+          </p>
         </div>
 
         <div className="flex flex-col md:flex-row gap-2 bg-card p-2.5 md:p-4 rounded-md border border-border shadow-sm">

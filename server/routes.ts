@@ -101,8 +101,16 @@ export async function registerRoutes(
   app.post(api.animals.create.path, requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const idempotencyKey = req.header("X-Idempotency-Key")?.trim();
+      if (idempotencyKey) {
+        const existing = await storage.getAnimalByClientId(userId, idempotencyKey);
+        if (existing) {
+          return res.status(200).json(existing);
+        }
+      }
       const input = api.animals.create.input.parse(req.body);
-      const animal = await storage.createAnimal(userId, input);
+      const createInput = idempotencyKey ? { ...input, clientId: idempotencyKey } : input;
+      const animal = await storage.createAnimal(userId, createInput);
       res.status(201).json(animal);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -116,6 +124,12 @@ export async function registerRoutes(
           message: err.message,
           field: "electronicId",
         });
+      }
+      if (req.header("X-Idempotency-Key")) {
+        const existing = await storage.getAnimalByClientId(getUserId(req), req.header("X-Idempotency-Key")!.trim());
+        if (existing) {
+          return res.status(200).json(existing);
+        }
       }
       throw err;
     }

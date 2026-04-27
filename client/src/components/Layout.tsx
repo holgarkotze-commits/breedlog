@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Beef, Dna, FileText, Settings, Syringe, LogOut } from "lucide-react";
+import { LayoutDashboard, Beef, Dna, FileText, Settings, Syringe, LogOut, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -57,7 +57,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const pageLabels: Record<string, string> = {
       "/animals": "My Herd",
+      "/analysis": "Analysis",
       "/breeding": "Breeding",
+      "/records": "Records",
+      "/health": "Health",
       "/settings": "Settings",
     };
     if (location.startsWith("/animals/")) {
@@ -70,7 +73,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/", icon: LayoutDashboard, label: "Home" },
     { href: "/animals", icon: Beef, label: "My Herd" },
-    { href: "/lambs", icon: Beef, label: "Lambs" },
+    { href: "/analysis", icon: BarChart3, label: "Analysis" },
     { href: "/breeding", icon: Dna, label: "Breeding" },
     { href: "/health", icon: Syringe, label: "Health" },
     { href: "/records", icon: FileText, label: "Records" },

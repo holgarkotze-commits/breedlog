@@ -1,10 +1,10 @@
-const CACHE_NAME = 'breedlog-v1';
-const STATIC_CACHE = 'breedlog-static-v1';
-const API_CACHE = 'breedlog-api-v1';
-const APP_SHELL_CACHE = 'breedlog-shell-v1';
+const STATIC_CACHE = 'breedlog-static-v2';
+const API_CACHE = 'breedlog-api-v2';
+const APP_SHELL_CACHE = 'breedlog-shell-v2';
 
 const STATIC_ASSETS = [
   '/',
+  '/index.html',
   '/manifest.json',
   '/favicon.png',
   '/icons/icon-72x72.png',
@@ -67,12 +67,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // NEVER cache ANY API routes - always go to network
-  // This ensures admin, auth, beta, device, and all data endpoints are always fresh
-  if (url.pathname === '/admin' ||
-      url.pathname.startsWith('/admin/') ||
-      url.pathname.startsWith('/api/')) {
-    // Skip service worker entirely for these routes - let browser handle normally
+  if (request.mode === 'navigate') {
+    event.respondWith(handleNavigationRequest(request));
+    return;
+  }
+
+  // Keep selected data APIs network-first with cached fallback for offline continuity.
+  // Sensitive/auth/admin/version endpoints are always network-only.
+  if (url.pathname.startsWith('/api/')) {
+    const isOfflineCapableApi = API_ROUTES.some((route) => (
+      url.pathname === route || url.pathname.startsWith(`${route}/`)
+    ));
+
+    if (isOfflineCapableApi) {
+      event.respondWith(networkFirstStrategy(request, API_CACHE, true));
+    } else {
+      event.respondWith(fetch(request));
+    }
     return;
   }
 
@@ -89,11 +100,11 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(staleWhileRevalidate(request));
 });
 
-async function networkFirstStrategy(request) {
+async function networkFirstStrategy(request, cacheName = API_CACHE, shouldCache = true) {
   try {
     const networkResponse = await fetch(request);
-    if (networkResponse.ok) {
-      const cache = await caches.open(API_CACHE);
+    if (shouldCache && networkResponse.ok) {
+      const cache = await caches.open(cacheName);
       cache.put(request, networkResponse.clone());
     }
     return networkResponse;
@@ -138,6 +149,23 @@ async function staleWhileRevalidate(request) {
   }).catch(() => cachedResponse);
 
   return cachedResponse || fetchPromise;
+}
+
+async function handleNavigationRequest(request) {
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse.ok) {
+      const cache = await caches.open(APP_SHELL_CACHE);
+      cache.put('/index.html', networkResponse.clone());
+    }
+    return networkResponse;
+  } catch {
+    const appShellCache = await caches.open(APP_SHELL_CACHE);
+    const shell = await appShellCache.match('/index.html');
+    if (shell) return shell;
+    const staticCache = await caches.open(STATIC_CACHE);
+    return (await staticCache.match('/')) || new Response('Offline', { status: 503 });
+  }
 }
 
 self.addEventListener('message', (event) => {

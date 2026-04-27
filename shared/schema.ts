@@ -133,7 +133,7 @@ export const animalsRelations = relations(animals, ({ one, many }) => ({
   images: many(animalImages),
 }));
 
-export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, userId: true, createdAt: true, clientId: true, vectorClock: true, lastSyncedAt: true });
+export const insertAnimalSchema = createInsertSchema(animals).omit({ id: true, userId: true, createdAt: true, vectorClock: true, lastSyncedAt: true });
 
 // === EID SCAN EVENTS ===
 export const eidScanEvents = pgTable("eid_scan_events", {

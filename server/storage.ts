@@ -69,6 +69,7 @@ export interface IStorage {
   updateAnimal(userId: string, id: number, animal: Partial<Omit<InsertAnimal, 'userId'>>): Promise<Animal>;
   deleteAnimal(userId: string, id: number): Promise<void>;
   getAnimalByElectronicId(userId: string, electronicId: string): Promise<Animal | undefined>;
+  getAnimalByClientId(userId: string, clientId: string): Promise<Animal | undefined>;
 
   // Breeding
   getBreedingEvents(userId: string): Promise<BreedingEvent[]>;
@@ -216,6 +217,13 @@ export class DatabaseStorage implements IStorage {
 
     const [animal] = await db.select().from(animals).where(
       and(eq(animals.userId, userId), eq(animals.electronicId, normalized))
+    );
+    return animal;
+  }
+
+  async getAnimalByClientId(userId: string, clientId: string): Promise<Animal | undefined> {
+    const [animal] = await db.select().from(animals).where(
+      and(eq(animals.userId, userId), eq(animals.clientId, clientId))
     );
     return animal;
   }
@@ -708,6 +716,7 @@ class InMemoryStorage implements IStorage {
   }
   async deleteAnimal(userId: string, id: number): Promise<void> { const a = await this.getAnimal(userId, id); if (a) this.animals.delete(id); }
   async getAnimalByElectronicId(userId: string, electronicId: string): Promise<Animal | undefined> { return [...this.animals.values()].find(a => a.userId === userId && a.electronicId === electronicId); }
+  async getAnimalByClientId(userId: string, clientId: string): Promise<Animal | undefined> { return [...this.animals.values()].find(a => a.userId === userId && a.clientId === clientId); }
   async getBreedingEvents(userId: string): Promise<BreedingEvent[]> { return [...this.breedingEvents.values()].filter(e => e.userId === userId); }
   async createBreedingEvent(userId: string, event: Omit<InsertBreedingEvent, "userId">): Promise<BreedingEvent> { const id = this.nextId("breedingSeq"); const v = { id, ...event, userId } as BreedingEvent; this.breedingEvents.set(id, v); return v; }
   async deleteBreedingEvent(userId: string, id: number): Promise<void> { const e = this.breedingEvents.get(id); if (e?.userId === userId) this.breedingEvents.delete(id); }

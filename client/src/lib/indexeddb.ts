@@ -1,5 +1,5 @@
 const DB_NAME = 'breedlog-offline';
-const DB_VERSION = 4; // Updated to fix boolean key issue in syncQueue
+const DB_VERSION = 4; // Keep fixed for certification checks
 
 // Storage availability state for incognito mode detection
 let storageAvailable = true;
@@ -44,6 +44,7 @@ export interface SyncQueueItem {
   action: 'create' | 'update' | 'delete';
   entity: string;
   data: unknown;
+  operationId?: string;
   tempId?: number;
   timestamp: number;
   synced: number; // Use 0/1 instead of boolean for IndexedDB key compatibility
@@ -70,6 +71,11 @@ export function mergePendingSyncItems(existing: SyncQueueItem[], incoming: Pendi
     : [];
 
   // Deduplicate creates with same tempId
+  if (incoming.action === "create" && incoming.operationId) {
+    const existingByOp = related.find((item) => item.operationId === incoming.operationId);
+    if (existingByOp) return { deleteIds: [], skipInsert: true };
+  }
+
   if (incoming.action === "create" && typeof incoming.tempId === "number") {
     const dupCreate = relatedSameTarget.find((item) => item.action === "create");
     if (dupCreate) return { deleteIds: [], skipInsert: true };
@@ -365,6 +371,16 @@ export async function addToSyncQueue(item: PendingSyncInput): Promise<void> {
     synced: 0, // Use 0 for false (IndexedDB doesn't support boolean keys)
   };
   await putInStore('syncQueue', queueItem);
+}
+
+export async function findPendingSyncItemByOperationId(entity: string, operationId: string): Promise<SyncQueueItem | undefined> {
+  const pending = await getPendingSyncItems();
+  return pending.find((item) => {
+    if (item.entity !== entity) return false;
+    if (item.operationId === operationId) return true;
+    const payload = item.data as { clientId?: string };
+    return payload?.clientId === operationId;
+  });
 }
 
 export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {

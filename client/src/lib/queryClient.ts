@@ -127,6 +127,7 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  options?: { headers?: HeadersInit },
 ): Promise<Response> {
   // Check if online for write operations
   if (!navigator.onLine && method !== 'GET') {
@@ -142,7 +143,10 @@ export async function apiRequest(
   
   const res = await fetch(url, {
     method,
-    headers: getAuthHeaders(!!data),
+    headers: {
+      ...getAuthHeaders(!!data),
+      ...(options?.headers || {}),
+    },
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
     cache: isAuthEndpoint ? "no-store" : undefined,
