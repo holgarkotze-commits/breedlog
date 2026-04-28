@@ -153,7 +153,7 @@ async function staleWhileRevalidate(request) {
 
 async function handleNavigationRequest(request) {
   try {
-    const networkResponse = await fetch(request);
+    const networkResponse = await fetch('/index.html', { cache: 'no-store' });
     if (networkResponse.ok) {
       const cache = await caches.open(APP_SHELL_CACHE);
       cache.put('/index.html', networkResponse.clone());

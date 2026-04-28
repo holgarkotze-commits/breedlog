@@ -75,7 +75,10 @@ export function useAnalysisBundle() {
     isLoading,
     isOnline,
     bundle,
+    animals: animalsQuery.data || [],
+    breedingEvents: breedingQuery.data || [],
+    performanceRecords: performanceQuery.data || [],
+    healthRecords: healthQuery.data || [],
     errors: [animalsQuery.error, breedingQuery.error, performanceQuery.error, healthQuery.error].filter(Boolean),
   };
 }
-

@@ -8,8 +8,8 @@ import {
   getAllFromStore,
   setLastSyncTime,
   deleteFromStore,
-  putInStore,
   getFromStore,
+  putInStore,
   runMigrations,
   SyncQueueItem
 } from './indexeddb';
@@ -282,6 +282,7 @@ class SyncManager {
 
     for (const item of pendingItems) {
       try {
+        await putInStore('syncQueue', { ...item, syncStatus: 'syncing' });
         await this.processSyncItem(item);
         await markSynced(item.id);
         successCount++;
@@ -297,14 +298,14 @@ class SyncManager {
         await incrementSyncItemFailures(item.id);
         
         if (statusCode >= 400 && statusCode < 500) {
-          // Permanent failure (validation, auth, etc.) - mark as failed, don't retry
-          console.log(`[SyncManager] Permanent failure (${statusCode}) for item ${item.id}, marking as blocked`);
-          // Mark as synced to remove from queue but log the failure
-          await markSynced(item.id);
-          failedCount++;
+          const conflict = statusCode === 409;
+          console.log(`[SyncManager] Client-side failure (${statusCode}) for item ${item.id}, keeping in queue for resolution/retry`);
+          await putInStore('syncQueue', { ...item, syncStatus: conflict ? 'conflict' : 'failed' });
+          retryableCount++;
         } else {
           // Network error or 5xx - keep in queue for retry (failure count incremented above)
           console.log(`[SyncManager] Retryable error for item ${item.id}, keeping in queue with incremented failure count`);
+          await putInStore('syncQueue', { ...item, syncStatus: 'failed' });
           retryableCount++;
         }
       }

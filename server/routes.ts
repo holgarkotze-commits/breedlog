@@ -1,15 +1,15 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
-import { DuplicateElectronicIdError } from "./storage";
+import { DuplicateElectronicIdError, DuplicateTagIdError, DuplicateAnimalNameError } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAdminPin, getUserId as getDeviceUserId, getDeviceId } from "./device-auth";
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAudioRoutes } from "./replit_integrations/audio/routes";
-import { stringify } from "csv-stringify/sync";
 import { parse } from "csv-parse/sync";
+import { buildBreedLogCsvContent, buildBreedLogCsvRows, parseBreedLogCsvRecords, buildBreedLogImportTemplateCsv } from "@shared/import-export";
 
 // Helper to extract userId from device session
 function getUserId(req: Request): string {
@@ -125,6 +125,18 @@ export async function registerRoutes(
           field: "electronicId",
         });
       }
+      if (err instanceof DuplicateTagIdError) {
+        return res.status(400).json({
+          message: err.message,
+          field: "tagId",
+        });
+      }
+      if (err instanceof DuplicateAnimalNameError) {
+        return res.status(400).json({
+          message: err.message,
+          field: "name",
+        });
+      }
       if (req.header("X-Idempotency-Key")) {
         const existing = await storage.getAnimalByClientId(getUserId(req), req.header("X-Idempotency-Key")!.trim());
         if (existing) {
@@ -152,6 +164,18 @@ export async function registerRoutes(
         return res.status(400).json({
           message: err.message,
           field: "electronicId",
+        });
+      }
+      if (err instanceof DuplicateTagIdError) {
+        return res.status(400).json({
+          message: err.message,
+          field: "tagId",
+        });
+      }
+      if (err instanceof DuplicateAnimalNameError) {
+        return res.status(400).json({
+          message: err.message,
+          field: "name",
         });
       }
       throw err;
@@ -513,13 +537,27 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animals = await storage.getAnimals(userId);
-      const csvData = stringify(animals, { header: true });
+      const farmSettings = await storage.getFarmSettings(userId);
+      const csvRows = buildBreedLogCsvRows(animals, farmSettings?.studPrefix || null);
+      const csvData = buildBreedLogCsvContent(csvRows);
       res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', 'attachment; filename="animals.csv"');
+      res.setHeader('Content-Disposition', 'attachment; filename="breedlog-herd-export.csv"');
       res.send(csvData);
     } catch (err) {
       console.error("Export Error:", err);
       res.status(500).json({ message: "Failed to export data" });
+    }
+  });
+
+  app.get('/api/import/template/csv', requireAuth, async (_req, res) => {
+    try {
+      const csvTemplate = buildBreedLogImportTemplateCsv();
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="breedlog-import-template.csv"');
+      res.send(csvTemplate);
+    } catch (err) {
+      console.error('CSV template export failed:', err);
+      res.status(500).json({ message: 'Failed to create import template' });
     }
   });
 
@@ -620,54 +658,41 @@ export async function registerRoutes(
       const records = parse(csvData, {
         columns: true,
         skip_empty_lines: true,
-        trim: true
+        trim: true,
       }) as Record<string, string>[];
 
-      const errors: string[] = [];
-      const animalsToCreate: any[] = [];
+      const existingAnimals = await storage.getAnimals(userId);
+      const farmSettings = await storage.getFarmSettings(userId);
+      const parsed = parseBreedLogCsvRecords(records, existingAnimals, farmSettings?.studPrefix || null);
 
-      for (let i = 0; i < records.length; i++) {
-        const record = records[i];
-        const rowNum = i + 2;
-        
-        const tagId = record.tagId || record.tag_id || record.TagID || record['Tag ID'];
-        if (!tagId) {
-          errors.push(`Row ${rowNum}: Missing required field tagId`);
-          continue;
+      let created = 0;
+      let duplicates = parsed.duplicates;
+      const errors = [...parsed.validationErrors];
+
+      for (const animal of parsed.rowsToCreate) {
+        try {
+          await storage.createAnimal(userId, animal);
+          created += 1;
+        } catch (err) {
+          if (err instanceof DuplicateElectronicIdError || err instanceof DuplicateTagIdError || err instanceof DuplicateAnimalNameError) {
+            duplicates += 1;
+          } else {
+            errors.push(`Create failed for ${animal.tagId}: ${err instanceof Error ? err.message : 'unknown error'}`);
+          }
         }
-
-        const sex = (record.sex || record.Sex || 'ewe').toLowerCase();
-        if (!['ram', 'ewe', 'wether'].includes(sex)) {
-          errors.push(`Row ${rowNum}: Invalid sex value "${sex}"`);
-          continue;
-        }
-
-        animalsToCreate.push({
-          tagId,
-          sex,
-          breed: record.breed || record.Breed || 'Meatmaster',
-          name: record.name || record.Name || null,
-          status: record.status || record.Status || 'active',
-          birthDate: record.birthDate || record.birth_date || record['Birth Date'] || null,
-          birthWeight: record.birthWeight || record.birth_weight || record['Birth Weight'] || null,
-          currentWeight: record.currentWeight || record.current_weight || record['Current Weight'] || null,
-          notes: record.notes || record.Notes || null,
-          tattooId: record.tattooId || record.tattoo_id || record.tattoo || record.Tattoo || null,
-          electronicId: record.electronicId || record.electronic_id || record['Electronic ID'] || null,
-        });
       }
 
-      // Bulk create animals
-      const created = await storage.bulkCreateAnimals(userId, animalsToCreate);
-
-      res.json({ 
-        imported: created.length, 
-        errors 
+      res.json({
+        imported: created,
+        created,
+        updated: 0,
+        skipped: parsed.skipped,
+        duplicate: duplicates,
+        failed: errors.length,
+        validationErrors: errors,
+        errors,
       });
     } catch (err: any) {
-      if (err instanceof DuplicateElectronicIdError) {
-        return res.status(400).json({ message: err.message, field: "electronicId" });
-      }
       console.error("CSV Import error:", err);
       res.status(500).json({ message: err.message || "Failed to import CSV" });
     }
@@ -1080,11 +1105,7 @@ export async function registerRoutes(
           const otherActivation = codeActivations.find(a => a.deviceId !== deviceId);
           if (otherActivation) {
             // Find the other device's user to get their effective workspace ID
-            const { users } = await import("@shared/models/auth");
-            const { db } = await import("./db");
-            const { eq } = await import("drizzle-orm");
-            const otherUsers = await db.select().from(users).where(eq(users.id, otherActivation.userId));
-            const otherUser = otherUsers[0];
+            const otherUser = await storage.getUserByDeviceId(otherActivation.deviceId);
             if (otherUser) {
               // The primary workspace is: their sharedUserId (if set) or their own id
               const primaryUserId = otherUser.sharedUserId || otherUser.id;
@@ -1163,11 +1184,7 @@ export async function registerRoutes(
       if (existingCodeActivations.length > 0) {
         // There's already an active device for this code — find their workspace ID
         const firstActivation = existingCodeActivations[0];
-        const { users } = await import("@shared/models/auth");
-        const { db } = await import("./db");
-        const { eq } = await import("drizzle-orm");
-        const primaryUsers = await db.select().from(users).where(eq(users.id, firstActivation.userId));
-        const primaryUser = primaryUsers[0];
+        const primaryUser = await storage.getUserByDeviceId(firstActivation.deviceId);
         if (primaryUser) {
           // The workspace owner is: their sharedUserId (if they're also secondary) or their own id
           const primaryUserId = primaryUser.sharedUserId || primaryUser.id;

@@ -122,6 +122,48 @@ test('duplicate protection check: duplicate electronicId is rejected', async () 
   assert.equal(second.status, 400);
 });
 
+test('idempotency key replay does not create duplicate animals', async () => {
+  await resetData();
+  const headers = {
+    ...authHeaders(),
+    'X-Idempotency-Key': 'phase5-idempotency-key-1',
+  };
+  const first = await fetch(`${BASE_URL}/api/animals`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ tagId: 'A-200', sex: 'ewe' }),
+  });
+  assert.ok([200, 201].includes(first.status));
+
+  const second = await fetch(`${BASE_URL}/api/animals`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ tagId: 'A-200', sex: 'ewe' }),
+  });
+  assert.ok([200, 201].includes(second.status));
+
+  const listRes = await fetch(`${BASE_URL}/api/animals`, { headers: authHeaders() });
+  const list = await listRes.json();
+  assert.equal(list.filter((a: any) => a.tagId === 'A-200').length, 1);
+});
+
+test('duplicate protection check: duplicate tagId is rejected', async () => {
+  await resetData();
+  const first = await fetch(`${BASE_URL}/api/animals`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ tagId: 'TAG-001', sex: 'ewe' }),
+  });
+  assert.equal(first.status, 201);
+
+  const second = await fetch(`${BASE_URL}/api/animals`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ tagId: 'tag-001', sex: 'ewe' }),
+  });
+  assert.equal(second.status, 400);
+});
+
 test('security check: debug endpoint is protected', async () => {
   const unauth = await fetch(`${BASE_URL}/api/debug/test`);
   assert.equal(unauth.status, 403);

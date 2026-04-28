@@ -44,9 +44,14 @@ export interface SyncQueueItem {
   action: 'create' | 'update' | 'delete';
   entity: string;
   data: unknown;
+  clientOperationId?: string;
+  idempotencyKey?: string;
+  localEntityId?: number;
+  accountId?: string;
   operationId?: string;
   tempId?: number;
   timestamp: number;
+  syncStatus?: 'pending' | 'syncing' | 'synced' | 'conflict' | 'failed';
   synced: number; // Use 0/1 instead of boolean for IndexedDB key compatibility
   failedAttempts?: number; // Track number of failed sync attempts
 }
@@ -104,6 +109,13 @@ export function mergePendingSyncItems(existing: SyncQueueItem[], incoming: Pendi
 
   // Delete supersedes pending updates and duplicate deletes for same target
   if (incoming.action === "delete" && relatedSameTarget.length > 0) {
+    const createForSameTarget = relatedSameTarget.find((item) => item.action === "create");
+    if (createForSameTarget) {
+      return {
+        deleteIds: relatedSameTarget.map((item) => item.id),
+        skipInsert: true,
+      };
+    }
     const toDelete = relatedSameTarget.filter((item) => item.action === "update" || item.action === "delete");
     return {
       deleteIds: toDelete.map((item) => item.id),
@@ -368,6 +380,7 @@ export async function addToSyncQueue(item: PendingSyncInput): Promise<void> {
     ...item,
     id: crypto.randomUUID(),
     timestamp: Date.now(),
+    syncStatus: 'pending',
     synced: 0, // Use 0 for false (IndexedDB doesn't support boolean keys)
   };
   await putInStore('syncQueue', queueItem);
@@ -428,6 +441,7 @@ export async function getPendingSyncItems(): Promise<SyncQueueItem[]> {
 export async function markSynced(id: string): Promise<void> {
   const item = await getFromStore<SyncQueueItem>('syncQueue', id);
   if (item) {
+    item.syncStatus = 'synced';
     item.synced = 1; // 1 = synced
     await putInStore('syncQueue', item);
   }

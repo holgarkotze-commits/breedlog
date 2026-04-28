@@ -1,66 +1,42 @@
+import { useMemo, useState } from "react";
 import { Layout } from "@/components/Layout";
-import type { ComponentType, ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAnalysisBundle } from "@/hooks/use-analysis";
-import { cn } from "@/lib/utils";
-import { BarChart3, TrendingUp, ShieldAlert, Heart, Dna, Target, AlertTriangle, Database, Activity } from "lucide-react";
+import { buildAdvancedAnalysisReport, type AnalysisFilters } from "@/lib/analysis-engine";
 
 function ConfidenceBadge({ level }: { level: "Low" | "Medium" | "High" | "Proven" }) {
-  const tone =
-    level === "Proven"
-      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-      : level === "High"
-        ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
-        : level === "Medium"
-          ? "bg-yellow-500/20 text-yellow-300 border-yellow-500/40"
-          : "bg-red-500/20 text-red-300 border-red-500/40";
-  return <Badge className={cn("text-[10px] uppercase", tone)}>{level}</Badge>;
-}
-
-function ModuleCard({
-  title,
-  icon: Icon,
-  confidence,
-  reason,
-  warnings,
-  children,
-}: {
-  title: string;
-  icon: ComponentType<{ className?: string }>;
-  confidence: "Low" | "Medium" | "High" | "Proven";
-  reason: string;
-  warnings?: string[];
-  children: ReactNode;
-}) {
-  return (
-    <Card className="rugged-card">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base md:text-lg flex items-center gap-2">
-            <Icon className="w-4 h-4 text-primary" />
-            {title}
-          </CardTitle>
-          <ConfidenceBadge level={confidence} />
-        </div>
-        <p className="text-xs text-muted-foreground">{reason}</p>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {warnings && warnings.length > 0 && (
-          <Alert>
-            <AlertDescription className="text-xs">{warnings[0]}</AlertDescription>
-          </Alert>
-        )}
-        {children}
-      </CardContent>
-    </Card>
-  );
+  const tone = level === "High" || level === "Proven" ? "bg-emerald-100 text-emerald-700" : level === "Medium" ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700";
+  return <Badge className={tone}>{level}</Badge>;
 }
 
 export default function Analysis() {
-  const { bundle, isLoading } = useAnalysisBundle();
+  const { bundle, animals, breedingEvents, performanceRecords, healthRecords, isLoading } = useAnalysisBundle();
+  const [filters, setFilters] = useState<AnalysisFilters>({
+    scope: "total_herd",
+    sex: "all",
+    status: "all",
+    classification: "all",
+    familyLine: "all",
+    birthType: "all",
+    minAgeDays: null,
+    maxAgeDays: null,
+  });
+
+  const report = useMemo(() => {
+    return buildAdvancedAnalysisReport(
+      { animals, breedingEvents, performanceRecords, healthRecords },
+      filters,
+    );
+  }, [animals, breedingEvents, performanceRecords, healthRecords, filters]);
+
+  const sireOptions = animals.filter((a) => a.sex === "ram");
+  const familyLineOptions = [...new Set(animals.map((a) => a.managementGroup).filter(Boolean))] as string[];
 
   if (isLoading) {
     return (
@@ -77,114 +53,201 @@ export default function Analysis() {
     );
   }
 
-  const { flockOverview, growth, eweMaternal, sirePerformance, survival, fertility, selection, pedigreeRisk, dataQuality } = bundle;
-
   return (
     <Layout>
-      <div className="space-y-4 md:space-y-6 animate-in fade-in duration-500">
+      <div className="space-y-4 md:space-y-6">
         <div className="space-y-1">
-          <h1 className="text-2xl md:text-3xl font-bold">BreedLog Performance Intelligence</h1>
-          <p className="text-sm text-muted-foreground">
-            Deterministic analysis from your own farm records. No external AI models are used.
-          </p>
+          <h1 className="text-2xl md:text-3xl font-bold">BreedLog Analysis</h1>
+          <p className="text-sm text-muted-foreground">Data-driven insights from your real herd records.</p>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card className="rugged-card"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Total Animals</p><p className="text-2xl font-bold">{flockOverview.totalAnimals}</p></CardContent></Card>
-          <Card className="rugged-card"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Active Herd</p><p className="text-2xl font-bold">{flockOverview.activeAnimals}</p></CardContent></Card>
-          <Card className="rugged-card"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Lamb Survival</p><p className="text-2xl font-bold">{flockOverview.lambSurvivalPercentage ? `${flockOverview.lambSurvivalPercentage.toFixed(1)}%` : "—"}</p></CardContent></Card>
-          <Card className="rugged-card"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Data Completeness</p><p className="text-2xl font-bold">{flockOverview.dataCompletenessScore.toFixed(1)}%</p></CardContent></Card>
+        <Card className="rugged-card" data-testid="analysis-selector-panel">
+          <CardHeader><CardTitle>Analysis Selector</CardTitle></CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-4">
+            <div>
+              <Label>Scope</Label>
+              <Select value={filters.scope} onValueChange={(v: any) => setFilters((p) => ({ ...p, scope: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="total_herd">Total Herd</SelectItem>
+                  <SelectItem value="individual">Individual Animal</SelectItem>
+                  <SelectItem value="offspring_of_sire">Offspring of Sire</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Sex</Label>
+              <Select value={filters.sex || "all"} onValueChange={(v: any) => setFilters((p) => ({ ...p, sex: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="ram">Rams</SelectItem>
+                  <SelectItem value="ewe">Ewes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={filters.status || "all"} onValueChange={(v) => setFilters((p) => ({ ...p, status: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="sold">Sold</SelectItem>
+                  <SelectItem value="dead">Dead</SelectItem>
+                  <SelectItem value="culled">Culled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Classification</Label>
+              <Select value={filters.classification || "all"} onValueChange={(v) => setFilters((p) => ({ ...p, classification: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="stud">Stud</SelectItem>
+                  <SelectItem value="commercial">Commercial</SelectItem>
+                  <SelectItem value="unclassified">Unclassified</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Sire</Label>
+              <Select value={String(filters.sireId || "all")} onValueChange={(v) => setFilters((p) => ({ ...p, sireId: v === "all" ? null : Number(v) }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {sireOptions.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.tagId}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Family Line</Label>
+              <Select value={filters.familyLine || "all"} onValueChange={(v) => setFilters((p) => ({ ...p, familyLine: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {familyLineOptions.map((line) => <SelectItem key={line} value={line}>{line}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Birth Type</Label>
+              <Select value={filters.birthType || "all"} onValueChange={(v) => setFilters((p) => ({ ...p, birthType: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="single">Single</SelectItem>
+                  <SelectItem value="twin">Twin</SelectItem>
+                  <SelectItem value="triplet">Triplet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>Min age (days)</Label>
+                <Input type="number" value={filters.minAgeDays ?? ""} onChange={(e) => setFilters((p) => ({ ...p, minAgeDays: e.target.value ? Number(e.target.value) : null }))} />
+              </div>
+              <div>
+                <Label>Max age (days)</Label>
+                <Input type="number" value={filters.maxAgeDays ?? ""} onChange={(e) => setFilters((p) => ({ ...p, maxAgeDays: e.target.value ? Number(e.target.value) : null }))} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="analysis-summary-cards">
+          <Card className="rugged-card"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Selected</p><p className="text-2xl font-bold">{report.filteredCount}</p></CardContent></Card>
+          <Card className="rugged-card"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Rams</p><p className="text-2xl font-bold">{report.herdComposition.rams}</p></CardContent></Card>
+          <Card className="rugged-card"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Ewes</p><p className="text-2xl font-bold">{report.herdComposition.ewes}</p></CardContent></Card>
+          <Card className="rugged-card"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Lambs</p><p className="text-2xl font-bold">{report.herdComposition.lambs}</p></CardContent></Card>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <ModuleCard title="Flock Overview" icon={BarChart3} confidence={flockOverview.confidence} reason={flockOverview.reasonSummary} warnings={flockOverview.missingDataWarnings}>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div>Rams: <strong>{flockOverview.rams}</strong></div>
-              <div>Ewes: <strong>{flockOverview.ewes}</strong></div>
-              <div>Lambs: <strong>{flockOverview.lambs}</strong></div>
-              <div>Stud: <strong>{flockOverview.studAnimals}</strong></div>
-              <div>Commercial: <strong>{flockOverview.commercialAnimals}</strong></div>
-              <div>Avg Weaning: <strong>{flockOverview.averages.weaningWeight ? `${flockOverview.averages.weaningWeight.toFixed(1)} kg` : "—"}</strong></div>
-            </div>
-          </ModuleCard>
+        <div className="grid gap-4 md:grid-cols-2" data-testid="analysis-sections">
+          <Card className="rugged-card">
+            <CardHeader><CardTitle>Data Completeness</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm">Completeness score: <strong>{report.dataCompleteness.score.toFixed(1)}%</strong></p>
+                <ConfidenceBadge level={report.dataCompleteness.confidence} />
+              </div>
+              {report.dataCompleteness.warnings.length > 0 ? (
+                <Alert><AlertDescription className="text-xs">{report.dataCompleteness.warnings[0]}</AlertDescription></Alert>
+              ) : <p className="text-xs text-muted-foreground">No major completeness blockers in current selection.</p>}
+            </CardContent>
+          </Card>
 
-          <ModuleCard title="Growth Analysis" icon={TrendingUp} confidence={growth.confidence} reason={growth.reasonSummary}>
-            <p className="text-sm">Lambs analyzed: <strong>{growth.totalLambsAnalyzed}</strong></p>
-            <p className="text-sm">Group ADG: <strong>{growth.groupAverageAdg ? `${growth.groupAverageAdg.toFixed(3)} kg/day` : "—"}</strong></p>
-            <div className="space-y-1">
-              {growth.bestGrowing.slice(0, 3).map((row) => (
-                <div key={row.animalId} className="text-xs flex justify-between">
-                  <span>{row.tagId}</span>
-                  <span className="font-semibold">{row.score.toFixed(1)} ({row.confidence})</span>
+          <Card className="rugged-card">
+            <CardHeader><CardTitle>Birth Type Split</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {Object.entries(report.birthTypeSplit).length === 0 && <p className="text-xs text-muted-foreground">More data required: record birth type (single/twin/triplet).</p>}
+              {Object.entries(report.birthTypeSplit).map(([key, value]) => (
+                <div key={key} className="text-xs flex justify-between"><span>{key}</span><strong>{value}</strong></div>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card className="rugged-card">
+            <CardHeader><CardTitle>Birth/Weaning Weight Comparison</CardTitle></CardHeader>
+            <CardContent className="space-y-1 text-xs">
+              <p>Actual birth avg: <strong>{report.weights.actualBirthAvg ? `${report.weights.actualBirthAvg.toFixed(2)} kg` : "—"}</strong></p>
+              <p>Estimated birth avg: <strong>{report.weights.estimatedBirthAvg ? `${report.weights.estimatedBirthAvg.toFixed(2)} kg` : "—"}</strong></p>
+              <p>Actual weaning avg: <strong>{report.weights.actualWeaningAvg ? `${report.weights.actualWeaningAvg.toFixed(2)} kg` : "—"}</strong></p>
+              <p>Estimated weaning avg: <strong>{report.weights.estimatedWeaningAvg ? `${report.weights.estimatedWeaningAvg.toFixed(2)} kg` : "—"}</strong></p>
+            </CardContent>
+          </Card>
+
+          <Card className="rugged-card">
+            <CardHeader><CardTitle>Sire Comparison</CardTitle></CardHeader>
+            <CardContent className="space-y-1 text-xs">
+              {report.sireComparison.length === 0 && <p className="text-muted-foreground">More data required: add sire links and offspring records.</p>}
+              {report.sireComparison.slice(0, 6).map((row) => (
+                <div key={row.sireId} className="border-b border-border/50 pb-1">
+                  <div className="flex justify-between"><strong>{row.sireTag}</strong><ConfidenceBadge level={row.confidence} /></div>
+                  <div>Offspring: {row.offspring} • Birth avg: {row.avgBirthWeight?.toFixed(1) ?? "—"} • Weaning avg: {row.avgWeaningWeight?.toFixed(1) ?? "—"}</div>
                 </div>
               ))}
-            </div>
-          </ModuleCard>
+            </CardContent>
+          </Card>
 
-          <ModuleCard title="Ewe Maternal Performance" icon={Heart} confidence={eweMaternal.confidence} reason="Maternal index uses lambing consistency, survival, weaning outcomes, growth, and repeatability.">
-            <div className="space-y-1">
-              {eweMaternal.top.slice(0, 4).map((row) => (
-                <div key={row.animalId} className="text-xs flex justify-between">
-                  <span>{row.tagId}</span>
-                  <span className="font-semibold">{row.score.toFixed(1)} ({row.confidence})</span>
-                </div>
+          <Card className="rugged-card">
+            <CardHeader><CardTitle>Maternal Performance Ranking</CardTitle></CardHeader>
+            <CardContent className="space-y-1 text-xs">
+              {report.maternalRanking.length === 0 && <p className="text-muted-foreground">More data required: add dam links for lambs.</p>}
+              {report.maternalRanking.slice(0, 6).map((row) => (
+                <div key={row.eweId} className="flex justify-between"><span>{row.eweTag}</span><span>{row.lambCount} lambs • {row.weaningRate.toFixed(0)}% weaned</span></div>
               ))}
-            </div>
-          </ModuleCard>
+            </CardContent>
+          </Card>
 
-          <ModuleCard title="Ram / Sire Performance" icon={Dna} confidence={sirePerformance.confidence} reason="Sire impact uses progeny count, progeny survival, growth, consistency across dams, and confidence.">
-            <div className="space-y-1">
-              {sirePerformance.top.slice(0, 4).map((row) => (
-                <div key={row.animalId} className="text-xs flex justify-between">
-                  <span>{row.tagId}</span>
-                  <span className="font-semibold">{row.score.toFixed(1)} ({row.confidence})</span>
-                </div>
+          <Card className="rugged-card">
+            <CardHeader><CardTitle>Growth Ranking</CardTitle></CardHeader>
+            <CardContent className="space-y-1 text-xs">
+              {report.growthRanking.length === 0 && <p className="text-muted-foreground">More data required: add birth + weaning weights and dates.</p>}
+              {report.growthRanking.slice(0, 8).map((row) => (
+                <div key={row.animalId} className="flex justify-between"><span>{row.tagId}</span><span>{row.metric.toFixed(3)} kg/day</span></div>
               ))}
-            </div>
-          </ModuleCard>
+            </CardContent>
+          </Card>
 
-          <ModuleCard title="Lamb Survival" icon={Activity} confidence={survival.confidence} reason={survival.reasonSummary} warnings={survival.missingDataWarnings}>
-            <p className="text-sm">Born alive: <strong>{survival.bornAlive}</strong></p>
-            <p className="text-sm">Weaned: <strong>{survival.weaned}</strong></p>
-            <p className="text-sm">Survival to weaning: <strong>{survival.survivalToWeaning ? `${survival.survivalToWeaning.toFixed(1)}%` : "—"}</strong></p>
-          </ModuleCard>
+          <Card className="rugged-card">
+            <CardHeader><CardTitle>Family-line Comparison</CardTitle></CardHeader>
+            <CardContent className="space-y-1 text-xs">
+              {report.familyLineComparison.length === 0 && <p className="text-muted-foreground">More data required: populate family-line values (currently uses management group).</p>}
+              {report.familyLineComparison.slice(0, 8).map((row) => (
+                <div key={row.familyLine} className="flex justify-between"><span>{row.familyLine}</span><span>{row.animals} animals • BW {row.avgBirthWeight?.toFixed(1) ?? "—"}</span></div>
+              ))}
+            </CardContent>
+          </Card>
 
-          <ModuleCard title="Fertility & Reproduction" icon={Target} confidence={fertility.confidence} reason={fertility.reasonSummary} warnings={fertility.missingDataWarnings}>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div>Ewes exposed: <strong>{fertility.ewesExposed}</strong></div>
-              <div>Ewes lambed: <strong>{fertility.ewesLambed}</strong></div>
-              <div>Lambs born / ewe lambed: <strong>{fertility.lambsBornPerEweLambed ? fertility.lambsBornPerEweLambed.toFixed(2) : "—"}</strong></div>
-              <div>Lambs weaned / ewe lambed: <strong>{fertility.lambsWeanedPerEweLambed ? fertility.lambsWeanedPerEweLambed.toFixed(2) : "—"}</strong></div>
-            </div>
-          </ModuleCard>
-
-          <ModuleCard title="Selection Candidates" icon={ShieldAlert} confidence={dataQuality.confidence} reason="Classification is rule-based from growth, maternal, sire, survival, and confidence metrics.">
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>Stud keep: <strong>{selection.keepStud.length}</strong></div>
-              <div>Commercial keep: <strong>{selection.keepCommercial.length}</strong></div>
-              <div>Watchlist: <strong>{selection.watchlist.length}</strong></div>
-              <div>Cull candidates: <strong>{selection.cullCandidates.length}</strong></div>
-            </div>
-          </ModuleCard>
-
-          <ModuleCard title="Pedigree / Inbreeding Risk" icon={AlertTriangle} confidence={pedigreeRisk.highRisk.length > 0 ? "High" : pedigreeRisk.unknown.length > 0 ? "Medium" : "Low"} reason="Version 1 checks direct conflicts, same-parent conflicts, half-sibling/shared line warnings, and unknown parentage.">
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              <div>High: <strong>{pedigreeRisk.highRisk.length}</strong></div>
-              <div>Medium: <strong>{pedigreeRisk.mediumRisk.length}</strong></div>
-              <div>Unknown: <strong>{pedigreeRisk.unknown.length}</strong></div>
-            </div>
-          </ModuleCard>
-
-          <ModuleCard title="Data Quality" icon={Database} confidence={dataQuality.confidence} reason={dataQuality.reasonSummary} warnings={dataQuality.majorWarnings}>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>Missing birth date: <strong>{dataQuality.missingBirthDate}</strong></div>
-              <div>Missing sire: <strong>{dataQuality.missingSire}</strong></div>
-              <div>Missing dam: <strong>{dataQuality.missingDam}</strong></div>
-              <div>Missing weaning weight: <strong>{dataQuality.lambsMissingWeaningWeight}</strong></div>
-              <div>Ewes no lambing links: <strong>{dataQuality.ewesMissingLambingRecords}</strong></div>
-              <div>Rams too few progeny: <strong>{dataQuality.ramsTooFewProgeny}</strong></div>
-            </div>
-          </ModuleCard>
+          <Card className="rugged-card">
+            <CardHeader><CardTitle>Legacy Summary</CardTitle></CardHeader>
+            <CardContent className="text-xs space-y-1">
+              <p>Total Animals: <strong>{bundle.flockOverview.totalAnimals}</strong></p>
+              <p>Data Completeness: <strong>{bundle.flockOverview.dataCompletenessScore.toFixed(1)}%</strong></p>
+              <p>Lamb Survival: <strong>{bundle.flockOverview.lambSurvivalPercentage?.toFixed(1) ?? "—"}%</strong></p>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </Layout>

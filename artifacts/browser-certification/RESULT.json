@@ -1,5 +1,8 @@
 {
+  "status": "blocked",
   "passed": false,
-  "reason": "Browser-level offline/sync certification has not yet been executed in this environment.",
+  "reason": "Browser certification dependencies are not installed. Install @playwright/test and browser binaries, then re-run.",
+  "blockerType": "external_dependency",
+  "missing": "@playwright/test",
   "runbook": "docs/release/offline-sync-certification.md"
 }

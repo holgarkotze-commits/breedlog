@@ -75,10 +75,29 @@ ${farmSettings?.logoUrl ? `<img src="${farmSettings.logoUrl}" style="width: 50px
 <div class="summary-grid">
 <p><strong>Event Date:</strong> ${format(new Date(event.eventDate), "dd MMMM yyyy")}</p>
 <p><strong>Treatment/Product:</strong> ${event.productName}</p>
-<p><strong>Treatment Type:</strong> ${event.route}</p>
+<p><strong>Event Type:</strong> ${event.eventType || "observation_symptom"}</p>
+<p><strong>Route:</strong> ${event.route}</p>
 <p><strong>Animals Treated:</strong> ${event.treatAllAnimals ? `All Active (${eventAnimals.length})` : `Selected (${eventAnimals.length})`}</p>
 </div>
 </div>
+
+${event.dose ? `
+<div class="notes-section">
+<strong>Dose:</strong> ${event.dose}
+</div>
+` : ''}
+
+${event.nextFollowUpDate ? `
+<div class="notes-section">
+<strong>Next Follow-up:</strong> ${event.nextFollowUpDate}
+</div>
+` : ''}
+
+${event.withdrawalPeriodNotes ? `
+<div class="notes-section">
+<strong>Withdrawal Notes:</strong> ${event.withdrawalPeriodNotes}
+</div>
+` : ''}
 
 ${event.notes ? `
 <div class="notes-section">
@@ -202,8 +221,13 @@ ${eventAnimals.map((animal, idx) => `<tr>
               {event.eventName || "Health Event"}
             </h1>
             <p className="text-muted-foreground text-xs md:text-sm mt-0.5">
-              {format(new Date(event.eventDate), "dd MMMM yyyy")} • {eventAnimals.length} animals
+              {format(new Date(event.eventDate), "dd MMMM yyyy")} • {eventAnimals.length} animals • {event.eventType || "observation_symptom"}
             </p>
+            <div className="flex flex-wrap gap-2 mt-2 text-xs">
+              {event.dose && <Badge variant="outline">Dose: {event.dose}</Badge>}
+              {event.nextFollowUpDate && <Badge variant="outline">Follow-up: {format(new Date(event.nextFollowUpDate), "dd MMM yyyy")}</Badge>}
+              {event.withdrawalPeriodNotes && <Badge variant="outline">Withdrawal notes recorded</Badge>}
+            </div>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -214,9 +238,6 @@ ${eventAnimals.map((animal, idx) => `<tr>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={exportPDF} className="cursor-pointer" data-testid="menu-export-pdf">
                 <FileText className="w-4 h-4 mr-2" /> Export PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportJSON} className="cursor-pointer" data-testid="menu-export-json">
-                <FileDown className="w-4 h-4 mr-2" /> Export JSON
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

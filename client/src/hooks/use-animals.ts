@@ -2,9 +2,24 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertAnimal, type AnimalWithRelations } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue, findPendingSyncItemByOperationId } from "@/lib/indexeddb";
+import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue, findPendingSyncItemByOperationId, deleteFromStore } from "@/lib/indexeddb";
 import { syncManager } from "@/lib/sync-manager";
 import { clearExpiredOperationCache, getOrCreateOperationId } from "@/lib/idempotency";
+import { splitTagInput } from "@shared/tag-utils";
+
+function normalizeTagId(tagId?: string | null): string {
+  return (tagId || "").trim().toUpperCase();
+}
+
+function normalizeAnimalName(name?: string | null): string {
+  return (name || "").trim().toLowerCase();
+}
+
+async function normalizeTagForClient(tagId?: string | null, explicitPrefix?: string | null): Promise<string> {
+  const farmSettings = await getAllFromStore<any>("farmSettings");
+  const resolvedPrefix = explicitPrefix || farmSettings?.[0]?.studPrefix || "";
+  return splitTagInput(tagId, resolvedPrefix).canonicalTag;
+}
 
 export function useAnimals(filters?: { search?: string; status?: string; sex?: string }) {
   const queryKey = [api.animals.list.path, filters];
@@ -137,6 +152,29 @@ export function useCreateAnimal() {
         }
       }
 
+      const localAnimals = await getAllFromStore<AnimalWithRelations>("animals");
+      const farmSettings = await getAllFromStore<any>("farmSettings");
+      const resolvedPrefix = (data.studPrefix || farmSettings?.[0]?.studPrefix || "").trim();
+      const tagParts = splitTagInput(data.tagId, resolvedPrefix);
+      data = {
+        ...data,
+        tagId: tagParts.canonicalTag,
+        rawTag: tagParts.rawTag || null,
+        studPrefix: tagParts.studPrefix || null,
+      } as InsertAnimal;
+      const normalizedTag = tagParts.canonicalTag;
+      const normalizedName = normalizeAnimalName(data.name);
+      const normalizedEid = data.electronicId?.trim().toLowerCase();
+      const duplicate = localAnimals.find((animal) => {
+        const sameTag = normalizeTagId(animal.tagId) === normalizedTag;
+        const sameName = normalizedName && normalizeAnimalName(animal.name) === normalizedName;
+        const sameEid = normalizedEid && (animal.electronicId || "").trim().toLowerCase() === normalizedEid;
+        return sameTag || !!sameName || !!sameEid;
+      });
+      if (duplicate) {
+        throw new Error("Duplicate tag, name, or EID detected. Please review before saving.");
+      }
+
       // Use robust connectivity check (actual API ping, not just navigator.onLine)
       const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
       const isOnline = await isApiReachable();
@@ -220,7 +258,16 @@ export function useCreateAnimal() {
       }
       
       // Offline or server failed - queue for sync
-      await addToSyncQueue({ action: "create", entity: "animals", data, tempId });
+      await addToSyncQueue({
+        action: "create",
+        entity: "animals",
+        data,
+        tempId,
+        operationId,
+        clientOperationId: operationId,
+        idempotencyKey: operationId,
+        localEntityId: tempId,
+      });
       console.log("[useCreateAnimal] Queued for sync");
       
       // Trigger background sync (non-blocking)
@@ -312,9 +359,22 @@ export function useUpdateAnimal() {
       
       // OFFLINE-FIRST: Always save locally first for instant response
       const existing = await getFromStore<AnimalWithRelations>("animals", id);
-      const normalizedUpdates = Object.prototype.hasOwnProperty.call(updates, "electronicId")
+      let normalizedUpdates = Object.prototype.hasOwnProperty.call(updates, "electronicId")
         ? { ...updates, electronicId: updates.electronicId?.trim() || null }
         : updates;
+      if (Object.prototype.hasOwnProperty.call(updates, "tagId") || Object.prototype.hasOwnProperty.call(updates, "studPrefix")) {
+        const canonicalTag = await normalizeTagForClient(
+          updates.tagId || existing?.tagId,
+          updates.studPrefix || existing?.studPrefix
+        );
+        const tagParts = splitTagInput(canonicalTag, updates.studPrefix || existing?.studPrefix || null);
+        normalizedUpdates = {
+          ...normalizedUpdates,
+          tagId: tagParts.canonicalTag,
+          rawTag: tagParts.rawTag || null,
+          studPrefix: tagParts.studPrefix || null,
+        };
+      }
       const updated = existing 
         ? { ...existing, ...normalizedUpdates, id, synced: 0 } as AnimalWithRelations
         : { ...normalizedUpdates, id, synced: 0, createdAt: new Date() } as unknown as AnimalWithRelations;
@@ -374,11 +434,16 @@ export function useUpdateAnimal() {
       }
       
       // Offline or server failed - queue for sync
+      const operationId = crypto.randomUUID();
       await addToSyncQueue({ 
         action: "update", 
         entity: "animals", 
         data: { id, ...normalizedUpdates },
-        ...(isTempId ? { tempId: id } : {})
+        ...(isTempId ? { tempId: id } : {}),
+        operationId,
+        clientOperationId: operationId,
+        idempotencyKey: operationId,
+        localEntityId: id,
       });
       console.log("[useUpdateAnimal] Queued for sync");
       
@@ -453,19 +518,39 @@ export function useDeleteAnimal() {
 
   return useMutation({
     mutationFn: async (id: number) => {
-      const url = buildUrl(api.animals.delete.path, { id });
-      // Include auth token for device-based authentication
-      const { getDeviceToken } = await import("@/lib/queryClient");
-      const token = getDeviceToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      
-      const res = await fetch(url, {
-        method: api.animals.delete.method,
-        headers,
-        credentials: "include",
+      const existing = await getFromStore<AnimalWithRelations>("animals", id);
+      await deleteFromStore("animals", id);
+
+      const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
+      const isOnline = await isApiReachable();
+      if (isOnline && id > 0) {
+        const url = buildUrl(api.animals.delete.path, { id });
+        const token = getDeviceToken();
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        const res = await fetch(url, {
+          method: api.animals.delete.method,
+          headers,
+          credentials: "include",
+        });
+        if (res.ok) return;
+        if (res.status >= 400 && res.status < 500) {
+          throw new Error("Failed to delete animal");
+        }
+      }
+
+      const operationId = crypto.randomUUID();
+      await addToSyncQueue({
+        action: "delete",
+        entity: "animals",
+        data: { id },
+        tempId: id < 0 ? id : undefined,
+        operationId,
+        clientOperationId: operationId,
+        idempotencyKey: operationId,
+        localEntityId: id,
       });
-      if (!res.ok) throw new Error("Failed to delete animal");
+      return existing;
     },
     onSuccess: () => {
       // Invalidate all animal queries to refresh UI immediately

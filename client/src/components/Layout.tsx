@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Beef, Dna, FileText, Settings, Syringe, LogOut, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Beef, Dna, FileText, Settings, Syringe, LogOut, LogIn, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useRecentVisits } from "@/hooks/use-recent-visits";
 import { NetworkStatusIndicator, GlobalRefreshButton, SyncStatusBadge, StorageWarningBanner } from "@/components/NetworkStatusIndicator";
 import { performLogout } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
 
 function ScrambleText({ text, className }: { text: string; className?: string }) {
   const [displayText, setDisplayText] = useState("");
@@ -45,6 +46,7 @@ function ScrambleText({ text, className }: { text: string; className?: string })
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { data: farmSettings } = useFarmSettings();
+  const { isAuthenticated } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const { addVisit } = useRecentVisits();
 
@@ -83,7 +85,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const displayName = farmSettings?.studName || farmSettings?.farmName || null;
 
   return (
-    <div className="min-h-screen bg-background abstract-bg flex flex-col pb-14 md:flex-row md:pb-0">
+    <div className="min-h-screen bg-background abstract-bg flex flex-col pb-28 md:flex-row md:pb-0">
       <StorageWarningBanner />
 
       <aside className="hidden md:fixed md:z-50 md:flex h-full w-72 flex-col border-r border-sidebar-border bg-[linear-gradient(175deg,#1f2a44_0%,#1e3350_42%,#111827_100%)] text-sidebar-foreground shadow-2xl">
@@ -123,10 +125,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="rounded-lg border border-white/10 bg-black/20 p-3 backdrop-blur-sm">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-mono text-slate-100/75">BreedLog v1.0.0</p>
-              <div className="flex items-center gap-1">
-                <SyncStatusBadge />
-                <GlobalRefreshButton location="sidebar" />
-              </div>
+              <SyncStatusBadge />
             </div>
             <NetworkStatusIndicator />
             <p className="mt-2 text-center text-[10px] font-medium tracking-wide text-cyan-100/70">Breeding Livestock Management</p>
@@ -134,19 +133,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
+      <div className="fixed right-2 top-[max(env(safe-area-inset-top,0px),0.5rem)] z-[60] flex items-center gap-1 rounded-xl border border-border/70 bg-card/90 p-1.5 shadow-md backdrop-blur">
+        <SyncStatusBadge />
+        <GlobalRefreshButton location="header" />
+      </div>
+
       <header className={cn("sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur md:hidden", isScrolled ? "py-2" : "py-4")}>
-        <div className="absolute right-2 top-2 flex items-center gap-1">
-          <SyncStatusBadge />
-          <GlobalRefreshButton />
-          <button
-            onClick={() => void performLogout()}
-            data-testid="button-logout-mobile"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            aria-label="Log out"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
         <Link href="/" className="flex flex-col items-center px-4">
           <div className={cn("transition-all duration-300", isScrolled ? "scale-75" : "scale-100")}>
             <Logo size={isScrolled ? "sm" : "md"} />
@@ -161,7 +153,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="mx-auto max-w-7xl">{children}</div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-14 items-center justify-around border-t border-border bg-card px-1 md:hidden">
+      <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-50 px-3 pb-2 md:hidden">
+        <button
+          onClick={() => void performLogout()}
+          data-testid="button-logout-mobile-bottom"
+          className="mx-auto flex w-full max-w-sm items-center justify-center gap-2 rounded-xl border border-border/70 bg-card/95 px-4 py-2.5 text-sm font-semibold text-foreground shadow-sm backdrop-blur supports-[backdrop-filter]:bg-card/80"
+          aria-label={isAuthenticated ? "Log out" : "Go to login"}
+        >
+          {isAuthenticated ? <LogOut className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
+          {isAuthenticated ? "Log Out" : "Log In"}
+        </button>
+      </div>
+
+      <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-14 items-center justify-around border-t border-border bg-card px-1 pb-[env(safe-area-inset-bottom,0px)] md:hidden">
         {navItems.map((item) => (
           <Link
             key={item.href}

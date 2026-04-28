@@ -357,9 +357,6 @@ ${g.notes ? `<p style="margin-top: 12px; font-size: 9pt; color: #555; padding: 0
                   <DropdownMenuItem onClick={exportCSV} data-testid="menu-export-csv">
                     Export as CSV
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={exportJSON} data-testid="menu-export-json">
-                    Export as JSON
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               

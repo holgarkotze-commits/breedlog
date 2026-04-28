@@ -263,7 +263,16 @@ export const api = {
       method: 'POST' as const,
       path: '/api/import/csv',
       responses: {
-        200: z.object({ imported: z.number(), errors: z.array(z.string()) }),
+        200: z.object({
+          imported: z.number(),
+          created: z.number().optional(),
+          updated: z.number().optional(),
+          skipped: z.number().optional(),
+          duplicate: z.number().optional(),
+          failed: z.number().optional(),
+          validationErrors: z.array(z.string()).optional(),
+          errors: z.array(z.string()),
+        }),
         400: errorSchemas.validation,
       },
     },

@@ -27,6 +27,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { Animal, AnimalWithRelations, BreedingEvent } from "@shared/schema";
 import { calculateEweBreedingStats } from "@/lib/breeding-stats";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
+import { splitTagInput } from "@shared/tag-utils";
+import { isMetricWeight, resolveBirthWeight, resolveWeaningWeight } from "@shared/animal-lifecycle";
 
 function ZoomableImagePreview({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   const [scale, setScale] = useState(1);
@@ -1355,9 +1357,6 @@ ${includeTree ? buildFamilyTreePage() : ''}
                 <DropdownMenuItem onClick={handleExportCSV} data-testid="export-csv">
                     <FileText className="w-4 h-4 mr-2" /> CSV
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportJSON} data-testid="export-json">
-                    <FileText className="w-4 h-4 mr-2" /> JSON (SA Stamboek)
-                </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
     );
@@ -1381,6 +1380,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
     const { mutate, isPending } = useUpdateAnimal();
     const { toast } = useToast();
     const { data: allAnimals } = useAnimals({});
+    const { data: farmSettings } = useFarmSettings();
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const galleryInputRef = useRef<HTMLInputElement>(null);
     const evalDocInputRef = useRef<HTMLInputElement>(null);
@@ -1395,9 +1395,11 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
         birthDate: animal.birthDate || "",
         birthStatus: animal.birthStatus || "",
         birthWeight: animal.birthWeight || "",
+        birthWeightEstimated: !!(animal as any).birthWeightEstimated,
         currentWeight: animal.currentWeight || "",
         weight100Day: animal.weight100Day || "",
         weight100DayDate: animal.weight100DayDate || "",
+        weight100DayEstimated: !!(animal as any).weight100DayEstimated,
         weaningStatus: animal.weaningStatus || "",
         electronicId: animal.electronicId || "",
         tattooId: animal.tattooId || "",
@@ -1438,6 +1440,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
     const rams = allAnimals?.filter(a => a.sex === "ram" && a.id !== animal.id) || [];
 
     const [isCompressing, setIsCompressing] = useState(false);
+    const normalizedTagPreview = splitTagInput(formData.tagId, formData.studPrefix || farmSettings?.studPrefix || "").canonicalTag;
 
     const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -1484,14 +1487,30 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
     };
 
     const handleSubmit = () => {
+        const weightFields: Array<[string, string]> = [
+            ["birthWeight", formData.birthWeight],
+            ["currentWeight", formData.currentWeight],
+            ["weight100Day", formData.weight100Day],
+        ];
+        for (const [field, value] of weightFields) {
+            if (!isMetricWeight(value)) {
+                toast({ title: "Invalid value", description: `${field} must be numeric in kg`, variant: "destructive" });
+                return;
+            }
+        }
+        const birth = resolveBirthWeight(formData.birthWeight, formData.birthWeightEstimated);
+        const weaning = resolveWeaningWeight(formData.weight100Day, formData.weight100DayEstimated);
+
         // Clean up empty strings for date fields to avoid database errors
         const cleanedData = {
             ...formData,
             birthDate: formData.birthDate || null,
             weight100DayDate: formData.weight100DayDate || null,
-            birthWeight: formData.birthWeight || null,
+            birthWeight: birth.value,
+            birthWeightEstimated: birth.estimated,
             currentWeight: formData.currentWeight || null,
-            weight100Day: formData.weight100Day || null,
+            weight100Day: weaning.value,
+            weight100DayEstimated: weaning.estimated,
             birthStatus: formData.birthStatus || null,
             weaningStatus: formData.weaningStatus || null,
             electronicId: formData.electronicId?.trim() || null,
@@ -1559,6 +1578,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                         <div>
                             <Label className="text-[11px] md:text-xs">Tag ID</Label>
                             <Input value={formData.tagId} onChange={(e) => setFormData(prev => ({...prev, tagId: e.target.value}))} className="rugged-input h-8 text-sm" data-testid="input-edit-tag-id" />
+                            <p className="text-[10px] text-muted-foreground mt-1">Display tag preview: <strong>{normalizedTagPreview || "—"}</strong></p>
                         </div>
                         <div>
                             <Label className="text-[11px] md:text-xs">Name</Label>
@@ -1627,6 +1647,34 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                             <Label className="text-[11px] md:text-xs">Weight (kg)</Label>
                             <Input type="number" step="0.1" value={formData.currentWeight} onChange={(e) => setFormData(prev => ({...prev, currentWeight: e.target.value}))} className="rugged-input h-8 text-sm" data-testid="input-edit-weight" />
                         </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Birth Weight (kg)</Label>
+                            <Input type="number" step="0.1" value={formData.birthWeight} onChange={(e) => setFormData(prev => ({...prev, birthWeight: e.target.value}))} className="rugged-input h-8 text-sm" data-testid="input-edit-birth-weight" />
+                        </div>
+                        <div className="flex items-end pb-1">
+                            <label className="text-[11px] md:text-xs flex items-center gap-2">
+                                <input type="checkbox" checked={formData.birthWeightEstimated} onChange={(e) => setFormData(prev => ({ ...prev, birthWeightEstimated: e.target.checked }))} />
+                                Birth weight is estimated
+                            </label>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Weaning Date</Label>
+                            <Input type="date" value={formData.weight100DayDate || ""} onChange={(e) => setFormData(prev => ({...prev, weight100DayDate: e.target.value}))} className="rugged-input h-8 text-xs" data-testid="input-edit-weaning-date" />
+                        </div>
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Weaning Weight (kg)</Label>
+                            <Input type="number" step="0.1" value={formData.weight100Day} onChange={(e) => setFormData(prev => ({...prev, weight100Day: e.target.value}))} className="rugged-input h-8 text-sm" data-testid="input-edit-weaning-weight" />
+                        </div>
+                    </div>
+                    <div className="flex items-center pb-1">
+                        <label className="text-[11px] md:text-xs flex items-center gap-2">
+                            <input type="checkbox" checked={formData.weight100DayEstimated} onChange={(e) => setFormData(prev => ({ ...prev, weight100DayEstimated: e.target.checked }))} />
+                            Weaning weight is estimated
+                        </label>
                     </div>
 
                     {/* IDs - Compact */}

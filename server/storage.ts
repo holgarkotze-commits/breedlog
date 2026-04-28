@@ -53,11 +53,26 @@ import {
   type SystemSetting,
 } from "@shared/schema";
 import { eq, desc, and, sql, lt, gte, ilike, or, ne, inArray } from "drizzle-orm";
+import { canonicalizeTag, splitTagInput } from "@shared/tag-utils";
 
 export class DuplicateElectronicIdError extends Error {
   constructor(public electronicId: string) {
     super(`Electronic ID "${electronicId}" is already assigned to another animal`);
     this.name = "DuplicateElectronicIdError";
+  }
+}
+
+export class DuplicateTagIdError extends Error {
+  constructor(public tagId: string) {
+    super(`Tag ID "${tagId}" is already assigned to another animal`);
+    this.name = "DuplicateTagIdError";
+  }
+}
+
+export class DuplicateAnimalNameError extends Error {
+  constructor(public animalName: string) {
+    super(`Animal name "${animalName}" is already assigned to another animal`);
+    this.name = "DuplicateAnimalNameError";
   }
 }
 
@@ -158,6 +173,15 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private normalizeTagId(tagId?: string | null): string {
+    return canonicalizeTag(tagId, undefined);
+  }
+
+  private normalizeAnimalName(name?: string | null): string | null {
+    const trimmed = name?.trim();
+    return trimmed ? trimmed.toLowerCase() : null;
+  }
+
   private normalizeElectronicId(electronicId?: string | null): string | null {
     const trimmed = electronicId?.trim();
     return trimmed ? trimmed : null;
@@ -175,6 +199,45 @@ export class DatabaseStorage implements IStorage {
     const [existing] = await db.select().from(animals).where(and(...conditions)).limit(1);
     if (existing) {
       throw new DuplicateElectronicIdError(normalized);
+    }
+  }
+
+  private async assertUniqueTagId(userId: string, tagId?: string | null, excludeAnimalId?: number, studPrefix?: string | null): Promise<void> {
+    const incoming = splitTagInput(tagId, studPrefix);
+    if (!incoming.canonicalTag) return;
+
+    const existingAnimals = await db.select().from(animals).where(eq(animals.userId, userId));
+    const duplicate = existingAnimals.find((animal) => {
+      if (excludeAnimalId !== undefined && animal.id === excludeAnimalId) return false;
+      const candidate = splitTagInput(animal.tagId, animal.studPrefix);
+      return (
+        candidate.canonicalTag === incoming.canonicalTag ||
+        (!!candidate.rawTag && !!incoming.rawTag && candidate.rawTag === incoming.rawTag)
+      );
+    });
+
+    if (duplicate) {
+      throw new DuplicateTagIdError(incoming.canonicalTag);
+    }
+  }
+
+  private async resolveStudPrefix(userId: string, explicitPrefix?: string | null): Promise<string> {
+    const provided = (explicitPrefix || "").trim();
+    if (provided) return provided;
+    const settings = await this.getFarmSettings(userId);
+    return settings?.studPrefix || "";
+  }
+
+  private async assertUniqueAnimalName(userId: string, name?: string | null, excludeAnimalId?: number): Promise<void> {
+    const normalized = this.normalizeAnimalName(name);
+    if (!normalized) return;
+    const conditions = [eq(animals.userId, userId), sql`lower(${animals.name}) = ${normalized}`];
+    if (excludeAnimalId !== undefined) {
+      conditions.push(ne(animals.id, excludeAnimalId));
+    }
+    const [existing] = await db.select().from(animals).where(and(...conditions)).limit(1);
+    if (existing) {
+      throw new DuplicateAnimalNameError(name!.trim());
     }
   }
 
@@ -229,11 +292,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAnimal(userId: string, animal: Omit<InsertAnimal, 'userId'>): Promise<Animal> {
+    const prefix = await this.resolveStudPrefix(userId, animal.studPrefix);
+    const normalizedTag = splitTagInput(animal.tagId, prefix);
+    await this.assertUniqueTagId(userId, normalizedTag.canonicalTag, undefined, normalizedTag.studPrefix);
     const normalizedElectronicId = this.normalizeElectronicId(animal.electronicId);
+    await this.assertUniqueAnimalName(userId, animal.name);
     await this.assertUniqueElectronicId(userId, normalizedElectronicId);
 
     const [newAnimal] = await db.insert(animals).values({
       ...animal,
+      tagId: normalizedTag.canonicalTag,
+      rawTag: normalizedTag.rawTag || null,
+      studPrefix: normalizedTag.studPrefix || null,
       electronicId: normalizedElectronicId,
       userId,
     }).returning();
@@ -241,6 +311,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAnimal(userId: string, id: number, updates: Partial<Omit<InsertAnimal, 'userId'>>): Promise<Animal> {
+    if (Object.prototype.hasOwnProperty.call(updates, "tagId") || Object.prototype.hasOwnProperty.call(updates, "studPrefix")) {
+      const existing = await this.getAnimal(userId, id);
+      if (!existing) throw new Error("Animal not found");
+      const prefix = await this.resolveStudPrefix(userId, updates.studPrefix ?? existing.studPrefix);
+      const normalizedTag = splitTagInput(updates.tagId ?? existing.tagId, prefix);
+      updates = {
+        ...updates,
+        tagId: normalizedTag.canonicalTag,
+        rawTag: normalizedTag.rawTag || null,
+        studPrefix: normalizedTag.studPrefix || null,
+      };
+      await this.assertUniqueTagId(userId, updates.tagId, id, updates.studPrefix);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, "name")) {
+      await this.assertUniqueAnimalName(userId, updates.name, id);
+    }
     if (Object.prototype.hasOwnProperty.call(updates, "electronicId")) {
       updates = {
         ...updates,
@@ -485,10 +571,17 @@ export class DatabaseStorage implements IStorage {
   async bulkCreateAnimals(userId: string, animalsList: Omit<InsertAnimal, 'userId'>[]): Promise<Animal[]> {
     if (animalsList.length === 0) return [];
 
-    const normalizedAnimals = animalsList.map((animal) => ({
-      ...animal,
-      electronicId: this.normalizeElectronicId(animal.electronicId),
-    }));
+    const settings = await this.getFarmSettings(userId);
+    const normalizedAnimals = animalsList.map((animal) => {
+      const normalizedTag = splitTagInput(animal.tagId, animal.studPrefix || settings?.studPrefix || "");
+      return {
+        ...animal,
+        tagId: normalizedTag.canonicalTag,
+        rawTag: normalizedTag.rawTag || null,
+        studPrefix: normalizedTag.studPrefix || null,
+        electronicId: this.normalizeElectronicId(animal.electronicId),
+      };
+    });
 
     const providedElectronicIds = normalizedAnimals
       .map((animal) => animal.electronicId)
@@ -513,6 +606,12 @@ export class DatabaseStorage implements IStorage {
       if (existingElectronicId) {
         throw new DuplicateElectronicIdError(existingElectronicId);
       }
+    }
+
+    const normalizedTags = normalizedAnimals.map((animal) => this.normalizeTagId(animal.tagId));
+    const duplicateTagInPayload = normalizedTags.find((tagId, index) => normalizedTags.indexOf(tagId) !== index);
+    if (duplicateTagInPayload) {
+      throw new DuplicateTagIdError(duplicateTagInPayload);
     }
 
     const animalsWithUserId = normalizedAnimals.map(a => ({ ...a, userId }));
@@ -694,18 +793,67 @@ class InMemoryStorage implements IStorage {
   }
   async getAnimal(userId: string, id: number): Promise<Animal | undefined> { const a = this.animals.get(id); return a?.userId === userId ? a : undefined; }
   async createAnimal(userId: string, animal: Omit<InsertAnimal, "userId">): Promise<Animal> {
+    const settings = await this.getFarmSettings(userId);
+    const normalizedTagParts = splitTagInput(animal.tagId, animal.studPrefix || settings?.studPrefix || "");
+    const normalizedTag = normalizedTagParts.canonicalTag;
+    const duplicateTag = [...this.animals.values()].find(a => {
+      if (a.userId !== userId) return false;
+      const existing = splitTagInput(a.tagId, a.studPrefix);
+      return (
+        existing.canonicalTag === normalizedTag ||
+        (!!existing.rawTag && !!normalizedTagParts.rawTag && existing.rawTag === normalizedTagParts.rawTag)
+      );
+    });
+    if (duplicateTag) throw new DuplicateTagIdError(animal.tagId);
+    if (animal.name?.trim()) {
+      const normalizedName = animal.name.trim().toLowerCase();
+      const duplicateName = [...this.animals.values()].find(a => a.userId === userId && (a.name || "").trim().toLowerCase() === normalizedName);
+      if (duplicateName) throw new DuplicateAnimalNameError(animal.name);
+    }
     if (animal.electronicId) {
       const duplicate = [...this.animals.values()].find(a => a.userId === userId && a.electronicId === animal.electronicId);
       if (duplicate) throw new DuplicateElectronicIdError(animal.electronicId);
     }
     const id = this.nextId("animalSeq");
-    const rec = { id, ...animal, userId, createdAt: this.now() } as Animal;
+    const rec = {
+      id,
+      ...animal,
+      tagId: normalizedTagParts.canonicalTag,
+      rawTag: normalizedTagParts.rawTag || null,
+      studPrefix: normalizedTagParts.studPrefix || null,
+      userId,
+      createdAt: this.now(),
+    } as Animal;
     this.animals.set(id, rec);
     return rec;
   }
   async updateAnimal(userId: string, id: number, animal: Partial<Omit<InsertAnimal, "userId">>): Promise<Animal> {
     const existing = await this.getAnimal(userId, id);
     if (!existing) throw new Error("Animal not found");
+    if (animal.tagId?.trim() || animal.studPrefix !== undefined) {
+      const settings = await this.getFarmSettings(userId);
+      const normalizedTag = splitTagInput(animal.tagId || existing.tagId, animal.studPrefix || existing.studPrefix || settings?.studPrefix || "");
+      const duplicateTag = [...this.animals.values()].find(a => {
+        if (a.userId !== userId || a.id === id) return false;
+        const existingTag = splitTagInput(a.tagId, a.studPrefix);
+        return (
+          existingTag.canonicalTag === normalizedTag.canonicalTag ||
+          (!!existingTag.rawTag && !!normalizedTag.rawTag && existingTag.rawTag === normalizedTag.rawTag)
+        );
+      });
+      if (duplicateTag) throw new DuplicateTagIdError(normalizedTag.canonicalTag);
+      animal = {
+        ...animal,
+        tagId: normalizedTag.canonicalTag,
+        rawTag: normalizedTag.rawTag || null,
+        studPrefix: normalizedTag.studPrefix || null,
+      };
+    }
+    if (animal.name?.trim()) {
+      const normalizedName = animal.name.trim().toLowerCase();
+      const duplicateName = [...this.animals.values()].find(a => a.userId === userId && a.id !== id && (a.name || "").trim().toLowerCase() === normalizedName);
+      if (duplicateName) throw new DuplicateAnimalNameError(animal.name);
+    }
     if (animal.electronicId) {
       const duplicate = [...this.animals.values()].find(a => a.userId === userId && a.electronicId === animal.electronicId && a.id !== id);
       if (duplicate) throw new DuplicateElectronicIdError(animal.electronicId);

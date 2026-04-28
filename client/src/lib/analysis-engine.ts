@@ -991,3 +991,203 @@ export function buildAnalysisBundle(input: AnalysisDataInput): AnalysisBundle {
   };
 }
 
+export interface AnalysisFilters {
+  scope: "total_herd" | "individual" | "offspring_of_sire";
+  animalId?: number | null;
+  sireId?: number | null;
+  sex?: "ram" | "ewe" | "all";
+  status?: string | "all";
+  classification?: string | "all";
+  familyLine?: string | "all";
+  birthType?: string | "all";
+  minAgeDays?: number | null;
+  maxAgeDays?: number | null;
+}
+
+export interface AdvancedAnalysisReport {
+  filteredCount: number;
+  herdComposition: { total: number; rams: number; ewes: number; lambs: number };
+  birthTypeSplit: Record<string, number>;
+  dataCompleteness: { score: number; warnings: string[]; confidence: ConfidenceLevel };
+  weights: {
+    actualBirthAvg: number | null;
+    estimatedBirthAvg: number | null;
+    actualWeaningAvg: number | null;
+    estimatedWeaningAvg: number | null;
+  };
+  sireComparison: Array<{ sireId: number; sireTag: string; offspring: number; avgBirthWeight: number | null; avgWeaningWeight: number | null; confidence: ConfidenceLevel }>;
+  familyLineComparison: Array<{ familyLine: string; animals: number; avgBirthWeight: number | null; avgWeaningWeight: number | null }>;
+  maternalRanking: Array<{ eweId: number; eweTag: string; lambCount: number; twinRate: number; weaningRate: number; confidence: ConfidenceLevel }>;
+  growthRanking: Array<{ animalId: number; tagId: string; metric: number; confidence: ConfidenceLevel }>;
+}
+
+function getConfidenceFromRatio(records: number, ratio: number): ConfidenceLevel {
+  if (records >= 10 && ratio >= 0.75) return "High";
+  if (records >= 4 && ratio >= 0.45) return "Medium";
+  return "Low";
+}
+
+export function filterAnimalsBySelection(input: AnalysisDataInput, filters: AnalysisFilters): Animal[] {
+  const today = input.today ?? new Date();
+  let animals = [...(input.animals || [])];
+  if (filters.scope === "individual" && filters.animalId) {
+    animals = animals.filter((a) => a.id === filters.animalId);
+  }
+  if (filters.scope === "offspring_of_sire" && filters.sireId) {
+    animals = animals.filter((a) => a.sireId === filters.sireId);
+  }
+  if (filters.sex && filters.sex !== "all") {
+    animals = animals.filter((a) => a.sex === filters.sex);
+  }
+  if (filters.status && filters.status !== "all") {
+    animals = animals.filter((a) => a.status === filters.status);
+  }
+  if (filters.classification && filters.classification !== "all") {
+    animals = animals.filter((a) => a.classification === filters.classification);
+  }
+  if (filters.familyLine && filters.familyLine !== "all") {
+    animals = animals.filter((a) => (a.managementGroup || "Unassigned") === filters.familyLine);
+  }
+  if (filters.birthType && filters.birthType !== "all") {
+    animals = animals.filter((a) => (a.birthStatus || "unknown") === filters.birthType);
+  }
+  if (filters.minAgeDays || filters.maxAgeDays) {
+    animals = animals.filter((a) => {
+      const age = getAgeInDaysAt(a.birthDate, today);
+      if (age === null) return false;
+      if (filters.minAgeDays && age < filters.minAgeDays) return false;
+      if (filters.maxAgeDays && age > filters.maxAgeDays) return false;
+      return true;
+    });
+  }
+  return animals;
+}
+
+export function buildAdvancedAnalysisReport(input: AnalysisDataInput, filters: AnalysisFilters): AdvancedAnalysisReport {
+  const today = input.today ?? new Date();
+  const selected = filterAnimalsBySelection(input, filters);
+  const byId = new Map(input.animals.map((a) => [a.id, a]));
+
+  const lambs = selected.filter((a) => isLamb(a, today));
+  const rams = selected.filter((a) => a.sex === "ram");
+  const ewes = selected.filter((a) => a.sex === "ewe");
+
+  const birthTypeSplit: Record<string, number> = {};
+  for (const animal of selected) {
+    const key = animal.birthStatus || "unknown";
+    birthTypeSplit[key] = (birthTypeSplit[key] || 0) + 1;
+  }
+
+  const actualBirth = selected
+    .filter((a) => toNumber(a.birthWeight) !== null && !(a as any).birthWeightEstimated)
+    .map((a) => toNumber(a.birthWeight) as number);
+  const estimatedBirth = selected
+    .filter((a) => toNumber(a.birthWeight) !== null && !!(a as any).birthWeightEstimated)
+    .map((a) => toNumber(a.birthWeight) as number);
+  const actualWeaning = selected
+    .filter((a) => toNumber(a.weight100Day) !== null && !(a as any).weight100DayEstimated)
+    .map((a) => toNumber(a.weight100Day) as number);
+  const estimatedWeaning = selected
+    .filter((a) => toNumber(a.weight100Day) !== null && !!(a as any).weight100DayEstimated)
+    .map((a) => toNumber(a.weight100Day) as number);
+
+  const completenessRequired = selected.length * 10;
+  const completenessAvailable = selected.reduce((sum, a) => {
+    return sum + [a.tagId, a.sex, a.status, a.birthDate, a.birthStatus, a.sireId, a.damId, a.birthWeight, a.weight100DayDate, a.weight100Day].filter(Boolean).length;
+  }, 0);
+  const completenessScore = completenessRequired > 0 ? (completenessAvailable / completenessRequired) * 100 : 0;
+  const completenessWarnings = [
+    selected.some((a) => !a.birthDate) ? "Record birth date for all animals to improve age and survival analysis." : "",
+    selected.some((a) => !a.birthWeight) ? "Record birth weights (actual or estimated flagged) for stronger growth analysis." : "",
+    selected.some((a) => !a.weight100Day) ? "Record weaning date + weaning weight to unlock weaning performance analysis." : "",
+    selected.some((a) => !a.sireId) ? "Add sire links to unlock sire offspring comparison." : "",
+    selected.some((a) => !a.damId) ? "Add dam links to unlock maternal ranking." : "",
+  ].filter(Boolean);
+
+  const sireMap = new Map<number, Animal[]>();
+  for (const animal of selected) {
+    if (!animal.sireId) continue;
+    const list = sireMap.get(animal.sireId) || [];
+    list.push(animal);
+    sireMap.set(animal.sireId, list);
+  }
+  const sireComparison = [...sireMap.entries()].map(([sireId, offspring]) => {
+    const birthValues = offspring.map((a) => toNumber(a.birthWeight)).filter((v): v is number => v !== null);
+    const weaningValues = offspring.map((a) => toNumber(a.weight100Day)).filter((v): v is number => v !== null);
+    const confidence = getConfidenceFromRatio(
+      offspring.length,
+      ((birthValues.length + weaningValues.length) / Math.max(offspring.length * 2, 1))
+    );
+    return {
+      sireId,
+      sireTag: byId.get(sireId)?.tagId || `Sire ${sireId}`,
+      offspring: offspring.length,
+      avgBirthWeight: average(birthValues),
+      avgWeaningWeight: average(weaningValues),
+      confidence,
+    };
+  }).sort((a, b) => b.offspring - a.offspring);
+
+  const familyLineMap = new Map<string, Animal[]>();
+  for (const animal of selected) {
+    const key = animal.managementGroup || "Unassigned";
+    const list = familyLineMap.get(key) || [];
+    list.push(animal);
+    familyLineMap.set(key, list);
+  }
+  const familyLineComparison = [...familyLineMap.entries()].map(([familyLine, items]) => ({
+    familyLine,
+    animals: items.length,
+    avgBirthWeight: average(items.map((a) => toNumber(a.birthWeight)).filter((v): v is number => v !== null)),
+    avgWeaningWeight: average(items.map((a) => toNumber(a.weight100Day)).filter((v): v is number => v !== null)),
+  })).sort((a, b) => b.animals - a.animals);
+
+  const maternalRanking = ewes.map((ewe) => {
+    const offspring = selected.filter((a) => a.damId === ewe.id);
+    const twins = offspring.filter((a) => a.birthStatus === "twin").length;
+    const weaned = offspring.filter((a) => toNumber(a.weight100Day) !== null).length;
+    const confidence = getConfidenceFromRatio(offspring.length, offspring.length ? weaned / offspring.length : 0);
+    return {
+      eweId: ewe.id,
+      eweTag: ewe.tagId,
+      lambCount: offspring.length,
+      twinRate: offspring.length ? (twins / offspring.length) * 100 : 0,
+      weaningRate: offspring.length ? (weaned / offspring.length) * 100 : 0,
+      confidence,
+    };
+  }).sort((a, b) => b.lambCount - a.lambCount);
+
+  const growthRanking = lambs.map((lamb) => {
+    const birth = toNumber(lamb.birthWeight);
+    const weaning = toNumber(lamb.weight100Day);
+    const adg = calculateADG(birth, weaning, lamb.birthDate, lamb.weight100DayDate || lamb.birthDate);
+    const confidence = getConfidenceFromRatio(1, adg !== null ? 1 : 0.3);
+    return {
+      animalId: lamb.id,
+      tagId: lamb.tagId,
+      metric: adg ?? 0,
+      confidence,
+    };
+  }).sort((a, b) => b.metric - a.metric);
+
+  return {
+    filteredCount: selected.length,
+    herdComposition: { total: selected.length, rams: rams.length, ewes: ewes.length, lambs: lambs.length },
+    birthTypeSplit,
+    dataCompleteness: {
+      score: completenessScore,
+      warnings: completenessWarnings,
+      confidence: getConfidenceFromRatio(selected.length, completenessScore / 100),
+    },
+    weights: {
+      actualBirthAvg: average(actualBirth),
+      estimatedBirthAvg: average(estimatedBirth),
+      actualWeaningAvg: average(actualWeaning),
+      estimatedWeaningAvg: average(estimatedWeaning),
+    },
+    sireComparison,
+    familyLineComparison,
+    maternalRanking,
+    growthRanking,
+  };
+}

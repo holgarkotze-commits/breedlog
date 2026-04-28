@@ -34,7 +34,7 @@ const defaultFeatureConfig: Record<FeatureFlag, FeatureConfig> = {
     interceptable: true,
   },
   export_json: {
-    enabled: true,
+    enabled: false,
     requiresOnline: false,
     requiresLicense: ['free', 'paid', 'offline_licensed', 'trial'],
     interceptable: true,
