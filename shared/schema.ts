@@ -44,6 +44,7 @@ export const animals = pgTable("animals", {
   userId: varchar("user_id").notNull().references(() => users.id), // User ownership - CRITICAL for data isolation
   // Identification
   tagId: text("tag_id").notNull(), // Ear tag - removed unique constraint, now unique per user
+  rawTag: text("raw_tag"),
   tattooId: text("tattoo_id"), // Tattoo
   electronicId: text("electronic_id"), // RFID
   studPrefix: text("stud_prefix"),
@@ -83,10 +84,12 @@ export const animals = pgTable("animals", {
   
   // Performance (Specific Stamboek fields)
   birthWeight: decimal("birth_weight"),
+  birthWeightEstimated: boolean("birth_weight_estimated").default(false),
   currentWeight: decimal("current_weight"), // Latest known weight
   
   weight100Day: decimal("weight_100_day"),
   weight100DayDate: date("weight_100_day_date"),
+  weight100DayEstimated: boolean("weight_100_day_estimated").default(false),
   
   weight270Day: decimal("weight_270_day"),
   weight270DayDate: date("weight_270_day_date"),
@@ -440,9 +443,13 @@ export const flockHealthEvents = pgTable("flock_health_events", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull().references(() => users.id), // User ownership
   eventName: text("event_name").notNull().default("Health Treatment"), // User-defined label for the event
+  eventType: text("event_type").default("observation_symptom"),
   eventDate: date("event_date").notNull(),
   productName: text("product_name").notNull(),
-  route: text("route").notNull(), // intravenous, intramuscular, subcutaneous
+  route: text("route").notNull(),
+  dose: text("dose"),
+  nextFollowUpDate: date("next_follow_up_date"),
+  withdrawalPeriodNotes: text("withdrawal_period_notes"),
   treatAllAnimals: boolean("treat_all_animals").default(false),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),

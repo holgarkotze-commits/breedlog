@@ -9,39 +9,39 @@
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Chivo', sans-serif;
 
-  --background: 194 20% 92%;
-  --foreground: 220 38% 9%;
+  --background: 44 38% 95%;
+  --foreground: 219 31% 16%;
 
-  --card: 0 0% 98%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 40 39% 49%;
+  --card: 42 34% 97%;
+  --card-foreground: 219 31% 16%;
+  --card-border: 219 21% 74%;
 
-  --popover: 0 0% 99%;
-  --popover-foreground: 220 38% 9%;
-  --popover-border: 213 20% 74%;
+  --popover: 42 34% 98%;
+  --popover-foreground: 219 31% 16%;
+  --popover-border: 217 23% 76%;
 
-  --primary: 212 43% 28%;
-  --primary-foreground: 46 86% 92%;
-  --primary-border: rgba(166, 132, 73, 0.95);
+  --primary: 214 58% 25%;
+  --primary-foreground: 0 0% 100%;
+  --primary-border: rgba(41, 77, 129, 0.95);
 
-  --secondary: 205 24% 88%;
-  --secondary-foreground: 216 35% 21%;
-  --secondary-border: rgba(65, 88, 123, 0.35);
+  --secondary: 210 24% 91%;
+  --secondary-foreground: 216 26% 26%;
+  --secondary-border: rgba(94, 112, 140, 0.35);
 
-  --muted: 204 22% 90%;
-  --muted-foreground: 218 21% 32%;
+  --muted: 214 23% 91%;
+  --muted-foreground: 217 16% 39%;
   --muted-border: rgba(113, 131, 161, 0.4);
 
-  --accent: 41 68% 58%;
-  --accent-foreground: 220 53% 14%;
+  --accent: 42 74% 52%;
+  --accent-foreground: 218 30% 18%;
   --accent-border: rgba(168, 130, 66, 0.95);
 
   --destructive: 0 72% 46%;
   --destructive-foreground: 0 0% 100%;
   --destructive-border: rgba(185, 28, 28, 0.95);
 
-  --border: 210 24% 72%;
-  --input: 0 0% 100%;
+  --border: 214 23% 78%;
+  --input: 42 34% 99%;
   --ring: 198 76% 36%;
 
   --sidebar: 221 42% 21%;
@@ -55,10 +55,10 @@
   --sidebar-accent-foreground: 210 40% 96%;
   --sidebar-accent-border: rgba(255, 255, 255, 0.2);
 
-  --button-outline: rgba(162, 126, 68, 0.9);
+  --button-outline: rgba(33, 75, 132, 0.72);
 
-  --table-row-even: 204 30% 95%;
-  --table-header-bg: 208 28% 87%;
+  --table-row-even: 45 34% 96%;
+  --table-header-bg: 211 31% 88%;
 
   --chart-1: 197 65% 40%;
   --chart-2: 143 54% 43%;
@@ -140,7 +140,7 @@
 
   body {
     @apply min-h-screen bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-primary-foreground;
-    background-image: radial-gradient(circle at 10% 10%, hsl(204 65% 91% / 0.42) 0, transparent 36%), radial-gradient(circle at 86% 0, hsl(42 76% 71% / 0.16) 0, transparent 38%);
+    background-image: radial-gradient(circle at 10% 10%, hsl(210 58% 82% / 0.3) 0, transparent 36%), radial-gradient(circle at 86% 0, hsl(41 82% 68% / 0.2) 0, transparent 38%);
     font-size: 14px;
     transition: background-color 0.25s ease, color 0.25s ease;
   }
@@ -209,10 +209,19 @@
     @apply font-semibold shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg;
   }
 
+  .light .rugged-btn {
+    box-shadow: 0 6px 14px rgba(26, 46, 76, 0.14);
+  }
+
   .rugged-card {
     @apply relative overflow-hidden rounded-2xl border bg-card text-card-foreground;
     border-color: hsl(var(--card-border));
     box-shadow: 0 6px 14px rgba(10, 25, 47, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
+  .light .rugged-card {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.92) 0%, rgba(249, 247, 240, 0.92) 100%);
+    box-shadow: 0 8px 18px rgba(28, 43, 63, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
   }
 
   .dark .rugged-card {
@@ -261,6 +270,13 @@
 
   .logo-shell {
     backdrop-filter: blur(2px);
+  }
+
+  .analysis-hero {
+    border: 1px solid hsl(var(--border));
+    border-radius: 1rem;
+    padding: 0.9rem 1rem;
+    background: linear-gradient(140deg, hsl(var(--card) / 0.96) 0%, hsl(var(--secondary) / 0.7) 100%);
   }
 
   ::-webkit-scrollbar {

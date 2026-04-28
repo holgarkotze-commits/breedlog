@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { ensureUserIsolation, clearAllOfflineData } from "@/lib/indexeddb";
+import { ensureUserIsolation } from "@/lib/indexeddb";
 import { clearBetaAccessStorage } from "@/components/BetaAccessGate";
 import { apiRequest, getDeviceToken, setDeviceToken, clearDeviceToken } from "@/lib/queryClient";
 
@@ -134,7 +134,6 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await clearAllOfflineData();
       clearBetaAccessStorage();
       clearDeviceToken();
       await apiRequest("POST", "/api/device/logout", {});

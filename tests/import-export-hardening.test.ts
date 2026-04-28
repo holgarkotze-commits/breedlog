@@ -1,0 +1,119 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { parse } from "csv-parse/sync";
+import { buildBreedLogSimulationDataset } from "../shared/breedlog-simulation";
+import {
+  BREEDLOG_CSV_HEADERS,
+  buildBreedLogCsvRows,
+  buildBreedLogCsvContent,
+  parseBreedLogCsvRecords,
+  buildBreedLogImportTemplateCsv,
+} from "../shared/import-export";
+
+function parseCsv(csvText: string): Record<string, string>[] {
+  return parse(csvText, {
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+  }) as Record<string, string>[];
+}
+
+test("CSV export uses required BreedLog headers and field mapping", () => {
+  const dataset = buildBreedLogSimulationDataset();
+  const rows = buildBreedLogCsvRows(dataset.animals, dataset.farmMetadata.studPrefix);
+  const csv = buildBreedLogCsvContent(rows);
+
+  const [headerLine] = csv.split("\n");
+  assert.deepEqual(headerLine.split(","), [...BREEDLOG_CSV_HEADERS]);
+
+  const parsedRows = parseCsv(csv);
+  assert.ok(parsedRows.length > 0);
+
+  const one = parsedRows.find((row) => row.displayTag === "KW22-001")!;
+  assert.equal(one.rawTag, "22-001");
+  assert.equal(one.studPrefix, "KW");
+  assert.equal(one.sex, "ewe");
+  assert.equal(one.birthDate.startsWith("2022-"), true);
+  assert.equal(one.birthWeightEstimated, "false");
+  assert.equal(one.weaningWeightEstimated, "false");
+  assert.equal(one.familyLine, "Bruno");
+});
+
+test("CSV export escapes quotes, commas and line breaks", () => {
+  const dataset = buildBreedLogSimulationDataset();
+  const animal = { ...dataset.animals[0], name: 'Doe "A", Prime', notes: "line1\nline2,quoted" };
+  const csv = buildBreedLogCsvContent(buildBreedLogCsvRows([animal], "KW"));
+
+  assert.match(csv, /"Doe ""A"", Prime"/);
+  assert.match(csv, /"line1\nline2,quoted"/);
+
+  const rows = parseCsv(csv);
+  assert.equal(rows[0].name, 'Doe "A", Prime');
+  assert.equal(rows[0].notes, "line1\nline2,quoted");
+});
+
+test("CSV import normalizes tags, blocks duplicates and validates weights/dates", () => {
+  const existing = buildBreedLogSimulationDataset().animals.slice(0, 2);
+  const csv = [
+    BREEDLOG_CSV_HEADERS.join(","),
+    '"24-001","KW","KW24-001","A","ewe","active","commercial","2024-01-01","single","4.00","false","2024-04-10","28.00","true","40.00","","","","","LineA","25A","EID-1","","ok"',
+    '"KW24-001","KW","KW24-001","A2","ewe","active","commercial","2024-01-02","single","4.00","false","","","false","","","","","","LineA","25A","EID-2","","dup-tag"',
+    '"24-002","KW","KW24-002","B","ewe","active","commercial","bad-date","single","bad-weight","false","","","false","","","","","","LineB","25A","EID-1","","bad"',
+  ].join("\n");
+
+  const parsed = parseBreedLogCsvRecords(parseCsv(csv), existing, "KW");
+  assert.equal(parsed.rowsToCreate.length, 1);
+  assert.equal(parsed.rowsToCreate[0].tagId, "KW24-001");
+  assert.equal(parsed.rowsToCreate[0].rawTag, "24-001");
+  assert.equal(parsed.rowsToCreate[0].birthWeightEstimated, false);
+  assert.equal(parsed.rowsToCreate[0].weight100DayEstimated, true);
+  assert.ok(parsed.duplicates >= 1);
+  assert.ok(parsed.validationErrors.some((err) => err.includes("birthDate")));
+  assert.ok(parsed.validationErrors.some((err) => err.includes("birthWeightKg")));
+});
+
+test("CSV roundtrip works for Phase 9 simulation and re-import is duplicate-safe", () => {
+  const dataset = buildBreedLogSimulationDataset();
+  const exportRows = buildBreedLogCsvRows(dataset.animals, dataset.farmMetadata.studPrefix);
+  const csv = buildBreedLogCsvContent(exportRows);
+  const parsedRows = parseCsv(csv);
+
+  const firstImport = parseBreedLogCsvRecords(parsedRows, [], dataset.farmMetadata.studPrefix);
+  assert.equal(firstImport.rowsToCreate.length, dataset.animals.length);
+
+  const secondImport = parseBreedLogCsvRecords(parsedRows, dataset.animals, dataset.farmMetadata.studPrefix);
+  assert.equal(secondImport.rowsToCreate.length, 0);
+  assert.ok(secondImport.duplicates > 0);
+
+  const sireRows = parsedRows.filter((row) => ["KWR1", "KWR2", "KWR3", "KWR4"].includes(row.displayTag));
+  assert.equal(sireRows.length, 4);
+});
+
+test("Import template matches parser headers", () => {
+  const template = buildBreedLogImportTemplateCsv();
+  const header = template.trim().split("\n")[0].split(",");
+  assert.deepEqual(header, [...BREEDLOG_CSV_HEADERS]);
+});
+
+test("Settings does not expose JSON as normal export and marks XLSX as blocked", () => {
+  const settings = fs.readFileSync("client/src/pages/Settings.tsx", "utf8");
+  assert.doesNotMatch(settings, /JSON export/i);
+  assert.match(settings, /XLSX \(Blocked\)/);
+  assert.match(settings, /button-download-import-template/);
+});
+
+test("PDF export structure keeps header/footer placement guards", () => {
+  const settings = fs.readFileSync("client/src/pages/Settings.tsx", "utf8");
+  assert.match(settings, /class="header"/);
+  assert.match(settings, /class="footer"/);
+  assert.match(settings, /position: absolute; bottom: 5mm/);
+  assert.match(settings, /padding-bottom: 30mm/);
+});
+
+test("XLSX blocker doc exists with attempted package command and error", () => {
+  const doc = fs.readFileSync("docs/release/xlsx-import-export-handoff.md", "utf8");
+  assert.match(doc, /npm install xlsx --save-exact/);
+  assert.match(doc, /E403/);
+  assert.match(doc, /CSV is the active and supported spreadsheet format/i);
+});

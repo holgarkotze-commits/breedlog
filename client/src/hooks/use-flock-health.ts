@@ -69,10 +69,14 @@ export function useFlockHealthEvent(id: number) {
 }
 
 export interface CreateFlockHealthEventInput {
+  eventType?: string;
   eventName: string;
   eventDate: string;
   productName: string;
   route: string;
+  dose?: string;
+  nextFollowUpDate?: string;
+  withdrawalPeriodNotes?: string;
   treatAllAnimals?: boolean;
   notes?: string;
   treatments: {

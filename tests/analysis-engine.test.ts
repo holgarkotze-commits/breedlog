@@ -12,6 +12,8 @@ import {
   getPedigreeRiskAnalysis,
   getDataQualityReport,
   buildAnalysisBundle,
+  filterAnimalsBySelection,
+  buildAdvancedAnalysisReport,
 } from "../client/src/lib/analysis-engine";
 import type { Animal, BreedingEvent, HealthRecord, PerformanceRecord } from "../shared/schema";
 
@@ -278,6 +280,69 @@ test("pedigree risk detects unknown and resolves known risk levels", () => {
   assert.ok(pedigree.unknown.length > 0);
 });
 
+test("selection filters support herd, sex and offspring-of-sire slices", () => {
+  const fixture = makeFixture();
+  const herd = filterAnimalsBySelection(fixture, { scope: "total_herd", sex: "all" });
+  const onlyRams = filterAnimalsBySelection(fixture, { scope: "total_herd", sex: "ram" });
+  const sire1Offspring = filterAnimalsBySelection(fixture, { scope: "offspring_of_sire", sireId: 1, sex: "all" });
+  assert.ok(herd.length > onlyRams.length);
+  assert.ok(onlyRams.every((a) => a.sex === "ram"));
+  assert.ok(sire1Offspring.every((a) => a.sireId === 1));
+});
+
+test("advanced analysis computes birth type split, sire comparison, family line and completeness", () => {
+  const fixture = makeFixture();
+  const report = buildAdvancedAnalysisReport(fixture, { scope: "total_herd", sex: "all" });
+  assert.ok(report.filteredCount > 0);
+  assert.ok(Object.keys(report.birthTypeSplit).length > 0);
+  assert.ok(report.dataCompleteness.score >= 0);
+  assert.ok(report.sireComparison.length > 0);
+  assert.ok(report.familyLineComparison.length > 0);
+  assert.ok(report.growthRanking.length >= 0);
+});
+
+test("advanced analysis separates actual vs estimated weights and actual overrides estimated", () => {
+  const fixture = makeFixture();
+  fixture.animals[0] = {
+    ...fixture.animals[0],
+    birthWeight: "4.0",
+    birthWeightEstimated: true as any,
+    weight100Day: "28.0",
+    weight100DayEstimated: true as any,
+  };
+  fixture.animals[1] = {
+    ...fixture.animals[1],
+    birthWeight: "4.5",
+    birthWeightEstimated: false as any,
+    weight100Day: "31.0",
+    weight100DayEstimated: false as any,
+  };
+
+  const report = buildAdvancedAnalysisReport(fixture, { scope: "total_herd", sex: "all" });
+  assert.ok(report.weights.actualBirthAvg !== null);
+  assert.ok(report.weights.estimatedBirthAvg !== null);
+  assert.ok(report.weights.actualWeaningAvg !== null);
+  assert.ok(report.weights.estimatedWeaningAvg !== null);
+});
+
+test("advanced analysis handles empty dataset safely", () => {
+  const report = buildAdvancedAnalysisReport(
+    { animals: [], breedingEvents: [], performanceRecords: [], healthRecords: [] },
+    { scope: "total_herd", sex: "all" }
+  );
+  assert.equal(report.filteredCount, 0);
+  assert.equal(report.herdComposition.total, 0);
+  assert.equal(report.sireComparison.length, 0);
+  assert.equal(report.familyLineComparison.length, 0);
+});
+
+test("analysis page renders selector and section containers", () => {
+  const source = fs.readFileSync("client/src/pages/Analysis.tsx", "utf8");
+  assert.match(source, /data-testid=\"analysis-selector-panel\"/);
+  assert.match(source, /data-testid=\"analysis-summary-cards\"/);
+  assert.match(source, /data-testid=\"analysis-sections\"/);
+});
+
 test("data quality report surfaces missing fields and completeness", () => {
   const quality = getDataQualityReport(makeFixture());
   assert.ok(quality.missingSire > 0);
@@ -289,8 +354,8 @@ test("analysis route smoke checks exist and empty states handled in source", () 
   const appSource = fs.readFileSync("client/src/App.tsx", "utf8");
   const analysisPage = fs.readFileSync("client/src/pages/Analysis.tsx", "utf8");
   assert.match(appSource, /Route path="\/analysis"/);
-  assert.match(analysisPage, /BreedLog Performance Intelligence/);
-  assert.match(analysisPage, /No external AI models are used/);
+  assert.match(analysisPage, /BreedLog Analysis/);
+  assert.match(analysisPage, /Data-driven insights from your real herd records/);
 });
 
 test("bundle builder returns all required modules", () => {

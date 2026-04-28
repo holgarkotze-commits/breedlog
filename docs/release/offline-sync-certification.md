@@ -24,6 +24,9 @@ This runbook defines the **required browser-level release certification** for Br
    - `NODE_ENV=test USE_IN_MEMORY_STORAGE=1 SESSION_SECRET=test-secret ADMIN_PIN=1234 npm run dev`
 3. Ensure reset endpoint works for deterministic setup:
    - `POST /api/reset-all-data` with `{ "confirmPhrase": "RESET BREEDLOG" }`
+4. Run the browser certification suite:
+   - `npm run test:browser-cert`
+   - This writes pass/fail evidence to `artifacts/browser-certification/RESULT.json` for release-gate consumption.
 
 ## Scenario suite (must pass)
 

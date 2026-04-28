@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileJson, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle, AlertTriangle, RotateCcw, ShieldCheck, RefreshCw, CloudOff, Database, Sun, Moon, Monitor } from "lucide-react";
+import { LogOut, User, Download, Upload, Building2, Save, Loader2, Image, X, FileText, FileSpreadsheet, Folder, Trash2, AlertCircle, CheckCircle, AlertTriangle, RotateCcw, ShieldCheck, RefreshCw, CloudOff, Database, Sun, Moon, Monitor } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,9 +26,12 @@ import { clearAllOfflineData, setOnboardingCompleted, getPendingSyncItems, type 
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useTheme, type ThemeMode } from "@/components/ThemeProvider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { performLogout } from "@/lib/queryClient";
+import { buildBreedLogCsvContent, buildBreedLogCsvRows, BREEDLOG_CSV_HEADERS } from "@shared/import-export";
+import { FIELD_TEST_BUILD_DATE, FIELD_TEST_VERSION_LABEL } from "@shared/version";
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { data: farmSettings, isLoading } = useFarmSettings();
   const { data: animals } = useAnimals();
   const { data: breedingEvents } = useBreedingEvents();
@@ -49,14 +52,18 @@ export default function Settings() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [importResult, setImportResult] = useState<{ imported: number; errors: string[] } | null>(null);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; created?: number; skipped?: number; duplicate?: number; failed?: number; errors: string[]; validationErrors?: string[] } | null>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
   
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetConfirmPhrase, setResetConfirmPhrase] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  const [showClearCacheDialog, setShowClearCacheDialog] = useState(false);
+  const [clearCacheConfirmText, setClearCacheConfirmText] = useState("");
+  const [isClearingCache, setIsClearingCache] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
   
   // Debug sync state
   const [showDebugInfo, setShowDebugInfo] = useState(false);
@@ -85,6 +92,23 @@ export default function Settings() {
       setIsLoadingDebug(false);
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+    const refreshPendingCount = async () => {
+      try {
+        const pending = await getPendingSyncItems();
+        if (mounted) {
+          setPendingSyncCount(pending.length);
+        }
+      } catch {
+        if (mounted) {
+          setPendingSyncCount(0);
+        }
+      }
+    };
+    void refreshPendingCount();
+  }, [syncState]);
   
   // Handle Purge Failed Syncs button
   const handlePurgeFailedSyncs = async () => {
@@ -214,10 +238,11 @@ export default function Settings() {
     onSuccess: (data) => {
       setImportResult(data);
       queryClient.invalidateQueries({ queryKey: ['/api/animals'] });
-      if (data.errors.length === 0) {
+      const validationErrors = data.validationErrors || data.errors || [];
+      if (validationErrors.length === 0) {
         toast({ title: "Import Complete", description: `${data.imported} animals imported successfully` });
       } else {
-        toast({ title: "Import Completed with Warnings", description: `${data.imported} imported, ${data.errors.length} errors`, variant: "destructive" });
+        toast({ title: "Import Completed with Warnings", description: `${data.imported} imported, ${validationErrors.length} issues`, variant: "destructive" });
       }
     },
     onError: (err: any) => {
@@ -228,19 +253,23 @@ export default function Settings() {
   const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setCsvFile(file);
+      setImportFile(file);
       setImportResult(null);
     }
   };
 
   const processCsvImport = () => {
-    if (!csvFile) return;
+    if (!importFile) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-      const csvData = e.target?.result as string;
-      importCsvMutation.mutate(csvData);
+      try {
+        const csvData = e.target?.result as string;
+        importCsvMutation.mutate(csvData);
+      } catch (error) {
+        toast({ title: "Import Failed", description: "Invalid file format for import.", variant: "destructive" });
+      }
     };
-    reader.readAsText(csvFile);
+    reader.readAsText(importFile);
   };
 
   const handleProductionReset = async () => {
@@ -304,6 +333,46 @@ export default function Settings() {
         description: "Could not reset onboarding", 
         variant: "destructive" 
       });
+    }
+  };
+
+  const handleClearLocalCache = async () => {
+    if (clearCacheConfirmText.trim().toUpperCase() !== "CLEAR DEVICE") {
+      toast({
+        title: "Confirmation required",
+        description: "Type CLEAR DEVICE exactly to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (pendingSyncCount > 0) {
+      toast({
+        title: "Sync required before reset",
+        description: `You have ${pendingSyncCount} unsynced change(s). Sync or export a backup first.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsClearingCache(true);
+    try {
+      await clearAllOfflineData();
+      setShowClearCacheDialog(false);
+      setClearCacheConfirmText("");
+      toast({
+        title: "Local cache cleared",
+        description: "Only this device cache was reset. Cloud account data was not deleted.",
+      });
+      window.location.reload();
+    } catch {
+      toast({
+        title: "Reset failed",
+        description: "Could not clear local cache.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClearingCache(false);
     }
   };
 
@@ -416,7 +485,7 @@ export default function Settings() {
     saveMutation.mutate(data);
   };
 
-  const downloadFile = (content: string, filename: string, type: string) => {
+  const downloadFile = (content: BlobPart, filename: string, type: string) => {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -424,6 +493,25 @@ export default function Settings() {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const shareOrDownloadFile = async (content: BlobPart, filename: string, type: string, successMessage: string) => {
+    const blob = new Blob([content], { type });
+    const file = new File([blob], filename, { type });
+    const navWithShare = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
+
+    if (navWithShare.share && navWithShare.canShare?.({ files: [file] })) {
+      try {
+        await navWithShare.share({ files: [file], title: "BreedLog Export" });
+        toast({ title: "Share Complete", description: successMessage });
+        return;
+      } catch {
+        // fallback to download
+      }
+    }
+
+    downloadFile(content, filename, type);
+    toast({ title: "Export Complete", description: `${successMessage} Download started.` });
   };
 
   const getExportData = () => {
@@ -450,114 +538,24 @@ export default function Settings() {
     };
   };
 
-  const exportJSON = () => {
+  const buildAnimalExportRows = () => {
     const data = getExportData();
-    downloadFile(JSON.stringify(data, null, 2), `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.json`, "application/json");
-    toast({ title: "Export Complete", description: "Full database exported as JSON" });
+    const rows = buildBreedLogCsvRows(data.animals as any[], data.farmBranding?.studPrefix || null);
+    return { data, rows };
   };
 
-  const exportCSV = () => {
-    const data = getExportData();
-    const farmHeader = data.farmBranding ? [
-      `"Farm/Stud","${data.farmBranding.studName || data.farmBranding.farmName || ''}"`,
-      `"Owner","${data.farmBranding.ownerName || ''}"`,
-      `"Phone","${data.farmBranding.ownerPhone || ''}"`,
-      `"Email","${data.farmBranding.ownerEmail || ''}"`,
-      `"Export Date","${data.exportDate}"`,
-      "",
-    ].join("\n") : "";
-    
-    const animalHeaders = ["Tag ID", "Name", "Sex", "Breed", "Status", "Birth Date", "Dam", "Sire", "Birth Weight", "Current Weight"];
-    const animalRows = data.animals.map((a: any) => [
-      a.tagId, a.name || "", a.sex, a.breed, a.status, a.birthDate || "",
-      a.damId || "", a.sireId || "", a.birthWeight || "", a.currentWeight || ""
-    ].map(v => `"${v}"`).join(","));
-    
-    const content = farmHeader + "ANIMALS\n" + animalHeaders.join(",") + "\n" + animalRows.join("\n");
-    downloadFile(content, `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.csv`, "text/csv");
-    toast({ title: "Export Complete", description: "Full database exported as CSV" });
+  const exportCSV = async () => {
+    const { rows } = buildAnimalExportRows();
+    const content = buildBreedLogCsvContent(rows);
+    await shareOrDownloadFile(content, `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.csv`, "text/csv", "Herd database exported as CSV.");
   };
 
-  const exportWord = () => {
-    const data = getExportData();
-    const fb = data.farmBranding;
-    const animalsPerPage = 20;
-    const totalPages = Math.ceil(data.animals.length / animalsPerPage);
-    
-    let tablesHtml = "";
-    for (let page = 0; page < Math.max(1, totalPages); page++) {
-      const startIdx = page * animalsPerPage;
-      const pageAnimals = data.animals.slice(startIdx, startIdx + animalsPerPage);
-      
-      tablesHtml += `
-        <div style="page-break-after: always;">
-          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-            <tr style="background:#FFC300;height:30pt;">
-              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:8%;">#</th>
-              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:15%;">Tag ID</th>
-              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:17%;">Name</th>
-              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:8%;">Sex</th>
-              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:12%;">Breed</th>
-              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:10%;">Status</th>
-              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:15%;">Birth Date</th>
-              <th style="border:1px solid #333;padding:3mm;font-weight:bold;width:15%;">Weight</th>
-            </tr>
-            ${pageAnimals.map((a: any, i: number) => `
-              <tr style="height:30pt;${i % 2 === 1 ? 'background:#f5f5f5;' : ''}">
-                <td style="border:1px solid #ddd;padding:2mm;">${startIdx + i + 1}</td>
-                <td style="border:1px solid #ddd;padding:2mm;font-weight:bold;">${a.tagId}</td>
-                <td style="border:1px solid #ddd;padding:2mm;">${a.name || "-"}</td>
-                <td style="border:1px solid #ddd;padding:2mm;">${a.sex === "male" ? "M" : a.sex === "female" ? "F" : a.sex}</td>
-                <td style="border:1px solid #ddd;padding:2mm;">${a.breed || "-"}</td>
-                <td style="border:1px solid #ddd;padding:2mm;">${a.status}</td>
-                <td style="border:1px solid #ddd;padding:2mm;">${a.birthDate || "-"}</td>
-                <td style="border:1px solid #ddd;padding:2mm;">${a.currentWeight ? a.currentWeight + " kg" : "-"}</td>
-              </tr>
-            `).join("")}
-          </table>
-          <p style="text-align:right;font-size:10pt;color:#666;">Page ${page + 1} of ${Math.max(1, totalPages)}</p>
-        </div>
-      `;
-    }
-    
-    const content = `
-<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    @page { size: A4; margin: 15mm; }
-    body { font-family: 'Calibri', Arial, sans-serif; font-size: 11pt; }
-    h1 { font-size: 18pt; text-align: center; border-bottom: 2px solid #FFC300; padding-bottom: 10px; }
-    .header-info { margin-bottom: 20px; }
-    .header-info p { margin: 2mm 0; }
-  </style>
-</head>
-<body>
-  <h1>${fb?.studName || fb?.farmName || "BREEDLOG"} - Herd Export</h1>
-  <div class="header-info">
-    <p><strong>Farm:</strong> ${fb?.farmName || "N/A"} | <strong>Stud:</strong> ${fb?.studName || "N/A"}</p>
-    <p><strong>Owner:</strong> ${fb?.ownerName || "N/A"} | <strong>Phone:</strong> ${fb?.ownerPhone || "N/A"} | <strong>Email:</strong> ${fb?.ownerEmail || "N/A"}</p>
-    <p><strong>Membership:</strong> ${fb?.membershipNumber || "N/A"} | <strong>Export Date:</strong> ${data.exportDate}</p>
-    <p><strong>Total Animals:</strong> ${data.animals.length}</p>
-  </div>
-  ${tablesHtml}
-  <div style="border-top:2px solid #FFC300;padding:10px 15px;margin-top:20px;background:linear-gradient(135deg,#1a1a1a,#2d2d2d);border-radius:4px;display:flex;align-items:center;">
-    <div style="flex:1;">
-      <p style="font-weight:bold;color:#FFC300;margin:0;">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-      <p style="font-size:9pt;color:white;margin:2px 0 0 0;">${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""} ${fb?.ownerEmail ? "| " + fb.ownerEmail : ""}</p>
-      ${fb?.membershipNumber ? `<p style="font-size:9pt;color:white;margin:2px 0 0 0;">Membership: ${fb.membershipNumber}</p>` : ""}
-    </div>
-    <div style="text-align:right;">
-      <p style="font-size:12pt;font-weight:bold;color:white;margin:0;">BREEDLOG</p>
-      <p style="font-size:8pt;font-style:italic;color:#FFC300;margin:2px 0 0 0;">Professional Livestock Management</p>
-    </div>
-  </div>
-</body>
-</html>
-    `;
-    downloadFile(content, `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.doc`, "application/msword");
-    toast({ title: "Export Complete", description: "Full database exported as Word document" });
+  const exportXLSX = async () => {
+    toast({
+      title: "XLSX blocked in this environment",
+      description: "Spreadsheet package install is blocked (403). Use CSV import/export until XLSX dependency is available.",
+      variant: "destructive",
+    });
   };
 
   const exportPDF = () => {
@@ -693,6 +691,19 @@ export default function Settings() {
     toast({ title: "PDF Ready", description: "Print dialog opened for PDF export" });
   };
 
+
+  const downloadImportTemplate = async () => {
+    try {
+      const response = await fetch('/api/import/template/csv', { credentials: 'include' });
+      if (!response.ok) throw new Error('Template download failed');
+      const content = await response.text();
+      await shareOrDownloadFile(content, 'breedlog-import-template.csv', 'text/csv', 'Import template ready.');
+    } catch {
+      const fallback = `${BREEDLOG_CSV_HEADERS.join(",")}
+`;
+      await shareOrDownloadFile(fallback, 'breedlog-import-template.csv', 'text/csv', 'Import template ready.');
+    }
+  };
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-8 pb-24 animate-in fade-in duration-500">
@@ -862,7 +873,7 @@ export default function Settings() {
 
                   <Button 
                     type="submit" 
-                    className="w-full rugged-btn bg-primary text-black" 
+                    className="w-full rugged-btn bg-primary text-primary-foreground" 
                     disabled={saveMutation.isPending}
                     data-testid="button-save-farm-settings"
                   >
@@ -967,7 +978,7 @@ export default function Settings() {
                       key={size.value}
                       type="button"
                       variant={logoSize === size.value ? "default" : "outline"}
-                      className={`flex flex-col h-auto py-2 ${logoSize === size.value ? "bg-primary text-black" : ""}`}
+                      className={`flex flex-col h-auto py-2 ${logoSize === size.value ? "bg-primary text-primary-foreground" : ""}`}
                       onClick={() => form.setValue("logoSize", size.value)}
                       data-testid={`button-logo-size-${size.value}`}
                     >
@@ -1012,7 +1023,7 @@ export default function Settings() {
               <Button 
                 type="button"
                 onClick={form.handleSubmit(onSubmit)}
-                className="w-full rugged-btn bg-primary text-black" 
+                className="w-full rugged-btn bg-primary text-primary-foreground" 
                 disabled={saveMutation.isPending}
                 data-testid="button-save-logo-settings"
               >
@@ -1046,10 +1057,16 @@ export default function Settings() {
                   </div>
                </div>
                {user && (
-                 <Button onClick={() => logout()} variant="destructive" data-testid="button-logout" className="w-full rugged-btn">
-                   <LogOut className="w-4 h-4 mr-2" /> Clear Device Data
+                 <Button onClick={() => void performLogout()} variant="outline" data-testid="button-logout" className="w-full rugged-btn">
+                   <LogOut className="w-4 h-4 mr-2" /> Log Out
                  </Button>
                )}
+               <Button onClick={() => setShowClearCacheDialog(true)} variant="secondary" data-testid="button-clear-local-cache" className="w-full rugged-btn">
+                 <Database className="w-4 h-4 mr-2" /> Reset This Device Session
+               </Button>
+               <p className="text-xs text-muted-foreground">
+                 Pending sync items: <span className="font-semibold">{pendingSyncCount}</span>. Local reset is blocked while unsynced records exist.
+               </p>
                <Button asChild variant="outline" className="w-full rugged-btn" data-testid="button-admin">
                  <Link href="/admin">
                    <ShieldCheck className="w-4 h-4 mr-2" /> Beta Admin Panel
@@ -1070,7 +1087,7 @@ export default function Settings() {
                 <h4 className="font-bold text-sm uppercase mb-2">Save Settings</h4>
                 <p className="text-xs text-muted-foreground mb-4">Save all your farm details, branding, and preferences.</p>
                 <Button 
-                    className="w-full bg-primary text-black font-bold hover:bg-primary/90"
+                    className="w-full bg-primary text-primary-foreground font-bold hover:bg-primary/90"
                     onClick={form.handleSubmit(onSubmit)}
                     disabled={saveMutation.isPending}
                     data-testid="button-save-settings-data"
@@ -1082,23 +1099,15 @@ export default function Settings() {
              
              <div className="p-4 bg-secondary rounded border border-border">
                 <h4 className="font-bold text-sm uppercase mb-2">Export Herd Database</h4>
-                <p className="text-xs text-muted-foreground mb-4">Download your complete herd database in multiple formats. All exports include farm branding and are SA Stamboek compatible.</p>
+                <p className="text-xs text-muted-foreground mb-4">Download your complete herd database in farmer-friendly formats. CSV is the approved spreadsheet roundtrip format in this build.</p>
                 
                 <div className="grid grid-cols-2 gap-2">
                   <Button 
-                      className="bg-primary text-black font-bold hover:bg-primary/90"
+                      className="bg-primary text-primary-foreground font-bold hover:bg-primary/90"
                       onClick={exportPDF}
                       data-testid="button-export-pdf"
                   >
                       <FileText className="w-4 h-4 mr-2" /> PDF
-                  </Button>
-                  <Button 
-                      variant="outline"
-                      className="font-bold"
-                      onClick={exportWord}
-                      data-testid="button-export-word"
-                  >
-                      <FileText className="w-4 h-4 mr-2" /> WORD
                   </Button>
                   <Button 
                       variant="outline"
@@ -1111,10 +1120,10 @@ export default function Settings() {
                   <Button 
                       variant="outline"
                       className="font-bold"
-                      onClick={exportJSON}
-                      data-testid="button-export-json"
+                      onClick={exportXLSX}
+                      data-testid="button-export-xlsx"
                   >
-                      <FileJson className="w-4 h-4 mr-2" /> JSON
+                      <FileSpreadsheet className="w-4 h-4 mr-2" /> XLSX (Blocked)
                   </Button>
                 </div>
                 
@@ -1124,12 +1133,21 @@ export default function Settings() {
              </div>
              
              <div className="p-4 bg-secondary rounded border border-border">
-                <h4 className="font-bold text-sm uppercase mb-2">Import Animals from CSV</h4>
+                <h4 className="font-bold text-sm uppercase mb-2">Import Animals (CSV)</h4>
                 <p className="text-xs text-muted-foreground mb-4">
-                  Bulk import animals from a CSV file. Required columns: tagId, sex (ram/ewe/wether). 
-                  Optional: name, breed, status, birthDate, birthWeight, currentWeight, notes, tattoo, electronicId.
+                  Bulk import animals from BreedLog CSV. Use the template for exact column names and safe roundtrip imports.
                 </p>
                 
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => void downloadImportTemplate()}
+                  data-testid="button-download-import-template"
+                >
+                  <Download className="w-4 h-4 mr-2" /> Download Import Template
+                </Button>
+
                 <input
                   ref={csvInputRef}
                   type="file"
@@ -1147,12 +1165,12 @@ export default function Settings() {
                     data-testid="button-select-csv"
                   >
                     <Upload className="w-4 h-4 mr-2" />
-                    {csvFile ? csvFile.name : "Select CSV File"}
+                    {importFile ? importFile.name : "Select CSV File"}
                   </Button>
                   
-                  {csvFile && (
+                  {importFile && (
                     <Button 
-                      className="w-full bg-primary text-black font-bold"
+                      className="w-full bg-primary text-primary-foreground font-bold"
                       onClick={processCsvImport}
                       disabled={importCsvMutation.isPending}
                       data-testid="button-process-import"
@@ -1160,28 +1178,28 @@ export default function Settings() {
                       {importCsvMutation.isPending ? (
                         <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Importing...</>
                       ) : (
-                        <><Upload className="w-4 h-4 mr-2" /> Import {csvFile.name}</>
+                        <><Upload className="w-4 h-4 mr-2" /> Import {importFile.name}</>
                       )}
                     </Button>
                   )}
                   
                   {importResult && (
-                    <div className={`p-3 rounded text-sm ${importResult.errors.length > 0 ? 'bg-destructive/20 border border-destructive/50' : 'bg-green-500/20 border border-green-500/50'}`}>
+                    <div className={`p-3 rounded text-sm ${(importResult.validationErrors || importResult.errors).length > 0 ? 'bg-destructive/20 border border-destructive/50' : 'bg-green-500/20 border border-green-500/50'}`}>
                       <div className="flex items-center gap-2 mb-1">
-                        {importResult.errors.length > 0 ? (
+                        {(importResult.validationErrors || importResult.errors).length > 0 ? (
                           <AlertCircle className="w-4 h-4 text-destructive" />
                         ) : (
                           <CheckCircle className="w-4 h-4 text-green-500" />
                         )}
                         <span className="font-bold">{importResult.imported} animals imported</span>
                       </div>
-                      {importResult.errors.length > 0 && (
+                      {(importResult.validationErrors || importResult.errors).length > 0 && (
                         <ul className="text-xs text-muted-foreground list-disc list-inside">
-                          {importResult.errors.slice(0, 5).map((err, i) => (
+                          {(importResult.validationErrors || importResult.errors).slice(0, 5).map((err, i) => (
                             <li key={i}>{err}</li>
                           ))}
-                          {importResult.errors.length > 5 && (
-                            <li>...and {importResult.errors.length - 5} more errors</li>
+                          {(importResult.validationErrors || importResult.errors).length > 5 && (
+                            <li>...and {(importResult.validationErrors || importResult.errors).length - 5} more errors</li>
                           )}
                         </ul>
                       )}
@@ -1512,6 +1530,31 @@ export default function Settings() {
           </CardContent>
         </Card>
 
+        <Card className="rugged-card border-border" data-testid="field-test-release-info">
+          <CardHeader>
+            <CardTitle className="uppercase flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-primary" /> Field-Test Release Info
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p><strong>Version:</strong> {FIELD_TEST_VERSION_LABEL}</p>
+            <p><strong>Build date:</strong> {FIELD_TEST_BUILD_DATE}</p>
+            <p className="text-xs text-muted-foreground">
+              If the app shows older content, connect online once and refresh/reload to update cached PWA files.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Report issues with version, device, browser, screen, steps, online/offline state, and screenshot/video when possible.
+            </p>
+            <a
+              href={`mailto:support@breedlog.app?subject=${encodeURIComponent(`[${FIELD_TEST_VERSION_LABEL}] Field Test Issue`)}`}
+              className="inline-flex items-center text-primary underline text-sm"
+              data-testid="link-report-field-test-issue"
+            >
+              Report Issue by Email
+            </a>
+          </CardContent>
+        </Card>
+
         {/* Encouraging message */}
         <div className="text-center py-6 px-4 border-t border-border/30 mt-4">
           <p className="text-sm text-muted-foreground italic max-w-md mx-auto">
@@ -1519,6 +1562,56 @@ export default function Settings() {
           </p>
         </div>
       </div>
+
+      <Dialog open={showClearCacheDialog} onOpenChange={setShowClearCacheDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-primary" /> Clear Local Device Cache
+            </DialogTitle>
+            <DialogDescription>
+              This resets only local data on this device (cached records, local sync queue, and session data).
+              It does not delete your cloud account/farm data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-3">
+            <div className="rounded border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
+              <p><strong>Will remove:</strong> local cache, this device session, pending local queue.</p>
+              <p><strong>Will not remove:</strong> server/cloud account data and admin access codes.</p>
+              <p className="mt-2"><strong>Current unsynced items:</strong> {pendingSyncCount}</p>
+              <Button type="button" variant="outline" className="mt-3 h-7 text-[11px]" onClick={() => void exportCSV()}>
+                Export CSV Backup
+              </Button>
+            </div>
+            <Input
+              value={clearCacheConfirmText}
+              onChange={(e) => setClearCacheConfirmText(e.target.value)}
+              placeholder="Type CLEAR DEVICE"
+              data-testid="input-clear-device-confirm"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowClearCacheDialog(false);
+                setClearCacheConfirmText("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleClearLocalCache}
+              disabled={isClearingCache || clearCacheConfirmText.trim().toUpperCase() !== "CLEAR DEVICE" || pendingSyncCount > 0}
+              data-testid="button-confirm-clear-device-cache"
+            >
+              {isClearingCache ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              Clear Local Cache
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Production Reset Dialog */}
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>

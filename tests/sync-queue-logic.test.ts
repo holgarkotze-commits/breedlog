@@ -84,3 +84,20 @@ test('mergePendingSyncItems makes delete supersede updates/deletes for same targ
   assert.equal(result.skipInsert, false);
   assert.deepEqual(result.deleteIds.sort(), ['d1', 'u1']);
 });
+
+test('mergePendingSyncItems cancels pending create when same temp animal is deleted before sync', () => {
+  const existing = [
+    makeItem({ id: 'c1', action: 'create', tempId: -55, data: { id: -55, tagId: 'TEMP-55' }, timestamp: 100 }),
+    makeItem({ id: 'u1', action: 'update', tempId: -55, data: { id: -55, notes: 'edited' }, timestamp: 110 }),
+  ];
+
+  const result = mergePendingSyncItems(existing, {
+    action: 'delete',
+    entity: 'animals',
+    tempId: -55,
+    data: { id: -55 },
+  });
+
+  assert.equal(result.skipInsert, true);
+  assert.deepEqual(result.deleteIds.sort(), ['c1', 'u1']);
+});

@@ -70,12 +70,19 @@ export function AnimalCard({ animal }: { animal: Animal }) {
                  </div>
               )}
               <div className="absolute top-1 right-1 md:top-2 md:right-2">
-                <Badge variant="secondary" className={cn(
-                  "font-semibold text-[9px] md:text-xs uppercase shadow-sm px-1.5 py-0 md:px-2 md:py-0.5",
-                  animal.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-red-900/80 text-red-100"
-                )}>
-                  {animal.status}
-                </Badge>
+                <div className="flex flex-col gap-1 items-end">
+                  <Badge variant="secondary" className={cn(
+                    "font-semibold text-[9px] md:text-xs uppercase shadow-sm px-1.5 py-0 md:px-2 md:py-0.5",
+                    animal.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-red-900/80 text-red-100"
+                  )}>
+                    {animal.status}
+                  </Badge>
+                  {(animal as any).synced === 0 && (
+                    <Badge variant="outline" className="text-[9px] md:text-[10px] uppercase bg-amber-500/15 border-amber-500/60 text-amber-200">
+                      Pending Sync
+                    </Badge>
+                  )}
+                </div>
               </div>
               <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-background/95 to-transparent p-2 md:p-4 pt-6 md:pt-12">
                  <h3 className="text-sm md:text-2xl font-bold text-foreground">{animal.tagId}</h3>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
 import { Layout } from "@/components/Layout";
 import { useAnimals, useCreateAnimal, useDeleteAnimal, useRemoveFromHerd, useClassifyRamLamb, useConfirmCull, useMoveToEwes, useMoveToRams, useUpdateAnimal } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -29,10 +29,13 @@ import { format, differenceInDays } from "date-fns";
 import { Label } from "@/components/ui/label";
 import { DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import logo from "@/assets/breedlog-logo-mark.png";
-import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
-import { type PDFQuality, PDF_QUALITY_SETTINGS, compressImage, getPDFStyles, getPDFFooter } from "@/lib/pdf-utils";
+import type { PDFQuality } from "@/lib/pdf-utils";
 import { api } from "@shared/routes";
+import { nextTagRawSequence, splitTagInput } from "@shared/tag-utils";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
+const PDFExportDialog = lazy(() => import("@/components/PDFExportDialog").then((m) => ({ default: m.PDFExportDialog })));
+const ANIMALS_INITIAL_VISIBLE_COUNT = 50;
+const ANIMALS_LOAD_MORE_STEP = 50;
 
 function calculateEweBreedingStats(eweId: number, breedingEvents: BreedingEvent[], allAnimals: Animal[]) {
   const eweEvents = breedingEvents.filter(e => e.eweId === eweId && e.lambingDate);
@@ -166,8 +169,9 @@ export default function Animals() {
   const createExportedDoc = useCreateExportedDocument();
   
   // PDF Export Dialog state
-  const pdfExport = usePDFExportDialog();
+  const [isPdfExportDialogOpen, setIsPdfExportDialogOpen] = useState(false);
   const [pdfExportType, setPdfExportType] = useState<'fullHerd' | 'rams' | 'ewes' | 'lambs' | 'culled' | 'ramsRegister' | 'ewesRegister'>('fullHerd');
+  const [visibleAnimalsCount, setVisibleAnimalsCount] = useState(ANIMALS_INITIAL_VISIBLE_COUNT);
   
   const getDocumentFileName = (type: string, identifier: string) => {
     const date = format(new Date(), "yyyy-MM-dd");
@@ -1381,6 +1385,16 @@ export default function Animals() {
     }
     return true;
   });
+  const safeFilteredAnimals = filteredAnimals || [];
+  const visibleAnimals = useMemo(
+    () => safeFilteredAnimals.slice(0, visibleAnimalsCount),
+    [safeFilteredAnimals, visibleAnimalsCount]
+  );
+  const hasMoreFilteredAnimals = safeFilteredAnimals.length > visibleAnimals.length;
+
+  useEffect(() => {
+    setVisibleAnimalsCount(ANIMALS_INITIAL_VISIBLE_COUNT);
+  }, [search, statusFilter, classificationFilter, sexFilter, ageFilter, viewMode]);
 
   return (
     <Layout>
@@ -1405,31 +1419,31 @@ export default function Animals() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 <DropdownMenuItem 
-                  onClick={() => { setPdfExportType('fullHerd'); pdfExport.setIsOpen(true); }}
+                  onClick={() => { setPdfExportType('fullHerd'); setIsPdfExportDialogOpen(true); }}
                   data-testid="export-full-herd"
                 >
                   Export Full Herd (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => { setPdfExportType('rams'); pdfExport.setIsOpen(true); }}
+                  onClick={() => { setPdfExportType('rams'); setIsPdfExportDialogOpen(true); }}
                   data-testid="export-rams"
                 >
                   Export Rams Only (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => { setPdfExportType('ewes'); pdfExport.setIsOpen(true); }}
+                  onClick={() => { setPdfExportType('ewes'); setIsPdfExportDialogOpen(true); }}
                   data-testid="export-ewes"
                 >
                   Export Ewes Only (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => { setPdfExportType('lambs'); pdfExport.setIsOpen(true); }}
+                  onClick={() => { setPdfExportType('lambs'); setIsPdfExportDialogOpen(true); }}
                   data-testid="export-lambs"
                 >
                   Export Lambs Only (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => { setPdfExportType('culled'); pdfExport.setIsOpen(true); }}
+                  onClick={() => { setPdfExportType('culled'); setIsPdfExportDialogOpen(true); }}
                   data-testid="export-culled"
                 >
                   Export Culled Animals (PDF)
@@ -1482,7 +1496,7 @@ export default function Animals() {
                   return;
                 }
                 setPdfExportType('fullHerd');
-                pdfExport.openDialog('fullHerd');
+                setIsPdfExportDialogOpen(true);
               }}
               data-testid="btn-export-total-herd"
             >
@@ -1587,7 +1601,7 @@ export default function Animals() {
           ) : viewMode === "thumbnail" ? (
             /* Thumbnail Grid View */
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
-              {filteredAnimals?.map(animal => (
+              {visibleAnimals.map(animal => (
                 <Link key={animal.id} href={`/animals/${animal.id}`}>
                   <div 
                     className="aspect-square rounded-md bg-secondary overflow-hidden border-2 border-transparent hover:border-primary transition-all cursor-pointer"
@@ -1604,7 +1618,7 @@ export default function Animals() {
                   <p className="text-[10px] text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
                 </Link>
               ))}
-              {filteredAnimals?.length === 0 && (
+              {safeFilteredAnimals.length === 0 && (
                 <div className="col-span-full py-12 text-center text-muted-foreground">
                   <p>No animals found matching your criteria.</p>
                 </div>
@@ -1625,12 +1639,12 @@ export default function Animals() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAnimals?.map((animal, idx) => (
+                  {visibleAnimals.map((animal, idx) => (
                     <ListRow key={animal.id} animal={animal} idx={idx} />
                   ))}
                 </tbody>
               </table>
-              {filteredAnimals?.length === 0 && (
+              {safeFilteredAnimals.length === 0 && (
                 <div className="py-12 text-center text-muted-foreground">
                   <p>No animals found matching your criteria.</p>
                 </div>
@@ -1638,10 +1652,10 @@ export default function Animals() {
             </div>
           ) : isMobile ? (
             <div className="space-y-1.5">
-              {filteredAnimals?.map(animal => (
+              {visibleAnimals.map(animal => (
                 <AnimalListRow key={animal.id} animal={animal} />
               ))}
-              {filteredAnimals?.length === 0 && (
+              {safeFilteredAnimals.length === 0 && (
                 <div className="py-8 text-center text-muted-foreground text-xs">
                   <p>No animals found.</p>
                 </div>
@@ -1649,13 +1663,31 @@ export default function Animals() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredAnimals?.map(animal => (
+              {visibleAnimals.map(animal => (
                 <AnimalCard key={animal.id} animal={animal} />
               ))}
-              {filteredAnimals?.length === 0 && (
+              {safeFilteredAnimals.length === 0 && (
                 <div className="col-span-full py-12 text-center text-muted-foreground">
                   <p>No animals found matching your criteria.</p>
                 </div>
+              )}
+            </div>
+          )}
+          {safeFilteredAnimals.length > 0 && (
+            <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <p className="text-xs text-muted-foreground" data-testid="animals-visible-count">
+                Showing {visibleAnimals.length} of {safeFilteredAnimals.length} filtered animals ({allAnimals?.length || 0} total)
+              </p>
+              {hasMoreFilteredAnimals && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setVisibleAnimalsCount((prev) => prev + ANIMALS_LOAD_MORE_STEP)}
+                  data-testid="button-load-more-animals"
+                >
+                  Load more
+                </Button>
               )}
             </div>
           )}
@@ -1759,22 +1791,24 @@ export default function Animals() {
       </AlertDialog>
       
       {/* PDF Export Quality Dialog */}
-      <PDFExportDialog
-        open={pdfExport.isOpen}
-        onOpenChange={pdfExport.setIsOpen}
-        title={`Export ${
-          pdfExportType === 'fullHerd' ? 'Full Herd Register' :
-          pdfExportType === 'rams' ? 'Rams Only' :
-          pdfExportType === 'ewes' ? 'Ewes Only' :
-          pdfExportType === 'lambs' ? 'Lambs Only' :
-          pdfExportType === 'culled' ? 'Culled Animals' :
-          pdfExportType === 'ramsRegister' ? 'Rams Register' :
-          pdfExportType === 'ewesRegister' ? 'Ewes Register' :
-          'PDF'
-        }`}
-        description="Select the quality level for your PDF export. Lower quality means smaller file size and faster export."
-        onExport={handlePDFExport}
-      />
+      <Suspense fallback={null}>
+        <PDFExportDialog
+          open={isPdfExportDialogOpen}
+          onOpenChange={setIsPdfExportDialogOpen}
+          title={`Export ${
+            pdfExportType === 'fullHerd' ? 'Full Herd Register' :
+            pdfExportType === 'rams' ? 'Rams Only' :
+            pdfExportType === 'ewes' ? 'Ewes Only' :
+            pdfExportType === 'lambs' ? 'Lambs Only' :
+            pdfExportType === 'culled' ? 'Culled Animals' :
+            pdfExportType === 'ramsRegister' ? 'Rams Register' :
+            pdfExportType === 'ewesRegister' ? 'Ewes Register' :
+            'PDF'
+          }`}
+          description="Select the quality level for your PDF export. Lower quality means smaller file size and faster export."
+          onExport={handlePDFExport}
+        />
+      </Suspense>
     </Layout>
   );
 }
@@ -3245,6 +3279,7 @@ function CreateAnimalDialog({
   const { mutate, isPending } = useCreateAnimal();
   const { toast } = useToast();
   const { data: allAnimals } = useAnimals({});
+  const { data: farmSettings } = useFarmSettings();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const evalDocInputRef = useRef<HTMLInputElement>(null);
@@ -3280,6 +3315,9 @@ function CreateAnimalDialog({
   });
 
   const birthStatus = form.watch("birthStatus");
+  const watchedTagId = form.watch("tagId");
+  const studPrefix = (farmSettings?.studPrefix || "").trim();
+  const normalizedTagPreview = splitTagInput(watchedTagId, studPrefix).canonicalTag;
 
   const ewes = allAnimals?.filter(a => a.sex === "ewe") || [];
   const rams = allAnimals?.filter(a => a.sex === "ram") || [];
@@ -3347,6 +3385,12 @@ function CreateAnimalDialog({
     if (evalDocInputRef.current) evalDocInputRef.current.value = "";
   };
 
+  const setNextTagForCurrentYear = () => {
+    const year = new Date().getUTCFullYear();
+    const rawNext = nextTagRawSequence((allAnimals || []).map((a) => a.tagId), studPrefix, year);
+    form.setValue("tagId", rawNext, { shouldDirty: true, shouldValidate: true });
+  };
+
   const onSubmit = (data: any) => {
     if (submitLocked) return;
     setSubmitLocked(true);
@@ -3412,6 +3456,18 @@ function CreateAnimalDialog({
                     <FormControl>
                       <Input placeholder="e.g. 24-001" className="rugged-input" data-testid="input-tag-id" {...field} />
                     </FormControl>
+                    {studPrefix ? (
+                      <p className="text-[11px] text-muted-foreground">
+                        Display tag preview: <strong>{normalizedTagPreview || "—"}</strong>
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-amber-600">
+                        Set stud prefix in Farm Details to apply automatic prefix normalization.
+                      </p>
+                    )}
+                    <Button type="button" variant="outline" size="sm" className="mt-1 h-7 text-xs" onClick={setNextTagForCurrentYear}>
+                      Use next sequence
+                    </Button>
                     <FormMessage />
                   </FormItem>
                 )}

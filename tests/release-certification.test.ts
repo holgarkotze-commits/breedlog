@@ -6,6 +6,7 @@ const indexedDbSource = fs.readFileSync('client/src/lib/indexeddb.ts', 'utf8');
 const syncManagerSource = fs.readFileSync('client/src/lib/sync-manager.ts', 'utf8');
 const animalsHookSource = fs.readFileSync('client/src/hooks/use-animals.ts', 'utf8');
 const routesSource = fs.readFileSync('server/routes.ts', 'utf8');
+const browserCertRunnerSource = fs.readFileSync('scripts/run-browser-cert.sh', 'utf8');
 
 // These are release-certification guard tests.
 // They verify critical sync/offline architecture invariants directly from source.
@@ -28,8 +29,18 @@ test('sync manager performs push + pull and reconnect checks', () => {
 
 test('animals workflow supports offline-first create with queued sync', () => {
   assert.match(animalsHookSource, /await putInStore\("animals", offlineAnimal\)/);
-  assert.match(animalsHookSource, /await addToSyncQueue\(\{ action: "create", entity: "animals", data, tempId \}\)/);
+  assert.match(animalsHookSource, /await addToSyncQueue\(\{\s*action:\s*"create",\s*entity:\s*"animals"/s);
+  assert.match(animalsHookSource, /idempotencyKey:\s*operationId/);
+  assert.match(animalsHookSource, /clientOperationId:\s*operationId/);
   assert.match(animalsHookSource, /syncManager\.sync\(\)/);
+});
+
+test('animals workflow supports offline-safe delete queueing and sync status states', () => {
+  assert.match(animalsHookSource, /action:\s*"delete"/);
+  assert.match(animalsHookSource, /await addToSyncQueue\(\{/);
+  assert.match(syncManagerSource, /syncStatus:\s*'syncing'/);
+  assert.match(syncManagerSource, /syncStatus:\s*'failed'/);
+  assert.match(syncManagerSource, /'conflict'/);
 });
 
 test('server exposes core CRUD routes used by sync endpoints', () => {
@@ -39,4 +50,11 @@ test('server exposes core CRUD routes used by sync endpoints', () => {
   assert.match(routesSource, /app\.post\(api\.breeding\.create\.path/);
   assert.match(routesSource, /app\.post\(api\.records\.health\.create\.path/);
   assert.match(routesSource, /app\.post\(api\.records\.performance\.create\.path/);
+});
+
+test('browser certification automation is wired for release gate evidence', () => {
+  assert.ok(fs.existsSync('tests/browser-cert/playwright.config.ts'));
+  assert.ok(fs.existsSync('tests/browser-cert/specs/offline-sync.spec.ts'));
+  assert.match(browserCertRunnerSource, /npx playwright test --config tests\/browser-cert\/playwright\.config\.ts/);
+  assert.match(browserCertRunnerSource, /\"passed\": true/);
 });
