@@ -9,6 +9,7 @@ import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { useState, useEffect, lazy, Suspense, Component, type ReactNode } from "react";
+import { normalizePreviewPath } from "@/lib/route-normalization";
 
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
@@ -28,6 +29,7 @@ const Records = lazy(() => import("@/pages/Records"));
 const Admin = lazy(() => import("@/pages/Admin"));
 
 // Loading fallback for lazy loaded pages
+
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -137,8 +139,15 @@ async function checkAndReloadIfVersionMismatch() {
 
 function AppContent() {
   const { user, isLoading: authLoading, deviceId } = useAuth();
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [versionChecked, setVersionChecked] = useState(false);
+  useEffect(() => {
+    const normalized = normalizePreviewPath(location);
+    if (normalized !== location) {
+      navigate(normalized, { replace: true });
+    }
+  }, [location, navigate]);
+
   
   // Check version on startup
   useEffect(() => {
