@@ -660,7 +660,7 @@ function CreateMatingGroupDialog({ open, onOpenChange }: { open: boolean, onOpen
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" data-testid="button-new-mating-group" className="rugged-btn bg-primary text-black">
+        <Button size="sm" data-testid="button-new-mating-group" className="rugged-btn bg-primary text-primary-foreground">
           <Plus className="w-4 h-4 mr-1" /> New Group
         </Button>
       </DialogTrigger>
@@ -777,7 +777,7 @@ function CreateMatingGroupDialog({ open, onOpenChange }: { open: boolean, onOpen
               type="submit" 
               disabled={isPending || !form.watch("ramId")} 
               data-testid="button-save-mating-group" 
-              className="w-full rugged-btn bg-primary text-black"
+              className="w-full rugged-btn bg-primary text-primary-foreground"
             >
               {isPending ? "Creating..." : "Create Mating Group"}
             </Button>
@@ -793,7 +793,7 @@ function RecordEventButton({ onOpenMating }: { onOpenMating: () => void }) {
     <Button 
       onClick={onOpenMating}
       data-testid="button-record-event" 
-      className="rugged-btn bg-primary text-black"
+      className="rugged-btn bg-primary text-primary-foreground"
     >
       <Plus className="w-4 h-4 mr-2" /> Record Mating
     </Button>
@@ -908,7 +908,7 @@ function RecordBreedingDialog({ open, onOpenChange }: { open: boolean, onOpenCha
               type="submit" 
               disabled={isPending} 
               data-testid="button-save-breeding" 
-              className="w-full rugged-btn bg-primary text-black"
+              className="w-full rugged-btn bg-primary text-primary-foreground"
             >
               {isPending ? "Saving..." : "Save Record"}
             </Button>
@@ -1129,7 +1129,7 @@ function EditMatingGroupDialog({ group, open, onOpenChange }: { group: MatingGro
                 type="submit" 
                 disabled={isPending} 
                 data-testid="button-update-mating-group" 
-                className="flex-1 rugged-btn bg-primary text-black"
+                className="flex-1 rugged-btn bg-primary text-primary-foreground"
               >
                 {isPending ? "Saving..." : "Save Changes"}
               </Button>

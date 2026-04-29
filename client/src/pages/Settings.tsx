@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { clearAllOfflineData, setOnboardingCompleted, getPendingSyncItems, type SyncQueueItem } from "@/lib/indexeddb";
+import { clearAllOfflineData, setOnboardingCompleted, getPendingSyncItems, getAllFromStore, type SyncQueueItem } from "@/lib/indexeddb";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useTheme, type ThemeMode } from "@/components/ThemeProvider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -187,6 +187,9 @@ export default function Settings() {
     
     setIsReloadingView(true);
     try {
+      if (!(await guardRiskyAction())) {
+        return;
+      }
       await reloadLocalData();
       toast({
         title: "View refreshed",
@@ -349,7 +352,7 @@ export default function Settings() {
     if (pendingSyncCount > 0) {
       toast({
         title: "Sync required before reset",
-        description: `You have ${pendingSyncCount} unsynced change(s). Sync or export a backup first.`,
+        description: `You have ${pendingSyncCount} unsynced change(s). Unsynced local records detected. Export a backup or sync successfully before continuing.`,
         variant: "destructive",
       });
       return;
@@ -691,6 +694,43 @@ export default function Settings() {
     toast({ title: "PDF Ready", description: "Print dialog opened for PDF export" });
   };
 
+
+
+
+  const getLocalAnimalCount = async (): Promise<number> => {
+    try {
+      const localAnimals = await getAllFromStore<any>('animals');
+      return Array.isArray(localAnimals) ? localAnimals.length : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const fetchServerAnimalCount = async (): Promise<number | null> => {
+    try {
+      if (!navigator.onLine) return null;
+      const response = await fetch('/api/animals', { credentials: 'include', headers: { Accept: 'application/json' } });
+      if (!response.ok) return null;
+      const data = await response.json();
+      return Array.isArray(data) ? data.length : 0;
+    } catch {
+      return null;
+    }
+  };
+
+  const guardRiskyAction = async (): Promise<boolean> => {
+    const localAnimalCount = await getLocalAnimalCount();
+    const serverAnimalCount = await fetchServerAnimalCount();
+    if (pendingSyncCount > 0 || (localAnimalCount > 0 && serverAnimalCount === 0)) {
+      toast({
+        title: 'Unsynced local records detected',
+        description: 'Export CSV Backup or sync successfully before continuing. Server returned no animals while this device has local records.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    return true;
+  };
 
   const downloadImportTemplate = async () => {
     try {
@@ -1057,7 +1097,7 @@ export default function Settings() {
                   </div>
                </div>
                {user && (
-                 <Button onClick={() => void performLogout()} variant="outline" data-testid="button-logout" className="w-full rugged-btn">
+                 <Button onClick={async () => { if (await guardRiskyAction()) { await performLogout(); } }} variant="outline" data-testid="button-logout" className="w-full rugged-btn">
                    <LogOut className="w-4 h-4 mr-2" /> Log Out
                  </Button>
                )}
@@ -1099,7 +1139,7 @@ export default function Settings() {
              
              <div className="p-4 bg-secondary rounded border border-border">
                 <h4 className="font-bold text-sm uppercase mb-2">Export Herd Database</h4>
-                <p className="text-xs text-muted-foreground mb-4">Download your complete herd database in farmer-friendly formats. CSV is the approved spreadsheet roundtrip format in this build.</p>
+                <p className="text-xs text-muted-foreground mb-4">Download your complete herd database in farmer-friendly formats. CSV is the approved spreadsheet roundtrip format in this build. CSV backup includes animal records and image references. Full image-file backup will be added in the Android/production backup phase.</p>
                 
                 <div className="grid grid-cols-2 gap-2">
                   <Button 

@@ -558,10 +558,10 @@ function FlockHealthEventDialog({
             <div className="space-y-2">
               <FormLabel>Animals Included *</FormLabel>
               <div className="flex gap-2">
-                <Button type="button" variant={treatAll ? "default" : "outline"} onClick={() => setTreatAll(true)} className={treatAll ? "bg-primary text-black" : ""} data-testid="button-treat-all">
+                <Button type="button" variant={treatAll ? "default" : "outline"} onClick={() => setTreatAll(true)} className={treatAll ? "bg-primary text-primary-foreground" : ""} data-testid="button-treat-all">
                   All Active Animals ({activeAnimals.length})
                 </Button>
-                <Button type="button" variant={!treatAll ? "default" : "outline"} onClick={() => setTreatAll(false)} className={!treatAll ? "bg-primary text-black" : ""} data-testid="button-select-individual">
+                <Button type="button" variant={!treatAll ? "default" : "outline"} onClick={() => setTreatAll(false)} className={!treatAll ? "bg-primary text-primary-foreground" : ""} data-testid="button-select-individual">
                   Select Individual
                 </Button>
               </div>
@@ -591,7 +591,7 @@ function FlockHealthEventDialog({
 
             <p className="text-xs text-muted-foreground">Suggested type from Health Plan: {EVENT_LABELS[selectedType]}</p>
 
-            <Button type="submit" disabled={isPending} data-testid="button-save-health-event" className="w-full rugged-btn bg-primary text-black">
+            <Button type="submit" disabled={isPending} data-testid="button-save-health-event" className="w-full rugged-btn bg-primary text-primary-foreground">
               {isPending ? "Saving..." : "Save Health Event"}
             </Button>
           </form>

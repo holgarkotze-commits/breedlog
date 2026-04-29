@@ -3230,7 +3230,7 @@ function AnimalListRow({ animal }: { animal: Animal }) {
             )}
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background/95 via-background/70 to-transparent p-4">
               <div className="flex items-center justify-center gap-2">
-                <Badge className="text-sm font-bold bg-primary text-black px-3 py-1">
+                <Badge className="text-sm font-bold bg-primary text-primary-foreground px-3 py-1">
                   ID: {animal.tagId}
                 </Badge>
                 {animal.name && (
@@ -3435,7 +3435,7 @@ function CreateAnimalDialog({
     <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button data-testid="button-add-animal" className="rugged-btn bg-primary text-black hover:bg-primary/90">
+        <Button data-testid="button-add-animal" className="rugged-btn bg-primary text-primary-foreground hover:bg-primary/90">
           <Plus className="w-5 h-5 mr-2" /> Add Animal
         </Button>
       </DialogTrigger>
@@ -3974,7 +3974,7 @@ function CreateAnimalDialog({
               </Button>
             )}
 
-            <Button type="submit" disabled={isPending || submitLocked} data-testid="button-save-animal" className="w-full rugged-btn bg-primary text-black">
+            <Button type="submit" disabled={isPending || submitLocked} data-testid="button-save-animal" className="w-full rugged-btn bg-primary text-primary-foreground">
               {isPending || submitLocked ? "Saving..." : "Save Record"}
             </Button>
           </form>
@@ -4141,7 +4141,7 @@ function EidScanDialog({
                       No animal is currently assigned to <span className="font-mono">{electronicIdRaw.trim()}</span>.
                     </p>
                     <Button
-                      className="w-full mt-2 bg-primary text-black"
+                      className="w-full mt-2 bg-primary text-primary-foreground"
                       onClick={() => {
                         const normalized = electronicIdRaw.trim();
                         handleDialogChange(false);
@@ -4164,7 +4164,7 @@ function EidScanDialog({
             <Button
               onClick={handleScan}
               disabled={isSubmitting}
-              className="bg-primary text-black"
+              className="bg-primary text-primary-foreground"
               data-testid="button-submit-eid-scan"
             >
               {isSubmitting ? "Checking..." : "Check EID"}

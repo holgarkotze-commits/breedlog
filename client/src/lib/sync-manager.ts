@@ -423,6 +423,14 @@ class SyncManager {
         
         const data = await response.json();
         const items = Array.isArray(data) ? data : data ? [data] : [];
+        if (store === 'animals' && items.length === 0) {
+          const localAnimals = await getAllFromStore<any>('animals');
+          if (Array.isArray(localAnimals) && localAnimals.length > 0) {
+            console.warn('[SyncManager] Server returned no animals, but local animal records exist. Keeping local data to prevent silent replacement.');
+            failedCount++;
+            return;
+          }
+        }
         if (items.length > 0) {
           await putManyInStore(store, items);
         }
