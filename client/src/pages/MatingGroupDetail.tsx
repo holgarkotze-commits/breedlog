@@ -734,7 +734,7 @@ function EditMatingGroupDialog({ group, open, onOpenChange }: { group: MatingGro
               type="submit" 
               disabled={isPending || !form.watch("ramId")} 
               data-testid="button-save-mating-group" 
-              className="w-full rugged-btn bg-primary text-black"
+              className="w-full rugged-btn bg-primary text-primary-foreground"
             >
               {isPending ? "Saving..." : "Save Changes"}
             </Button>
