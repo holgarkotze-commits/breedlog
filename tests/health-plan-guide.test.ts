@@ -26,7 +26,7 @@ const REQUIRED_TOPIC_LABELS = [
 test("Health Plan has mandatory disclaimer exactly", () => {
   assert.equal(
     HEALTH_PLAN_DISCLAIMER,
-    "This is a general livestock health planning guide. Always follow Namibian veterinary regulations, product labels, withdrawal periods, and consult a local veterinarian for diagnosis and treatment."
+    "This Health Plan is a BreedLog in-app planning guide for livestock recordkeeping and prevention planning. Always follow applicable local veterinary rules, product labels, withdrawal periods, and consult a local veterinarian for diagnosis and treatment."
   );
 });
 
@@ -128,4 +128,31 @@ test("Health page wires Health Plan button, topic navigation, and record-action 
   assert.match(source, /select-event-type/);
   assert.match(source, /input-next-followup-date/);
   assert.match(source, /input-withdrawal-notes/);
+});
+
+
+test("Common condition cards include practical option guidance and event mapping", () => {
+  const topic = HEALTH_PLAN_TOPICS.find((t) => t.id === "common-conditions");
+  assert.ok(topic);
+  const required = ["Pulpy Kidney","Pasteurellosis","Tetanus","Malignant oedema","Blackquarter","Botulism","Anthrax","Reproductive disease / abortion risk","Anaplasmosis / gallsickness","Sweating sickness","Warts","Orf","Lumpy skin disease","Parasite infestation","Pneumonia","Coccidiosis / scours","Pink eye","Heartwater"];
+  const titles = topic.cards.map((c) => c.title);
+  for (const name of required) assert.ok(titles.some((t) => t.includes(name)), `missing ${name}`);
+  for (const card of topic.cards) {
+    assert.ok(card.recordInBreedLog.length > 0);
+    assert.ok(card.suggestedEventType);
+    assert.ok((card.remedyCategoryOptions?.length || card.supportOptions?.length || card.treatmentOptions?.length || 0) > 0, `${card.title} missing practical guidance`);
+  }
+});
+
+test("Relevant sections include treatment/remedy/support guidance and no dosage instructions", () => {
+  const relevantIds = ["parasite-control","vaccination-prevention","medicine-failure","deficiencies","wounds-footrot-mastitis","common-conditions"];
+  for (const id of relevantIds) {
+    const topic = HEALTH_PLAN_TOPICS.find((t) => t.id === id);
+    assert.ok(topic);
+    for (const card of topic.cards) {
+      assert.ok((card.remedyCategoryOptions?.length || card.supportOptions?.length || card.treatmentOptions?.length || 0) > 0, `${id}:${card.title} missing guidance`);
+    }
+  }
+  const text = JSON.stringify(HEALTH_PLAN_TOPICS);
+  assert.doesNotMatch(text, /\b\d+\s?(ml|mg|g)\b/i);
 });

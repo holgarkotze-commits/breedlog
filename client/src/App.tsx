@@ -8,7 +8,7 @@ import { OfflineBanner } from "@/components/NetworkStatusIndicator";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, Component, type ReactNode } from "react";
 
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
@@ -36,9 +36,37 @@ function PageLoader() {
   );
 }
 
+
+class RouteErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-background px-4">
+          <div className="max-w-md text-center space-y-3">
+            <h2 className="text-xl font-bold">BreedLog page failed to load</h2>
+            <p className="text-muted-foreground text-sm">A route failed to load. Please reload the app to continue.</p>
+            <button className="rugged-btn bg-primary text-primary-foreground px-4 py-2 rounded" onClick={() => window.location.reload()}>Reload App</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function Router() {
   return (
-    <Suspense fallback={<PageLoader />}>
+    <RouteErrorBoundary>
+      <Suspense fallback={<PageLoader />}>
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/animals" component={Animals} />
@@ -56,6 +84,7 @@ function Router() {
         <Route component={NotFound} />
       </Switch>
     </Suspense>
+  </RouteErrorBoundary>
   );
 }
 
@@ -134,9 +163,11 @@ function AppContent() {
   // Admin route bypasses beta access gate (protected by PIN instead)
   if (location === "/admin") {
     return (
-      <Suspense fallback={<PageLoader />}>
-        <Admin />
-      </Suspense>
+      <RouteErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <Admin />
+        </Suspense>
+      </RouteErrorBoundary>
     );
   }
   
