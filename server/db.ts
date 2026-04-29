@@ -18,6 +18,13 @@ if (!databaseUrl && !allowInMemoryStorage) {
 export const pool = databaseUrl
   ? new Pool({ connectionString: databaseUrl })
   : ({} as unknown as pg.Pool);
+
+if (databaseUrl) {
+  (pool as pg.Pool).on("error", (err) => {
+    console.error("[db] Idle pool client error (recovered):", err.message);
+  });
+}
+
 export const db = databaseUrl
   ? drizzle(pool, { schema })
   : ({} as unknown as ReturnType<typeof drizzle>);
