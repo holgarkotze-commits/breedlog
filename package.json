@@ -11,7 +11,11 @@
     "db:push": "drizzle-kit push",
     "test:cert": "NODE_ENV=test USE_IN_MEMORY_STORAGE=1 tsx --test tests/*.test.ts",
     "test:browser-cert": "bash scripts/run-browser-cert.sh",
-    "release:gate": "bash scripts/release-gate.sh"
+    "release:gate": "bash scripts/release-gate.sh",
+    "seed:field-test:dry-run": "tsx scripts/seed-field-test-simulation.ts",
+    "seed:field-test:apply": "tsx scripts/seed-field-test-simulation.ts --apply",
+    "seed:field-test:cleanup:dry-run": "tsx scripts/cleanup-field-test-simulation.ts",
+    "seed:field-test:cleanup:apply": "tsx scripts/cleanup-field-test-simulation.ts --apply"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
