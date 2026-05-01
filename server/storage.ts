@@ -164,7 +164,12 @@ export interface IStorage {
   // Device-based Users
   getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null } | undefined>;
   upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null }>;
-  setSharedUserId(userId: string, sharedUserId: string): Promise<void>;
+  setSharedUserId(userId: string, sharedUserId: string | null): Promise<void>;
+  // Creates a stub user with no deviceId, used as a standalone workspace identity
+  // (e.g., when a device switches to an invite code that has no other primary device,
+  //  we mint a fresh workspace so the device's own user.id does not double as the workspace
+  //  for two unrelated codes).
+  createWorkspaceUser(label: string): Promise<{ id: string }>;
   updateUserLastSeen(userId: string): Promise<void>;
   
   // System Settings (global app config)
@@ -720,11 +725,20 @@ export class DatabaseStorage implements IStorage {
     return { id: results[0].id, deviceId: results[0].deviceId!, sharedUserId: results[0].sharedUserId ?? null };
   }
   
-  async setSharedUserId(userId: string, sharedUserId: string): Promise<void> {
+  async setSharedUserId(userId: string, sharedUserId: string | null): Promise<void> {
     const { users } = await import("@shared/models/auth");
     await db.update(users).set({ sharedUserId }).where(eq(users.id, userId));
   }
-  
+
+  async createWorkspaceUser(label: string): Promise<{ id: string }> {
+    const { users } = await import("@shared/models/auth");
+    const results = await db.insert(users).values({
+      deviceId: null,
+      deviceName: label,
+    }).returning();
+    return { id: results[0].id };
+  }
+
   async updateUserLastSeen(userId: string): Promise<void> {
     const { users } = await import("@shared/models/auth");
     await db.update(users).set({ lastSeenAt: new Date() }).where(eq(users.id, userId));
@@ -952,7 +966,12 @@ class InMemoryStorage implements IStorage {
     this.users.set(id, user);
     return user;
   }
-  async setSharedUserId(userId: string, sharedUserId: string): Promise<void> { const user = this.users.get(userId); if (user) this.users.set(userId, { ...user, sharedUserId }); }
+  async setSharedUserId(userId: string, sharedUserId: string | null): Promise<void> { const user = this.users.get(userId); if (user) this.users.set(userId, { ...user, sharedUserId }); }
+  async createWorkspaceUser(label: string): Promise<{ id: string }> {
+    const id = crypto.randomUUID();
+    this.users.set(id, { id, deviceId: null as any, sharedUserId: null, deviceName: label });
+    return { id };
+  }
   async updateUserLastSeen(_userId: string): Promise<void> {}
   async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
   async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }

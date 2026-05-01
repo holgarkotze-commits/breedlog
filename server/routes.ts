@@ -1097,34 +1097,140 @@ export async function registerRoutes(
       // Check if user already has an activation
       const existingActivation = await storage.getUserActivation(userId);
       if (existingActivation && existingActivation.status === 'active') {
-        // HEALING: If sharedUserId is missing, check if another device used the same code earlier
-        // and set sharedUserId so this device resolves to the shared workspace.
-        if (!user.sharedUserId) {
-          const allActivations = await storage.getAllActiveActivations();
-          const codeActivations = allActivations.filter(a => a.inviteCodeId === existingActivation.inviteCodeId && a.status === 'active');
-          const otherActivation = codeActivations.find(a => a.deviceId !== deviceId);
-          if (otherActivation) {
-            // Find the other device's user to get their effective workspace ID
-            const otherUser = await storage.getUserByDeviceId(otherActivation.deviceId);
-            if (otherUser) {
-              // The primary workspace is: their sharedUserId (if set) or their own id
-              const primaryUserId = otherUser.sharedUserId || otherUser.id;
-              await storage.setSharedUserId(userId, primaryUserId);
-              user = { ...user, sharedUserId: primaryUserId };
-              console.log(`[Beta Validate] Healed sharedUserId for ${userId} → ${primaryUserId}`);
+        // SAME CODE re-login: heal sharedUserId if needed and return existing workspace.
+        // DIFFERENT CODE: fall through to workspace-switch path below (do NOT silently
+        // return the old workspace — that was the workspace-switching bug).
+        if (existingActivation.inviteCodeId === inviteCode!.id) {
+          // HEALING: If sharedUserId is missing, check if another device used the same code earlier
+          // and set sharedUserId so this device resolves to the shared workspace.
+          if (!user.sharedUserId) {
+            const allActivations = await storage.getAllActiveActivations();
+            const codeActivations = allActivations.filter(a => a.inviteCodeId === existingActivation.inviteCodeId && a.status === 'active');
+            const otherActivation = codeActivations.find(a => a.deviceId !== deviceId);
+            if (otherActivation) {
+              // Find the other device's user to get their effective workspace ID
+              const otherUser = await storage.getUserByDeviceId(otherActivation.deviceId);
+              if (otherUser) {
+                // The primary workspace is: their sharedUserId (if set) or their own id
+                const primaryUserId = otherUser.sharedUserId || otherUser.id;
+                await storage.setSharedUserId(userId, primaryUserId);
+                user = { ...user, sharedUserId: primaryUserId };
+                console.log(`[Beta Validate] Healed sharedUserId for ${userId} → ${primaryUserId}`);
+              }
+            }
+          }
+          // Use the effective userId (sharedUserId takes priority) for the session
+          const effectiveUserId = user.sharedUserId || userId;
+          req.session.deviceId = deviceId;
+          req.session.userId = effectiveUserId;
+          return res.json({ 
+            success: true, 
+            message: 'Already activated',
+            token,
+            deviceId,
+            userId: effectiveUserId
+          });
+        }
+
+        // === WORKSPACE SWITCH PATH ===
+        // Device already had an active activation under a DIFFERENT invite code.
+        // Validate the new code's slot for this device type, then switch the
+        // device/session to the new code's workspace. The unique constraint on
+        // user_activations.userId means we UPDATE the existing row in-place
+        // rather than create a new one.
+        const switchUserAgent = req.headers['user-agent'] || '';
+        const switchDeviceType = detectDeviceType(switchUserAgent);
+        console.log(`[Beta Validate] Workspace switch attempt: device ${deviceId} (${switchDeviceType}) from code ${existingActivation.inviteCodeId} to ${inviteCode!.id}`);
+
+        const switchAllActivations = await storage.getAllActiveActivations();
+        const switchNewCodeActivations = switchAllActivations.filter(a => a.inviteCodeId === inviteCode!.id && a.status === 'active');
+        // Exclude this device's existing activation (still pointing at old code, will be overwritten)
+        const switchOtherActivations = switchNewCodeActivations.filter(a => a.deviceId !== deviceId);
+        const switchDesktopTaken = switchOtherActivations.filter(a => a.deviceType === 'desktop').length;
+        const switchMobileTaken = switchOtherActivations.filter(a => a.deviceType === 'mobile').length;
+
+        if (switchDeviceType === 'desktop' && switchDesktopTaken >= 1) {
+          return res.status(400).json({
+            message: 'The desktop slot for this code is already taken. One desktop and one mobile device are allowed per code. Contact the admin to reset your desktop slot.'
+          });
+        }
+        if (switchDeviceType === 'mobile' && switchMobileTaken >= 1) {
+          return res.status(400).json({
+            message: 'The mobile slot for this code is already taken. One desktop and one mobile device are allowed per code. Contact the admin to reset your mobile slot.'
+          });
+        }
+        if (switchOtherActivations.length >= 2) {
+          return res.status(400).json({ message: 'This code already has both device slots occupied (one desktop + one mobile). Contact the admin to reset a slot.' });
+        }
+
+        // Determine the new effective workspace userId.
+        // Per-code workspace identity is persisted in system_settings under
+        // `workspace:invite_code:<id>` so that switching away and back returns
+        // to the same workspace data, and so a code's workspace identity does
+        // not collide with any device's own user.id.
+        const workspaceSettingKey = `workspace:invite_code:${inviteCode!.id}`;
+        let switchEffectiveUserId: string;
+        if (switchOtherActivations.length > 0) {
+          const switchPrimaryActivation = switchOtherActivations[0];
+          const switchPrimaryUser = await storage.getUserByDeviceId(switchPrimaryActivation.deviceId);
+          switchEffectiveUserId = switchPrimaryUser
+            ? (switchPrimaryUser.sharedUserId || switchPrimaryUser.id)
+            : userId;
+          // Backfill the persistent mapping if missing.
+          const existingMapping = await storage.getSystemSetting(workspaceSettingKey);
+          if (!existingMapping) {
+            await storage.setSystemSetting(workspaceSettingKey, switchEffectiveUserId);
+          }
+        } else {
+          const persisted = await storage.getSystemSetting(workspaceSettingKey);
+          if (persisted) {
+            switchEffectiveUserId = persisted;
+            console.log(`[Beta Validate] Reusing persisted workspace ${persisted} for code ${inviteCode!.code}`);
+          } else {
+            const stub = await storage.createWorkspaceUser(`workspace:${inviteCode!.code}`);
+            await storage.setSystemSetting(workspaceSettingKey, stub.id);
+            // Re-read after write: if a concurrent request also tried to mint a
+            // workspace and won the write race, defer to the persisted value so
+            // both requests converge on the same workspace identity.
+            const confirmed = await storage.getSystemSetting(workspaceSettingKey);
+            switchEffectiveUserId = confirmed || stub.id;
+            if (confirmed && confirmed !== stub.id) {
+              console.log(`[Beta Validate] Race detected; deferring to persisted workspace ${confirmed} for code ${inviteCode!.code}`);
+            } else {
+              console.log(`[Beta Validate] Minted stub workspace ${stub.id} for code ${inviteCode!.code}`);
             }
           }
         }
-        // Use the effective userId (sharedUserId takes priority) for the session
-        const effectiveUserId = user.sharedUserId || userId;
+
+        // Update existing activation row to point at the new code (preserves UNIQUE on userId).
+        await storage.updateUserActivation(userId, {
+          inviteCodeId: inviteCode!.id,
+          deviceId,
+          deviceType: switchDeviceType,
+          status: 'active',
+        });
+
+        // Set or clear sharedUserId so it matches the new workspace.
+        const newSharedValue = switchEffectiveUserId !== userId ? switchEffectiveUserId : null;
+        if (user.sharedUserId !== newSharedValue) {
+          await storage.setSharedUserId(userId, newSharedValue);
+          user = { ...user, sharedUserId: newSharedValue };
+        }
+
+        // Increment new code's usesCount (this device is a new occupant on the new code).
+        await storage.incrementInviteCodeUses(inviteCode!.id);
+
         req.session.deviceId = deviceId;
-        req.session.userId = effectiveUserId;
-        return res.json({ 
-          success: true, 
-          message: 'Already activated',
+        req.session.userId = switchEffectiveUserId;
+
+        console.log(`[Beta Validate] Workspace switched: device ${deviceId} now on code ${inviteCode!.code}, workspace ${switchEffectiveUserId}`);
+
+        return res.json({
+          success: true,
+          message: 'Workspace switched',
           token,
           deviceId,
-          userId: effectiveUserId
+          userId: switchEffectiveUserId,
         });
       }
       
@@ -1178,9 +1284,13 @@ export async function registerRoutes(
       // STEP 2b: Workspace sharing — if another device already activated this code,
       // link this device to the same data workspace (shared_user_id = primary userId).
       // This is what makes both devices see the same animals, breeding records, etc.
+      // The per-code workspace identity is also persisted in system_settings under
+      // `workspace:invite_code:<id>` so that workspace switches (logout → enter different
+      // code → switch back) restore the same workspace data.
       const existingCodeActivations = codeActivations.filter(a => a.status === 'active');
+      const firstActivationWorkspaceKey = `workspace:invite_code:${inviteCode!.id}`;
       let effectiveUserId = userId;
-      
+
       if (existingCodeActivations.length > 0) {
         // There's already an active device for this code — find their workspace ID
         const firstActivation = existingCodeActivations[0];
@@ -1193,6 +1303,20 @@ export async function registerRoutes(
           effectiveUserId = primaryUserId;
           console.log(`[Beta Validate] Linked device ${deviceId} (user ${userId}) to shared workspace ${primaryUserId}`);
         }
+      } else {
+        // First device activating this code. If a previous workspace identity was persisted
+        // (e.g. someone activated this code before, then switched off it), reuse it so the
+        // original workspace data is restored. Otherwise this device's own user.id IS the
+        // workspace, and we persist that mapping for future switch-backs.
+        const persistedWorkspace = await storage.getSystemSetting(firstActivationWorkspaceKey);
+        if (persistedWorkspace && persistedWorkspace !== userId) {
+          await storage.setSharedUserId(userId, persistedWorkspace);
+          effectiveUserId = persistedWorkspace;
+          console.log(`[Beta Validate] First device on code ${inviteCode!.code} reusing persisted workspace ${persistedWorkspace}`);
+        }
+      }
+      if (!(await storage.getSystemSetting(firstActivationWorkspaceKey))) {
+        await storage.setSystemSetting(firstActivationWorkspaceKey, effectiveUserId);
       }
       
       // Set session using the effective workspace userId
@@ -1222,23 +1346,13 @@ export async function registerRoutes(
         userId: effectiveUserId
       });
     } catch (err: any) {
+      // The previous "unique constraint → silent Already activated" fallback was
+      // removed. Existing-activation handling is now done explicitly above
+      // (same-code re-login + workspace-switch paths), and silently returning
+      // a success without resolving the correct workspace was the same family
+      // of bug as the original workspace-switching issue. Surface real errors
+      // with a clear message instead.
       console.error("Beta validation error:", err);
-      if (err.message?.includes('unique constraint')) {
-        // User already has activation - generate token and return success
-        try {
-          const { generateDeviceToken } = await import('./device-auth');
-          const { deviceId: clientDeviceId } = req.body;
-          const token = generateDeviceToken(clientDeviceId);
-          return res.json({ 
-            success: true, 
-            message: 'Already activated',
-            token,
-            deviceId: clientDeviceId
-          });
-        } catch {
-          return res.json({ success: true, message: 'Already activated' });
-        }
-      }
       res.status(500).json({ message: 'Activation failed. Please refresh and try again.' });
     }
   });

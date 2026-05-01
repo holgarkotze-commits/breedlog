@@ -1,0 +1,84 @@
+REPLIT — FIX ACCESS-CODE WORKSPACE SWITCHING BUG ONLY
+
+Scope is strictly limited.
+
+Do not work on dashboard.
+Do not work on crop.
+Do not work on exports.
+Do not run seed apply.
+Do not delete data.
+Do not reset database.
+Do not create new access codes.
+Do not touch unrelated files.
+
+Confirmed bug:
+In /api/beta/validate, the “Already activated” branch returns the existing activation user/workspace without checking whether the submitted invite code matches the existing activation’s inviteCodeId.
+
+Result:
+A phone that activated Code A can log out, enter Code B, and still receive Code A’s workspace/userId. Code B is effectively ignored.
+
+This is wrong.
+
+Correct behavior:
+
+1. If same device enters the SAME code again:
+   - allow re-login
+   - return the same existing workspace
+   - do not consume another slot
+
+2. If same device enters a DIFFERENT code:
+   - do NOT return the old activation automatically
+   - validate the new submitted code
+   - check available slot for that device type
+   - switch the device/session to the new code’s workspace/account
+   - return the new resolved workspace/userId
+   - trigger client user-isolation logic because returned userId/workspace changed
+
+3. If the new code has no slot available:
+   - block clearly
+   - do not keep showing the old workspace silently
+
+4. If the new code is invalid/expired:
+   - block clearly
+   - do not keep showing the old workspace silently
+
+5. IndexedDB/local cache:
+   - do not globally wipe local data on logout
+   - but when login returns a different resolved userId/workspace, existing ensureUserIsolation must clear/switch local IndexedDB so old herd data is not shown under the new code
+   - confirm this path works
+
+6. Seed script:
+   - keep the fixed access-code resolver
+   - seed dry-run must resolve --access-code to a real workspace/user, not the code string
+
+Tests required:
+- same device + same code re-login returns same workspace
+- same device + different valid code switches workspace
+- same device + different full/expired code is blocked and does not return old workspace
+- IndexedDB isolation is triggered when returned workspace changes
+- mobile + desktop under same code still share one herd
+- third mobile/desktop still blocked
+- seed dry-run does not output targetUserId equal to access code string
+
+Run:
+npm run check
+npm run build
+npm run test:cert
+
+Run targeted access-code tests.
+
+Do not commit if tests fail.
+
+Final report:
+ACCESS-CODE WORKSPACE SWITCH FIX
+Status:
+Files changed:
+Root cause:
+Same-code relogin:
+Different-code switch:
+Full/expired code behavior:
+IndexedDB isolation:
+Shared herd sync:
+Seed resolver:
+Tests run:
+Ready for field recheck: yes/no
