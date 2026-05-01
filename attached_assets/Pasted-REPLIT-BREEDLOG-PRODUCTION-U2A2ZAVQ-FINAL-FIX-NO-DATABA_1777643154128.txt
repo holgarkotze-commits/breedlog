@@ -1,0 +1,197 @@
+REPLIT — BREEDLOG PRODUCTION U2A2ZAVQ FINAL FIX
+NO DATABASE URL SECRET REQUIRED
+
+Correction:
+Do NOT ask me for a production DATABASE_URL.
+Do NOT require me to paste any database URL.
+Do NOT treat access code U2A2ZAVQ as a secret.
+
+The target production access code is:
+
+U2A2ZAVQ
+
+This is a test code. It is safe to use for this test seed.
+
+Your previous finding confirmed:
+- U2A2ZAVQ exists in production.
+- Canonical production workspace owner is:
+  d08b57e6-82a0-45cf-b263-b9b4f9fbd193
+- Legacy mobile user is:
+  055a3af0-69bb-4098-836a-1991f6e1719a
+- The mobile user points shared_user_id to the canonical workspace.
+- But 23 animals still exist under the old mobile user_id bucket.
+- Production dev-tool SQL is read-only, so direct production INSERT/UPDATE from the dev workspace is blocked.
+
+CORRECT FIX PATH
+
+Use the deployed production app/runtime to perform the controlled production write.
+
+That means:
+- create a temporary or admin-only production maintenance action/endpoint,
+- run it from the deployed production app,
+- target ONLY access code U2A2ZAVQ,
+- then disable/remove the temporary route after success if it is not meant to remain.
+
+Do NOT use dev DATABASE_URL.
+Do NOT seed dev again.
+Do NOT seed globally.
+Do NOT touch other codes.
+Do NOT delete the 23 legacy mobile animals.
+Do NOT discard existing data.
+
+TASK 1 — CREATE SAFE PRODUCTION MAINTENANCE ACTION
+
+Add a tightly scoped admin/maintenance action that can run inside the production app runtime.
+
+It must:
+
+1. Accept target access code only:
+   U2A2ZAVQ
+
+2. Refuse to run for any other code.
+
+3. Verify the production mapping before writing:
+   - code exists
+   - code is active
+   - canonical workspace owner is d08b57e6-82a0-45cf-b263-b9b4f9fbd193
+   - legacy mobile user is 055a3af0-69bb-4098-836a-1991f6e1719a
+   - mobile shared_user_id points to canonical owner
+   - BL-SIM-2025-RC1 does not already exist, or if it exists, seed must be idempotent
+
+4. If mapping is different, STOP and report.
+
+5. Protect the route/action:
+   - use existing admin protection if available,
+   - or hard-limit it to this one code and one operation,
+   - and remove/disable it after completion if temporary.
+
+TASK 2 — SNAPSHOT BEFORE WRITE
+
+Before changing production data, log/report:
+
+- code status
+- canonical workspace userId
+- legacy mobile userId
+- canonical animal count
+- legacy mobile animal count
+- BL-SIM-2025-RC1 count
+- total production animal count
+- total other-workspace animal count
+
+Do not continue if the mapping differs from the confirmed values.
+
+TASK 3 — UNIFY LEGACY MOBILE DATA
+
+Move/reassign the 23 legacy mobile-user animals from:
+
+055a3af0-69bb-4098-836a-1991f6e1719a
+
+to canonical workspace:
+
+d08b57e6-82a0-45cf-b263-b9b4f9fbd193
+
+Do not delete them.
+
+Do not overwrite conflicts.
+
+If canonical tag/EID conflicts exist, stop and report conflict.
+
+After reassignment, verify:
+
+- legacy mobile user animal count = 0
+- canonical workspace count increased by 23
+- desktop and mobile now resolve to the same canonical workspace
+
+TASK 4 — APPLY SIMULATION SEED TO PRODUCTION
+
+Apply the existing idempotent simulation seed to production runtime only for:
+
+U2A2ZAVQ
+
+Seed batch:
+
+BL-SIM-2025-RC1
+
+Expected result:
+
+- existing unified animals preserved
+- 426 simulation animals added
+- BL-SIM-2025-RC1 count = 426
+- other workspaces unchanged
+- rerun does not duplicate
+
+TASK 5 — VERIFY LIVE APP DATA
+
+After seed, verify by production runtime/database query:
+
+- U2A2ZAVQ exists
+- canonical workspace ID
+- animal count before and after
+- legacy mobile bucket count
+- BL-SIM-2025-RC1 count
+- ewe count
+- ram count
+- lamb count
+- mating group count
+- other workspaces unchanged
+- idempotency rerun does not duplicate
+
+Then I will log out and log back in on mobile and desktop to confirm the live app shows the seeded production data.
+
+TASK 6 — BUILD CHECK
+
+Run:
+
+npm run check
+npm run build
+
+Run targeted tests:
+
+NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/breedlog-simulation-dataset.test.ts
+NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/import-export-hardening.test.ts
+NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/image-crop-geometry.test.ts
+NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/access-code-workspace-switch.test.ts
+
+Do not block this production test-code seed on the known 5 baseline runtime-certification failures.
+Report those separately.
+
+TASK 7 — CLEANUP
+
+If you created a temporary maintenance route/action, remove it or disable it after the production seed is confirmed.
+
+Do not leave an open seed endpoint available.
+
+FINAL REPORT ONLY
+
+PRODUCTION U2A2ZAVQ FIX RESULT
+
+1. Production runtime action:
+Maintenance action created: yes/no
+Protected/scoped to U2A2ZAVQ only: yes/no
+Removed/disabled after success: yes/no
+
+2. Workspace unification:
+Canonical workspace:
+Legacy mobile user:
+Legacy mobile animals before:
+Legacy mobile animals after:
+Canonical animals before:
+Canonical animals after unification:
+Conflicts found: yes/no
+
+3. Simulation seed:
+Applied: yes/no
+Seed batch:
+BL-SIM-2025-RC1 count:
+Final canonical animal count:
+Other workspaces touched: yes/no
+Idempotency rerun result:
+
+4. Build/tests:
+npm run check:
+npm run build:
+targeted tests:
+known baseline failures:
+
+5. Final status:
+READY TO TEST PRODUCTION APP / NOT READY
