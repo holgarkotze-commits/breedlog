@@ -2,7 +2,9 @@
 
 Batch: BL-SIM-2025-RC1
 
-Target: U2A2ZAVQ
+Resolved target userId: d5f54fcf-357b-4245-96f5-28a672fd1f9f
+
+Resolved from: user-id
 
 Mode: dry-run
 

@@ -1,0 +1,77 @@
+REPLIT AGENT — FIX ONLY ACCESS-CODE SHARED HERD SYNC
+
+Scope is strictly limited.
+
+Do not work on Phase 19 dashboard.
+Do not work on crop tool.
+Do not work on exports.
+Do not run simulation seed apply.
+Do not create new access codes.
+Do not delete data.
+Do not reset local storage or database.
+Do not redesign UI.
+Do not touch unrelated files.
+Do not claim fixed without proof.
+
+Problem:
+Access code U2A2ZAVQ works on both phone PWA and desktop/Replit Preview, so the one-phone + one-desktop slot logic is working.
+
+But data does not sync between those two devices.
+
+If I add 4 rams on the phone under U2A2ZAVQ, the desktop using the same code does not see those rams.
+
+Correct rule:
+One access code = one shared farm/workspace/herd.
+The allowed phone and desktop under that code must see the same herd when online.
+
+Diagnose:
+1. Inspect U2A2ZAVQ in the dev database.
+2. Check invite/access code record.
+3. Check user activations/device slots.
+4. Identify phone user/device ID.
+5. Identify desktop/Replit user/device ID.
+6. Identify sharedUserId/workspace/account/farm ID if present.
+7. Check where animals are stored when created.
+8. Check whether /api/animals filters by device-specific userId instead of shared workspace/sharedUserId.
+9. Check whether sync push/pull uses device userId instead of shared herd owner.
+10. Check whether animals added from phone are under a different userId than desktop.
+
+Fix only if needed:
+- Both devices under U2A2ZAVQ must resolve to the same shared herd owner.
+- Animals created by either device must be stored/listed/synced under the shared herd identity.
+- Device IDs must be used for authorization/device slots only, not separate herd ownership.
+- Existing records under the same code must be healed/made visible without duplication or deletion.
+
+Tests required:
+1. Same code allows one mobile and one desktop.
+2. Same mobile re-login does not consume new slot.
+3. Same desktop re-login does not consume new slot.
+4. Animal created by mobile is visible to desktop.
+5. Animal created by desktop is visible to mobile.
+6. Third mobile blocked.
+7. Third desktop blocked.
+8. No duplicate animals after sync.
+9. Seed dry-run with --access-code U2A2ZAVQ resolves to real shared user/workspace, not targetUserId: "U2A2ZAVQ".
+
+Run:
+npm run check
+npm run build
+npm run test:cert
+
+Also run any targeted access/sync tests you add.
+
+Do not commit if tests fail.
+
+Final report:
+ACCESS-CODE SHARED HERD SYNC RESULT
+Status:
+Files changed:
+Root cause:
+Shared herd identity:
+Phone user/device:
+Desktop user/device:
+Where animals were stored before:
+What was fixed:
+Tests run:
+Manual test needed:
+Ready for field sync recheck: yes/no
