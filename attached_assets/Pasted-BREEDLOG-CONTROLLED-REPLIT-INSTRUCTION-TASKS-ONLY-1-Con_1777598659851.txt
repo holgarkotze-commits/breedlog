@@ -1,0 +1,425 @@
+BREEDLOG — CONTROLLED REPLIT INSTRUCTION
+TASKS ONLY:
+1. Confirm and apply Simulation Seed ONLY to access code U2A2ZAVQ.
+2. Fix animal image crop workflow.
+3. Complete/export-check the BreedLog export outputs.
+
+DO NOT work on the Data Dashboard upgrade in this run.
+The Data Dashboard upgrade is parked for the next upgrade cycle.
+
+DO NOT change unrelated app logic.
+DO NOT redesign the app.
+DO NOT change dark mode.
+DO NOT change access-code logic except where needed to safely target the simulation seed to one code.
+DO NOT wipe, reset, overwrite, or hide existing farmer data.
+DO NOT seed any other access code, workspace, account, or user.
+DO NOT fake XLSX support.
+DO NOT commit if tests fail.
+
+CURRENT CONTEXT
+
+BreedLog has already passed earlier controlled phases for:
+
+- tag prefix and canonical tag logic
+- complete animal lifecycle edit model
+- analysis engine
+- simulation dataset generator
+- CSV import/export hardening
+- Health Plan guide
+- Android packaging blocker documentation
+- final verification
+- mobile performance / large herd hardening is the current hardening direction
+
+This instruction must stay narrow.
+
+The target simulation seed code is:
+
+U2A2ZAVQ
+
+This code must be the ONLY code/workspace/account/farm that receives the simulation seed data.
+
+PART 1 — FIRST CONFIRM POSSIBILITY BEFORE APPLYING SIMULATION SEED
+
+Before applying any seed data, inspect the current access-code/workspace/account mapping.
+
+You must confirm whether code U2A2ZAVQ exists and whether it maps to a unique workspace/account/farm.
+
+Check:
+
+- where access codes are stored
+- how access codes link to account/client/farm/workspace
+- whether U2A2ZAVQ exists
+- whether U2A2ZAVQ is active or expired
+- which workspace/account/farm it points to
+- whether seeding can safely target that workspace only
+- whether any existing data is already present in that workspace
+- whether the Phase 9 simulation dataset generator is available and usable
+
+If the code does NOT exist, or if it does not map to a unique workspace/account/farm, STOP.
+
+Report:
+
+POSSIBILITY CONFIRMATION:
+Status: NOT POSSIBLE YET
+Reason:
+What is missing:
+Exact next step required:
+
+Do not apply seed data.
+
+If the code DOES exist and maps clearly to one workspace/account/farm, report internally and continue.
+
+POSSIBILITY CONFIRMATION:
+Status: POSSIBLE
+Target code:
+Target workspace/account/farm:
+Existing animal count before seed:
+Simulation seed source:
+Safety strategy:
+
+SEED SAFETY RULES
+
+The seed must be scoped only to code U2A2ZAVQ’s workspace/account/farm.
+
+It must never run globally.
+
+It must never seed all users.
+
+It must never seed every demo account.
+
+It must never seed future codes automatically.
+
+It must not run automatically on deploy/startup.
+
+It must only run through an explicit admin/dev seed action, script, or controlled internal route.
+
+Before seeding:
+
+1. Count existing animals in the target workspace.
+2. Create a seed snapshot/log.
+3. Use a stable seedBatchId, for example:
+
+breedlog-phase9-simulation-U2A2ZAVQ
+
+4. Mark seeded records clearly with safe metadata where the schema supports it, for example:
+
+source: simulation_seed
+seedBatchId: breedlog-phase9-simulation-U2A2ZAVQ
+seedTargetCode: U2A2ZAVQ
+
+If the schema does not support metadata fields, do not perform broad schema changes unless needed. Use existing safe fields/notes/managementGroup/source pattern where available.
+
+The seed must be idempotent.
+
+If the seed is run twice, it must NOT duplicate animals.
+
+It must either:
+
+- skip already-seeded records, or
+- update only matching seed records safely, or
+- block rerun with a clear message
+
+Seed matching must use stable canonical tags, workspace/account/farm ID, and seedBatchId/source where available.
+
+Do not delete existing real animals in the target workspace.
+
+Do not overwrite existing real animals unless they are clearly seed records from the same seed batch.
+
+SIMULATION DATA TO APPLY
+
+Use the existing Phase 9 deterministic BreedLog simulation dataset generator.
+
+Apply the complete simulation dataset to only U2A2ZAVQ’s workspace/account/farm.
+
+The dataset must include:
+
+- 200 ewe animals
+- 100 Bruno daughters
+- 100 Bash daughters
+- 4 rams: R1, R2, R3, R4
+- 4 breeding groups:
+  - R1 Breeding Group
+  - R2 Breeding Group
+  - R3 Breeding Group
+  - R4 Breeding Group
+- 50 ewes allocated to each ram
+- mating period: 01 October 2024 to 11 November 2024
+- calculated lambing window using 147 days:
+  - 25 February 2025 to 07 April 2025
+- Group 1: 50 ewes lambed, 59 lambs, 41 singles, 9 twin births
+- Group 2: 48 ewes lambed, 55 lambs, 41 singles, 7 twin births, 2 open ewes, average lamb birth weight 3.2 kg
+- Group 3: 49 ewes lambed, 66 lambs, 32 singles, 17 twin births, 1 open ewe, average lamb birth weight about 4.67 kg
+- Group 4: 41 ewes lambed, 42 lambs, 40 singles, 1 twin birth, 9 open ewes
+- KW tag logic must be preserved
+- twin identifiers must be preserved
+- sire/dam links must be preserved
+- family line / management group data must remain usable by the analysis engine
+
+After applying seed:
+
+Report:
+
+Seed applied:
+Target code:
+Target workspace/account/farm:
+Animal count before:
+Animal count after:
+Ewe count:
+Ram count:
+Lamb count:
+Breeding group count:
+Open ewe count:
+Twin lamb count:
+Seed batch ID:
+Duplicate prevention result:
+Rerun/idempotency result:
+
+PART 2 — IMAGE CROP FIX
+
+Fix the animal image crop workflow.
+
+Current requirement:
+
+When a user uploads or changes an animal profile image, the app must allow cropping inside BreedLog before the image is saved.
+
+The crop workflow must be mobile-friendly.
+
+Required behavior:
+
+1. User selects/uploads an animal image.
+2. BreedLog opens a crop step before saving.
+3. User can crop the image to a clean animal profile frame.
+4. Default crop should be square or profile-card friendly unless the existing UI requires another ratio.
+5. User can confirm crop.
+6. Cropped image is saved to the animal profile.
+7. User can cancel crop without changing the existing image.
+8. User can later edit/crop/replace the profile image from the animal profile/detail view.
+9. Cropping must not corrupt existing animal data.
+10. Cropping must not break offline animal records.
+11. Existing saved images must continue to display.
+
+Implementation rules:
+
+- Use an existing crop/image dependency only if already available.
+- If no dependency exists, prefer a lightweight canvas-based crop implementation over adding a heavy dependency.
+- Do not add a large dependency unless absolutely necessary.
+- Compress or resize images reasonably for mobile use if the current app already does image resizing or if it can be done safely.
+- Preserve image quality enough for animal identification.
+- Do not store unnecessarily huge original files if the app stores images locally.
+- Do not break sync.
+- Do not break existing image upload.
+- Do not change unrelated animal fields.
+
+Crop UI requirements:
+
+- Clear crop area.
+- Confirm button.
+- Cancel button.
+- Replace image option.
+- Works on mobile.
+- Works in light and dark mode.
+- No hidden buttons behind navigation or header.
+- No dead crop button.
+- No saving half-cropped broken images.
+
+Tests/verification for image crop:
+
+Add or run tests where practical.
+
+At minimum verify manually or by test:
+
+- upload new animal image
+- crop image
+- save cropped image
+- image displays on animal card/profile
+- cancel crop keeps old image unchanged
+- replace image works
+- crop modal/view works on mobile layout
+- no animal data is lost
+- no console/runtime errors
+
+PART 3 — EXPORT COMPLETENESS
+
+Review and complete BreedLog exports.
+
+The goal is not to create fake new export systems. The goal is to make sure the existing approved exports are complete, useful, and include the important BreedLog fields.
+
+Normal user exports must include:
+
+- PDF
+- CSV
+- XLSX only if genuinely supported
+- No normal user-facing JSON export
+
+If XLSX is still blocked by package/dependency restrictions, do not fake it. Keep CSV as the working spreadsheet path and keep XLSX clearly documented as blocked.
+
+Export completeness check:
+
+Confirm that CSV export includes all important animal fields where available:
+
+- rawTag
+- studPrefix
+- canonical/display tag
+- name
+- sex
+- status
+- classification
+- birth date
+- birth type
+- birth weight kg
+- birth weight estimated flag
+- weaning date
+- weaning weight kg
+- weaning weight estimated flag
+- latest/current weight kg
+- sire
+- dam
+- external sire/dam flags if available
+- family line / management group
+- mating group
+- EID/RFID
+- tattoo ID
+- notes
+- health-related summary if already supported
+- source/seed/demo flag if relevant and safe to expose
+
+Confirm that PDF export includes a complete useful user-facing report, not just a partial animal dump.
+
+PDF must include where practical:
+
+- farm/account identification
+- export date
+- herd summary
+- animal list with key identifiers
+- tag/canonical tag
+- sex/status/classification
+- birth/weaning fields where available
+- sire/dam where available
+- notes where appropriate
+- no clipped headers
+- no clipped footers
+- no banner in the middle of the document
+- no broken spacing
+- no JSON/internal developer fields
+
+Confirm import/export roundtrip where applicable:
+
+- export CSV
+- import same CSV
+- no duplicates created
+- KW tag normalization still works
+- U2A2ZAVQ seed data can be exported cleanly after seed
+- re-importing exported seed data does not duplicate records
+
+Export sharing/download:
+
+Confirm existing behavior still allows:
+
+- file download on desktop/browser
+- device share where Web Share API is supported
+- fallback download where share is unavailable
+
+Tests/verification for export completeness:
+
+Run existing import/export tests.
+
+Add targeted tests only if gaps are found.
+
+Verify:
+
+- CSV headers complete
+- CSV escaping works
+- seeded simulation dataset exports correctly
+- duplicate import prevention works
+- JSON is not exposed as normal user export
+- XLSX is not shown as complete if blocked
+- PDF structural guard still passes where testable
+
+REQUIRED TEST COMMANDS BEFORE COMMIT
+
+Run all relevant checks before committing:
+
+npm run check
+npm run build
+npm run test:cert
+
+Run targeted tests relevant to this task:
+
+NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/breedlog-simulation-dataset.test.ts
+NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/import-export-hardening.test.ts
+NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/tag-prefix-logic.test.ts
+NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/edit-animal-lifecycle-fields.test.ts
+NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/analysis-engine.test.ts
+
+If you add new tests for seed application or image crop, run them too.
+
+Run:
+
+git status --short
+git log --oneline -n 5
+
+COMMIT RULE
+
+Do not commit while any required test fails.
+
+If all tests pass and the work is clean, commit with this message:
+
+Apply controlled simulation seed and harden crop export workflows
+
+If seed application is confirmed impossible because U2A2ZAVQ cannot be mapped to one workspace/account/farm, do not force it. Commit only safe image/export work if completed and tested, and report the seed blocker clearly.
+
+FINAL REPORT FORMAT
+
+Report only in this structure:
+
+CONTROLLED UPDATE RESULT
+
+1. Simulation Seed
+Possibility confirmed:
+Target code:
+Target workspace/account/farm:
+Applied: yes/no
+Animal count before:
+Animal count after:
+Seed batch ID:
+Duplicate/idempotency result:
+Blocker if any:
+
+2. Image Crop Fix
+Status:
+Files changed:
+Behavior confirmed:
+Tests/manual checks:
+
+3. Export Completeness
+Status:
+Files changed:
+CSV status:
+PDF status:
+XLSX status:
+JSON user export status:
+Roundtrip result:
+Tests run:
+
+4. Safety Confirmation
+No other codes seeded:
+No global seed:
+No existing farmer data wiped:
+No unrelated app areas changed:
+Working tree clean:
+
+5. Commit
+Commit hash:
+Branch:
+Remote/push status:
+
+FINAL STATUS:
+READY FOR USER REVIEW or NOT READY
+
+READY FOR USER REVIEW is allowed only if:
+- U2A2ZAVQ seed was safely applied or honestly blocked before any damage,
+- image crop fix works,
+- export completeness checks pass,
+- required tests pass,
+- no red commit was made,
+- no unrelated areas were changed.
