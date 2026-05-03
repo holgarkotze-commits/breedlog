@@ -5,7 +5,6 @@ import { DuplicateElectronicIdError, DuplicateTagIdError, DuplicateAnimalNameErr
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAdminPin, getUserId as getDeviceUserId, getDeviceId } from "./device-auth";
-import { registerU2A2ZAVQMaintenanceRoute } from "./maintenance/u2a2zavq"; // TEMP: remove after one-shot prod fix
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAudioRoutes } from "./replit_integrations/audio/routes";
@@ -1376,10 +1375,6 @@ export async function registerRoutes(
   // Admin routes are now protected by ADMIN_PIN secret (no Replit auth)
   // Admin check is already registered in registerDeviceAuthRoutes
 
-  // TEMPORARY: one-shot production maintenance for access code U2A2ZAVQ.
-  // Single-use guarded by system_settings flag. Remove after success.
-  registerU2A2ZAVQMaintenanceRoute(app);
-  
   // Helper to set no-cache headers on admin responses
   function setNoCacheHeaders(res: Response): void {
     res.set({
