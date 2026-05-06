@@ -930,14 +930,25 @@ export async function registerRoutes(
     return hash;
   }
   
-  // Check if invite code is valid (not expired, not revoked, uses remaining)
-  async function isCodeValid(code: any): Promise<{ valid: boolean; reason?: string }> {
-    if (!code) return { valid: false, reason: 'Code not found' };
-    if (code.status === 'revoked') return { valid: false, reason: 'Code has been revoked' };
-    if (code.status === 'expired') return { valid: false, reason: 'Code has expired' };
-    if (new Date(code.expiresAt) < new Date()) return { valid: false, reason: 'Code has expired' };
-    if (code.usesCount >= code.maxUses) return { valid: false, reason: 'Code has reached maximum uses' };
-    return { valid: true };
+  // Returns the code's own usability — independent of how many slots are taken.
+  // A code is usable if it exists, is not revoked, and is not expired.
+  // Slot availability (desktop/mobile) is computed separately at the call site.
+  // NOTE: usesCount is intentionally NOT consulted here. The real source of truth
+  // for slot availability is the count of active rows in user_activations for the
+  // requested deviceType. Old codes with maxUses=1 must still allow the second
+  // (different-deviceType) slot.
+  function getCodeStatus(code: any): 'active' | 'revoked' | 'expired' {
+    if (!code) return 'expired';
+    if (code.status === 'revoked') return 'revoked';
+    if (code.status === 'expired') return 'expired';
+    if (new Date(code.expiresAt) < new Date()) return 'expired';
+    return 'active';
+  }
+  function getCodeBlockReason(code: any): string | null {
+    const status = getCodeStatus(code);
+    if (status === 'revoked') return 'Code has been revoked';
+    if (status === 'expired') return 'Code has expired';
+    return null;
   }
   
   // Check access status for authenticated user
@@ -1496,16 +1507,51 @@ export async function registerRoutes(
       const codeActivations = allActivations.filter(a => a.inviteCodeId === inviteCode.id);
       const desktopSlot = codeActivations.find(a => a.deviceType === 'desktop' && a.status === 'active');
       const mobileSlot = codeActivations.find(a => a.deviceType === 'mobile' && a.status === 'active');
-      
-      const validation = await isCodeValid(inviteCode);
-      
+
+      // Code-level status (does NOT depend on slot count or usesCount).
+      const codeStatus = getCodeStatus(inviteCode);
+      const blockReason = getCodeBlockReason(inviteCode);
+
+      // Per-slot canActivate: a free slot is activatable iff the code itself is usable.
+      const desktopCanActivate = codeStatus === 'active' && !desktopSlot;
+      const mobileCanActivate = codeStatus === 'active' && !mobileSlot;
+
+      // License activation date = earliest active activation timestamp.
+      const sortedActive = [...codeActivations]
+        .filter(a => a.status === 'active')
+        .sort((a, b) => new Date(a.activatedAt as any).getTime() - new Date(b.activatedAt as any).getTime());
+      const licenseActivatedAt = sortedActive[0]?.activatedAt ?? null;
+
+      // Workspace identity for this code (persisted in system_settings).
+      const workspaceKey = `workspace:invite_code:${inviteCode.id}`;
+      const workspaceUserId = await storage.getSystemSetting(workspaceKey);
+      let workspaceAnimalCount: number | null = null;
+      if (workspaceUserId) {
+        try {
+          const animalsList = await storage.getAnimals(workspaceUserId);
+          workspaceAnimalCount = animalsList.length;
+        } catch {
+          workspaceAnimalCount = null;
+        }
+      }
+
       res.json({
         found: true,
         code: inviteCode,
-        validation,
+        codeStatus,
+        blockReason,
+        licenseActivatedAt,
         slots: {
-          desktop: desktopSlot ? { taken: true, deviceId: desktopSlot.deviceId, activatedAt: desktopSlot.activatedAt } : { taken: false },
-          mobile: mobileSlot ? { taken: true, deviceId: mobileSlot.deviceId, activatedAt: mobileSlot.activatedAt } : { taken: false },
+          desktop: desktopSlot
+            ? { taken: true, deviceId: desktopSlot.deviceId, activatedAt: desktopSlot.activatedAt, canActivate: false, reason: 'Desktop slot already taken' }
+            : { taken: false, canActivate: desktopCanActivate, reason: desktopCanActivate ? null : blockReason },
+          mobile: mobileSlot
+            ? { taken: true, deviceId: mobileSlot.deviceId, activatedAt: mobileSlot.activatedAt, canActivate: false, reason: 'Mobile slot already taken' }
+            : { taken: false, canActivate: mobileCanActivate, reason: mobileCanActivate ? null : blockReason },
+        },
+        workspace: {
+          userId: workspaceUserId ?? null,
+          animalCount: workspaceAnimalCount,
         },
         totalActivations: codeActivations.length,
       });
@@ -1535,13 +1581,12 @@ export async function registerRoutes(
       }
       
       await storage.updateUserActivation(slotActivation.userId, { status: 'revoked' });
-      // Decrement uses count
-      const codes = await storage.getInviteCodes();
-      const code = codes.find(c => c.id === id);
-      if (code && code.usesCount > 0) {
-        await storage.updateInviteCode(id, { usesCount: code.usesCount - 1 });
-      }
-      
+      // NOTE: Do NOT decrement invite_codes.usesCount here. usesCount is informational
+      // and is intentionally NOT consulted by /api/beta/validate — slot availability
+      // is computed live from active rows in user_activations. Mutating usesCount
+      // risks resurrecting the legacy "max uses reached" gating bug if any caller
+      // ever re-couples to it. Slot freeing is fully expressed by revoking the row.
+
       const slotLabel = slotType.charAt(0).toUpperCase() + slotType.slice(1);
       res.json({ success: true, message: `${slotLabel} slot has been reset. The device can now re-activate with the same code.` });
     } catch (err: any) {
@@ -1598,6 +1643,79 @@ export async function registerRoutes(
     }
   });
   
+  // Reactivate a revoked or expired code (data-safe: does NOT touch user_activations,
+  // animals, users, or system_settings). When the code's expiry is in the past it is
+  // pushed forward by `extendDays` (default 30). Devices that previously held a slot
+  // can simply re-enter the same code; the persisted `workspace:invite_code:<id>`
+  // mapping ensures they land back on the original workspace data.
+  app.post("/api/admin/invite-codes/:id/reactivate", requireAdminPin, async (req, res) => {
+    setNoCacheHeaders(res);
+    try {
+      const id = Number(req.params.id);
+      const { extendDays } = (req.body ?? {}) as { extendDays?: number };
+      const codes = await storage.getInviteCodes();
+      const code = codes.find(c => c.id === id);
+      if (!code) return res.status(404).json({ message: 'Code not found' });
+
+      const updates: { status: string; expiresAt?: Date } = { status: 'active' };
+      const days = typeof extendDays === 'number' && Number.isFinite(extendDays) && extendDays > 0
+        ? Math.floor(extendDays)
+        : null;
+      if (days !== null) {
+        const newExpiry = new Date();
+        newExpiry.setDate(newExpiry.getDate() + days);
+        updates.expiresAt = newExpiry;
+      } else if (new Date(code.expiresAt) < new Date()) {
+        // Past expiry — bump by default 30 days so the reactivation is meaningful.
+        const newExpiry = new Date();
+        newExpiry.setDate(newExpiry.getDate() + 30);
+        updates.expiresAt = newExpiry;
+      }
+
+      const updated = await storage.updateInviteCode(id, updates);
+      res.json({
+        success: true,
+        code: updated,
+        message: 'Code reactivated. Existing activation rows were not modified — devices that re-enter this code will land on the same workspace data via the persisted workspace mapping.',
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Extend the expiry of an invite code. Accepts either { days } (relative to current
+  // expiry if still in the future, otherwise to now) or { expiresAt } (ISO date string).
+  // Does NOT change status — use /reactivate for that. Data-safe.
+  app.post("/api/admin/invite-codes/:id/extend-expiry", requireAdminPin, async (req, res) => {
+    setNoCacheHeaders(res);
+    try {
+      const id = Number(req.params.id);
+      const { days, expiresAt } = (req.body ?? {}) as { days?: number; expiresAt?: string };
+      const codes = await storage.getInviteCodes();
+      const code = codes.find(c => c.id === id);
+      if (!code) return res.status(404).json({ message: 'Code not found' });
+
+      let newExpiry: Date;
+      if (typeof expiresAt === 'string' && expiresAt.length > 0) {
+        newExpiry = new Date(expiresAt);
+        if (Number.isNaN(newExpiry.getTime())) {
+          return res.status(400).json({ message: 'Invalid expiresAt value' });
+        }
+      } else if (typeof days === 'number' && Number.isFinite(days) && days > 0) {
+        const base = new Date(code.expiresAt) > new Date() ? new Date(code.expiresAt) : new Date();
+        newExpiry = new Date(base);
+        newExpiry.setDate(newExpiry.getDate() + Math.floor(days));
+      } else {
+        return res.status(400).json({ message: 'Provide { days: number } or { expiresAt: ISO string }' });
+      }
+
+      const updated = await storage.updateInviteCode(id, { expiresAt: newExpiry });
+      res.json({ success: true, code: updated });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // Get active testers
   app.get("/api/admin/testers", requireAdminPin, async (req, res) => {
     try {

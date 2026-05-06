@@ -1,0 +1,178 @@
+REPLIT AGENT — BREEDLOG ACCESS-CODE / LICENSE / ADMIN HARDENING ONLY
+
+Scope is strictly limited to the access-code, license, device-slot, admin-control system.
+
+Do not work on crop.
+Do not work on dashboard/Data tab.
+Do not work on exports.
+Do not run simulation seed apply.
+Do not delete animal data.
+Do not reset databases.
+Do not create new unrelated features.
+Do not make one-user-only patches.
+
+PROBLEM SHOWN BY FIELD TEST
+
+The admin diagnostic for code MM5DBB4H shows contradictory logic:
+
+- Desktop slot says: Free — can activate.
+- Mobile slot says: Taken.
+- But red status says: Not Valid: Code has reached maximum uses.
+
+That is wrong.
+
+If each code allows one desktop + one mobile, then a code with mobile taken and desktop free must still allow desktop activation.
+
+Also, revoked/expired/used codes currently give admin too little control. The admin must be able to safely extend, reactivate, unrevoke, release device slots, and inspect license status without causing data loss.
+
+CORRECT LICENSE MODEL
+
+One access code = one license/workspace/herd.
+
+One access code allows:
+- one mobile slot
+- one desktop slot
+
+The license activation starts when the first device activates, whether mobile or desktop.
+
+The expiry date applies to the whole license/code, not separately per device.
+
+If only one slot is used, the other slot remains available until the license expires or is revoked.
+
+The herd data belongs to the workspace/account, not the device and not the literal code text.
+
+Releasing a device slot must never delete herd data.
+
+Revoking or expiring a code must never delete herd data.
+
+REQUIRED FIXES
+
+1. Fix validity calculation.
+
+A code must be considered usable if:
+- code is active
+- code is not expired
+- requested device type has an available slot
+- or the same device is re-logging into its existing slot
+
+Do not block desktop activation just because mobile slot is already taken.
+
+Do not show “maximum uses reached” if the requested device type still has a free slot.
+
+2. Fix diagnostic output.
+
+The diagnostic panel must show separate status clearly:
+
+- Code status: Active / Expired / Revoked
+- License activation date
+- License expiry date
+- Desktop slot: Free / Taken / Released / Stale
+- Mobile slot: Free / Taken / Released / Stale
+- Whether the currently requested device type can activate
+- Exact reason if blocked
+
+No contradictory messages.
+
+3. Harden admin actions.
+
+Admin must be able to:
+
+- release desktop slot
+- release mobile slot
+- extend expiry date
+- reactivate expired code
+- unrevoke/recover revoked code
+- revoke code without deleting herd data
+- view linked workspace/herd owner
+- view activation date, last used date, device type, and slot state
+
+Do not delete animal/herd data when any of these actions happen.
+
+4. Protect U2A2ZAVQ data.
+
+U2A2ZAVQ is currently revoked but may be linked to important field-test data.
+
+Do not delete it.
+Do not delete its workspace.
+Do not delete its animals.
+If reactivation is supported, admin must be able to reactivate it safely.
+
+5. Keep normal slot rules.
+
+Normal codes still allow:
+- one mobile
+- one desktop
+
+Same-device re-login must not consume another slot.
+
+Third mobile must be blocked.
+
+Third desktop must be blocked.
+
+6. BL3666 handling.
+
+Do not make BL3666 a dangerous master key into all user data.
+
+If BL3666 is added, it must be a controlled admin/field-test code linked only to a controlled admin field-test workspace.
+
+It must not expose unrelated users’ herds.
+
+REPORT BEFORE DATA CHANGES
+
+First inspect and report:
+
+- why MM5DBB4H says max uses while desktop is free
+- how usesCount is calculated
+- how desktop/mobile slots are counted
+- how expired/revoked/used status is determined
+- what admin actions currently exist
+- what is missing
+
+Then fix.
+
+TESTS REQUIRED
+
+Add/update tests proving:
+
+- mobile taken + desktop free allows desktop activation
+- desktop taken + mobile free allows mobile activation
+- both slots taken blocks new device
+- same desktop re-login works
+- same mobile re-login works
+- revoked code blocks activation
+- expired code blocks activation
+- admin can reactivate expired code without data loss
+- admin can unrevoke code without data loss
+- admin can release desktop slot without deleting herd data
+- admin can release mobile slot without deleting herd data
+- diagnostic status does not show contradictory “free slot” + “maximum uses reached”
+- animal data remains linked to workspace after slot release/reactivation/revoke/unrevoke
+
+RUN
+
+npm run check
+npm run build
+npm run test:cert
+
+Run targeted access-code/admin tests.
+
+Do not commit if tests fail.
+
+FINAL REPORT
+
+ACCESS CODE / LICENSE HARDENING RESULT
+Status:
+Files changed:
+Root cause:
+MM5DBB4H diagnostic fix:
+U2A2ZAVQ safety:
+Activation/expiry logic:
+Desktop/mobile slot logic:
+Admin actions added/fixed:
+Data safety:
+Tests run:
+Manual checks needed:
+Remaining blockers:
+
+FINAL STATUS:
+READY FOR ACCESS-CODE FIELD RECHECK or NOT READY

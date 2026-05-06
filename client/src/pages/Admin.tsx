@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2, Pencil, Check, X, Monitor, Smartphone, Search } from "lucide-react";
+import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2, Pencil, Check, X, Monitor, Smartphone, Search, RotateCcw, CalendarPlus } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 
@@ -406,17 +406,74 @@ export default function AdminPage() {
     });
   };
   
+  // Status reflects ONLY the code's own usability (revoked / expired / active).
+  // Slot occupancy is shown separately in the "Device Slots" column — a code with
+  // both slots taken is still "Active" (it just has no free slots right now).
   const getStatusBadge = (code: InviteCode) => {
     if (code.status === "revoked") {
       return <Badge variant="destructive">Revoked</Badge>;
     }
-    if (new Date(code.expiresAt) < new Date()) {
+    if (code.status === "expired" || new Date(code.expiresAt) < new Date()) {
       return <Badge variant="secondary">Expired</Badge>;
     }
-    if (code.usesCount >= code.maxUses) {
-      return <Badge variant="secondary">Used</Badge>;
-    }
     return <Badge variant="default">Active</Badge>;
+  };
+
+  const reactivateCodeMutation = useMutation({
+    mutationFn: async ({ id, extendDays }: { id: number; extendDays?: number }) => {
+      const response = await adminApiRequest("POST", `/api/admin/invite-codes/${id}/reactivate`, { extendDays });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invite-codes"] });
+      toast({ title: "Code Reactivated", description: data.message ?? "Code is active again." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const extendExpiryMutation = useMutation({
+    mutationFn: async ({ id, days }: { id: number; days: number }) => {
+      const response = await adminApiRequest("POST", `/api/admin/invite-codes/${id}/extend-expiry`, { days });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/invite-codes"] });
+      toast({
+        title: "Expiry Extended",
+        description: `New expiry: ${data.code?.expiresAt ? format(new Date(data.code.expiresAt), "MMM d, yyyy") : "updated"}`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleExtendExpiry = (id: number) => {
+    const input = window.prompt("Extend expiry by how many days?", "30");
+    if (!input) return;
+    const days = parseInt(input, 10);
+    if (Number.isNaN(days) || days <= 0) {
+      toast({ title: "Invalid Value", description: "Enter a positive number of days", variant: "destructive" });
+      return;
+    }
+    extendExpiryMutation.mutate({ id, days });
+  };
+
+  const handleReactivate = (id: number) => {
+    const input = window.prompt(
+      "Reactivate this code. If the code is past expiry, enter days to extend it for (leave blank for default 30).",
+      ""
+    );
+    if (input === null) return;
+    const trimmed = input.trim();
+    const extendDays = trimmed.length > 0 ? parseInt(trimmed, 10) : undefined;
+    if (trimmed.length > 0 && (Number.isNaN(extendDays!) || (extendDays as number) <= 0)) {
+      toast({ title: "Invalid Value", description: "Days must be a positive number", variant: "destructive" });
+      return;
+    }
+    reactivateCodeMutation.mutate({ id, extendDays });
   };
   
   if (isAuthenticated === null) {
@@ -679,32 +736,55 @@ export default function AdminPage() {
                     </AlertDescription>
                   </Alert>
                 ) : (
-                  <div className="border rounded p-3 space-y-2 text-sm">
-                    <div className="flex items-center gap-2">
+                  <div className="border rounded p-3 space-y-2 text-sm" data-testid="lookup-result">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono font-bold text-base">{lookupResult.code?.code}</span>
-                      <Badge variant={lookupResult.validation?.valid ? "default" : "destructive"}>
-                        {lookupResult.validation?.valid ? "Valid & Redeemable" : `Not Valid: ${lookupResult.validation?.reason}`}
-                      </Badge>
+                      {lookupResult.codeStatus === 'active' && <Badge variant="default" data-testid="badge-code-status">Active</Badge>}
+                      {lookupResult.codeStatus === 'revoked' && <Badge variant="destructive" data-testid="badge-code-status">Revoked</Badge>}
+                      {lookupResult.codeStatus === 'expired' && <Badge variant="secondary" data-testid="badge-code-status">Expired</Badge>}
+                      {lookupResult.blockReason && (
+                        <span className="text-xs text-muted-foreground">— {lookupResult.blockReason}</span>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div className={`flex items-center gap-2 p-2 rounded border ${lookupResult.slots?.desktop?.taken ? 'border-blue-500/40 bg-blue-500/10' : 'border-border'}`}>
-                        <Monitor className="h-4 w-4 text-blue-400" />
-                        <div>
-                          <div className="font-medium">Desktop</div>
-                          <div className="text-xs text-muted-foreground">{lookupResult.slots?.desktop?.taken ? `Taken (activated ${lookupResult.slots.desktop.activatedAt ? format(new Date(lookupResult.slots.desktop.activatedAt), 'MMM d, HH:mm') : ''})` : 'Free — can activate'}</div>
-                        </div>
-                      </div>
-                      <div className={`flex items-center gap-2 p-2 rounded border ${lookupResult.slots?.mobile?.taken ? 'border-green-500/40 bg-green-500/10' : 'border-border'}`}>
-                        <Smartphone className="h-4 w-4 text-green-400" />
-                        <div>
-                          <div className="font-medium">Mobile</div>
-                          <div className="text-xs text-muted-foreground">{lookupResult.slots?.mobile?.taken ? `Taken (activated ${lookupResult.slots.mobile.activatedAt ? format(new Date(lookupResult.slots.mobile.activatedAt), 'MMM d, HH:mm') : ''})` : 'Free — can activate'}</div>
-                        </div>
-                      </div>
+                      {(['desktop', 'mobile'] as const).map((slotKey) => {
+                        const slot = lookupResult.slots?.[slotKey];
+                        const Icon = slotKey === 'desktop' ? Monitor : Smartphone;
+                        const accent = slotKey === 'desktop' ? 'blue' : 'green';
+                        const taken = !!slot?.taken;
+                        const canActivate = !!slot?.canActivate;
+                        const label = slotKey.charAt(0).toUpperCase() + slotKey.slice(1);
+                        return (
+                          <div key={slotKey} className={`flex items-start gap-2 p-2 rounded border ${taken ? `border-${accent}-500/40 bg-${accent}-500/10` : 'border-border'}`} data-testid={`slot-${slotKey}`}>
+                            <Icon className={`h-4 w-4 text-${accent}-400 mt-0.5`} />
+                            <div className="min-w-0">
+                              <div className="font-medium">{label}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {taken
+                                  ? `Taken${slot.activatedAt ? ` — activated ${format(new Date(slot.activatedAt), 'MMM d, HH:mm')}` : ''}`
+                                  : (canActivate ? 'Free — can activate' : `Free — blocked: ${slot?.reason ?? 'code unusable'}`)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    {lookupResult.code?.expiresAt && (
-                      <div className="text-xs text-muted-foreground">Expires: {format(new Date(lookupResult.code.expiresAt), 'MMM d, yyyy')}</div>
-                    )}
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      {lookupResult.licenseActivatedAt && (
+                        <div>License first activated: {format(new Date(lookupResult.licenseActivatedAt), 'MMM d, yyyy HH:mm')}</div>
+                      )}
+                      {lookupResult.code?.expiresAt && (
+                        <div>Expires: {format(new Date(lookupResult.code.expiresAt), 'MMM d, yyyy')}</div>
+                      )}
+                      {lookupResult.workspace?.userId && (
+                        <div>
+                          Workspace: <span className="font-mono">{String(lookupResult.workspace.userId).slice(0, 8)}…</span>
+                          {typeof lookupResult.workspace.animalCount === 'number' && (
+                            <> · {lookupResult.workspace.animalCount} animal{lookupResult.workspace.animalCount === 1 ? '' : 's'}</>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -867,18 +947,40 @@ export default function AdminPage() {
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
-                            {code.status === "active" && code.usesCount > 0 && (
-                              <Button 
-                                size="icon" 
+                            {code.status === "active" && new Date(code.expiresAt) > new Date() && (
+                              <Button
+                                size="icon"
                                 variant="ghost"
                                 onClick={() => revokeCodeMutation.mutate(code.id)}
                                 disabled={revokeCodeMutation.isPending}
                                 data-testid={`button-revoke-${code.id}`}
-                                title="Revoke code"
+                                title="Revoke code (preserves workspace data)"
                               >
                                 <Ban className="h-4 w-4" />
                               </Button>
                             )}
+                            {(code.status === "revoked" || code.status === "expired" || new Date(code.expiresAt) < new Date()) && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => handleReactivate(code.id)}
+                                disabled={reactivateCodeMutation.isPending}
+                                data-testid={`button-reactivate-${code.id}`}
+                                title="Reactivate code (preserves workspace data)"
+                              >
+                                <RotateCcw className="h-4 w-4 text-primary" />
+                              </Button>
+                            )}
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => handleExtendExpiry(code.id)}
+                              disabled={extendExpiryMutation.isPending}
+                              data-testid={`button-extend-${code.id}`}
+                              title="Extend expiry"
+                            >
+                              <CalendarPlus className="h-4 w-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>

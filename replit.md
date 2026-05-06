@@ -107,6 +107,9 @@ Preferred communication style: Simple, everyday language.
   - Admin can reset individual device slots (desktop or mobile) without deleting farm data
   - **Code Diagnostic Lookup** tool in admin panel — type any code to instantly verify if it exists in DB and see which slots are taken/free
   - Non-existent codes display clearly as "not found in database" with actionable hints
+  - **License model**: 1 invite code = 1 workspace allowing 1 desktop + 1 mobile slot. Code-level status (Active / Revoked / Expired) is independent of slot occupancy — a code with both slots taken is still "Active" (just no free slots). The legacy `usesCount >= maxUses` "max uses reached" check has been removed from the diagnostic; slot availability per device type is the only source of truth (`server/routes.ts` `getCodeStatus()` + `/api/admin/invite-codes/lookup/:code`).
+  - **Data-safe admin actions**: `POST /api/admin/invite-codes/:id/reactivate` (unrevoke / unexpire, optionally extends expiry) and `POST /api/admin/invite-codes/:id/extend-expiry` (`{days}` or `{expiresAt}`). Neither touches `user_activations`, `animals`, `users`, or `system_settings`. The persisted `workspace:invite_code:<id>` mapping ensures devices that re-enter a reactivated code land back on the original workspace data.
+  - **Diagnostic returns**: `codeStatus`, `blockReason`, `licenseActivatedAt` (earliest active activation), per-slot `{taken, canActivate, reason, deviceId, activatedAt}`, and `workspace.{userId, animalCount}` — no contradictory "Not Valid: max uses" labels.
 - **User Data Isolation**: All data tables have userId columns ensuring complete separation between users' farm data.
 
 ## External Dependencies
