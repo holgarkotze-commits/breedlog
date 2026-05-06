@@ -74,6 +74,7 @@ function Router() {
         <Route path="/animals" component={Animals} />
         <Route path="/animals/:id" component={AnimalDetail} />
         <Route path="/analysis" component={Analysis} />
+        <Route path="/data" component={Analysis} />
         <Route path="/lambs" component={Lambs} />
         <Route path="/breeding" component={Breeding} />
         <Route path="/breeding/groups/:id" component={MatingGroupDetail} />
