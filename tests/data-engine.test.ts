@@ -242,6 +242,61 @@ test("empty input returns safe values with no NaN and no throws", () => {
   assert.equal(insights.availableSeasons.length, 0);
 });
 
+test("reproductive efficiency aggregates joined/lambed/groups from breeding events", () => {
+  const ewe1 = makeAnimal({ id: 50, tagId: "E1", sex: "ewe", birthDate: "2022-01-01" });
+  const ewe2 = makeAnimal({ id: 51, tagId: "E2", sex: "ewe", birthDate: "2022-01-01" });
+  const ewe3 = makeAnimal({ id: 52, tagId: "E3", sex: "ewe", birthDate: "2022-01-01" }); // joined, not lambed
+  const ram = makeAnimal({ id: 60, tagId: "R1", sex: "ram", birthDate: "2022-01-01" });
+  const events: BreedingEvent[] = [
+    { id: 1, userId: "u1", eweId: 50, ramId: 60, matingGroupId: 1, matingDate: "2025-08-01", matingType: "natural", lambingDate: "2026-01-10", lambCount: 2, notes: null, clientId: null, vectorClock: null, lastSyncedAt: null } as any,
+    { id: 2, userId: "u1", eweId: 51, ramId: 60, matingGroupId: 1, matingDate: "2025-08-05", matingType: "natural", lambingDate: "2026-01-25", lambCount: 1, notes: null, clientId: null, vectorClock: null, lastSyncedAt: null } as any,
+    { id: 3, userId: "u1", eweId: 52, ramId: 60, matingGroupId: 2, matingDate: "2025-08-10", matingType: "natural", lambingDate: null, lambCount: null, notes: null, clientId: null, vectorClock: null, lastSyncedAt: null } as any,
+  ];
+  const insights = buildDataInsights({
+    animals: [ewe1, ewe2, ewe3, ram],
+    breedingEvents: events,
+    performanceRecords: [], healthRecords: [], today: TODAY,
+  });
+  const r = insights.reproductive;
+  assert.equal(r.sufficient, true);
+  assert.equal(r.ewesJoined, 3);
+  assert.equal(r.ewesLambed, 2);
+  assert.equal(r.totalLambsBorn, 3);
+  assert.ok(r.lambingRatePct !== null && Math.abs(r.lambingRatePct - 66.67) < 0.1);
+  assert.equal(r.groupBreakdown.length, 2);
+  assert.equal(r.lambingSpreadDays, 15);
+});
+
+test("health overview counts records, mortality, and survival within scope", () => {
+  const a1 = makeAnimal({ id: 1, tagId: "A1", sex: "ram", birthDate: "2022-01-01" });
+  const a2 = makeAnimal({ id: 2, tagId: "A2", sex: "ewe", birthDate: "2022-01-01", status: "dead" });
+  const records: HealthRecord[] = [
+    { id: 1, userId: "u1", animalId: 1, date: "2026-04-20", treatment: "Vaccination", medication: null, dosage: null, vet: null, withdrawalPeriod: null, notes: null } as any,
+    { id: 2, userId: "u1", animalId: 1, date: "2026-04-22", treatment: "Drench", medication: null, dosage: null, vet: null, withdrawalPeriod: null, notes: null } as any,
+    { id: 4, userId: "u1", animalId: 1, date: "2026-04-25", treatment: "Drench", medication: null, dosage: null, vet: null, withdrawalPeriod: null, notes: null } as any,
+    { id: 3, userId: "u1", animalId: 99, date: "2026-04-22", treatment: "Drench", medication: null, dosage: null, vet: null, withdrawalPeriod: null, notes: null } as any, // out of scope
+  ];
+  const insights = buildDataInsights({
+    animals: [a1, a2], breedingEvents: [], performanceRecords: [], healthRecords: records, today: TODAY,
+  });
+  const h = insights.health;
+  assert.equal(h.sufficient, true);
+  assert.equal(h.totalRecords, 3);
+  assert.equal(h.animalsTreated, 1);
+  assert.equal(h.recordsLast30Days, 3);
+  assert.equal(h.mortalityCount, 1);
+  assert.equal(h.survivalPct, 50);
+  assert.equal(h.topTreatments[0].name, "Drench");
+});
+
+test("reproductive and health are 'insufficient' when no events/records exist", () => {
+  const insights = buildDataInsights({
+    animals: [], breedingEvents: [], performanceRecords: [], healthRecords: [], today: TODAY,
+  });
+  assert.equal(insights.reproductive.sufficient, false);
+  assert.equal(insights.health.sufficient, false);
+});
+
 test("data quality warnings list real missing-field counts", () => {
   const ramOnly = makeAnimal({ id: 1, tagId: "R", sex: "ram" }); // missing birthDate, weights, links
   const insights = buildDataInsights({

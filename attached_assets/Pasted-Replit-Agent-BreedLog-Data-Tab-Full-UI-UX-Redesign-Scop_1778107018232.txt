@@ -1,0 +1,750 @@
+Replit Agent — BreedLog Data Tab Full UI/UX Redesign (Scope-Limited)
+You must redesign the complete BreedLog “Data” tab only, using the uploaded mobile UI reference images in this chat as visual references only.
+Very important:
+Do not copy the reference screens literally.
+Do not use placeholder/demo numbers.
+Do not use the Ovix brand, names, or text.
+Do not alter the rest of the app outside what is strictly necessary for the Data tab and the bottom navigation styling that supports this redesign.
+Do not change other app logic, pages, or workflows unless absolutely required for the Data tab to function correctly.
+Use our real BreedLog data and real app calculations only.
+Core objective
+Redesign the full logic, layout, charts, interactions, and presentation of the existing “Data” tab so that it becomes a high-value, farmer-focused analytics area with beautiful, modern, mobile-first visuals in both dark mode and light mode.
+The uploaded images are the style references only:
+use their visual quality, card treatment, spacing, chart style, section structure, dark/light treatment, and elegant mobile layout language,
+but replace everything with BreedLog branding, BreedLog labels, BreedLog navigation, and real data coming from our app.
+Use the current app’s real records to drive the Data tab.
+This must not be a fake UI.
+It must be fact-based and calculation-correct.
+Scope rules
+Allowed:
+
+
+redesign the Data tab UI and all visuals inside it
+
+
+improve the bottom mobile navigation style so it feels like the reference images
+
+
+keep our existing BreedLog icons and text labels in the bottom navigation
+
+
+add a “More” tab in the bottom menu that opens elegantly to additional tabs/actions if needed
+
+
+add calculation helpers, selectors, chart components, derived metric logic, and tests required for the Data tab
+
+
+improve Data tab responsiveness, light/dark theming, empty states, loading states, and interactions
+
+
+Not allowed:
+
+
+do not redesign the rest of the app
+
+
+do not modify unrelated pages
+
+
+do not change access-code logic
+
+
+do not change crop/image logic
+
+
+do not change export logic unless the Data tab directly depends on it
+
+
+do not introduce placeholder static numbers
+
+
+do not weaken tests
+
+
+do not commit red/failing work
+
+
+Design direction
+Use the uploaded light and dark mobile screenshots as visual design references.
+Match the overall look and feel:
+
+
+premium mobile-first dashboard feel
+
+
+elegant cards
+
+
+clean spacing
+
+
+informative KPI tiles
+
+
+modern charts
+
+
+strong visual hierarchy
+
+
+beautiful but readable dark mode
+
+
+equally polished light mode
+
+
+highly legible typography
+
+
+subtle gradients, soft borders, refined shadows, and polished chart presentation
+
+
+clear section numbering / titles
+
+
+compact but informative layouts
+
+
+But keep it as BreedLog:
+
+
+BreedLog brand identity
+
+
+our text
+
+
+our data
+
+
+our sections
+
+
+our navigation labels/icons
+
+
+our real functionality
+
+
+Required Data tab structure
+All sections must live inside the Data tab and appear as minimized sections/cards first.
+The user must be able to:
+
+
+tap/click a section to expand inline
+
+
+preview key insights while minimized
+
+
+open directly into a detailed section view from the minimized section
+
+
+on desktop, support right-click/context-action if practical
+
+
+on mobile, support tap/long-press equivalent behavior elegantly
+
+
+Required sections to implement in the Data tab:
+
+
+Herd Distribution
+Must show actual live counts for:
+
+
+
+
+Rams
+
+
+Ewes
+
+
+Lambs
+
+
+Stud
+
+
+Commercial
+
+
+Culled / Archive (if available)
+
+
+Required visuals:
+
+
+donut/pie chart
+
+
+count summary cards
+
+
+category bar chart or horizontal comparison chart
+
+
+total herd count
+
+
+percentages
+
+
+empty-state handling if categories have no values
+
+
+
+
+Ram / Sire Performance
+Show real breeding performance for sires/rams.
+Use actual app data where available.
+
+
+Must include:
+
+
+ranked sires/rams
+
+
+lambs born per sire
+
+
+ewes joined per sire
+
+
+ewes lambed per sire
+
+
+average birth weight
+
+
+average weaning weight
+
+
+average latest weight
+
+
+lambs per ewe joined
+
+
+lambs per ewe lambed
+
+
+top sire ranking list
+
+
+visually prominent KPI cards
+
+
+Required visuals:
+
+
+metric cards
+
+
+ranked list with progress bars
+
+
+sortable ranking metric selector if practical
+
+
+
+
+Ewe Maternal Performance
+Must include:
+
+
+
+
+top ewes by maternal performance
+
+
+watchlist ewes
+
+
+passenger ewes
+
+
+barren / not lambed ewes
+
+
+twin-bearing ewes
+
+
+lambs born split by single vs twin
+
+
+lamb survival
+
+
+average weaning weight
+
+
+Required visuals:
+
+
+ranked ewe list
+
+
+donut/ring charts for barren, twin-bearing, lambs born distribution
+
+
+summary KPI tiles
+
+
+simple, beautiful small charts
+
+
+
+
+Lamb Growth Performance
+Must include:
+
+
+
+
+average birth weight
+
+
+30-day weight if available
+
+
+weaning weight
+
+
+latest weight
+
+
+average daily gain (ADG)
+
+
+single vs twin comparison
+
+
+group comparison
+
+
+weight progression chart
+
+
+Required visuals:
+
+
+KPI tiles
+
+
+line chart for progression
+
+
+comparison cards
+
+
+grouped bar chart for groups
+
+
+
+
+Genetic Direction / Flock Improvement
+This section must provide value, not fluff.
+If explicit genetic metrics do not exist yet, derive meaningful direction only from the available app data and clearly label derived insights.
+Do not invent science.
+Where data is insufficient, show “Insufficient data” gracefully.
+
+
+Must include, where derivable:
+
+
+improving / stable / declining summary
+
+
+sire line or group comparison
+
+
+multi-period trend
+
+
+summary of genetic / flock improvement direction
+
+
+data quality / confidence indicator
+
+
+Required visuals:
+
+
+summary tiles or gauges
+
+
+line trend chart
+
+
+ranked comparison bars
+
+
+data quality indicator
+
+
+
+
+Reproductive Efficiency
+Use available breeding/lambing data to show:
+
+
+
+
+ewes joined
+
+
+ewes lambed
+
+
+conception/lambing rate where logically derivable
+
+
+lambing window overview
+
+
+lambing spread
+
+
+lambs born per breeding group
+
+
+singles vs twins by group
+
+
+group success comparison
+
+
+Required visuals:
+
+
+KPI cards
+
+
+breeding group comparison chart
+
+
+timeline / date spread chart if practical
+
+
+
+
+Health / Mortality / Risk Overview
+Use actual health and flock-event data only if available.
+If some data does not exist, handle gracefully with “No recorded data”.
+
+
+Possible metrics:
+
+
+health events by type
+
+
+mortality/loss records
+
+
+survival percentage
+
+
+flagged animals
+
+
+at-risk groups
+
+
+treatment completion / outstanding issues if available
+
+
+Required visuals:
+
+
+count cards
+
+
+simple bar/donut charts
+
+
+risk highlight cards
+
+
+
+
+Data Quality / Completeness / Action Summary
+This section must help farmers trust the data and know what to do next.
+
+
+Must include useful indicators such as:
+
+
+animals with missing key weights
+
+
+animals with incomplete breeding records
+
+
+animals with no latest weight
+
+
+animals missing classification
+
+
+data completeness percentage
+
+
+suggested actions / alerts
+
+
+Required visuals:
+
+
+completeness indicator
+
+
+issue count cards
+
+
+actionable summary list
+
+
+Bottom navigation requirement
+Redesign the bottom mobile navigation to feel like the reference images:
+
+
+cleaner, more premium, modern, slightly floating ribbon-style mobile bottom navigation
+
+
+keep our own BreedLog text labels and our icons
+
+
+include a “More” tab
+
+
+“More” must elegantly open extra tabs/actions in a refined way
+
+
+do not replace our app language with reference-brand language
+
+
+only restyle/reposition this bottom navigation as needed to support the new visual system
+
+
+User-facing naming
+The tab must be called “Data”.
+If the underlying route remains /analysis for compatibility, that is acceptable, but all user-facing labels and headings must say “Data”.
+Data correctness rules
+This is non-negotiable:
+
+
+every chart and metric must come from real app data
+
+
+no hardcoded placeholder figures
+
+
+no fake counts
+
+
+no fake sire names unless the underlying data truly contains them
+
+
+if data is absent, show an honest empty state
+
+
+every displayed metric must be cross-checked against the app’s current records
+
+
+Calculation rules
+Implement and verify calculation logic clearly. At minimum:
+
+
+Total animals by category = actual filtered record count
+
+
+Lambs per ewe joined = total lambs born / ewes joined
+
+
+Lambs per ewe lambed = total lambs born / ewes lambed
+
+
+Avg birth weight = average of valid recorded birth weights
+
+
+Avg weaning weight = average of valid recorded weaning weights
+
+
+Avg latest weight = average of valid latest weights
+
+
+ADG = (latest weight - birth weight) / days between the two valid dates where possible
+
+
+Twin-bearing ewes = ewes with a twin birth record / 2+ lambs in lambing result
+
+
+Barren / not lambed = joined ewes with no lambing outcome or zero lambs born in the selected period
+
+
+Lamb survival = surviving lambs / lambs born
+
+
+Data quality/completeness = percentage based on defined critical fields actually present
+
+
+Filtering and interaction
+Add proper filters near the top of the Data tab:
+
+
+season/year selector
+
+
+flock/group filter if supported by data
+
+
+optional animal category filter if useful
+
+
+Behavior:
+
+
+all charts and KPIs must react to filters
+
+
+minimized sections must preview the core insight
+
+
+opening a section must show deeper detail
+
+
+animations should be subtle and polished, not flashy
+
+
+scrolling must remain smooth on mobile
+
+
+Technical expectations
+
+
+Mobile-first
+
+
+Desktop also clean and usable
+
+
+Support both dark and light themes
+
+
+Match current app stack and styling conventions
+
+
+Use reusable components where sensible
+
+
+Keep performance reasonable
+
+
+Do not bloat the app with unnecessary libraries
+
+
+If a chart library is needed, use a stable lightweight one and integrate properly
+
+
+Preserve existing data sources and app behavior outside this scope
+
+
+Testing and verification
+You must not claim done until you verify the Data tab works properly.
+Run:
+
+
+npm run check
+
+
+npm run build
+
+
+npm run test:cert
+
+
+Also add or update targeted tests for:
+
+
+Data tab rendering
+
+
+real metric calculations
+
+
+filter-driven updates
+
+
+empty-state behavior
+
+
+section expand/open behavior
+
+
+bottom navigation “More” behavior if changed
+
+
+Final report format
+When finished, report exactly:
+
+
+Root approach
+
+
+Exact files changed
+
+
+What calculations were implemented
+
+
+What sections were added/wired
+
+
+How real data is being sourced
+
+
+What the light and dark mode behavior is
+
+
+Tests run and results
+
+
+Confirmation that no unrelated app areas were changed
+
+
+Any limitations or data gaps still honestly remaining
+
+
+Final quality bar
+This must feel like a serious premium livestock data dashboard, not basic info cards.
+The result must add real value to farmers:
+
+
+easy to understand
+
+
+visually beautiful
+
+
+actually useful
+
+
+exposes top performers and weak performers
+
+
+shows whether herd performance is improving or not
+
+
+helps decision-making around sires, ewes, lamb performance, breeding success, and herd direction
+
+
+Again:
+Use the uploaded UI images only as design references.
+Do not copy their text.
+Do not use placeholder data.
+Use BreedLog’s actual data and make the Data tab beautiful, intelligent, interactive, and correct.
+Only change the Data tab and the minimum bottom-navigation styling needed to support it.

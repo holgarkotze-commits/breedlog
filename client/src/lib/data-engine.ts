@@ -1,4 +1,35 @@
 import type { Animal, BreedingEvent, HealthRecord, PerformanceRecord } from "@shared/schema";
+
+export interface ReproductiveEfficiency {
+  ewesJoined: number;
+  ewesLambed: number;
+  lambingRatePct: number | null;
+  totalLambsBorn: number;
+  lambsPerEweJoined: number | null;
+  lambsPerEweLambed: number | null;
+  groupBreakdown: Array<{
+    groupId: number | "ungrouped";
+    label: string;
+    joined: number;
+    lambed: number;
+    lambs: number;
+    successPct: number | null;
+  }>;
+  lambingSpreadDays: number | null;
+  sufficient: boolean;
+  insufficientReason?: string;
+}
+
+export interface HealthOverview {
+  totalRecords: number;
+  animalsTreated: number;
+  recordsLast30Days: number;
+  mortalityCount: number;
+  survivalPct: number | null;
+  topTreatments: Array<{ name: string; count: number }>;
+  sufficient: boolean;
+  insufficientReason?: string;
+}
 import {
   buildAdvancedAnalysisReport,
   calculateADG,
@@ -104,6 +135,8 @@ export interface DataInsights {
   eweMaternal: EweMaternal;
   lambGrowth: LambGrowth;
   flockDirection: FlockDirection;
+  reproductive: ReproductiveEfficiency;
+  health: HealthOverview;
   dataQuality: DataQuality;
 }
 
@@ -385,6 +418,127 @@ function buildFlockDirection(allAnimalsForTrend: Animal[]): FlockDirection {
   };
 }
 
+function buildReproductive(
+  scoped: Animal[],
+  events: BreedingEvent[],
+  season: string,
+): ReproductiveEfficiency {
+  // Scope events: when a season filter is active, only include events whose
+  // ewe (damId) appears among the season-scoped lambs.
+  const scopedDamIds = new Set<number>();
+  for (const a of scoped) if (a.damId) scopedDamIds.add(a.damId);
+  const evts = season === "all"
+    ? events
+    : events.filter((e) => scopedDamIds.has(e.eweId));
+
+  const joined = new Set<number>();
+  const lambed = new Set<number>();
+  const groups = new Map<number | "ungrouped", { joined: Set<number>; lambed: Set<number>; lambs: number }>();
+  let lambsBorn = 0;
+  let firstLambDate: number | null = null;
+  let lastLambDate: number | null = null;
+
+  for (const e of evts) {
+    joined.add(e.eweId);
+    const gKey: number | "ungrouped" = e.matingGroupId ?? "ungrouped";
+    const g = groups.get(gKey) || { joined: new Set<number>(), lambed: new Set<number>(), lambs: 0 };
+    g.joined.add(e.eweId);
+    if (e.lambingDate) {
+      lambed.add(e.eweId);
+      g.lambed.add(e.eweId);
+      const lc = e.lambCount ?? 0;
+      g.lambs += lc;
+      lambsBorn += lc;
+      const t = new Date(e.lambingDate).getTime();
+      if (Number.isFinite(t)) {
+        firstLambDate = firstLambDate === null ? t : Math.min(firstLambDate, t);
+        lastLambDate = lastLambDate === null ? t : Math.max(lastLambDate, t);
+      }
+    }
+    groups.set(gKey, g);
+  }
+
+  // If lambCount wasn't recorded but we have season-scoped lambs, fall back to
+  // the count of scoped lambs whose damId is in the joined set.
+  if (lambsBorn === 0) {
+    lambsBorn = scoped.filter((a) => a.damId && joined.has(a.damId)).length;
+  }
+
+  const ewesJoined = joined.size;
+  const ewesLambed = lambed.size;
+  const lambingRatePct = ewesJoined > 0 ? (ewesLambed / ewesJoined) * 100 : null;
+  const lambsPerEweJoined = ewesJoined > 0 ? lambsBorn / ewesJoined : null;
+  const lambsPerEweLambed = ewesLambed > 0 ? lambsBorn / ewesLambed : null;
+  const spread = firstLambDate !== null && lastLambDate !== null
+    ? Math.round((lastLambDate - firstLambDate) / (1000 * 60 * 60 * 24))
+    : null;
+
+  const groupBreakdown = [...groups.entries()]
+    .map(([gid, g]) => ({
+      groupId: gid,
+      label: gid === "ungrouped" ? "Ungrouped" : `Group #${gid}`,
+      joined: g.joined.size,
+      lambed: g.lambed.size,
+      lambs: g.lambs,
+      successPct: g.joined.size > 0 ? (g.lambed.size / g.joined.size) * 100 : null,
+    }))
+    .sort((a, b) => b.lambs - a.lambs);
+
+  const sufficient = ewesJoined > 0;
+  return {
+    ewesJoined,
+    ewesLambed,
+    lambingRatePct,
+    totalLambsBorn: lambsBorn,
+    lambsPerEweJoined,
+    lambsPerEweLambed,
+    groupBreakdown,
+    lambingSpreadDays: spread,
+    sufficient,
+    insufficientReason: sufficient
+      ? undefined
+      : "Record breeding events (ewe + ram pairings) to unlock reproductive efficiency metrics.",
+  };
+}
+
+function buildHealth(scoped: Animal[], records: HealthRecord[], today: Date): HealthOverview {
+  const scopedIds = new Set<number>(scoped.map((a) => a.id));
+  const scopedRecords = records.filter((r) => scopedIds.has(r.animalId));
+  const animalsTreated = new Set(scopedRecords.map((r) => r.animalId)).size;
+  const cutoff = today.getTime() - 30 * 24 * 60 * 60 * 1000;
+  const recordsLast30Days = scopedRecords.filter((r) => {
+    const t = r.date ? new Date(r.date).getTime() : NaN;
+    return Number.isFinite(t) && t >= cutoff;
+  }).length;
+
+  const mortality = scoped.filter((a) => a.status === "dead").length;
+  const survival = scoped.length > 0 ? ((scoped.length - mortality) / scoped.length) * 100 : null;
+
+  const counts = new Map<string, number>();
+  for (const r of scopedRecords) {
+    const key = (r.treatment || "Other").trim() || "Other";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const topTreatments = [...counts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  const sufficient = scopedRecords.length > 0 || mortality > 0;
+  return {
+    totalRecords: scopedRecords.length,
+    animalsTreated,
+    recordsLast30Days,
+    mortalityCount: mortality,
+    survivalPct: survival,
+    topTreatments,
+    sufficient,
+    insufficientReason: sufficient
+      ? undefined
+      : "Add health records (vaccinations, treatments) to unlock health & risk insights.",
+  };
+}
+
 function buildDataQuality(scoped: Animal[]): DataQuality {
   if (scoped.length === 0) {
     return { score: 0, confidence: "Low", warnings: ["No animals match the current filters."] };
@@ -451,6 +605,8 @@ export function buildDataInsights(input: DataInsightsInput): DataInsights {
     eweMaternal: buildEweMaternal(scoped, report, today),
     lambGrowth: buildLambGrowth(scoped, today),
     flockDirection: buildFlockDirection(animals),
+    reproductive: buildReproductive(scoped, input.breedingEvents || [], season),
+    health: buildHealth(scoped, input.healthRecords || [], today),
     dataQuality: buildDataQuality(scoped),
   };
 }
