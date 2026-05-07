@@ -1,0 +1,102 @@
+Fix the BreedLog invite-code activation system universally, not for one specific code.
+
+Critical rule:
+Do NOT hardcode or manually patch U2A2ZAVQ or any single invite code.
+The fix must apply to every invite code in the database and every future code created by the admin panel.
+
+Current failure pattern:
+Admin Diagnostic Lookup can show a code as:
+- Active
+- not expired
+- desktop slot free
+- mobile slot free
+- workspace exists
+- animals still attached
+
+But the real activation screen still fails with:
+“Activation failed. Please refresh and try again.”
+or
+“Access revoked or expired.”
+
+This proves the admin lookup and activation endpoint are not using the same source of truth.
+
+Required universal fix:
+
+1. Create or refactor one shared invite-code validation/activation service used by BOTH:
+   - admin diagnostic lookup
+   - real user activation endpoint
+
+2. This shared logic must determine:
+   - code exists
+   - code is active
+   - code is not expired
+   - code is not revoked
+   - requested device type is valid: desktop or mobile
+   - requested device slot is free
+   - workspace exists or is safely assigned
+   - existing animals/data remain attached
+
+3. Admin re-authorize/recover must universally normalize the code state by clearing stale blocking fields such as:
+   - revoked flags
+   - revoked reason
+   - blocked access state
+   - stale device binding
+   - stale device fingerprint/session binding
+   - invalid previous activation state
+   - any field that causes activation to still treat the code as revoked/expired after admin recovery
+
+4. Re-authorize must NOT:
+   - delete animals
+   - wipe workspace data
+   - create a new empty workspace if the existing workspace is valid
+   - weaken the 1 desktop + 1 mobile device rule
+
+5. Activation must be transactional:
+   - check code state
+   - claim only the requested free device slot
+   - attach to the correct workspace
+   - return the same workspace every time for that code
+   - prevent race conditions where two devices claim the same slot at once
+
+6. Replace generic frontend activation errors during testing with exact backend reason codes:
+   - CODE_NOT_FOUND
+   - CODE_REVOKED
+   - CODE_EXPIRED
+   - DEVICE_SLOT_ALREADY_USED
+   - INVALID_DEVICE_TYPE
+   - WORKSPACE_MISSING
+   - ACTIVATION_STATE_MISMATCH
+   - UNKNOWN_ACTIVATION_ERROR
+
+7. Add a defensive consistency check:
+   If admin diagnostic says a code is active, unexpired, and the requested slot is free, the real activation endpoint must not reject it as revoked or expired.
+   If it does, return ACTIVATION_STATE_MISMATCH and log the conflicting fields.
+
+8. Add universal tests, not single-code tests:
+   - active code with free mobile slot activates successfully
+   - active code with free desktop slot activates successfully
+   - recovered/re-authorized code activates successfully
+   - code with existing workspace and animals keeps the same workspace
+   - animals are not deleted or hidden after reactivation
+   - revoked code cannot activate until admin re-authorizes it
+   - expired code cannot activate unless expiry is extended
+   - occupied mobile slot blocks second mobile activation
+   - occupied desktop slot blocks second desktop activation
+   - admin diagnostic and activation endpoint produce matching availability results
+   - concurrent activation attempts cannot double-claim the same slot
+
+9. Add a safe database-state normalizer if needed:
+   It must be idempotent and only repair inconsistent invite-code activation fields.
+   It must not alter animal records, herd records, workspace records, or production livestock data.
+
+10. Run and report:
+   - root cause found
+   - files changed
+   - shared activation service name/location
+   - tests added/updated
+   - npm run check result
+   - npm run build result
+   - relevant activation test result
+
+Acceptance gate:
+The work is NOT complete unless the same universal activation logic is used by admin lookup and real activation, and the tests prove that any active, unexpired code with a free desktop/mobile slot can activate without data loss.

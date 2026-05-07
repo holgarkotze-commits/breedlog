@@ -937,19 +937,14 @@ export async function registerRoutes(
   // for slot availability is the count of active rows in user_activations for the
   // requested deviceType. Old codes with maxUses=1 must still allow the second
   // (different-deviceType) slot.
-  function getCodeStatus(code: any): 'active' | 'revoked' | 'expired' {
-    if (!code) return 'expired';
-    if (code.status === 'revoked') return 'revoked';
-    if (code.status === 'expired') return 'expired';
-    if (new Date(code.expiresAt) < new Date()) return 'expired';
-    return 'active';
-  }
-  function getCodeBlockReason(code: any): string | null {
-    const status = getCodeStatus(code);
-    if (status === 'revoked') return 'Code has been revoked';
-    if (status === 'expired') return 'Code has expired';
-    return null;
-  }
+  // Code status / block-reason helpers come from the shared invite-activation
+  // service so admin lookup and activation always read from the same source of truth.
+  const {
+    getCodeStatus,
+    getCodeBlockReason,
+    evaluateActivation,
+    summarizeSlot,
+  } = await import('./invite-activation');
   
   // Check access status for authenticated user
   app.get("/api/beta/access", requireAuth, async (req, res) => {
@@ -1062,19 +1057,20 @@ export async function registerRoutes(
       
       const codeUpper = inputCode.toUpperCase().trim();
       
-      // STEP 1: Look up code and check basic eligibility (exists, not revoked, not expired)
-      // NOTE: maxUses check is done AFTER slot checks below so we can give better error messages
+      // STEP 1: Look up code and check basic eligibility via the shared
+      // invite-activation service (same one the admin diagnostic uses).
       const inviteCode = await storage.getInviteCodeByCode(codeUpper);
       
       if (!inviteCode) {
         console.log(`[Beta Validate] Code not found in DB: "${codeUpper}"`);
-        return res.status(400).json({ message: 'Code not found. Please check and try again.' });
+        return res.status(400).json({ message: 'Code not found. Please check and try again.', reasonCode: 'CODE_NOT_FOUND' });
       }
-      if (inviteCode.status === 'revoked') {
-        return res.status(400).json({ message: 'This code has been revoked.' });
+      const codeLevelStatus = getCodeStatus(inviteCode);
+      if (codeLevelStatus === 'revoked') {
+        return res.status(400).json({ message: 'This code has been revoked.', reasonCode: 'CODE_REVOKED' });
       }
-      if (inviteCode.status === 'expired' || new Date(inviteCode.expiresAt) < new Date()) {
-        return res.status(400).json({ message: 'This code has expired.' });
+      if (codeLevelStatus === 'expired') {
+        return res.status(400).json({ message: 'This code has expired.', reasonCode: 'CODE_EXPIRED' });
       }
       
       // STEP 2: Register/find device (atomic with activation)
@@ -1257,39 +1253,34 @@ export async function registerRoutes(
       const deviceType = detectDeviceType(userAgent);
       console.log(`[Beta Validate] Device type detected: ${deviceType} (UA: ${userAgent.substring(0, 60)})`);
 
-      // Check device slot limits (1 desktop + 1 mobile per code)
+      // Check device slot limits (1 desktop + 1 mobile per code) via shared evaluator.
       const allActivations = await storage.getAllActiveActivations();
       const codeActivations = allActivations.filter(a => a.inviteCodeId === inviteCode!.id);
-      
-      // Check if this exact device already has a (revoked/expired) activation for this code
-      const sameDeviceActivation = codeActivations.find(a => a.deviceId === deviceId);
-      
-      if (!sameDeviceActivation) {
-        // New device trying to activate — check the slot for this device type FIRST
-        // (before maxUses check so we give specific slot-full messages)
-        const desktopActivations = codeActivations.filter(a => a.deviceType === 'desktop' && a.status === 'active');
-        const mobileActivations = codeActivations.filter(a => a.deviceType === 'mobile' && a.status === 'active');
-        
-        if (deviceType === 'desktop' && desktopActivations.length >= 1) {
-          console.log(`[Beta Validate] Desktop slot full for code ${inviteCode.id}`);
-          return res.status(400).json({ 
-            message: 'The desktop slot for this code is already taken. One desktop and one mobile device are allowed per code. Contact the admin to reset your desktop slot.' 
-          });
+      const activeForCode = codeActivations.filter(a => a.status === 'active');
+
+      const slotDecision = evaluateActivation({
+        code: inviteCode,
+        activeActivationsForCode: activeForCode,
+        requestedDeviceType: deviceType,
+        callerDeviceId: deviceId,
+      });
+
+      if (!slotDecision.ok) {
+        // Defensive consistency check: if the code itself is healthy and the
+        // *only* reason we are rejecting is slot occupancy, log a context
+        // line so admin/diagnostic vs activation drift is debuggable.
+        if (slotDecision.reasonCode === 'DEVICE_SLOT_ALREADY_USED') {
+          console.log(`[Beta Validate] Slot taken for code ${inviteCode.id} (${deviceType})`);
         }
-        if (deviceType === 'mobile' && mobileActivations.length >= 1) {
-          console.log(`[Beta Validate] Mobile slot full for code ${inviteCode.id}`);
-          return res.status(400).json({ 
-            message: 'The mobile slot for this code is already taken. One desktop and one mobile device are allowed per code. Contact the admin to reset your mobile slot.' 
-          });
-        }
-        
-        // Final safety: count ACTIVE slots (1 desktop + 1 mobile = max 2 devices per code).
-        // Using actual active-slot count instead of usesCount avoids blocking the mobile slot
-        // when desktop has already activated (which was a bug for old codes with maxUses=1).
-        const activeDeviceCount = codeActivations.filter(a => a.status === 'active').length;
-        if (activeDeviceCount >= 2) {
-          return res.status(400).json({ message: 'This code already has both device slots occupied (one desktop + one mobile). Contact the admin to reset a slot.' });
-        }
+        return res.status(400).json({ message: slotDecision.reason, reasonCode: slotDecision.reasonCode });
+      }
+
+      // Final safety: count ACTIVE slots (1 desktop + 1 mobile = max 2 devices per code).
+      // Using actual active-slot count instead of usesCount avoids blocking the mobile slot
+      // when desktop has already activated (which was a bug for old codes with maxUses=1).
+      const activeOtherDevices = activeForCode.filter(a => a.deviceId !== deviceId).length;
+      if (activeOtherDevices >= 2) {
+        return res.status(400).json({ message: 'This code already has both device slots occupied (one desktop + one mobile). Contact the admin to reset a slot.', reasonCode: 'DEVICE_SLOT_ALREADY_USED' });
       }
       
       // STEP 2b: Workspace sharing — if another device already activated this code,
@@ -1334,14 +1325,32 @@ export async function registerRoutes(
       req.session.deviceId = deviceId;
       req.session.userId = effectiveUserId;
       
-      // STEP 3: Create activation (atomic - only after all checks pass)
-      await storage.createUserActivation({
-        userId,
-        inviteCodeId: inviteCode!.id,
-        deviceId,
-        deviceType,
-        status: 'active',
-      });
+      // STEP 3: Upsert activation (atomic — only after all checks pass).
+      // CRITICAL: user_activations has UNIQUE(userId), so if this user already
+      // has a row (e.g. status='revoked' after admin reset/revoke), we MUST
+      // UPDATE it in-place rather than INSERT a new one. The previous code
+      // always called createUserActivation here, which threw 23505 in
+      // production Postgres → the catch handler returned the generic
+      // "Activation failed. Please refresh and try again." that the field
+      // tester reported. Admin lookup said "Active, free slot, can activate";
+      // activation failed regardless. This upsert is the universal fix.
+      const priorActivation = await storage.getUserActivation(userId);
+      if (priorActivation) {
+        await storage.updateUserActivation(userId, {
+          inviteCodeId: inviteCode!.id,
+          deviceId,
+          deviceType,
+          status: 'active',
+        });
+      } else {
+        await storage.createUserActivation({
+          userId,
+          inviteCodeId: inviteCode!.id,
+          deviceId,
+          deviceType,
+          status: 'active',
+        });
+      }
       
       // STEP 4: Increment uses count (only after activation created)
       await storage.incrementInviteCodeUses(inviteCode!.id);
@@ -1359,12 +1368,13 @@ export async function registerRoutes(
     } catch (err: any) {
       // The previous "unique constraint → silent Already activated" fallback was
       // removed. Existing-activation handling is now done explicitly above
-      // (same-code re-login + workspace-switch paths), and silently returning
-      // a success without resolving the correct workspace was the same family
-      // of bug as the original workspace-switching issue. Surface real errors
-      // with a clear message instead.
-      console.error("Beta validation error:", err);
-      res.status(500).json({ message: 'Activation failed. Please refresh and try again.' });
+      // (same-code re-login + workspace-switch + revive-revoked-row paths).
+      // Surface real errors with a clear reason code so the field tester /
+      // admin diagnostic can correlate failures.
+      const isUnique = err?.code === '23505' || /unique constraint/i.test(String(err?.message || ''));
+      const reasonCode = isUnique ? 'ACTIVATION_STATE_MISMATCH' : 'UNKNOWN_ACTIVATION_ERROR';
+      console.error("Beta validation error:", err, "reasonCode=", reasonCode);
+      res.status(500).json({ message: 'Activation failed. Please refresh and try again.', reasonCode });
     }
   });
   
@@ -1505,20 +1515,21 @@ export async function registerRoutes(
       
       const allActivations = await storage.getAllActiveActivations();
       const codeActivations = allActivations.filter(a => a.inviteCodeId === inviteCode.id);
-      const desktopSlot = codeActivations.find(a => a.deviceType === 'desktop' && a.status === 'active');
-      const mobileSlot = codeActivations.find(a => a.deviceType === 'mobile' && a.status === 'active');
+      const activeForCode = codeActivations.filter(a => a.status === 'active');
 
       // Code-level status (does NOT depend on slot count or usesCount).
       const codeStatus = getCodeStatus(inviteCode);
       const blockReason = getCodeBlockReason(inviteCode);
 
-      // Per-slot canActivate: a free slot is activatable iff the code itself is usable.
-      const desktopCanActivate = codeStatus === 'active' && !desktopSlot;
-      const mobileCanActivate = codeStatus === 'active' && !mobileSlot;
+      // Per-slot summaries computed by the SAME shared evaluator that
+      // /api/beta/validate uses → admin diagnostic and activation cannot drift.
+      const desktopSummary = summarizeSlot({ code: inviteCode, activeActivationsForCode: activeForCode, deviceType: 'desktop' });
+      const mobileSummary = summarizeSlot({ code: inviteCode, activeActivationsForCode: activeForCode, deviceType: 'mobile' });
+      const desktopSlot = activeForCode.find(a => a.deviceType === 'desktop');
+      const mobileSlot = activeForCode.find(a => a.deviceType === 'mobile');
 
       // License activation date = earliest active activation timestamp.
-      const sortedActive = [...codeActivations]
-        .filter(a => a.status === 'active')
+      const sortedActive = [...activeForCode]
         .sort((a, b) => new Date(a.activatedAt as any).getTime() - new Date(b.activatedAt as any).getTime());
       const licenseActivatedAt = sortedActive[0]?.activatedAt ?? null;
 
@@ -1543,11 +1554,11 @@ export async function registerRoutes(
         licenseActivatedAt,
         slots: {
           desktop: desktopSlot
-            ? { taken: true, deviceId: desktopSlot.deviceId, activatedAt: desktopSlot.activatedAt, canActivate: false, reason: 'Desktop slot already taken' }
-            : { taken: false, canActivate: desktopCanActivate, reason: desktopCanActivate ? null : blockReason },
+            ? { taken: true, deviceId: desktopSlot.deviceId, activatedAt: desktopSlot.activatedAt, canActivate: false, reason: 'Desktop slot already taken', reasonCode: desktopSummary.reasonCode }
+            : { taken: false, canActivate: desktopSummary.canActivate, reason: desktopSummary.canActivate ? null : (desktopSummary.reason ?? blockReason), reasonCode: desktopSummary.reasonCode },
           mobile: mobileSlot
-            ? { taken: true, deviceId: mobileSlot.deviceId, activatedAt: mobileSlot.activatedAt, canActivate: false, reason: 'Mobile slot already taken' }
-            : { taken: false, canActivate: mobileCanActivate, reason: mobileCanActivate ? null : blockReason },
+            ? { taken: true, deviceId: mobileSlot.deviceId, activatedAt: mobileSlot.activatedAt, canActivate: false, reason: 'Mobile slot already taken', reasonCode: mobileSummary.reasonCode }
+            : { taken: false, canActivate: mobileSummary.canActivate, reason: mobileSummary.canActivate ? null : (mobileSummary.reason ?? blockReason), reasonCode: mobileSummary.reasonCode },
         },
         workspace: {
           userId: workspaceUserId ?? null,

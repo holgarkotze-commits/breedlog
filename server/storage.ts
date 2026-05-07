@@ -943,6 +943,15 @@ class InMemoryStorage implements IStorage {
   async getUserActivation(userId: string): Promise<UserActivation | undefined> { return [...this.activations.values()].find(a => a.userId === userId); }
   async getActivationByDeviceId(deviceId: string): Promise<UserActivation | undefined> { return [...this.activations.values()].find(a => a.deviceId === deviceId); }
   async createUserActivation(activation: InsertUserActivation): Promise<UserActivation> {
+    // Mirror the production Postgres UNIQUE(userId) constraint so in-memory
+    // tests catch the "INSERT into already-existing row" bug that previously
+    // only manifested on real DBs.
+    const collision = [...this.activations.values()].find((a) => a.userId === activation.userId);
+    if (collision) {
+      const err: any = new Error('duplicate key value violates unique constraint "user_activations_user_id_unique"');
+      err.code = '23505';
+      throw err;
+    }
     const id = this.nextId("activationSeq");
     const v = {
       id,
