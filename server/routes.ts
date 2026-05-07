@@ -984,8 +984,10 @@ export async function registerRoutes(
       const code = codes.find(c => c.id === activation.inviteCodeId);
       
       if (code && (code.status === 'revoked' || new Date(code.expiresAt) < new Date())) {
-        // Update activation status
-        await storage.updateUserActivation(userId, { status: 'revoked' });
+        // NOTE: Do NOT silently revoke the activation row here. Doing so creates an
+        // infinite revoke→validate-upsert→revoke loop: validate upserts the activation
+        // back to 'active' on the next call, then this check immediately re-revokes it.
+        // Activation-row status is managed only by explicit admin revoke/reactivate actions.
         return res.json({ 
           hasAccess: false, 
           reason: 'Re-enter your invite code to restore access.',
