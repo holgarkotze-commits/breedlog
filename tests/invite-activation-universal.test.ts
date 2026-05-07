@@ -267,3 +267,84 @@ test("UNIVERSAL: workspace userId is stable across revoke/reactivate cycles for 
   const b = (await (await validateCode(code.code, dev, DESKTOP_UA)).json()) as any;
   assert.equal(b.userId, a.userId);
 });
+
+// === admin reactivate restores existing device access immediately ===
+// After admin revoke → reactivate, the device must NOT need to re-enter the code.
+// /api/beta/access must return hasAccess: true without another /api/beta/validate call.
+test("UNIVERSAL: admin reactivate restores device access without re-entering code", async () => {
+  const code = await adminCreateCode(30);
+  const dev = randomDeviceId("u-restore");
+
+  // Initial activation
+  const first = await validateCode(code.code, dev, MOBILE_UA);
+  assert.equal(first.status, 200);
+  const firstBody = (await first.json()) as any;
+  const token = firstBody.token as string;
+
+  // Admin revokes
+  assert.equal((await adminRevoke(code.id)).status, 200);
+
+  // Device access check: should be needsCode: true (not hard-blocked), not hasAccess: true
+  const revokedCheck = await fetch(`${BASE_URL}/api/beta/access`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(revokedCheck.status, 200);
+  const revokedBody = (await revokedCheck.json()) as any;
+  assert.equal(revokedBody.hasAccess, false);
+  assert.equal(revokedBody.needsCode, true, "revoked device should get needsCode: true, not false");
+
+  // Admin reactivates
+  const reactivateRes = await fetch(`${BASE_URL}/api/admin/invite-codes/${code.id}/reactivate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "AdminPin 1234" },
+    body: JSON.stringify({}),
+  });
+  const reactivateBody = (await reactivateRes.json()) as any;
+  assert.equal(reactivateRes.status, 200);
+  assert.equal(reactivateBody.restoredActivations, 1, "reactivate must restore 1 activation row");
+
+  // NOW — no re-entry: /api/beta/access must return hasAccess: true immediately
+  const restoredCheck = await fetch(`${BASE_URL}/api/beta/access`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(restoredCheck.status, 200);
+  const restoredBody = (await restoredCheck.json()) as any;
+  assert.equal(restoredBody.hasAccess, true, "device must have access immediately after admin reactivate, without re-entering code");
+});
+
+// === activatedAt is refreshed on re-activation (not stale Apr-29 date) ===
+test("UNIVERSAL: re-activation sets a current activatedAt timestamp", async () => {
+  const code = await adminCreateCode(30);
+  const dev = randomDeviceId("u-ts");
+
+  const before = new Date();
+  void before; // used for ordering
+  await validateCode(code.code, dev, MOBILE_UA);
+  await adminRevoke(code.id);
+  // Reset the code to active before re-validating (revoked code blocks validate entirely)
+  await fetch(`${BASE_URL}/api/admin/invite-codes/${code.id}/reactivate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "AdminPin 1234" },
+    body: JSON.stringify({}),
+  });
+  // Even after admin reactivate (which restores the row), we can re-validate to confirm
+  // the activatedAt was refreshed. The device's row is now active with a new timestamp.
+  const t2before = new Date();
+  const reRes = await validateCode(code.code, dev, MOBILE_UA);
+  const t2after = new Date();
+  assert.equal(reRes.status, 200);
+
+  // /api/beta/access reports activatedAt
+  const reBody = (await reRes.json()) as any;
+  const token = reBody.token as string;
+  const accessRes = await fetch(`${BASE_URL}/api/beta/access`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const accessBody = (await accessRes.json()) as any;
+  assert.equal(accessBody.hasAccess, true);
+  const activatedAt = new Date(accessBody.activatedAt);
+  assert.ok(
+    activatedAt >= t2before && activatedAt <= t2after,
+    `activatedAt (${activatedAt.toISOString()}) must be within the re-activation window`,
+  );
+});

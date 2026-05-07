@@ -968,10 +968,14 @@ export async function registerRoutes(
       
       // Check if activation is still valid
       if (activation.status !== 'active') {
+        // needsCode: true — the device can re-enter its invite code to restore access.
+        // Returning false here was the root cause of the "Access revoked or expired"
+        // pre-entry error: the frontend showed the reason text even before the user
+        // typed anything, making it look like a permanent block.
         return res.json({ 
           hasAccess: false, 
-          reason: 'Access revoked or expired',
-          needsCode: false 
+          reason: 'Re-enter your invite code to restore access.',
+          needsCode: true 
         });
       }
       
@@ -984,8 +988,8 @@ export async function registerRoutes(
         await storage.updateUserActivation(userId, { status: 'revoked' });
         return res.json({ 
           hasAccess: false, 
-          reason: 'Access has expired or been revoked',
-          needsCode: false 
+          reason: 'Re-enter your invite code to restore access.',
+          needsCode: true 
         });
       }
       
@@ -1336,11 +1340,15 @@ export async function registerRoutes(
       // activation failed regardless. This upsert is the universal fix.
       const priorActivation = await storage.getUserActivation(userId);
       if (priorActivation) {
+        // UPDATE in-place — preserves the UNIQUE(userId) constraint and sets a
+        // fresh activatedAt so admin diagnostic shows the current timestamp, not
+        // the original Apr-29-style date from a previous activation cycle.
         await storage.updateUserActivation(userId, {
           inviteCodeId: inviteCode!.id,
           deviceId,
           deviceType,
           status: 'active',
+          activatedAt: new Date(),
         });
       } else {
         await storage.createUserActivation({
@@ -1352,8 +1360,11 @@ export async function registerRoutes(
         });
       }
       
-      // STEP 4: Increment uses count (only after activation created)
-      await storage.incrementInviteCodeUses(inviteCode!.id);
+      // STEP 4: Increment uses count (best-effort — purely informational counter;
+      // never let it block the 200 response or leave the slot claimed without a token).
+      storage.incrementInviteCodeUses(inviteCode!.id).catch((e) => {
+        console.warn('[Beta Validate] incrementInviteCodeUses failed (non-fatal):', e?.message);
+      });
       
       console.log("[Beta Validate] Activation success for device:", deviceId);
       
@@ -1654,11 +1665,13 @@ export async function registerRoutes(
     }
   });
   
-  // Reactivate a revoked or expired code (data-safe: does NOT touch user_activations,
-  // animals, users, or system_settings). When the code's expiry is in the past it is
-  // pushed forward by `extendDays` (default 30). Devices that previously held a slot
-  // can simply re-enter the same code; the persisted `workspace:invite_code:<id>`
-  // mapping ensures they land back on the original workspace data.
+  // Reactivate a revoked or expired code. Restores the invite_code status to
+  // 'active' AND revives any previously-revoked activation rows for this code so
+  // existing devices regain access immediately (no re-entry of invite code required).
+  // This fixes the scenario where admin revoke → reactivate left devices in a
+  // permanently-blocked state even though the admin panel showed the code as Active.
+  // When the code's expiry is in the past it is pushed forward by `extendDays`
+  // (default 30). Animals and workspace data are never touched.
   app.post("/api/admin/invite-codes/:id/reactivate", requireAdminPin, async (req, res) => {
     setNoCacheHeaders(res);
     try {
@@ -1684,10 +1697,28 @@ export async function registerRoutes(
       }
 
       const updated = await storage.updateInviteCode(id, updates);
+
+      // Restore any revoked activation rows for this code so existing devices
+      // regain access immediately without needing to re-enter the invite code.
+      // activatedAt is refreshed to now so admin diagnostic shows the correct timestamp.
+      const allCodeActivations = await storage.getActivationsByCodeId(id);
+      const revokedRows = allCodeActivations.filter(a => a.status === 'revoked');
+      let restoredCount = 0;
+      for (const row of revokedRows) {
+        await storage.updateUserActivation(row.userId, {
+          status: 'active',
+          activatedAt: new Date(),
+        });
+        restoredCount++;
+      }
+
       res.json({
         success: true,
         code: updated,
-        message: 'Code reactivated. Existing activation rows were not modified — devices that re-enter this code will land on the same workspace data via the persisted workspace mapping.',
+        restoredActivations: restoredCount,
+        message: restoredCount > 0
+          ? `Code reactivated and ${restoredCount} device activation(s) restored. Existing devices will regain access automatically on next app open.`
+          : 'Code reactivated. No prior activation rows to restore — devices must enter the invite code to activate.',
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

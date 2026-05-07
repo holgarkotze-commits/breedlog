@@ -157,8 +157,9 @@ export interface IStorage {
   getUserActivation(userId: string): Promise<UserActivation | undefined>;
   getActivationByDeviceId(deviceId: string): Promise<UserActivation | undefined>;
   createUserActivation(activation: InsertUserActivation): Promise<UserActivation>;
-  updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, 'id' | 'userId' | 'activatedAt'>>): Promise<UserActivation | undefined>;
+  updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, 'id' | 'userId'>>): Promise<UserActivation | undefined>;
   getAllActiveActivations(): Promise<UserActivation[]>;
+  getActivationsByCodeId(inviteCodeId: number): Promise<UserActivation[]>;
   deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void>;
   
   // Device-based Users
@@ -690,13 +691,17 @@ export class DatabaseStorage implements IStorage {
     return results[0];
   }
   
-  async updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, 'id' | 'userId' | 'activatedAt'>>): Promise<UserActivation | undefined> {
+  async updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, 'id' | 'userId'>>): Promise<UserActivation | undefined> {
     const results = await db.update(userActivations).set(updates).where(eq(userActivations.userId, userId)).returning();
     return results[0];
   }
   
   async getAllActiveActivations(): Promise<UserActivation[]> {
     return await db.select().from(userActivations).where(eq(userActivations.status, 'active'));
+  }
+
+  async getActivationsByCodeId(inviteCodeId: number): Promise<UserActivation[]> {
+    return await db.select().from(userActivations).where(eq(userActivations.inviteCodeId, inviteCodeId));
   }
   
   async deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void> {
@@ -963,8 +968,9 @@ class InMemoryStorage implements IStorage {
     this.activations.set(id, v);
     return v;
   }
-  async updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, "id" | "userId" | "activatedAt">>): Promise<UserActivation | undefined> { const a = [...this.activations.values()].find(v => v.userId === userId); if (!a) return undefined; const v = { ...a, ...updates } as UserActivation; this.activations.set(v.id, v); return v; }
+  async updateUserActivation(userId: string, updates: Partial<Omit<UserActivation, "id" | "userId">>): Promise<UserActivation | undefined> { const a = [...this.activations.values()].find(v => v.userId === userId); if (!a) return undefined; const v = { ...a, ...updates } as UserActivation; this.activations.set(v.id, v); return v; }
   async getAllActiveActivations(): Promise<UserActivation[]> { return [...this.activations.values()].filter(a => a.status === "active"); }
+  async getActivationsByCodeId(inviteCodeId: number): Promise<UserActivation[]> { return [...this.activations.values()].filter(a => a.inviteCodeId === inviteCodeId); }
   async deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void> { for (const [id, a] of this.activations.entries()) if (a.inviteCodeId === inviteCodeId) this.activations.delete(id); }
   async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null } | undefined> { return [...this.users.values()].find(u => u.deviceId === deviceId); }
   async upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null }> {

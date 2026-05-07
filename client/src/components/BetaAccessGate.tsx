@@ -125,6 +125,13 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
   const [code, setCode] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isRetrying, setIsRetrying] = useState(false);
+
+  // Clear any stale error message whenever the access code screen is first shown.
+  // This prevents a previous session's "Access revoked or expired" reason from the
+  // server appearing as a pre-entry alert before the user has typed anything.
+  useEffect(() => {
+    setErrorMessage("");
+  }, []);
   
   const handleRetryConnection = async () => {
     setIsRetrying(true);
@@ -288,7 +295,7 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
                 type="text"
                 placeholder="Enter your access code"
                 value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                onChange={(e) => { setCode(e.target.value.toUpperCase()); setErrorMessage(""); }}
                 className="text-center text-lg tracking-widest font-mono"
                 maxLength={16}
                 data-testid="input-access-code"
@@ -300,12 +307,6 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
             {errorMessage && (
               <Alert variant="destructive">
                 <AlertDescription>{errorMessage}</AlertDescription>
-              </Alert>
-            )}
-            
-            {reason && (
-              <Alert>
-                <AlertDescription>{reason}</AlertDescription>
               </Alert>
             )}
             

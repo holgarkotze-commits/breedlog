@@ -54,7 +54,6 @@ export async function performLogout(): Promise<void> {
   queryClient.setQueryData(["/api/beta/access"], {
     hasAccess: false,
     needsCode: true,
-    reason: "You have been logged out.",
   });
 }
 
