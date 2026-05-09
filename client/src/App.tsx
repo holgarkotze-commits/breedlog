@@ -9,6 +9,9 @@ import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { NavigationHistoryProvider } from "@/lib/navigation-history-context";
+import { AIAssistantProvider } from "@/lib/ai-assistant-context";
+import { AskBreedLogButton } from "@/components/AskBreedLogButton";
+import { BreedLogAssistantPanel } from "@/components/BreedLogAssistantPanel";
 import { useState, useEffect, lazy, Suspense, Component, type ReactNode } from "react";
 import { normalizePreviewPath } from "@/lib/route-normalization";
 
@@ -94,11 +97,15 @@ function Router() {
 
 function AuthenticatedApp() {
   return (
-    <NavigationHistoryProvider>
-      <OfflineBanner />
-      <PWAInstallPrompt />
-      <Router />
-    </NavigationHistoryProvider>
+    <AIAssistantProvider>
+      <NavigationHistoryProvider>
+        <OfflineBanner />
+        <PWAInstallPrompt />
+        <Router />
+        <AskBreedLogButton />
+        <BreedLogAssistantPanel />
+      </NavigationHistoryProvider>
+    </AIAssistantProvider>
   );
 }
 

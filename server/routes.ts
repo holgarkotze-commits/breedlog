@@ -8,6 +8,7 @@ import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAd
 import { registerChatRoutes } from "./replit_integrations/chat";
 import { registerImageRoutes } from "./replit_integrations/image";
 import { registerAudioRoutes } from "./replit_integrations/audio/routes";
+import { registerAIRoutes } from "./ai/breedlog-ai-routes";
 import { parse } from "csv-parse/sync";
 import { buildBreedLogCsvContent, buildBreedLogCsvRows, parseBreedLogCsvRecords, buildBreedLogImportTemplateCsv } from "@shared/import-export";
 
@@ -35,6 +36,9 @@ export async function registerRoutes(
   registerChatRoutes(app);
   registerImageRoutes(app);
   registerAudioRoutes(app);
+
+  // Register BreedLog AI Assistant routes
+  registerAIRoutes(app);
 
   // === ANIMALS ===
   // All animal routes now require authentication and filter by userId

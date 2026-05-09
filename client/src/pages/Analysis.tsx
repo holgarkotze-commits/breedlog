@@ -60,6 +60,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { useAnalysisBundle } from "@/hooks/use-analysis";
 import { buildDataInsights, type DataInsights } from "@/lib/data-engine";
+import { AskSectionButton } from "@/components/AskBreedLogButton";
 
 type ConfidenceLevel = "Low" | "Medium" | "High" | "Proven";
 
@@ -227,6 +228,7 @@ function EmptyState({ message }: { message: string }) {
 
 function SectionCard({
   number, title, icon: Icon, tone = "primary", preview, defaultOpen = false, children, testid,
+  askCategory, askSection,
 }: {
   number: number;
   title: string;
@@ -236,6 +238,8 @@ function SectionCard({
   defaultOpen?: boolean;
   children: React.ReactNode;
   testid?: string;
+  askCategory?: string;
+  askSection?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const t = TILE_TONES[tone];
@@ -260,6 +264,11 @@ function SectionCard({
               <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{preview}</p>
             )}
           </div>
+          {askCategory && askSection && (
+            <span onClick={(e) => e.stopPropagation()}>
+              <AskSectionButton section={askSection} category={askCategory} />
+            </span>
+          )}
           <ChevronDown
             className={cn(
               "h-4 w-4 flex-none text-muted-foreground transition-transform duration-200",
@@ -733,28 +742,28 @@ export default function Analysis() {
 
         {/* Sections (preserves legacy testid 'analysis-sections') */}
         <div className="space-y-2.5" data-testid="analysis-sections">
-          <SectionCard number={1} title="Herd Distribution"        icon={Beef}        tone="blue"    preview={previewHerd}    defaultOpen testid="section-herd-distribution">
+          <SectionCard number={1} title="Herd Distribution"        icon={Beef}        tone="blue"    preview={previewHerd}    defaultOpen testid="section-herd-distribution"  askCategory="herd-overview"      askSection="herd-distribution">
             <Section1Herd d={insights.herdDistribution} />
           </SectionCard>
-          <SectionCard number={2} title="Ram / Sire Performance"   icon={Trophy}      tone="violet"  preview={previewSire}    testid="section-sire-performance">
+          <SectionCard number={2} title="Ram / Sire Performance"   icon={Trophy}      tone="violet"  preview={previewSire}    testid="section-sire-performance"   askCategory="sire-performance"   askSection="sire-performance">
             <Section2Sire s={insights.sirePerformance} />
           </SectionCard>
-          <SectionCard number={3} title="Ewe Maternal Performance" icon={Heart}       tone="rose"    preview={previewEwe}     testid="section-ewe-maternal">
+          <SectionCard number={3} title="Ewe Maternal Performance" icon={Heart}       tone="rose"    preview={previewEwe}     testid="section-ewe-maternal"        askCategory="ewe-maternal"       askSection="ewe-maternal">
             <Section3Ewe m={insights.eweMaternal} />
           </SectionCard>
-          <SectionCard number={4} title="Lamb Growth Performance"  icon={TrendingUp}  tone="emerald" preview={previewGrowth}  testid="section-lamb-growth">
+          <SectionCard number={4} title="Lamb Growth Performance"  icon={TrendingUp}  tone="emerald" preview={previewGrowth}  testid="section-lamb-growth"         askCategory="lamb-growth"        askSection="lamb-growth">
             <Section4Growth g={insights.lambGrowth} />
           </SectionCard>
-          <SectionCard number={5} title="Flock Improvement"        icon={BarChart3}   tone="primary" preview={previewDir}     testid="section-flock-direction">
+          <SectionCard number={5} title="Flock Improvement"        icon={BarChart3}   tone="primary" preview={previewDir}     testid="section-flock-direction"     askCategory="herd-overview"      askSection="flock-improvement">
             <Section5Direction f={insights.flockDirection} />
           </SectionCard>
-          <SectionCard number={6} title="Reproductive Efficiency"  icon={Dna}         tone="blue"    preview={previewRep}     testid="section-reproductive">
+          <SectionCard number={6} title="Reproductive Efficiency"  icon={Dna}         tone="blue"    preview={previewRep}     testid="section-reproductive"        askCategory="breeding-lambing"   askSection="reproductive">
             <Section6Reproductive r={insights.reproductive} />
           </SectionCard>
-          <SectionCard number={7} title="Health Overview"          icon={Stethoscope} tone="emerald" preview={previewHealth}  testid="section-health">
+          <SectionCard number={7} title="Health Overview"          icon={Stethoscope} tone="emerald" preview={previewHealth}  testid="section-health"              askCategory="health-records"     askSection="health">
             <Section7Health h={insights.health} />
           </SectionCard>
-          <SectionCard number={8} title="Data Quality"             icon={Database}    tone="amber"   preview={previewQuality} testid="section-data-quality">
+          <SectionCard number={8} title="Data Quality"             icon={Database}    tone="amber"   preview={previewQuality} testid="section-data-quality"        askCategory="data-quality"       askSection="data-quality">
             <Section8Quality q={insights.dataQuality} />
           </SectionCard>
         </div>

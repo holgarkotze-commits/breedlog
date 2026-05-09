@@ -1,0 +1,564 @@
+REPLIT AGENT — BREEDLOG AI ASSISTANT FOUNDATION MVP
+
+This is a controlled implementation task, not a discussion.
+
+Build the first working BreedLog AI Assistant foundation end-to-end.
+
+Do not return with a vague plan.
+Do not ask whether to proceed with only a small part.
+Do not build a fake chatbot.
+Do not expose API keys to the frontend.
+Do not let AI edit, delete, create, revoke, or mutate BreedLog records.
+Do not add market/auction predictions yet.
+Do not add veterinary diagnosis.
+Do not break existing access-code, Data tab, crop, navigation, or sync logic.
+Do not run simulation seed apply.
+Do not delete any data.
+Do not commit failing work.
+
+GOAL
+
+Add a secure, read-only AI assistant foundation to BreedLog.
+
+The assistant must be able to answer questions using the current user’s own BreedLog workspace data only.
+
+The assistant must be grounded in real app data, especially the Data tab/data-engine outputs, not random model guesses.
+
+The assistant must be useful to farmers without overwhelming them.
+
+SECRET CONFIGURATION
+
+Use server-side environment secrets only.
+
+Required Replit Secrets:
+
+GEMINI_API_KEY
+GEMINI_MODEL
+
+Use Google’s official Gemini SDK unless the existing codebase already has a clean provider adapter pattern that makes OpenAI-compatible routing safer.
+
+Official Gemini SDK path:
+- use @google/genai
+- initialize server-side only
+- API key must be read from process.env.GEMINI_API_KEY
+- model must be read from process.env.GEMINI_MODEL
+- default model may be gemini-3-flash-preview only if no secret is set, but prefer explicit GEMINI_MODEL
+
+Do not send GEMINI_API_KEY to the browser.
+Do not place keys in client/src.
+Do not log keys.
+Do not return keys from any endpoint.
+Do not expose keys in build output.
+
+AI PRODUCT RULES
+
+The assistant is BreedLog Assistant.
+
+It is not a general chatbot.
+It is a read-only farm data assistant.
+
+It may:
+- explain the user’s herd data
+- summarize Data tab insights
+- compare rams/sires
+- compare ewes
+- explain lamb growth
+- identify missing records
+- explain data quality
+- suggest what the farmer should record next
+- explain breeding/lambing results
+- summarize health records already captured
+- answer questions about the current workspace’s animals and records
+
+It may not:
+- invent animal records
+- invent weights
+- invent market prices
+- invent auction data
+- invent health treatments
+- diagnose disease as fact
+- prescribe medicine
+- promise profit
+- give guaranteed genetic claims
+- expose another user’s data
+- access other workspaces
+- change records
+- delete records
+- update records
+- revoke/reactivate codes
+- perform admin actions
+- bypass access control
+
+If data is missing, it must say:
+“Not enough recorded data.”
+
+If a user asks for something outside BreedLog’s data, it must explain the limitation clearly.
+
+If a user asks for health/veterinary advice, it must respond cautiously:
+- summarize recorded symptoms/events only
+- recommend consulting a local veterinarian
+- do not diagnose as fact
+- do not prescribe dosage or medicine unless already recorded in the user’s own data as a record
+
+If a user asks for market/auction predictions, it must respond:
+- BreedLog does not yet have verified market data connected
+- it can discuss readiness based on recorded weights, growth, age, and data quality
+- it must not invent prices
+
+ARCHITECTURE TO BUILD
+
+Build this server-side flow:
+
+Frontend AI Panel
+→ POST /api/ai/chat
+→ authenticated user/session check
+→ workspace isolation check
+→ BreedLog AI context builder
+→ Gemini provider adapter
+→ structured answer
+→ frontend response panel
+
+Also add:
+
+GET /api/ai/health
+GET /api/ai/suggested-prompts
+GET /api/ai/context-summary
+
+Endpoint behavior:
+
+/api/ai/health:
+- verifies server config
+- returns whether AI is configured
+- must not call Gemini unless a lightweight test flag is passed or unless you decide health should call provider safely
+- must never reveal API key
+
+/api/ai/suggested-prompts:
+- returns grouped prompt categories and prompt templates
+- must be safe static prompt metadata
+- no fake answers
+
+/api/ai/context-summary:
+- returns a safe summary of what context categories are available for the current user
+- must not dump full raw database
+- must respect current authenticated workspace only
+
+/api/ai/chat:
+- accepts a user question
+- accepts optional category
+- accepts optional context target such as data-section, animal-id, breeding-group-id
+- builds current workspace context
+- calls Gemini server-side
+- returns an answer with source notes
+- never mutates app data
+
+AUTHENTICATION AND DATA ISOLATION
+
+Every AI endpoint must require the same auth/session/access rules as the rest of BreedLog.
+
+The AI must only see the effective workspace/sharedUserId/account for the authenticated user.
+
+Use the same effective user/workspace identity logic used by animals, Data tab, and sync.
+
+Do not use access-code strings as user IDs.
+Do not query global data.
+Do not query all users.
+Do not expose other workspace data.
+
+If the user is not authenticated:
+- return 401
+- no AI call
+
+If workspace cannot be resolved:
+- return safe error
+- no AI call
+
+CONTEXT BUILDER
+
+Create a dedicated AI context builder, for example:
+
+server/ai/breedlog-ai-context.ts
+
+It must collect and structure only what the model needs.
+
+Use existing Data tab/data-engine logic where possible.
+
+Context should include:
+
+workspace summary:
+- workspace/user id only if safe/internal
+- farm name if available
+- selected season if available
+- total animals
+- data quality/completeness summary
+
+herd distribution:
+- rams
+- ewes
+- lambs
+- stud
+- commercial
+- culled/archive where available
+
+sire/ram performance:
+- top sires
+- lamb counts
+- avg birth weight
+- avg weaning weight
+- avg latest weight where available
+- lambs per ewe where available
+- confidence/data sufficiency
+
+ewe maternal performance:
+- top ewes
+- watchlist/passenger ewes
+- barren/not-lambed counts
+- twin-bearing ewes
+- lamb survival where available
+
+lamb growth:
+- average birth weight
+- average weaning weight
+- average latest weight
+- ADG where calculable
+- single vs twin comparison
+- group comparison where available
+
+breeding/reproductive:
+- ewes joined
+- ewes lambed
+- lambs born
+- lambing rate
+- lambs per ewe joined
+- lambs per ewe lambed
+- breeding group summaries
+
+health:
+- health events count
+- common event types
+- follow-ups
+- withdrawal notes where available
+- repeated issues where available
+
+data quality:
+- missing birth dates
+- missing birth weights
+- missing weaning weights
+- missing sire links
+- missing dam links
+- missing health records
+- missing breeding records
+- recommended recording actions
+
+selected animal context where animalId is supplied:
+- animal identity
+- sex
+- status
+- birth date
+- sire/dam
+- weights
+- breeding/maternal/sire summary
+- health records
+- missing fields
+
+Do not dump every raw animal unless necessary.
+Summarize first.
+Keep token usage controlled.
+
+AI SYSTEM PROMPT
+
+Create a strict server-side system prompt.
+
+It must include:
+
+You are BreedLog Assistant, a read-only livestock records assistant.
+You answer only from the provided BreedLog context.
+You must not invent records, animals, weights, prices, diagnoses, or treatments.
+If the context does not contain enough data, say so.
+You must separate facts from recommendations.
+Use practical farmer language.
+Keep answers concise by default.
+Show which data was used.
+Never expose data from other users or workspaces.
+Never claim veterinary diagnosis.
+Never provide medication dosage unless it is directly recorded in the user’s own records.
+Never make financial or auction-price predictions without verified market data in context.
+Never perform app actions or database mutations.
+When giving recommendations, base them only on recorded BreedLog data and label confidence.
+
+ANSWER FORMAT
+
+Return structured JSON from the server to the frontend:
+
+answer:
+confidence: high | medium | low | insufficient
+usedData:
+warnings:
+suggestedNextQuestions:
+
+The frontend may render it as normal chat bubbles/cards.
+
+If the model returns invalid structure, normalize safely.
+
+FRONTEND UI
+
+Add a floating “Ask BreedLog” button.
+
+It should be available in the authenticated app shell, not on the access-code login screen.
+
+Clicking it opens a clean AI panel, bottom sheet, or side drawer.
+
+The panel must include:
+
+- BreedLog Assistant title
+- short explanation: “Answers from your BreedLog records”
+- category dropdown
+- suggested prompt list
+- question input
+- send button
+- loading state
+- error state
+- answer display
+- source/used-data notes
+- suggested follow-up questions
+- close button
+
+Prompt categories:
+
+Herd Overview
+Ram / Sire Performance
+Ewe Maternal Performance
+Lamb Growth
+Breeding & Lambing
+Health Records
+Data Quality
+Auction / Market Readiness
+Animal Profile Help
+
+Each category must include useful prepared prompts.
+
+Example prompts:
+
+Herd Overview:
+- Summarize my herd.
+- What stands out in my current records?
+- What needs attention first?
+
+Ram / Sire Performance:
+- Which ram appears to be performing best?
+- Which sire has the strongest lamb growth records?
+- Which ram has the weakest recorded output?
+
+Ewe Maternal Performance:
+- Which ewes look like top performers?
+- Which ewes should be on my watchlist?
+- Which ewes look like passengers?
+
+Lamb Growth:
+- Explain my lamb growth performance.
+- Which lamb group is growing best?
+- What growth data is missing?
+
+Breeding & Lambing:
+- Summarize my lambing results.
+- Which breeding group performed best?
+- What is my lambs-per-ewe result?
+
+Health Records:
+- Summarize recorded health events.
+- Which animals have repeated health issues?
+- What follow-ups are due?
+
+Data Quality:
+- What records are missing?
+- Can I trust my current Data tab results?
+- What should I record next to improve analysis?
+
+Auction / Market Readiness:
+- Which animals look closest to market readiness based on recorded weights?
+- What records do I need before auction selection?
+- Which groups should I review for sale readiness?
+
+Animal Profile Help:
+- Summarize this animal.
+- What is missing from this animal’s records?
+- Is this animal contributing well based on recorded data?
+
+DATA TAB INTEGRATION
+
+Inside the Data tab, add a small “Ask about this data” action.
+
+When clicked from a Data section, pass the relevant section context to the assistant.
+
+Examples:
+- Herd Distribution section → ask about herd composition
+- Ram/Sire Performance section → ask about rams
+- Ewe Maternal section → ask about ewes
+- Lamb Growth section → ask about growth
+- Data Quality section → ask what to record next
+
+Do not break the current Data tab.
+
+ANIMAL PROFILE INTEGRATION
+
+If easy and low-risk, add “Ask about this animal” to animal profile.
+
+If not easy, do not block the AI foundation on it.
+But build the backend route/input shape to support animalId context later.
+
+SAFETY AND COST CONTROLS
+
+Add request validation:
+- question max length
+- category enum validation
+- optional target IDs validated
+- authenticated user required
+
+Add rate limiting or basic per-session throttling if the app already has suitable middleware.
+If not, implement a simple safe limit server-side.
+
+Add token/context size control:
+- summarize data before sending
+- cap top lists
+- do not send entire raw DB
+- include maximum top 10 where appropriate
+
+Add error handling:
+- missing API key
+- model unavailable
+- provider error
+- timeout
+- malformed model response
+
+Errors must show a friendly message in the UI.
+
+TESTS REQUIRED
+
+Add targeted tests for:
+
+AI config:
+- health endpoint does not expose API key
+- missing Gemini key returns configured=false or safe error
+- AI endpoints require authentication
+
+Context builder:
+- context only includes current workspace data
+- context includes herd summary
+- context includes Data tab metrics where available
+- context excludes other workspace data
+- missing data produces insufficient-data indicators
+
+Chat endpoint:
+- rejects unauthenticated requests
+- validates category
+- validates question length
+- does not mutate data
+- returns structured response shape
+- handles provider failure safely
+
+Prompt categories:
+- suggested prompts endpoint returns categories
+- categories include the required farmer-useful prompts
+
+Frontend:
+- Ask BreedLog button renders for authenticated users
+- AI panel opens/closes
+- suggested prompts populate input or submit
+- loading/error states render
+- API key is not referenced in client bundle/source
+
+Run:
+
+npm run check
+npm run build
+npm run test:cert
+
+Run all new targeted AI tests.
+
+If test:cert has known pre-existing failures, report them honestly, but do not introduce new failures.
+
+FILES EXPECTED
+
+Likely new files:
+
+server/ai/gemini-provider.ts
+server/ai/breedlog-ai-context.ts
+server/ai/breedlog-ai-rules.ts
+server/ai/breedlog-ai-prompts.ts
+server/ai/breedlog-ai-routes.ts or route additions in server/routes.ts
+client/src/components/BreedLogAssistantPanel.tsx
+client/src/components/AskBreedLogButton.tsx
+tests/ai-assistant.test.ts
+docs/release/ai-assistant-foundation.md
+
+Use actual repo structure. Do not force these names if the repo has a better pattern.
+
+REPLIT SECRET CHECK
+
+Before provider test, check whether GEMINI_API_KEY is present.
+
+If absent:
+- implement the code
+- make /api/ai/health report configured=false
+- do not call Gemini
+- do not fail build
+- report that the user must add GEMINI_API_KEY
+
+If present:
+- run a provider smoke test safely
+- do not leak the response or key unnecessarily
+
+DOCUMENTATION
+
+Create:
+
+docs/release/ai-assistant-foundation.md
+
+Include:
+- architecture
+- endpoints
+- secrets needed
+- data isolation rules
+- AI safety rules
+- prompt categories
+- tests run
+- limitations
+- next phase
+
+COMMIT RULE
+
+Only commit if:
+- npm run check passes
+- npm run build passes
+- targeted AI tests pass
+- no new critical regression exists
+
+Commit message:
+
+Add secure BreedLog AI assistant foundation
+
+FINAL REPORT FORMAT
+
+BREEDLOG AI ASSISTANT FOUNDATION RESULT
+Status:
+Commit:
+Files changed:
+Secrets required:
+Provider integration:
+Backend endpoints:
+Context builder:
+Data isolation:
+AI rules:
+Frontend UI:
+Prompt categories:
+Data tab integration:
+Animal profile integration:
+Tests run:
+Known pre-existing failures:
+New failures:
+Manual checks needed:
+Remaining blockers:
+
+FINAL STATUS:
+READY FOR AI FIELD TEST
+or
+NOT READY

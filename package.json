@@ -18,6 +18,7 @@
     "seed:field-test:cleanup:apply": "tsx scripts/cleanup-field-test-simulation.ts --apply"
   },
   "dependencies": {
+    "@google/genai": "^2.0.1",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.4",
