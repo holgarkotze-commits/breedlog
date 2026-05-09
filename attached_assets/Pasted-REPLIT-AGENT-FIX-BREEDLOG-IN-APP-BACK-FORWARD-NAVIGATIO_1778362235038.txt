@@ -1,0 +1,147 @@
+REPLIT AGENT — FIX BREEDLOG IN-APP BACK/FORWARD NAVIGATION LOGIC ONLY
+
+Scope is strictly limited to navigation history behavior inside the BreedLog app.
+
+Do not change Data tab.
+Do not change access-code logic.
+Do not change crop tool.
+Do not change exports.
+Do not redesign unrelated UI.
+Do not delete data.
+Do not commit if tests fail.
+
+PROBLEM
+
+Current navigation does not behave naturally.
+
+Example:
+
+1. User opens My Herd.
+2. User clicks an animal.
+3. Animal profile opens.
+4. User wants to go back.
+
+The app must return the user to the previous page they were actually on, for example My Herd, not force them back to Home.
+
+The more the user navigates, the further back the Back button should go through their real in-app navigation history.
+
+REQUIRED BEHAVIOR
+
+Implement proper in-app navigation history:
+
+1. Back button must go to the previous in-app page.
+2. Forward button must go forward again if the user went back.
+3. Back must not always go Home.
+4. If user came from My Herd → Animal Profile, Back returns to My Herd.
+5. If user came from Data → Animal Profile, Back returns to Data.
+6. If user came from Breeding → Animal/Profile/Event, Back returns to Breeding context.
+7. If user navigated multiple levels deep, Back should step backward one page at a time.
+8. Forward should step forward one page at a time where history exists.
+9. Directly opened pages must still have a safe fallback, for example Home/My Herd.
+10. Browser back button and in-app back button should behave consistently where possible.
+11. PWA/mobile should behave properly.
+12. Navigation must not lose form data unexpectedly.
+13. Navigation must not clear local data or session data.
+
+IMPLEMENTATION EXPECTATION
+
+Inspect current routing/navigation logic:
+
+- wouter routing setup
+- Layout navigation
+- AnimalDetail page back buttons
+- profile/detail pages
+- any hardcoded navigate("/") or navigate("/dashboard") behavior
+- any “Return to Paddock/Home” logic
+- bottom nav interactions
+
+Replace hardcoded Home fallback behavior with real history-aware navigation.
+
+Preferred logic:
+
+- Use browser history where safe:
+  window.history.back()
+  window.history.forward()
+- Maintain an app-level navigation stack if needed for reliable SPA behavior.
+- Store previous route/context when navigating to detail pages.
+- For direct deep links with no prior route, use a safe fallback route.
+
+Add a reusable helper/component if needed:
+
+- useAppNavigationHistory()
+- AppBackButton
+- AppForwardButton
+
+Back button rules:
+
+- If app history exists: go back one step.
+- If no app history exists: fallback to sensible route, usually /animals or /dashboard depending on page.
+- Animal profile fallback should prefer /animals, not Home.
+- Breeding detail fallback should prefer /breeding.
+- Health detail fallback should prefer /health.
+- Records detail fallback should prefer /records.
+- Data detail fallback should prefer /data or /analysis.
+
+Forward button rules:
+
+- If forward history exists: go forward.
+- If no forward history exists: disable/hide forward button.
+
+UI REQUIREMENTS
+
+Where back/forward controls appear:
+
+- detail/profile pages should show a clear Back button.
+- if Forward is supported, show it only where useful.
+- buttons must be visually clean and consistent.
+- no ugly browser-like raw controls.
+- must work on mobile and desktop.
+
+Do not overcrowd headers.
+If space is tight on mobile, use icon-only buttons with accessible labels.
+
+TESTS REQUIRED
+
+Add/update tests proving:
+
+1. My Herd → Animal Profile → Back returns to My Herd.
+2. Data → Animal Profile → Back returns to Data.
+3. Breeding → Detail → Back returns to Breeding.
+4. Multiple navigation steps go back step-by-step.
+5. Forward returns to the page after using Back.
+6. Direct deep link to Animal Profile falls back to My Herd/Animals.
+7. Direct deep link to Breeding detail falls back to Breeding.
+8. No forced Home navigation when a valid previous page exists.
+9. Bottom navigation still works.
+10. Browser/PWA session is not cleared by navigation.
+
+RUN
+
+npm run check
+npm run build
+npm run test:cert
+
+Run targeted navigation tests.
+
+Do not commit if tests fail.
+
+COMMIT MESSAGE
+
+Fix in-app back and forward navigation history
+
+FINAL REPORT
+
+IN-APP NAVIGATION HISTORY RESULT
+Status:
+Files changed:
+Root cause:
+Back navigation logic:
+Forward navigation logic:
+Detail page fallback behavior:
+Mobile/PWA behavior:
+Tests run:
+Manual checks:
+Remaining blockers:
+
+FINAL STATUS:
+READY FOR NAVIGATION FIELD RECHECK or NOT READY

@@ -8,6 +8,7 @@ import { OfflineBanner } from "@/components/NetworkStatusIndicator";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { NavigationHistoryProvider } from "@/lib/navigation-history-context";
 import { useState, useEffect, lazy, Suspense, Component, type ReactNode } from "react";
 import { normalizePreviewPath } from "@/lib/route-normalization";
 
@@ -93,11 +94,11 @@ function Router() {
 
 function AuthenticatedApp() {
   return (
-    <>
+    <NavigationHistoryProvider>
       <OfflineBanner />
       <PWAInstallPrompt />
       <Router />
-    </>
+    </NavigationHistoryProvider>
   );
 }
 

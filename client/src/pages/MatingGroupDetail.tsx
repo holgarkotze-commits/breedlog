@@ -23,11 +23,13 @@ import { useState, useEffect } from "react";
 import { z } from "zod";
 import { useLocation, Link } from "wouter";
 import { useRoute } from "wouter";
+import { useNavigationHistory } from "@/lib/navigation-history-context";
 
 export default function MatingGroupDetail() {
   const [, params] = useRoute("/breeding/groups/:id");
   const groupId = params?.id ? parseInt(params.id) : null;
   const [, navigate] = useLocation();
+  const { goBack } = useNavigationHistory();
   
   const { data: matingGroups, isLoading } = useMatingGroups();
   const { data: animals } = useAnimals({});
@@ -56,7 +58,7 @@ export default function MatingGroupDetail() {
     return (
       <Layout>
         <div className="space-y-4">
-          <Button variant="ghost" onClick={() => navigate("/breeding")} data-testid="button-back">
+          <Button variant="ghost" onClick={() => goBack('/breeding')} data-testid="button-back">
             <ArrowLeft className="w-4 h-4 mr-2" /> Back to Breeding
           </Button>
           <div className="text-center py-12">
@@ -326,7 +328,7 @@ ${g.notes ? `<p style="margin-top: 12px; font-size: 9pt; color: #555; padding: 0
         <div className="flex flex-col gap-3">
           <Button 
             variant="ghost" 
-            onClick={() => navigate("/breeding")} 
+            onClick={() => goBack('/breeding')} 
             className="w-fit"
             data-testid="button-back"
           >

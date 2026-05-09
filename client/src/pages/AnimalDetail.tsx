@@ -4,6 +4,7 @@ import { usePerformanceRecords, useHealthRecords, useCreatePerformanceRecord } f
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import { Layout } from "@/components/Layout";
+import { useNavigationHistory } from "@/lib/navigation-history-context";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -114,6 +115,7 @@ export default function AnimalDetail() {
   const id = parseInt(params?.id || "0");
   const { data: animal, isLoading } = useAnimal(id);
   const { data: farmSettings } = useFarmSettings();
+  const { goBack, goForward, canGoForward } = useNavigationHistory();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
   const [removeReason, setRemoveReason] = useState<"sold" | "deceased" | "transferred">("sold");
@@ -152,18 +154,9 @@ export default function AnimalDetail() {
             </p>
           </div>
           <div className="flex gap-3">
-            <Link href="/animals">
-              <Button variant="default" data-testid="button-back-to-herd">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to My Herd
-              </Button>
-            </Link>
-            <Button 
-              variant="outline" 
-              onClick={() => window.history.back()}
-              data-testid="button-go-back"
-            >
-              Go Back
+            <Button variant="default" onClick={() => goBack('/animals')} data-testid="button-back-to-herd">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to My Herd
             </Button>
           </div>
         </div>
@@ -178,11 +171,14 @@ export default function AnimalDetail() {
         <div className="space-y-3">
           {/* Top row: Back + Title + Inline Buttons */}
           <div className="flex items-center gap-3">
-            <Link href="/animals">
-              <Button variant="ghost" size="icon" className="shrink-0" data-testid="button-back">
-                <ArrowLeft className="w-5 h-5" />
+            <Button variant="ghost" size="icon" className="shrink-0" onClick={() => goBack('/animals')} data-testid="button-back">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            {canGoForward && (
+              <Button variant="ghost" size="icon" className="shrink-0" onClick={() => goForward()} data-testid="button-forward">
+                <ArrowLeft className="w-5 h-5 rotate-180" />
               </Button>
-            </Link>
+            )}
             <h1 className="text-xl md:text-2xl font-bold flex-1 truncate">{animal.tagId}</h1>
             <div className="flex items-center gap-2">
               <Button 

@@ -317,19 +317,16 @@ test("UNIVERSAL: re-activation sets a current activatedAt timestamp", async () =
   const code = await adminCreateCode(30);
   const dev = randomDeviceId("u-ts");
 
-  const before = new Date();
-  void before; // used for ordering
   await validateCode(code.code, dev, MOBILE_UA);
   await adminRevoke(code.id);
-  // Reset the code to active before re-validating (revoked code blocks validate entirely)
+  // Measure window BEFORE adminReactivate — that call writes the new activatedAt timestamp.
+  const t2before = new Date();
   await fetch(`${BASE_URL}/api/admin/invite-codes/${code.id}/reactivate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: "AdminPin 1234" },
     body: JSON.stringify({}),
   });
-  // Even after admin reactivate (which restores the row), we can re-validate to confirm
-  // the activatedAt was refreshed. The device's row is now active with a new timestamp.
-  const t2before = new Date();
+  // re-validate succeeds because the row is now active; activatedAt was set by adminReactivate above.
   const reRes = await validateCode(code.code, dev, MOBILE_UA);
   const t2after = new Date();
   assert.equal(reRes.status, 200);

@@ -1,0 +1,179 @@
+REPLIT AGENT — FIX BREEDLOG ANIMAL IMAGE CROP TOOL ONLY
+
+Scope is strictly limited to the animal image upload/crop tool.
+
+Do not change Data tab.
+Do not change access-code logic.
+Do not change exports.
+Do not change dashboard.
+Do not change unrelated UI.
+Do not delete data.
+Do not commit if tests fail.
+
+PROBLEM
+
+The current animal image crop feature is unusable:
+
+- It has confusing zoom/drag controls.
+- It does not behave like a normal crop tool.
+- There is no clear working Save Crop button.
+- The saved image appears as the wrong zoomed-in portion.
+- Users cannot reliably crop and save animal profile images.
+- This affects both adding a new animal and editing an existing animal profile.
+
+REQUIRED USER FLOW
+
+When adding a new animal:
+
+1. User clicks Add Animal.
+2. User enters animal details.
+3. User uploads/selects an image.
+4. A crop dialog opens immediately.
+5. The full uploaded image is visible.
+6. A visible rectangular crop box appears over the image.
+7. User can resize the crop box by dragging:
+   - corners
+   - left/right sides
+   - top/bottom sides
+8. User can click/hold inside the crop box/image area and drag to reposition the crop area over the animal.
+9. User clicks Save Crop.
+10. The cropped image is saved into the animal image/photo field.
+11. The animal card/profile displays the saved cropped image.
+
+When editing an existing animal profile:
+
+1. User opens animal profile.
+2. User changes/uploads a new image.
+3. Same crop dialog opens.
+4. User crops image.
+5. User clicks Save Crop.
+6. The existing animal profile image updates only after saving.
+7. Cancel must keep the old image unchanged.
+
+REQUIRED BUTTONS
+
+The crop dialog must clearly show:
+
+- Save Crop
+- Cancel
+- Reset Crop
+
+Save Crop must actually save the cropped image.
+
+Cancel must close the dialog without changing the animal image.
+
+Reset Crop must restore the crop box to the default centered crop area.
+
+Button text must be readable. Dark/primary buttons must have white/light text.
+
+CROP TOOL BEHAVIOR
+
+Remove or hide the confusing zoom-slider-first workflow.
+
+Do not save random zoomed-in image areas.
+
+The crop must work like a normal crop tool:
+
+- visible crop box
+- drag crop box
+- resize crop box
+- save selected crop area
+
+The user should not need technical understanding of zoom, x-axis, y-axis, sliders, or strange handles.
+
+IMPLEMENTATION EXPECTATION
+
+Inspect current files first, likely including:
+
+- client/src/components/ImageCropDialog.tsx
+- animal create form
+- animal edit/profile form
+- image upload handling
+- animal photo/image field mapping
+- image compression logic if used
+
+Use the safest implementation available:
+
+Preferred:
+- If a proper crop library already exists in package.json, use it correctly.
+
+If no crop library exists:
+- implement a lightweight canvas/pointer-event crop:
+  - load image into dialog
+  - maintain crop rectangle state
+  - support pointer drag/resize
+  - draw selected crop to canvas
+  - export cropped data URL/blob
+  - pass cropped result back to animal form
+
+Do not add a heavy new dependency unless absolutely necessary.
+
+Do not break existing stored animal images.
+
+Do not force users to upload images.
+
+Images remain optional.
+
+ACCEPTANCE TESTS
+
+Add/update targeted tests where practical to prove:
+
+1. Crop dialog opens after image selection.
+2. Save Crop button exists.
+3. Cancel button exists.
+4. Reset Crop button exists.
+5. Save Crop calls the crop/save handler.
+6. Cancel does not overwrite existing image.
+7. Saved crop is assigned to the animal image/photo field.
+8. Existing image display still works.
+9. Add animal flow still works without image.
+10. Edit animal image flow works.
+11. Crop buttons use readable contrast classes.
+
+MANUAL VERIFICATION REQUIRED
+
+After implementation, manually verify in preview:
+
+1. Add new animal with image.
+2. Crop box appears.
+3. Resize crop box.
+4. Drag crop area over animal.
+5. Click Save Crop.
+6. Animal card shows cropped image correctly.
+7. Edit existing animal image.
+8. Cancel preserves old image.
+9. Reset Crop works.
+10. Save Crop updates image.
+
+RUN
+
+npm run check
+npm run build
+npm run test:cert
+
+Run any targeted crop tests added.
+
+Do not commit if tests fail.
+
+COMMIT MESSAGE
+
+Fix animal image crop save workflow
+
+FINAL REPORT
+
+IMAGE CROP FIX RESULT
+Status:
+Files changed:
+Root cause:
+Crop workflow:
+Add animal image:
+Edit animal image:
+Save Crop status:
+Cancel status:
+Reset Crop status:
+Tests run:
+Manual checks:
+Remaining blockers:
+
+FINAL STATUS:
+READY FOR IMAGE CROP FIELD RECHECK or NOT READY

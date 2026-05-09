@@ -11,6 +11,7 @@ import { ArrowLeft, Download, FileText, Calendar, Syringe, Users, FileDown, Chev
 import { format } from "date-fns";
 import { useRoute, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigationHistory } from "@/lib/navigation-history-context";
 
 export default function HealthEventDetail() {
   const [, params] = useRoute("/health/:id");
@@ -21,6 +22,7 @@ export default function HealthEventDetail() {
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const createExportedDoc = useCreateExportedDocument();
   const { toast } = useToast();
+  const { goBack } = useNavigationHistory();
 
   const getAnimalById = (id: number) => animals?.find(a => a.id === id);
 
@@ -197,11 +199,9 @@ ${eventAnimals.map((animal, idx) => `<tr>
       <Layout>
         <div className="flex flex-col items-center justify-center h-64 gap-4">
           <p className="text-muted-foreground">Health event not found</p>
-          <Link href="/health">
-            <Button variant="outline">
-              <ArrowLeft className="w-4 h-4 mr-2" /> Back to Health
-            </Button>
-          </Link>
+          <Button variant="outline" onClick={() => goBack('/health')}>
+            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Health
+          </Button>
         </div>
       </Layout>
     );
@@ -212,11 +212,9 @@ ${eventAnimals.map((animal, idx) => `<tr>
       <div className="space-y-4 md:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
           <div>
-            <Link href="/health">
-              <Button variant="ghost" size="sm" className="mb-2 -ml-2" data-testid="button-back">
-                <ArrowLeft className="w-4 h-4 mr-1" /> Back to Health
-              </Button>
-            </Link>
+            <Button variant="ghost" size="sm" className="mb-2 -ml-2" onClick={() => goBack('/health')} data-testid="button-back">
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back to Health
+            </Button>
             <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight" data-testid="page-title">
               {event.eventName || "Health Event"}
             </h1>
