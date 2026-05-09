@@ -193,16 +193,24 @@ describe("AI Assistant — /api/ai/chat", () => {
     );
   });
 
-  test("returns structured response or 503 when AI not configured", async () => {
+  test("returns structured response, 503 (not configured), or 502 (provider error)", async () => {
     const res = await post("/api/ai/chat", {
       question: "Summarize my herd.",
       category: "herd-overview",
     });
 
     if (res.status === 503) {
+      // Not configured
       const body = await res.json() as { configured: boolean; error: string };
       assert.equal(body.configured, false, "503 must indicate not configured");
       assert.ok(typeof body.error === "string", "503 must have error message");
+    } else if (res.status === 502) {
+      // Configured but provider error (quota, timeout, etc.) — must have clean user-facing error
+      const body = await res.json() as { error: string };
+      assert.ok(typeof body.error === "string", "502 must have error message");
+      assert.ok(body.error.length < 300, "502 error must be a short user-facing message, not raw JSON");
+      assert.ok(!body.error.includes("RESOURCE_EXHAUSTED"), "502 must not expose raw API error codes");
+      assert.ok(!body.error.includes("{"), "502 must not expose JSON in user-facing error");
     } else if (res.status === 200) {
       const body = await res.json() as {
         answer: string;

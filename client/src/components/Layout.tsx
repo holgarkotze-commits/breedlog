@@ -180,20 +180,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="fixed right-2 top-[max(env(safe-area-inset-top,0px),0.5rem)] z-[60] flex items-center gap-1 rounded-xl border border-border/70 bg-card/90 p-1.5 shadow-md backdrop-blur">
-        <SyncStatusBadge />
-        <GlobalRefreshButton location="header" />
-      </div>
-
-      <header className={cn("sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur md:hidden", isScrolled ? "py-2" : "py-4")}>
-        <Link href="/" className="flex flex-col items-center px-4">
-          <div className={cn("transition-all duration-300", isScrolled ? "scale-75" : "scale-100")}>
-            <Logo size={isScrolled ? "sm" : "md"} />
+      {/* Mobile header: logo centred, sync widget anchored to the right inside the header */}
+      <header className={cn("sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur md:hidden", isScrolled ? "py-2" : "py-3")}>
+        <div className="relative flex items-center justify-center px-4">
+          <Link href="/" className="flex flex-col items-center">
+            <div className={cn("transition-all duration-300", isScrolled ? "scale-75" : "scale-100")}>
+              <Logo size={isScrolled ? "sm" : "md"} />
+            </div>
+            <div className={cn("overflow-hidden transition-all duration-300", isScrolled ? "max-h-0 opacity-0" : "mt-1.5 max-h-20 opacity-100")}>
+              <ScrambleText text={displayName || "Breed Smart, Farm Better"} className="text-xs font-medium text-muted-foreground" />
+            </div>
+          </Link>
+          {/* Sync indicator — lives inside the header on mobile, never overlaps logo */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 rounded-xl border border-border/70 bg-card/90 p-1.5 shadow-sm backdrop-blur">
+            <SyncStatusBadge />
+            <GlobalRefreshButton location="header" />
           </div>
-          <div className={cn("overflow-hidden transition-all duration-300", isScrolled ? "max-h-0 opacity-0" : "mt-2 max-h-20 opacity-100")}>
-            <ScrambleText text={displayName || "Breed Smart, Farm Better"} className="text-xs font-medium text-muted-foreground" />
-          </div>
-        </Link>
+        </div>
       </header>
 
       <main className="min-h-[calc(100vh-4rem)] flex-1 overflow-y-auto p-2.5 md:ml-72 md:min-h-screen md:p-8">

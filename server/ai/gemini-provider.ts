@@ -53,9 +53,21 @@ export async function generateContent(
     return { ok: true, text };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    // Log the full technical error on the server only — never expose it to the client
+    console.error("[BreedLog AI] Gemini error:", msg.slice(0, 500));
     if (msg.includes("aborted") || msg.includes("timeout")) {
-      return { ok: false, text: "", error: "AI provider timed out" };
+      return { ok: false, text: "", error: "The AI took too long to respond. Please try again." };
     }
-    return { ok: false, text: "", error: `AI provider error: ${msg}` };
+    if (
+      msg.includes("429") ||
+      msg.includes("RESOURCE_EXHAUSTED") ||
+      msg.includes("quota")
+    ) {
+      return { ok: false, text: "", error: "AI quota is temporarily exhausted. Please try again in a few minutes." };
+    }
+    if (msg.includes("API_KEY") || msg.includes("authentication") || msg.includes("401")) {
+      return { ok: false, text: "", error: "AI is not configured correctly. Contact support." };
+    }
+    return { ok: false, text: "", error: "AI is temporarily unavailable. Please try again shortly." };
   }
 }
