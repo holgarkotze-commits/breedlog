@@ -581,3 +581,129 @@ describe("AI Context Builder — breedlog-ai-context.ts (unit)", () => {
     assert.equal(ctx.workspace.dataQualityScore, 0);
   });
 });
+
+// ── AI Config & Model Chain (unit) ───────────────────────────────────────────
+
+describe("AI Config — model chain & shared config", () => {
+  test("AI_CONFIG exposes a single source of truth", async () => {
+    const mod = await import("../server/ai/ai-config.ts");
+    assert.ok("apiKey" in mod.AI_CONFIG, "must expose apiKey");
+    assert.ok("primaryModel" in mod.AI_CONFIG, "must expose primaryModel");
+    assert.ok(Array.isArray(mod.AI_CONFIG.fallbackModels), "fallbackModels must be array");
+    assert.equal(mod.AI_CONFIG.provider, "gemini");
+  });
+
+  test("getModelChain returns primary first, then fallbacks, deduplicated", async () => {
+    const { getModelChain, AI_CONFIG } = await import("../server/ai/ai-config.ts");
+    const chain = getModelChain();
+    assert.ok(chain.length >= 1, "chain must have at least one model");
+    assert.equal(chain[0], AI_CONFIG.primaryModel, "primary model must be first");
+    assert.equal(new Set(chain).size, chain.length, "chain must be deduplicated");
+  });
+
+  test("default chain prefers a free-tier-available 2.5 model (no 1.5 deprecated models)", async () => {
+    const { getModelChain } = await import("../server/ai/ai-config.ts");
+    const chain = getModelChain();
+    const has25 = chain.some((m) => m.includes("2.5") || m.includes("2.0"));
+    assert.ok(has25, "default chain must include a 2.x model");
+    // 1.5-flash was deprecated; chain must not contain only deprecated models
+    const onlyDeprecated = chain.every((m) => m === "gemini-1.5-flash" || m === "gemini-1.5-flash-8b");
+    assert.equal(onlyDeprecated, false, "chain must not consist entirely of deprecated models");
+  });
+});
+
+// ── Health endpoint exposes model chain & active model ───────────────────────
+
+describe("AI Assistant — /api/ai/health model diagnostics", () => {
+  test("health endpoint exposes modelChain and activeModel fields", async () => {
+    const res = await get("/api/ai/health", false);
+    const body = await res.json() as Record<string, unknown>;
+    assert.ok("modelChain" in body, "must expose modelChain");
+    assert.ok(Array.isArray(body.modelChain), "modelChain must be array");
+    assert.ok((body.modelChain as string[]).length >= 1, "modelChain must not be empty");
+    assert.ok("activeModel" in body, "must expose activeModel (null until first success)");
+  });
+});
+
+// ── Canary endpoint ──────────────────────────────────────────────────────────
+
+describe("AI Assistant — /api/ai/canary", () => {
+  test("canary endpoint returns honest provider reachability", async () => {
+    const res = await get("/api/ai/canary", false);
+    // 200 when configured (reachable or not), 503 when key missing
+    assert.ok(res.status === 200 || res.status === 503, `expected 200 or 503, got ${res.status}`);
+    const body = await res.json() as Record<string, unknown>;
+    assert.ok("configured" in body, "must expose configured flag");
+    assert.ok("reachable" in body, "must expose reachable flag");
+    assert.ok("message" in body, "must expose human-readable message");
+    if (body.configured) {
+      assert.ok("modelChain" in body, "must expose modelChain when configured");
+    }
+  });
+});
+
+// ── Local fallback is category-specific (regression for "always herd overview") ─
+
+describe("AI Local Fallback — category-specific answers", () => {
+  test("sire-performance category produces sire/ram-focused answer", async () => {
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+    const { buildBreedLogAIContext } = await import("../server/ai/breedlog-ai-context.ts");
+    const ctx = buildBreedLogAIContext({
+      animals: [], breedingEvents: [], performanceRecords: [],
+      healthRecords: [], flockHealthEvents: [], matingGroups: [], farmSettings: undefined,
+    });
+    const result = generateLocalFallback("Which ram is performing best?", ctx, "sire-performance");
+    const lower = result.answer.toLowerCase();
+    assert.ok(
+      lower.includes("ram") || lower.includes("sire"),
+      `sire-performance answer must mention ram/sire, got: ${result.answer.slice(0,200)}`,
+    );
+  });
+
+  test("data-quality category produces data-quality-focused answer", async () => {
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+    const { buildBreedLogAIContext } = await import("../server/ai/breedlog-ai-context.ts");
+    const ctx = buildBreedLogAIContext({
+      animals: [], breedingEvents: [], performanceRecords: [],
+      healthRecords: [], flockHealthEvents: [], matingGroups: [], farmSettings: undefined,
+    });
+    const result = generateLocalFallback("How complete is my herd data?", ctx, "data-quality");
+    const lower = result.answer.toLowerCase();
+    assert.ok(
+      lower.includes("data") || lower.includes("complete") || lower.includes("missing") || lower.includes("quality"),
+      `data-quality answer must mention data/completeness, got: ${result.answer.slice(0,200)}`,
+    );
+  });
+
+  test("priority/attention question routes to priority handler, not herd overview", async () => {
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+    const { buildBreedLogAIContext } = await import("../server/ai/breedlog-ai-context.ts");
+    const ctx = buildBreedLogAIContext({
+      animals: [], breedingEvents: [], performanceRecords: [],
+      healthRecords: [], flockHealthEvents: [], matingGroups: [], farmSettings: undefined,
+    });
+    const result = generateLocalFallback("What needs my attention first?", ctx);
+    const lower = result.answer.toLowerCase();
+    assert.ok(
+      lower.includes("attention") || lower.includes("priority") || lower.includes("action") ||
+      lower.includes("first") || lower.includes("focus"),
+      `priority answer must be action-oriented, got: ${result.answer.slice(0,200)}`,
+    );
+  });
+
+  test("fallback never leaks raw provider JSON or 'error' tokens", async () => {
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+    const { buildBreedLogAIContext } = await import("../server/ai/breedlog-ai-context.ts");
+    const ctx = buildBreedLogAIContext({
+      animals: [], breedingEvents: [], performanceRecords: [],
+      healthRecords: [], flockHealthEvents: [], matingGroups: [], farmSettings: undefined,
+    });
+    for (const cat of ["herd-overview", "sire-performance", "ewe-performance", "lamb-growth",
+                       "reproductive", "health", "data-quality"]) {
+      const r = generateLocalFallback("test question", ctx, cat);
+      assert.ok(!r.answer.includes('{"error"'), `${cat}: must not contain raw error JSON`);
+      assert.ok(!r.answer.includes("RESOURCE_EXHAUSTED"), `${cat}: must not leak provider error codes`);
+      assert.ok(!r.answer.includes("ai.google.dev"), `${cat}: must not leak provider URLs`);
+    }
+  });
+});

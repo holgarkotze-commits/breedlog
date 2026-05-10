@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { getDeviceToken } from "@/lib/queryClient";
 import { useAIAssistant } from "@/lib/ai-assistant-context";
@@ -139,16 +138,18 @@ export function BreedLogAssistantPanel() {
         side="bottom"
         className={cn(
           // Mobile: full-width bottom sheet, no side margins, rounded top corners
-          "flex flex-col rounded-t-2xl p-0",
+          "grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-t-2xl p-0",
           "h-[92dvh] max-h-[92dvh]",
           "w-full max-w-full overflow-hidden",
+          // Hide the Sheet's built-in absolute close button — we render our own
+          "[&>button.absolute]:hidden",
           // Desktop: side drawer
           "md:right-4 md:top-4 md:h-[calc(100dvh-2rem)] md:max-h-none md:w-[440px] md:max-w-[440px] md:rounded-2xl md:border md:border-border/70",
         )}
         data-testid="ai-assistant-panel"
       >
-        {/* Header */}
-        <SheetHeader className="flex-none border-b border-border/60 px-4 py-3">
+        {/* Header — row 1 (auto) */}
+        <SheetHeader className="border-b border-border/60 px-4 py-3">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-primary/15 text-primary">
               <Bot className="h-5 w-5" />
@@ -170,9 +171,14 @@ export function BreedLogAssistantPanel() {
           </div>
         </SheetHeader>
 
-        {/* Scrollable body — constrained so it never pushes outside the sheet */}
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-4 p-4">
+        {/* Scrollable body — row 2 (1fr). Native overflow-y-auto for reliable
+            mobile scrolling (Radix ScrollArea + dvh + flex has known iOS bugs).
+            Bottom padding ensures answer card never sits under the input bar. */}
+        <div
+          className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
+          data-testid="ai-panel-scroll"
+        >
+          <div className="space-y-4 p-4 pb-6">
 
             {/* Category selector */}
             <div>
@@ -316,10 +322,10 @@ export function BreedLogAssistantPanel() {
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
-        {/* Input area — fixed at the bottom, never overflows horizontally */}
-        <div className="flex-none border-t border-border/60 px-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] pt-3">
+        {/* Input area — row 3 (auto), never overflows horizontally */}
+        <div className="border-t border-border/60 bg-background px-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] pt-3">
           <div className="flex items-end gap-2">
             <Textarea
               ref={textareaRef}

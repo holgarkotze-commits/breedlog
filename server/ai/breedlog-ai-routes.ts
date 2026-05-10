@@ -1,7 +1,12 @@
 import type { Express, Request, Response } from "express";
 import { requireDeviceAuth, getUserId } from "../device-auth";
 import { storage } from "../storage";
-import { isConfigured, generateContent } from "./gemini-provider";
+import {
+  isConfigured,
+  generateContent,
+  runCanary,
+  getConfiguredModelChain,
+} from "./gemini-provider";
 import { buildBreedLogAIContext, type BreedLogAIContext } from "./breedlog-ai-context";
 import { SYSTEM_PROMPT } from "./breedlog-ai-rules";
 import { PROMPT_CATEGORIES, CATEGORY_KEYS } from "./breedlog-ai-prompts";
@@ -10,19 +15,24 @@ import { z } from "zod";
 
 const requireAuth = requireDeviceAuth;
 
-// ── Quota exhaustion tracking ────────────────────────────────────────────────
-// When Gemini returns 429/RESOURCE_EXHAUSTED we note the timestamp so that:
-// a) Subsequent requests go straight to the local fallback (no wasted API call)
-// b) /api/ai/health reflects the degraded state
-// Clears automatically after 5 minutes (quota windows typically reset sooner).
+// ── Provider state tracking ──────────────────────────────────────────────────
 
 let _quotaExhaustedAt: number | null = null;
-const QUOTA_COOLDOWN_MS = 5 * 60_000; // 5 min
+let _lastWorkingModel: string | null = null;
+let _lastCanary: {
+  at: number;
+  reachable: boolean;
+  modelUsed: string | null;
+  quotaExhausted: boolean;
+} | null = null;
+
+const QUOTA_COOLDOWN_MS = 5 * 60_000;
+const CANARY_CACHE_MS = 60_000;
 
 function isQuotaExhausted(): boolean {
   if (!_quotaExhaustedAt) return false;
   if (Date.now() - _quotaExhaustedAt > QUOTA_COOLDOWN_MS) {
-    _quotaExhaustedAt = null; // expired — optimistically retry Gemini
+    _quotaExhaustedAt = null;
     return false;
   }
   return true;
@@ -34,6 +44,21 @@ function markQuotaExhausted(): void {
 
 function clearQuotaExhausted(): void {
   _quotaExhaustedAt = null;
+}
+
+async function getCanary() {
+  if (_lastCanary && Date.now() - _lastCanary.at < CANARY_CACHE_MS) {
+    return _lastCanary;
+  }
+  const result = await runCanary();
+  _lastCanary = { at: Date.now(), ...result };
+  if (result.reachable) {
+    clearQuotaExhausted();
+    if (result.modelUsed) _lastWorkingModel = result.modelUsed;
+  } else if (result.quotaExhausted) {
+    markQuotaExhausted();
+  }
+  return _lastCanary;
 }
 
 // ── Rate limiter ─────────────────────────────────────────────────────────────
@@ -54,7 +79,7 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
-// ── Gemini response parser ────────────────────────────────────────────────────
+// ── Gemini response parser ───────────────────────────────────────────────────
 
 function parseAIResponse(text: string): {
   answer: string;
@@ -104,36 +129,75 @@ const chatSchema = z.object({
 });
 
 export function registerAIRoutes(app: Express): void {
-  // GET /api/ai/health — configuration and quota status check (no auth required)
-  app.get("/api/ai/health", (_req: Request, res: Response) => {
-    const quotaExhausted = isQuotaExhausted();
-    const providerStatus = !isConfigured()
+  // GET /api/ai/health — honest provider status, no key leakage
+  app.get("/api/ai/health", async (_req: Request, res: Response) => {
+    const configured = isConfigured();
+    const quotaFlag = isQuotaExhausted();
+    const chain = getConfiguredModelChain();
+
+    const providerStatus = !configured
       ? "not_configured"
-      : quotaExhausted
+      : quotaFlag
         ? "quota_exhausted"
         : "available";
 
     res.json({
-      configured: isConfigured(),
-      quotaExhausted,
-      fallbackActive: isConfigured() && quotaExhausted,
+      configured,
+      quotaExhausted: quotaFlag,
+      fallbackActive: configured && quotaFlag,
       providerStatus,
-      model: isConfigured() ? (process.env.GEMINI_MODEL || "gemini-2.0-flash") : null,
-      status: isConfigured() ? (quotaExhausted ? "fallback" : "ready") : "not_configured",
-      message: !isConfigured()
+      modelChain: chain,
+      activeModel: _lastWorkingModel,
+      lastCanary: _lastCanary
+        ? {
+            at: _lastCanary.at,
+            reachable: _lastCanary.reachable,
+            modelUsed: _lastCanary.modelUsed,
+          }
+        : null,
+      status: !configured
+        ? "not_configured"
+        : quotaFlag
+          ? "fallback"
+          : "ready",
+      message: !configured
         ? "AI key is not configured. Add the Gemini secret to enable AI features."
-        : quotaExhausted
-          ? "AI provider quota is exhausted. Local record-based answers are active."
+        : quotaFlag
+          ? "AI provider quota is exhausted on all configured models. Local record-based answers are active."
           : "BreedLog AI is ready.",
     });
   });
 
-  // GET /api/ai/suggested-prompts — static prompt metadata
+  // GET /api/ai/canary — actively probe the provider, returns honest status.
+  // Cached for 60s to avoid burning quota.
+  app.get("/api/ai/canary", async (_req: Request, res: Response) => {
+    if (!isConfigured()) {
+      return res.status(503).json({
+        configured: false,
+        reachable: false,
+        message: "GEMINI_API_KEY is not configured.",
+      });
+    }
+    const c = await getCanary();
+    res.json({
+      configured: true,
+      reachable: c.reachable,
+      modelUsed: c.modelUsed,
+      quotaExhausted: c.quotaExhausted,
+      cachedAt: c.at,
+      modelChain: getConfiguredModelChain(),
+      message: c.reachable
+        ? `Live AI reachable via ${c.modelUsed}.`
+        : c.quotaExhausted
+          ? "All configured models are quota-exhausted."
+          : "Provider unreachable. See server logs.",
+    });
+  });
+
   app.get("/api/ai/suggested-prompts", requireAuth, (_req: Request, res: Response) => {
     res.json({ categories: PROMPT_CATEGORIES });
   });
 
-  // GET /api/ai/context-summary — summary of available context for current user
   app.get("/api/ai/context-summary", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req)!;
@@ -157,7 +221,6 @@ export function registerAIRoutes(app: Express): void {
     }
   });
 
-  // POST /api/ai/chat — main AI chat endpoint with local fallback
   app.post("/api/ai/chat", requireAuth, async (req: Request, res: Response) => {
     const userId = getUserId(req)!;
 
@@ -178,7 +241,6 @@ export function registerAIRoutes(app: Express): void {
       return res.status(429).json({ error: "Too many requests. Please wait a moment before asking again." });
     }
 
-    // If not configured at all, return 503
     if (!isConfigured()) {
       return res.status(503).json({
         error: "BreedLog AI is not configured. GEMINI_API_KEY secret is missing.",
@@ -186,7 +248,6 @@ export function registerAIRoutes(app: Express): void {
       });
     }
 
-    // Load workspace data (needed for both Gemini context and local fallback)
     let animals: Awaited<ReturnType<typeof storage.getAnimals>>;
     let breedingEvents: Awaited<ReturnType<typeof storage.getBreedingEvents>>;
     let performanceRecords: Awaited<ReturnType<typeof storage.getAllPerformanceRecords>>;
@@ -223,48 +284,47 @@ export function registerAIRoutes(app: Express): void {
       contextSection,
     });
 
-    // ── If quota is already known-exhausted, skip Gemini entirely ──────────
-    if (isQuotaExhausted()) {
+    function respondWithFallback(reason: "quota" | "unavailable") {
       const fallback = generateLocalFallback(question, context, category);
+      const prefix =
+        reason === "quota"
+          ? "Live AI quota is temporarily exhausted — here is a record-based BreedLog summary:"
+          : "Live AI is temporarily unavailable — here is a record-based BreedLog summary:";
       return res.json({
         ...fallback,
-        answer: `Live AI polish is temporarily unavailable — here is a record-based BreedLog summary:\n\n${fallback.answer}`,
+        answer: `${prefix}\n\n${fallback.answer}`,
         category: category || null,
         contextSection: contextSection || null,
       });
     }
 
-    // ── Try Gemini ──────────────────────────────────────────────────────────
+    // Skip Gemini if we know quota is exhausted
+    if (isQuotaExhausted()) {
+      return respondWithFallback("quota");
+    }
+
     const userMessage = buildUserMessage(question, context);
     const geminiResponse = await generateContent(SYSTEM_PROMPT, userMessage);
 
     if (geminiResponse.ok) {
       clearQuotaExhausted();
+      if (geminiResponse.modelUsed) _lastWorkingModel = geminiResponse.modelUsed;
       const structured = parseAIResponse(geminiResponse.text);
       return res.json({
         ...structured,
         isFallback: false,
+        modelUsed: geminiResponse.modelUsed || null,
         category: category || null,
         contextSection: contextSection || null,
       });
     }
 
-    // ── Gemini failed — check if it's a quota error ─────────────────────────
     if (geminiResponse.quotaExhausted) {
       markQuotaExhausted();
-      const fallback = generateLocalFallback(question, context, category);
-      return res.json({
-        ...fallback,
-        answer: `Live AI polish is temporarily unavailable — here is a record-based BreedLog summary:\n\n${fallback.answer}`,
-        isFallback: true,
-        category: category || null,
-        contextSection: contextSection || null,
-      });
+      return respondWithFallback("quota");
     }
 
-    // ── Other provider error (timeout, auth, etc.) — still 502 ─────────────
-    return res.status(502).json({
-      error: geminiResponse.error || "AI provider unavailable. Please try again shortly.",
-    });
+    // Other provider error — still serve a useful fallback rather than dead-end
+    return respondWithFallback("unavailable");
   });
 }
