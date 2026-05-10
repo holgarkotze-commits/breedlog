@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Bot, Send, X, AlertCircle, Sparkles, Lightbulb, Database } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "@/components/ui/sheet";
+import { Bot, Send, X, AlertCircle, Sparkles, Lightbulb, Database, Info, ChevronDown, ChevronUp, Settings2 } from "lucide-react";
+import { Sheet, SheetContent, SheetTitle, SheetClose } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +68,8 @@ async function sendAIChat(opts: {
   return res.json();
 }
 
+const MAX_VISIBLE_FOLLOWUPS = 2;
+
 export function BreedLogAssistantPanel() {
   const { isOpen, initialOptions, closePanel } = useAIAssistant();
   const [categories, setCategories] = useState<PromptCategory[]>([]);
@@ -76,7 +78,14 @@ export function BreedLogAssistantPanel() {
   const [response, setResponse] = useState<AIResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Controls area (category + suggested questions) collapsed when an answer is showing
+  const [showControls, setShowControls] = useState(true);
+  // Details panel (Data used / caveats / warnings) — collapsed by default
+  const [showDetails, setShowDetails] = useState(false);
+  // Follow-up questions — show only first MAX_VISIBLE_FOLLOWUPS by default
+  const [showAllFollowUp, setShowAllFollowUp] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const answerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchPromptCategories().then(setCategories);
@@ -89,10 +98,17 @@ export function BreedLogAssistantPanel() {
       if (!initialOptions.prompt) setQuestion("");
       setResponse(null);
       setError(null);
+      setShowControls(true);
+      setShowDetails(false);
+      setShowAllFollowUp(false);
     }
   }, [isOpen, initialOptions]);
 
   const currentCategory = categories.find((c) => c.key === selectedCategory);
+
+  const hasDetails =
+    response &&
+    (response.usedData.length > 0 || response.warnings.length > 0);
 
   async function handleSend() {
     const q = question.trim();
@@ -100,6 +116,8 @@ export function BreedLogAssistantPanel() {
     setLoading(true);
     setError(null);
     setResponse(null);
+    setShowDetails(false);
+    setShowAllFollowUp(false);
     try {
       const result = await sendAIChat({
         question: q,
@@ -108,11 +126,15 @@ export function BreedLogAssistantPanel() {
         animalId: initialOptions.animalId,
       });
       setResponse(result);
+      // Auto-collapse controls so the answer is the first thing visible
+      setShowControls(false);
+      // Scroll answer into view after a tick
+      setTimeout(() => answerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
-      // Strip any JSON blobs from client-side errors before showing
       const safe = msg.length > 200 ? msg.slice(0, 200) + "…" : msg;
       setError(safe);
+      setShowControls(false);
     } finally {
       setLoading(false);
     }
@@ -129,109 +151,140 @@ export function BreedLogAssistantPanel() {
     setQuestion(q);
     setResponse(null);
     setError(null);
+    setShowControls(false);
+    setShowDetails(false);
+    setShowAllFollowUp(false);
     setTimeout(() => textareaRef.current?.focus(), 50);
   }
+
+  const visibleFollowUps = response?.suggestedNextQuestions ?? [];
+  const shownFollowUps = showAllFollowUp
+    ? visibleFollowUps
+    : visibleFollowUps.slice(0, MAX_VISIBLE_FOLLOWUPS);
+  const hiddenFollowUpCount = visibleFollowUps.length - shownFollowUps.length;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) closePanel(); }}>
       <SheetContent
         side="bottom"
         className={cn(
-          // Mobile: full-width bottom sheet, no side margins, rounded top corners
-          "grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-t-2xl p-0",
-          "h-[92dvh] max-h-[92dvh]",
+          // Full-screen on mobile — no wasted gap at top
+          "grid grid-rows-[auto_minmax(0,1fr)_auto] p-0",
+          "h-[100dvh] max-h-[100dvh]",
           "w-full max-w-full overflow-hidden",
+          // Rounded top corners for aesthetics
+          "rounded-t-2xl",
           // Hide the Sheet's built-in absolute close button — we render our own
           "[&>button.absolute]:hidden",
-          // Desktop: side drawer
+          // Desktop: side drawer — compact height so it doesn't fill desktop screen
           "md:right-4 md:top-4 md:h-[calc(100dvh-2rem)] md:max-h-none md:w-[440px] md:max-w-[440px] md:rounded-2xl md:border md:border-border/70",
         )}
         data-testid="ai-assistant-panel"
       >
-        {/* Header — row 1 (auto) */}
-        <SheetHeader className="border-b border-border/60 px-4 py-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-primary/15 text-primary">
-              <Bot className="h-5 w-5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <SheetTitle className="text-base font-bold leading-tight">BreedLog Assistant</SheetTitle>
-              <p className="text-[11px] text-muted-foreground">Answers from your BreedLog records</p>
-            </div>
-            <SheetClose asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 flex-none"
-                data-testid="button-close-ai-panel"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </SheetClose>
+        {/* ── Row 1: Header ── */}
+        <div className="flex flex-none items-center gap-2.5 border-b border-border/60 px-4 py-3">
+          <div className="flex h-9 w-9 flex-none items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <Bot className="h-5 w-5" />
           </div>
-        </SheetHeader>
+          <div className="min-w-0 flex-1">
+            <SheetTitle className="text-base font-bold leading-tight">BreedLog Assistant</SheetTitle>
+            <p className="text-[11px] text-muted-foreground">Answers from your BreedLog records</p>
+          </div>
+          {/* Controls toggle button — compact, always visible */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-8 w-8 flex-none",
+              showControls && "bg-primary/10 text-primary",
+            )}
+            onClick={() => setShowControls((v) => !v)}
+            data-testid="button-toggle-controls"
+            aria-label={showControls ? "Hide settings" : "Show settings"}
+          >
+            <Settings2 className="h-4 w-4" />
+          </Button>
+          <SheetClose asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 flex-none"
+              data-testid="button-close-ai-panel"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </SheetClose>
+        </div>
 
-        {/* Scrollable body — row 2 (1fr). Native overflow-y-auto for reliable
-            mobile scrolling (Radix ScrollArea + dvh + flex has known iOS bugs).
-            Bottom padding ensures answer card never sits under the input bar. */}
+        {/* ── Row 2: Scrollable body ── */}
         <div
           className="min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain"
           data-testid="ai-panel-scroll"
         >
-          <div className="space-y-4 p-4 pb-6">
+          <div className="space-y-3 p-4 pb-6">
 
-            {/* Category selector */}
-            <div>
-              <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Category
-              </label>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="h-9 w-full" data-testid="select-trigger-ai-category">
-                  <SelectValue placeholder="Choose a topic…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Suggested prompts — wrap cleanly, no horizontal overflow */}
-            {currentCategory && currentCategory.prompts.length > 0 && !loading && (
-              <div>
-                <label className="mb-2 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Suggested questions
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {currentCategory.prompts.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => handlePromptChip(p)}
-                      data-testid="button-prompt-chip"
-                      className={cn(
-                        "rounded-full border border-border/70 bg-muted/50 px-3 py-1",
-                        "text-[11px] font-medium text-foreground/80",
-                        "transition-colors hover:bg-muted hover:text-foreground",
-                        // Wrap long prompts — never push past panel width
-                        "max-w-full whitespace-normal text-left break-words",
-                      )}
-                    >
-                      {p}
-                    </button>
-                  ))}
+            {/* ── Collapsible controls: category + suggested questions ── */}
+            {showControls && (
+              <div
+                className="space-y-3 rounded-xl border border-border/60 bg-muted/30 p-3"
+                data-testid="ai-controls-area"
+              >
+                {/* Category selector */}
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Category
+                  </label>
+                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="h-8 w-full text-xs" data-testid="select-trigger-ai-category">
+                      <SelectValue placeholder="Choose a topic…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => (
+                        <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {/* Suggested prompts — wrap cleanly */}
+                {currentCategory && currentCategory.prompts.length > 0 && !loading && (
+                  <div>
+                    <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Suggested questions
+                    </label>
+                    <div className="flex flex-wrap gap-1.5" data-testid="ai-suggested-questions">
+                      {currentCategory.prompts.map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => handlePromptChip(p)}
+                          data-testid="button-prompt-chip"
+                          className={cn(
+                            "rounded-full border border-border/70 bg-muted/50 px-2.5 py-1",
+                            "text-[11px] font-medium text-foreground/80",
+                            "transition-colors hover:bg-muted hover:text-foreground",
+                            "max-w-full whitespace-normal text-left break-words",
+                          )}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Answer display */}
+            {/* ── Answer card ── */}
             {response && (
-              <div className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-3" data-testid="ai-answer-container">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 flex-none text-primary" />
-                    <span className="text-xs font-semibold text-foreground">Assistant</span>
-                  </div>
+              <div
+                ref={answerRef}
+                className="rounded-xl border border-border/70 bg-card/80"
+                data-testid="ai-answer-container"
+              >
+                {/* Card header: AI label + confidence + info toggle */}
+                <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
+                  <Sparkles className="h-3.5 w-3.5 flex-none text-primary" />
+                  <span className="flex-1 text-xs font-semibold text-foreground">Assistant</span>
                   <Badge
                     variant="secondary"
                     className={cn("flex-none text-[10px]", CONFIDENCE_STYLE[response.confidence])}
@@ -239,52 +292,120 @@ export function BreedLogAssistantPanel() {
                   >
                     {response.confidence}
                   </Badge>
+                  {hasDetails && (
+                    <button
+                      onClick={() => setShowDetails((v) => !v)}
+                      data-testid="button-toggle-details"
+                      aria-label={showDetails ? "Hide data details" : "Show data details"}
+                      className={cn(
+                        "ml-1 flex h-6 w-6 flex-none items-center justify-center rounded-md transition-colors",
+                        showDetails
+                          ? "bg-primary/15 text-primary"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
 
-                {/* Answer text — always wraps, never overflows */}
-                <p className="break-words text-sm leading-relaxed text-foreground" data-testid="ai-answer-text">
-                  {response.answer}
-                </p>
+                {/* Main answer — always visible, prominent */}
+                <div className="px-3 py-3">
+                  <p
+                    className="break-words text-sm leading-relaxed text-foreground"
+                    data-testid="ai-answer-text"
+                  >
+                    {response.answer}
+                  </p>
+                </div>
 
-                {response.usedData.length > 0 && (
-                  <div className="rounded-lg border border-border/50 bg-muted/40 px-3 py-2">
-                    <div className="mb-1.5 flex items-center gap-1.5">
-                      <Database className="h-3 w-3 flex-none text-muted-foreground" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Data used</span>
-                    </div>
-                    <ul className="space-y-0.5">
-                      {response.usedData.map((d, i) => (
-                        <li key={i} className="break-words text-[11px] text-muted-foreground before:mr-1.5 before:content-['·']">{d}</li>
-                      ))}
-                    </ul>
+                {/* Details section — Data used + Caveats — collapsed by default */}
+                {showDetails && hasDetails && (
+                  <div
+                    className="space-y-2 border-t border-border/40 px-3 pb-3 pt-2"
+                    data-testid="ai-details-section"
+                  >
+                    {response.usedData.length > 0 && (
+                      <div className="rounded-lg border border-border/50 bg-muted/40 px-3 py-2">
+                        <div className="mb-1 flex items-center gap-1.5">
+                          <Database className="h-3 w-3 flex-none text-muted-foreground" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Data used
+                          </span>
+                        </div>
+                        <ul className="space-y-0.5">
+                          {response.usedData.map((d, i) => (
+                            <li
+                              key={i}
+                              className="break-words text-[11px] text-muted-foreground before:mr-1.5 before:content-['·']"
+                            >
+                              {d}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {response.warnings.length > 0 && (
+                      <div className="rounded-lg border border-amber-200/60 bg-amber-50/60 px-3 py-2 dark:border-amber-800/40 dark:bg-amber-900/10">
+                        <div className="mb-1 flex items-center gap-1.5">
+                          <AlertCircle className="h-3 w-3 flex-none text-amber-600 dark:text-amber-400" />
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                            Caveats
+                          </span>
+                        </div>
+                        {response.warnings.map((w, i) => (
+                          <p
+                            key={i}
+                            className="break-words text-[11px] text-amber-700 dark:text-amber-300"
+                          >
+                            {w}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {response.warnings.length > 0 && (
-                  <div className="rounded-lg border border-amber-200/60 bg-amber-50/60 px-3 py-2 dark:border-amber-800/40 dark:bg-amber-900/10">
-                    <div className="mb-1 flex items-center gap-1.5">
-                      <AlertCircle className="h-3 w-3 flex-none text-amber-600 dark:text-amber-400" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">Caveats</span>
+                {/* Follow-up questions — compact chips, max 2 visible by default */}
+                {visibleFollowUps.length > 0 && (
+                  <div
+                    className="border-t border-border/40 px-3 pb-3 pt-2"
+                    data-testid="ai-follow-up-section"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1">
+                        <Lightbulb className="h-3 w-3 flex-none text-muted-foreground" />
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Follow up
+                        </span>
+                      </div>
+                      {hiddenFollowUpCount > 0 && (
+                        <button
+                          onClick={() => setShowAllFollowUp(true)}
+                          className="text-[10px] text-primary underline-offset-2 hover:underline"
+                          data-testid="button-show-more-followup"
+                        >
+                          +{hiddenFollowUpCount} more
+                        </button>
+                      )}
+                      {showAllFollowUp && visibleFollowUps.length > MAX_VISIBLE_FOLLOWUPS && (
+                        <button
+                          onClick={() => setShowAllFollowUp(false)}
+                          className="text-[10px] text-muted-foreground underline-offset-2 hover:underline"
+                          data-testid="button-collapse-followup"
+                        >
+                          Show less
+                        </button>
+                      )}
                     </div>
-                    {response.warnings.map((w, i) => (
-                      <p key={i} className="break-words text-[11px] text-amber-700 dark:text-amber-300">{w}</p>
-                    ))}
-                  </div>
-                )}
-
-                {response.suggestedNextQuestions.length > 0 && (
-                  <div>
-                    <div className="mb-1.5 flex items-center gap-1.5">
-                      <Lightbulb className="h-3 w-3 flex-none text-muted-foreground" />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Follow up</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      {response.suggestedNextQuestions.map((q, i) => (
+                    <div className="flex flex-wrap gap-1.5">
+                      {shownFollowUps.map((q, i) => (
                         <button
                           key={i}
                           onClick={() => handleFollowUp(q)}
                           data-testid="button-follow-up"
-                          className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-left text-[11px] text-primary transition-colors hover:bg-primary/10 break-words"
+                          className="rounded-full border border-primary/25 bg-primary/8 px-2.5 py-1 text-left text-[11px] text-primary break-words transition-colors hover:bg-primary/15 max-w-full"
                         >
                           {q}
                         </button>
@@ -295,7 +416,7 @@ export function BreedLogAssistantPanel() {
               </div>
             )}
 
-            {/* Error state — compact, word-wrapped, never overflows */}
+            {/* Error state */}
             {error && (
               <div
                 className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 p-3"
@@ -308,7 +429,10 @@ export function BreedLogAssistantPanel() {
 
             {/* Loading state */}
             {loading && (
-              <div className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/30 px-4 py-3" data-testid="ai-loading-state">
+              <div
+                className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-muted/30 px-4 py-3"
+                data-testid="ai-loading-state"
+              >
                 <div className="flex gap-1">
                   {[0, 1, 2].map((i) => (
                     <div
@@ -324,8 +448,10 @@ export function BreedLogAssistantPanel() {
           </div>
         </div>
 
-        {/* Input area — row 3 (auto), never overflows horizontally */}
-        <div className="border-t border-border/60 bg-background px-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] pt-3">
+        {/* ── Row 3: Input composer — always visible, never clipped ── */}
+        <div
+          className="flex-none border-t border-border/60 bg-background px-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] pt-3"
+        >
           <div className="flex items-end gap-2">
             <Textarea
               ref={textareaRef}
@@ -354,6 +480,7 @@ export function BreedLogAssistantPanel() {
                 "hover:brightness-110 active:scale-95",
                 "disabled:cursor-not-allowed disabled:opacity-40",
               )}
+              aria-label="Send question"
             >
               <Send className="h-4 w-4" />
             </button>

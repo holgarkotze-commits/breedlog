@@ -1,0 +1,182 @@
+Replit Agent: fix BreedLog theme contrast and rebuild the Assistant mobile layout properly.
+
+Do not do scattered one-button patches. Fix the shared theme/button system so the rules apply consistently across the whole app.
+
+Current issues from mobile testing:
+
+1. Light mode has white/light buttons with white text.
+   That is wrong and unreadable.
+   Light buttons must use dark readable text.
+
+2. Dark mode has yellow/gold buttons with white text.
+   That is wrong and unreadable.
+   Yellow/gold buttons must use dark/black readable text.
+
+3. Bottom navigation active tab in dark mode turns yellow, but the text remains white.
+   That is wrong.
+   When the active tab background is yellow/gold, the label and icon must turn dark/black.
+   When the tab is inactive on dark background, label/icon can be white/light again.
+
+4. BreedLog Assistant mobile sheet still wastes space at the top and does not prioritize the answer/chat area properly.
+   The assistant must behave like a professional mobile AI screen, not a web modal squeezed into a phone.
+
+Required global contrast system:
+
+Implement button/text contrast based on actual background type:
+
+A. Light mode
+
+* white/light/outline buttons: dark readable text and dark readable icons
+* blue/dark buttons: white readable text and white readable icons
+* yellow/gold buttons: dark/black readable text and dark/black icons
+* disabled buttons: muted but still readable, never white-on-white
+
+B. Dark mode
+
+* dark/blue/gradient buttons: white readable text and white readable icons
+* yellow/gold buttons: dark/black readable text and dark/black icons
+* active yellow/gold bottom-nav tab: dark/black icon + dark/black label
+* inactive dark bottom-nav tabs: light/white icon + light/white label
+* disabled buttons: visibly disabled but still readable
+
+Important:
+Do not use one global “button text must be white” rule.
+Use contrast-aware token classes/components.
+
+Specific buttons to verify:
+
+* Export
+* Scan EID
+* Add Animal
+* Export PDF
+* Ask BreedLog
+* bottom navigation active tabs
+* AI send button
+* Health Record buttons
+* Breeding New Group button
+* Access/Activate button
+* Admin buttons
+
+Assistant mobile layout rebuild:
+
+The BreedLog Assistant must become a proper full-screen mobile assistant.
+
+A. Full-screen placement
+
+* On mobile, the assistant sheet must start at the top of the usable screen.
+* Remove the empty/padding gap above the assistant panel.
+* Use height: 100dvh or equivalent safe mobile viewport handling.
+* Width must be 100vw max, no horizontal overflow.
+* Respect safe-area insets but do not leave a large wasted top gap.
+
+B. Screen priority
+The main assistant answer/chat card must become the primary focus.
+
+New mobile order:
+
+1. Header: BreedLog Assistant title + close button.
+2. Compact collapsed controls area:
+
+   * Category selector
+   * Suggested questions
+     These should be compact/collapsible, not taking over the screen.
+3. Main answer/chat window:
+
+   * This must sit low in the screen, directly above the input composer.
+   * It must be the dominant visible area.
+   * It must not be clipped by the input composer.
+4. Follow-up questions:
+
+   * These must be minimized/collapsible below or inside the answer card area.
+   * They must not push the main answer off-screen.
+5. Input composer:
+
+   * Sticky at bottom
+   * Always visible
+   * Send button clear and tappable
+
+C. Data Used / Caveats / technical detail handling
+Currently the assistant shows Data Used, Caveats, and other metadata directly in the main answer area, making the screen too busy.
+
+Change this:
+
+* The main answer card should show the actual assistant answer first.
+* Add a small info button/icon inside the answer card.
+* Only when the user taps the info button should it expand/show:
+
+  * Data Used
+  * Caveats
+  * Warnings
+  * Follow-up context
+  * source fields / detailed record basis
+* Default state must keep these details collapsed.
+
+D. Follow-up questions
+
+* Show follow-up questions as a small collapsed strip or compact chips.
+* They must not dominate the screen.
+* They can expand when tapped.
+* They must never widen the screen or create horizontal overflow.
+
+E. Assistant scrolling behavior
+
+* The answer/chat area must scroll independently when content is long.
+* The input composer must not cover the answer.
+* Add enough bottom padding in the scroll area so the last answer remains visible above the input bar.
+* No content should disappear behind the bottom input section.
+
+F. Mobile viewport checks
+Test and verify on:
+
+* 360px width
+* 390px width
+* 430px width
+
+Verify:
+
+* no horizontal overflow
+* assistant starts at top with no wasted gap
+* main answer card is visible above input
+* input composer remains visible
+* info/details section is collapsed by default
+* details expand/collapse correctly
+* follow-up questions are compact/minimized
+* close button is visible/tappable
+
+Do not break desktop/tablet layout.
+Desktop can keep a larger modal/sheet if needed, but mobile must be purpose-built.
+
+AI behavior reminder:
+
+* Live AI must remain wired through the model chain.
+* Fallback mode must still work if provider quota fails.
+* Raw provider errors must never be shown to users.
+
+Testing/proof required:
+
+Add or update tests/checks for:
+
+* light-mode light buttons do not render white text on white/light background
+* dark-mode yellow/gold buttons render dark text/icons
+* dark-mode active bottom nav yellow tab renders dark text/icons
+* assistant details/Data Used section is collapsed by default
+* assistant info button expands details
+* assistant mobile layout has no horizontal overflow
+* answer card is not hidden behind input composer
+* follow-up questions are compact/minimized by default
+
+Run and report:
+
+* files changed
+* shared button/theme tokens changed
+* bottom nav active-state fix location
+* Ask BreedLog contrast fix location
+* assistant layout fix location
+* info/details collapse implementation location
+* npm run check result
+* npm run build result
+* relevant UI/test result
+* mobile 360/390/430 verification result
+
+Acceptance gate:
+This is only complete when light mode has no white-on-white buttons, dark mode has no white-on-yellow active buttons, active yellow nav tabs use dark text/icons, and the mobile Assistant is full-screen, top-aligned, answer-first, with Data Used/Caveats collapsed behind an info button.

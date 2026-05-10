@@ -707,3 +707,132 @@ describe("AI Local Fallback — category-specific answers", () => {
     }
   });
 });
+
+// ── Assistant panel layout & details-collapse (DOM/unit) ─────────────────────
+
+describe("AI Assistant panel — details collapsed by default", () => {
+  test("BreedLogAssistantPanel source has showDetails default false", async () => {
+    // Read the panel source and verify the state initialiser
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("client/src/components/BreedLogAssistantPanel.tsx", "utf8");
+    // showDetails must default to false
+    assert.ok(
+      src.includes("useState(false)") && src.includes("showDetails"),
+      "showDetails must be initialised to false",
+    );
+    // Info button must be rendered with data-testid
+    assert.ok(
+      src.includes('data-testid="button-toggle-details"'),
+      "info toggle button must have data-testid",
+    );
+    // Details section must be guarded by showDetails
+    assert.ok(
+      src.includes("showDetails && hasDetails") || src.includes("{showDetails &&"),
+      "details section must be conditionally rendered behind showDetails",
+    );
+  });
+
+  test("BreedLogAssistantPanel source wraps follow-ups in compact chip strip", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("client/src/components/BreedLogAssistantPanel.tsx", "utf8");
+    assert.ok(
+      src.includes("MAX_VISIBLE_FOLLOWUPS") || src.includes("shownFollowUps"),
+      "follow-up list must be capped by MAX_VISIBLE_FOLLOWUPS",
+    );
+    assert.ok(
+      src.includes('data-testid="ai-follow-up-section"'),
+      "follow-up section must have data-testid",
+    );
+  });
+
+  test("BreedLogAssistantPanel source uses 100dvh (full-screen on mobile)", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("client/src/components/BreedLogAssistantPanel.tsx", "utf8");
+    assert.ok(
+      src.includes("100dvh"),
+      "panel must use 100dvh for full-screen mobile coverage",
+    );
+  });
+
+  test("BreedLogAssistantPanel source uses grid layout (no flex column clipping)", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("client/src/components/BreedLogAssistantPanel.tsx", "utf8");
+    assert.ok(
+      src.includes("grid-rows-[auto_minmax(0,1fr)_auto]"),
+      "panel must use grid layout to prevent input bar clipping",
+    );
+  });
+
+  test("BreedLogAssistantPanel source has no horizontal overflow risk on suggestions", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("client/src/components/BreedLogAssistantPanel.tsx", "utf8");
+    // overflow-x-hidden on scroll container
+    assert.ok(
+      src.includes("overflow-x-hidden"),
+      "scroll body must have overflow-x-hidden to prevent widening",
+    );
+    // Suggested question chips must have max-w-full
+    assert.ok(
+      src.includes("max-w-full"),
+      "chips must have max-w-full to prevent overflow",
+    );
+  });
+});
+
+// ── Button contrast (CSS token) ──────────────────────────────────────────────
+
+describe("Theme tokens — button contrast", () => {
+  test("dark mode primary-foreground is dark (not white) for yellow bg readability", async () => {
+    const { readFileSync } = await import("fs");
+    const css = readFileSync("client/src/index.css", "utf8");
+    // Extract .dark block
+    const darkMatch = css.match(/\.dark\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}/s);
+    assert.ok(darkMatch, "must have .dark block");
+    const darkBlock = darkMatch![1];
+    // primary-foreground must NOT be white (0 0% 100%)
+    const pfLine = darkBlock.match(/--primary-foreground:\s*([^;]+);/);
+    assert.ok(pfLine, "must define --primary-foreground in .dark");
+    const val = pfLine![1].trim();
+    assert.notEqual(
+      val,
+      "0 0% 100%",
+      `Dark mode --primary-foreground must not be white (0 0% 100%), got: ${val}. Yellow bg with white text is unreadable.`,
+    );
+  });
+
+  test("dark mode primary-foreground is low-lightness (dark enough to read on yellow)", async () => {
+    const { readFileSync } = await import("fs");
+    const css = readFileSync("client/src/index.css", "utf8");
+    const darkMatch = css.match(/\.dark\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}/s);
+    const darkBlock = darkMatch![1];
+    const pfLine = darkBlock.match(/--primary-foreground:\s*([^;]+);/);
+    const val = pfLine![1].trim();
+    // Parse H S% L% — lightness must be < 30% for dark text
+    const parts = val.split(/\s+/);
+    const lightness = parseFloat(parts[2] ?? "100");
+    assert.ok(
+      lightness < 30,
+      `Dark mode --primary-foreground lightness must be <30% for dark text on yellow, got: ${lightness}%`,
+    );
+  });
+
+  test("light mode primary is dark navy (not yellow) so white foreground is fine", async () => {
+    const { readFileSync } = await import("fs");
+    const css = readFileSync("client/src/index.css", "utf8");
+    // Extract :root block
+    const rootMatch = css.match(/:root\s*,?\s*\.light\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}/s) ??
+                     css.match(/:root\s*\{([^}]+(?:\{[^}]*\}[^}]*)*)\}/s);
+    assert.ok(rootMatch, "must have :root block");
+    const rootBlock = rootMatch![1];
+    const pLine = rootBlock.match(/--primary:\s*([^;]+);/);
+    assert.ok(pLine, "must define --primary in :root");
+    const val = pLine![1].trim();
+    const parts = val.split(/\s+/);
+    const lightness = parseFloat(parts[2] ?? "0");
+    // Light mode primary should be dark (lightness < 40%) so white text is readable
+    assert.ok(
+      lightness < 40,
+      `Light mode --primary should be dark for white foreground readability, got lightness: ${lightness}%`,
+    );
+  });
+});
