@@ -13,7 +13,9 @@ import {
   MoreHorizontal,
   Shield,
   X,
+  Bot,
 } from "lucide-react";
+import { useAIStatus } from "@/hooks/use-ai-status";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -130,6 +132,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     location.startsWith("/admin");
 
   const displayName = farmSettings?.studName || farmSettings?.farmName || null;
+  const { quotaExhausted } = useAIStatus();
 
   return (
     <div className="min-h-screen bg-background abstract-bg flex flex-col pb-24 md:flex-row md:pb-0">
@@ -180,22 +183,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile header: logo centred, sync widget anchored to the right inside the header */}
-      <header className={cn("sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur md:hidden", isScrolled ? "py-2" : "py-3")}>
-        <div className="relative flex items-center justify-center px-4">
-          <Link href="/" className="flex flex-col items-center">
-            <div className={cn("transition-all duration-300", isScrolled ? "scale-75" : "scale-100")}>
-              <Logo size={isScrolled ? "sm" : "md"} />
-            </div>
-            <div className={cn("overflow-hidden transition-all duration-300", isScrolled ? "max-h-0 opacity-0" : "mt-1.5 max-h-20 opacity-100")}>
-              <ScrambleText text={displayName || "Breed Smart, Farm Better"} className="text-xs font-medium text-muted-foreground" />
-            </div>
-          </Link>
-          {/* Sync indicator — lives inside the header on mobile, never overlaps logo */}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 rounded-xl border border-border/70 bg-card/90 p-1.5 shadow-sm backdrop-blur">
+      {/* Mobile header — stacked layout: logo row then status row. Nothing overlaps. */}
+      <header className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur md:hidden">
+        {/* Logo row */}
+        <Link href="/" className={cn("flex flex-col items-center px-4 transition-all duration-300", isScrolled ? "pt-1.5 pb-1" : "pt-3 pb-1.5")}>
+          <div className={cn("transition-all duration-300", isScrolled ? "scale-75 origin-top" : "scale-100")}>
+            <Logo size={isScrolled ? "sm" : "md"} />
+          </div>
+          <div className={cn("overflow-hidden transition-all duration-300", isScrolled ? "max-h-0 opacity-0" : "max-h-8 opacity-100 mt-1")}>
+            <ScrambleText text={displayName || "Breed Smart, Farm Better"} className="text-xs font-medium text-muted-foreground" />
+          </div>
+        </Link>
+
+        {/* Status row — always its own row, never overlaps anything above */}
+        <div className={cn("flex items-center justify-center gap-2 transition-all duration-300 pb-1.5", isScrolled ? "pb-1" : "pb-2")}>
+          {/* Sync status chip */}
+          <div className="flex items-center gap-1 rounded-full border border-border/60 bg-card/80 px-2.5 py-1 shadow-sm">
             <SyncStatusBadge />
             <GlobalRefreshButton location="header" />
           </div>
+          {/* AI status chip — only visible when quota exhausted */}
+          {quotaExhausted && (
+            <div className="flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 shadow-sm">
+              <Bot className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+              <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">Local AI</span>
+            </div>
+          )}
         </div>
       </header>
 

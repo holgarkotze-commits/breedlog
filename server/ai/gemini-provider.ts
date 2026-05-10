@@ -11,6 +11,8 @@ export interface GeminiResponse {
   text: string;
   ok: boolean;
   error?: string;
+  /** True when the provider returned a 429 / RESOURCE_EXHAUSTED quota error. */
+  quotaExhausted?: boolean;
 }
 
 let _client: GoogleGenAI | null = null;
@@ -63,7 +65,12 @@ export async function generateContent(
       msg.includes("RESOURCE_EXHAUSTED") ||
       msg.includes("quota")
     ) {
-      return { ok: false, text: "", error: "AI quota is temporarily exhausted. Please try again in a few minutes." };
+      return {
+        ok: false,
+        text: "",
+        error: "AI quota is temporarily exhausted.",
+        quotaExhausted: true,
+      };
     }
     if (msg.includes("API_KEY") || msg.includes("authentication") || msg.includes("401")) {
       return { ok: false, text: "", error: "AI is not configured correctly. Contact support." };

@@ -193,33 +193,28 @@ describe("AI Assistant — /api/ai/chat", () => {
     );
   });
 
-  test("returns structured response, 503 (not configured), or 502 (provider error)", async () => {
+  test("returns structured response or 503 (not configured) — quota errors produce 200 with fallback, not 502", async () => {
     const res = await post("/api/ai/chat", {
       question: "Summarize my herd.",
       category: "herd-overview",
     });
 
     if (res.status === 503) {
-      // Not configured
+      // Not configured — acceptable
       const body = await res.json() as { configured: boolean; error: string };
       assert.equal(body.configured, false, "503 must indicate not configured");
       assert.ok(typeof body.error === "string", "503 must have error message");
-    } else if (res.status === 502) {
-      // Configured but provider error (quota, timeout, etc.) — must have clean user-facing error
-      const body = await res.json() as { error: string };
-      assert.ok(typeof body.error === "string", "502 must have error message");
-      assert.ok(body.error.length < 300, "502 error must be a short user-facing message, not raw JSON");
-      assert.ok(!body.error.includes("RESOURCE_EXHAUSTED"), "502 must not expose raw API error codes");
-      assert.ok(!body.error.includes("{"), "502 must not expose JSON in user-facing error");
     } else if (res.status === 200) {
+      // Success — either live Gemini answer or local fallback for quota errors
       const body = await res.json() as {
         answer: string;
         confidence: string;
         usedData: unknown[];
         warnings: unknown[];
         suggestedNextQuestions: unknown[];
+        isFallback?: boolean;
       };
-      assert.ok(typeof body.answer === "string", "must have answer string");
+      assert.ok(typeof body.answer === "string" && body.answer.length > 0, "must have non-empty answer");
       assert.ok(
         ["high", "medium", "low", "insufficient"].includes(body.confidence),
         "confidence must be valid",
@@ -227,6 +222,16 @@ describe("AI Assistant — /api/ai/chat", () => {
       assert.ok(Array.isArray(body.usedData), "usedData must be array");
       assert.ok(Array.isArray(body.warnings), "warnings must be array");
       assert.ok(Array.isArray(body.suggestedNextQuestions), "suggestedNextQuestions must be array");
+      // When using local fallback, answer must NOT contain raw API error JSON
+      assert.ok(!body.answer.includes("RESOURCE_EXHAUSTED"), "answer must not expose raw API error");
+      assert.ok(!body.answer.includes('"error"'), "answer must not expose raw JSON error field");
+    } else if (res.status === 502) {
+      // Non-quota provider error (timeout, auth, etc.) — must have clean message
+      const body = await res.json() as { error: string };
+      assert.ok(typeof body.error === "string", "502 must have error message");
+      assert.ok(body.error.length < 300, "502 error must be short user-facing message, not raw JSON");
+      assert.ok(!body.error.includes("RESOURCE_EXHAUSTED"), "502 must not expose raw API error codes");
+      assert.ok(!body.error.includes("{"), "502 must not expose JSON in user-facing error");
     } else {
       assert.fail(`Unexpected status ${res.status}: ${await res.text()}`);
     }
@@ -252,6 +257,183 @@ describe("AI Assistant — /api/ai/chat", () => {
       res.status === 400 || res.status === 503,
       `expected 400 or 503 for negative animalId, got ${res.status}`,
     );
+  });
+});
+
+// ── Health — quota status fields ────────────────────────────────────────────
+
+describe("AI Assistant — /api/ai/health quota status fields", () => {
+  test("health endpoint returns quotaExhausted and fallbackActive fields", async () => {
+    const res = await get("/api/ai/health", false);
+    assert.equal(res.status, 200);
+    const body = await res.json() as Record<string, unknown>;
+    assert.ok("quotaExhausted" in body, "must have quotaExhausted field");
+    assert.ok("fallbackActive" in body, "must have fallbackActive field");
+    assert.ok("providerStatus" in body, "must have providerStatus field");
+    assert.ok(typeof body.quotaExhausted === "boolean", "quotaExhausted must be boolean");
+    assert.ok(typeof body.fallbackActive === "boolean", "fallbackActive must be boolean");
+    const validStatuses = ["available", "quota_exhausted", "not_configured", "unavailable"];
+    assert.ok(
+      validStatuses.includes(body.providerStatus as string),
+      `providerStatus must be one of: ${validStatuses.join(", ")}`,
+    );
+  });
+
+  test("when quota is not exhausted, fallbackActive must be false (or AI not configured)", async () => {
+    const res = await get("/api/ai/health", false);
+    const body = await res.json() as { configured: boolean; quotaExhausted: boolean; fallbackActive: boolean };
+    // fallbackActive should only be true when configured AND quota is exhausted
+    if (!body.configured) {
+      assert.equal(body.fallbackActive, false, "fallbackActive must be false when not configured");
+    } else if (!body.quotaExhausted) {
+      assert.equal(body.fallbackActive, false, "fallbackActive must be false when quota not exhausted");
+    }
+  });
+});
+
+// ── Local Fallback (unit — no server needed) ─────────────────────────────────
+
+describe("AI Local Fallback — generateLocalFallback (unit)", () => {
+  // Build a minimal context for testing
+  async function makeCtx(overrides: Partial<import("../server/ai/breedlog-ai-context.ts").BreedLogAIContext> = {}) {
+    const { buildBreedLogAIContext } = await import("../server/ai/breedlog-ai-context.ts");
+    const base = buildBreedLogAIContext({
+      animals: [],
+      breedingEvents: [],
+      performanceRecords: [],
+      healthRecords: [],
+      flockHealthEvents: [],
+      matingGroups: [],
+      farmSettings: undefined,
+    });
+    return { ...base, ...overrides };
+  }
+
+  async function fallback(question: string, category?: string) {
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+    const ctx = await makeCtx();
+    return generateLocalFallback(question, ctx, category);
+  }
+
+  test("always returns isFallback: true", async () => {
+    const result = await fallback("Summarize my herd.");
+    assert.equal(result.isFallback, true, "isFallback must always be true");
+  });
+
+  test("herd-overview returns valid structure", async () => {
+    const result = await fallback("Summarize my herd.", "herd-overview");
+    assert.ok(typeof result.answer === "string" && result.answer.length > 0, "must have non-empty answer");
+    assert.ok(Array.isArray(result.usedData), "usedData must be array");
+    assert.ok(Array.isArray(result.warnings), "warnings must be array");
+    assert.ok(Array.isArray(result.suggestedNextQuestions), "suggestedNextQuestions must be array");
+    assert.ok(
+      ["high", "medium", "low", "insufficient"].includes(result.confidence),
+      "confidence must be valid",
+    );
+  });
+
+  test("data-quality returns valid structure", async () => {
+    const result = await fallback("How complete is my herd data?", "data-quality");
+    assert.equal(result.isFallback, true);
+    assert.ok(typeof result.answer === "string" && result.answer.length > 0);
+    assert.ok(result.answer.toLowerCase().includes("data quality") || result.answer.toLowerCase().includes("score"), "should mention data quality");
+  });
+
+  test("sire-performance returns valid structure (empty = insufficient)", async () => {
+    const result = await fallback("Which ram is performing best?", "sire-performance");
+    assert.equal(result.isFallback, true);
+    assert.ok(typeof result.answer === "string" && result.answer.length > 0);
+    // Empty data should return insufficient confidence
+    assert.equal(result.confidence, "insufficient", "no sires = insufficient confidence");
+  });
+
+  test("health returns valid structure (empty = insufficient)", async () => {
+    const result = await fallback("How is my herd's health?", "health");
+    assert.equal(result.isFallback, true);
+    assert.ok(typeof result.answer === "string" && result.answer.length > 0);
+    assert.equal(result.confidence, "insufficient", "no health records = insufficient");
+  });
+
+  test("priority list returns valid structure", async () => {
+    const result = await fallback("What needs my attention first?", "priority");
+    assert.equal(result.isFallback, true);
+    assert.ok(typeof result.answer === "string" && result.answer.length > 0);
+    assert.equal(result.confidence, "high", "priority list always returns high confidence");
+  });
+
+  test("question keyword detection — 'ram' maps to sire-performance", async () => {
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+    const ctx = await makeCtx();
+    const result = generateLocalFallback("Which ram appears to be performing best?", ctx);
+    assert.equal(result.isFallback, true);
+    // Should be sire-performance (no data → insufficient)
+    assert.equal(result.confidence, "insufficient");
+  });
+
+  test("question keyword detection — 'attention' maps to priority", async () => {
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+    const ctx = await makeCtx();
+    const result = generateLocalFallback("What needs my attention first?", ctx);
+    assert.equal(result.isFallback, true);
+    assert.equal(result.confidence, "high", "priority always returns high confidence");
+  });
+
+  test("question keyword detection — 'how many animals' maps to herd-overview", async () => {
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+    const ctx = await makeCtx();
+    const result = generateLocalFallback("How many animals do I have and how are they distributed?", ctx);
+    assert.equal(result.isFallback, true);
+    // herd with 0 animals → insufficient or low
+    assert.ok(["insufficient", "low", "medium"].includes(result.confidence));
+  });
+
+  test("answer never contains raw API JSON or error codes", async () => {
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+    const ctx = await makeCtx();
+    const questions = [
+      "Summarize my herd.",
+      "Which ram appears to be performing best?",
+      "How complete is my herd data?",
+      "What needs my attention first?",
+    ];
+    for (const q of questions) {
+      const result = generateLocalFallback(q, ctx);
+      assert.ok(!result.answer.includes("RESOURCE_EXHAUSTED"), `answer must not contain RESOURCE_EXHAUSTED for: ${q}`);
+      assert.ok(!result.answer.includes('"error"'), `answer must not contain JSON error field for: ${q}`);
+      assert.ok(!result.answer.includes("quota"), `answer must not mention quota for: ${q}`);
+    }
+  });
+
+  test("fallback with real herd data produces high-confidence herd overview", async () => {
+    const { buildBreedLogAIContext } = await import("../server/ai/breedlog-ai-context.ts");
+    const { generateLocalFallback } = await import("../server/ai/local-fallback.ts");
+
+    const baseAnimal = {
+      userId: "u1", rawTag: null, tattooId: null, electronicId: null,
+      studPrefix: null, name: null, breed: null, classification: "stud" as const,
+      photo: null, lambStatus: null, ramLambClass: null,
+      birthDate: "2022-01-01", currentWeight: null, weight100DayDate: null,
+      birthStatus: null, lambingSeason: null, notes: null, clientId: null, vectorClock: null,
+      lastSyncedAt: null, cullConfirmed: null, cullReason: null, cullNotes: null,
+      cullDate: null, culledAt: null, isCulled: null, deathDate: null, deathCause: null,
+      deathNotes: null, createdAt: new Date(), updatedAt: new Date(),
+      sireId: null, damId: null, birthWeight: null, weight100Day: null,
+      status: "active" as const,
+    };
+    const animals = Array.from({ length: 12 }, (_, i) => ({
+      ...baseAnimal,
+      id: i + 1,
+      tagId: `TAG-${String(i + 1).padStart(3, "0")}`,
+      sex: (i < 3 ? "ram" : "ewe") as "ram" | "ewe",
+    }));
+    const ctx = buildBreedLogAIContext({
+      animals, breedingEvents: [], performanceRecords: [],
+      healthRecords: [], flockHealthEvents: [], matingGroups: [], farmSettings: undefined,
+    });
+    const result = generateLocalFallback("Summarize my herd.", ctx, "herd-overview");
+    assert.equal(result.isFallback, true);
+    assert.equal(result.confidence, "high", "12 animals should produce high confidence");
+    assert.ok(result.answer.includes("12"), "answer should mention total animal count");
   });
 });
 

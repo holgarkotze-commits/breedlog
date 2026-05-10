@@ -5,11 +5,39 @@ import { isConfigured, generateContent } from "./gemini-provider";
 import { buildBreedLogAIContext, type BreedLogAIContext } from "./breedlog-ai-context";
 import { SYSTEM_PROMPT } from "./breedlog-ai-rules";
 import { PROMPT_CATEGORIES, CATEGORY_KEYS } from "./breedlog-ai-prompts";
+import { generateLocalFallback } from "./local-fallback";
 import { z } from "zod";
 
 const requireAuth = requireDeviceAuth;
 
-// Simple in-memory rate limiter: 20 requests per 60 seconds per userId
+// ── Quota exhaustion tracking ────────────────────────────────────────────────
+// When Gemini returns 429/RESOURCE_EXHAUSTED we note the timestamp so that:
+// a) Subsequent requests go straight to the local fallback (no wasted API call)
+// b) /api/ai/health reflects the degraded state
+// Clears automatically after 5 minutes (quota windows typically reset sooner).
+
+let _quotaExhaustedAt: number | null = null;
+const QUOTA_COOLDOWN_MS = 5 * 60_000; // 5 min
+
+function isQuotaExhausted(): boolean {
+  if (!_quotaExhaustedAt) return false;
+  if (Date.now() - _quotaExhaustedAt > QUOTA_COOLDOWN_MS) {
+    _quotaExhaustedAt = null; // expired — optimistically retry Gemini
+    return false;
+  }
+  return true;
+}
+
+function markQuotaExhausted(): void {
+  _quotaExhaustedAt = Date.now();
+}
+
+function clearQuotaExhausted(): void {
+  _quotaExhaustedAt = null;
+}
+
+// ── Rate limiter ─────────────────────────────────────────────────────────────
+
 const rateLimiter = new Map<string, { count: number; windowStart: number }>();
 const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 60_000;
@@ -26,7 +54,8 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
-// Validate and parse the AI response from Gemini
+// ── Gemini response parser ────────────────────────────────────────────────────
+
 function parseAIResponse(text: string): {
   answer: string;
   confidence: string;
@@ -35,7 +64,6 @@ function parseAIResponse(text: string): {
   suggestedNextQuestions: string[];
 } {
   try {
-    // Strip markdown code fences if present
     const stripped = text
       .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
@@ -54,7 +82,6 @@ function parseAIResponse(text: string): {
         : [],
     };
   } catch {
-    // Model returned prose instead of JSON — wrap it
     return {
       answer: text.slice(0, 2000),
       confidence: "low",
@@ -77,24 +104,36 @@ const chatSchema = z.object({
 });
 
 export function registerAIRoutes(app: Express): void {
-  // GET /api/ai/health — configuration check, no key leakage
-  app.get("/api/ai/health", (req: Request, res: Response) => {
+  // GET /api/ai/health — configuration and quota status check (no auth required)
+  app.get("/api/ai/health", (_req: Request, res: Response) => {
+    const quotaExhausted = isQuotaExhausted();
+    const providerStatus = !isConfigured()
+      ? "not_configured"
+      : quotaExhausted
+        ? "quota_exhausted"
+        : "available";
+
     res.json({
       configured: isConfigured(),
+      quotaExhausted,
+      fallbackActive: isConfigured() && quotaExhausted,
+      providerStatus,
       model: isConfigured() ? (process.env.GEMINI_MODEL || "gemini-2.0-flash") : null,
-      status: isConfigured() ? "ready" : "not_configured",
-      message: isConfigured()
-        ? "BreedLog AI is ready."
-        : "AI key is not configured. Add the Gemini secret to enable AI features.",
+      status: isConfigured() ? (quotaExhausted ? "fallback" : "ready") : "not_configured",
+      message: !isConfigured()
+        ? "AI key is not configured. Add the Gemini secret to enable AI features."
+        : quotaExhausted
+          ? "AI provider quota is exhausted. Local record-based answers are active."
+          : "BreedLog AI is ready.",
     });
   });
 
   // GET /api/ai/suggested-prompts — static prompt metadata
-  app.get("/api/ai/suggested-prompts", requireAuth, (req: Request, res: Response) => {
+  app.get("/api/ai/suggested-prompts", requireAuth, (_req: Request, res: Response) => {
     res.json({ categories: PROMPT_CATEGORIES });
   });
 
-  // GET /api/ai/context-summary — safe summary of available context for current user
+  // GET /api/ai/context-summary — summary of available context for current user
   app.get("/api/ai/context-summary", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req)!;
@@ -118,11 +157,10 @@ export function registerAIRoutes(app: Express): void {
     }
   });
 
-  // POST /api/ai/chat — main AI chat endpoint
+  // POST /api/ai/chat — main AI chat endpoint with local fallback
   app.post("/api/ai/chat", requireAuth, async (req: Request, res: Response) => {
     const userId = getUserId(req)!;
 
-    // Parse and validate request body
     const parsed = chatSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
@@ -132,17 +170,15 @@ export function registerAIRoutes(app: Express): void {
     }
     const { question, category, animalId, contextSection } = parsed.data;
 
-    // Validate category if provided
     if (category && !CATEGORY_KEYS.includes(category)) {
       return res.status(400).json({ error: "Unknown category.", categories: CATEGORY_KEYS });
     }
 
-    // Rate limit
     if (!checkRateLimit(userId)) {
       return res.status(429).json({ error: "Too many requests. Please wait a moment before asking again." });
     }
 
-    // Check AI is configured
+    // If not configured at all, return 503
     if (!isConfigured()) {
       return res.status(503).json({
         error: "BreedLog AI is not configured. GEMINI_API_KEY secret is missing.",
@@ -150,9 +186,17 @@ export function registerAIRoutes(app: Express): void {
       });
     }
 
-    // Load workspace data
+    // Load workspace data (needed for both Gemini context and local fallback)
+    let animals: Awaited<ReturnType<typeof storage.getAnimals>>;
+    let breedingEvents: Awaited<ReturnType<typeof storage.getBreedingEvents>>;
+    let performanceRecords: Awaited<ReturnType<typeof storage.getAllPerformanceRecords>>;
+    let healthRecords: Awaited<ReturnType<typeof storage.getAllHealthRecords>>;
+    let flockHealthEvents: Awaited<ReturnType<typeof storage.getFlockHealthEvents>>;
+    let matingGroups: Awaited<ReturnType<typeof storage.getMatingGroups>>;
+    let farmSettings: Awaited<ReturnType<typeof storage.getFarmSettings>>;
+
     try {
-      const [animals, breedingEvents, performanceRecords, healthRecords, flockHealthEvents, matingGroups, farmSettings] =
+      [animals, breedingEvents, performanceRecords, healthRecords, flockHealthEvents, matingGroups, farmSettings] =
         await Promise.all([
           storage.getAnimals(userId, {}),
           storage.getBreedingEvents(userId),
@@ -162,40 +206,65 @@ export function registerAIRoutes(app: Express): void {
           storage.getMatingGroups(userId),
           storage.getFarmSettings(userId),
         ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ error: "Failed to load workspace data.", detail: msg });
+    }
 
-      // Build context
-      const context = buildBreedLogAIContext({
-        animals,
-        breedingEvents,
-        performanceRecords,
-        healthRecords,
-        flockHealthEvents,
-        matingGroups,
-        farmSettings,
-        animalId,
-        contextSection,
-      });
+    const context = buildBreedLogAIContext({
+      animals,
+      breedingEvents,
+      performanceRecords,
+      healthRecords,
+      flockHealthEvents,
+      matingGroups,
+      farmSettings,
+      animalId,
+      contextSection,
+    });
 
-      // Call Gemini
-      const userMessage = buildUserMessage(question, context);
-      const geminiResponse = await generateContent(SYSTEM_PROMPT, userMessage);
-
-      if (!geminiResponse.ok) {
-        return res.status(502).json({
-          error: geminiResponse.error || "AI provider unavailable. Please try again shortly.",
-        });
-      }
-
-      const structured = parseAIResponse(geminiResponse.text);
-
+    // ── If quota is already known-exhausted, skip Gemini entirely ──────────
+    if (isQuotaExhausted()) {
+      const fallback = generateLocalFallback(question, context, category);
       return res.json({
-        ...structured,
+        ...fallback,
+        answer: `Live AI polish is temporarily unavailable — here is a record-based BreedLog summary:\n\n${fallback.answer}`,
         category: category || null,
         contextSection: contextSection || null,
       });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return res.status(500).json({ error: "Failed to process AI request.", detail: msg });
     }
+
+    // ── Try Gemini ──────────────────────────────────────────────────────────
+    const userMessage = buildUserMessage(question, context);
+    const geminiResponse = await generateContent(SYSTEM_PROMPT, userMessage);
+
+    if (geminiResponse.ok) {
+      clearQuotaExhausted();
+      const structured = parseAIResponse(geminiResponse.text);
+      return res.json({
+        ...structured,
+        isFallback: false,
+        category: category || null,
+        contextSection: contextSection || null,
+      });
+    }
+
+    // ── Gemini failed — check if it's a quota error ─────────────────────────
+    if (geminiResponse.quotaExhausted) {
+      markQuotaExhausted();
+      const fallback = generateLocalFallback(question, context, category);
+      return res.json({
+        ...fallback,
+        answer: `Live AI polish is temporarily unavailable — here is a record-based BreedLog summary:\n\n${fallback.answer}`,
+        isFallback: true,
+        category: category || null,
+        contextSection: contextSection || null,
+      });
+    }
+
+    // ── Other provider error (timeout, auth, etc.) — still 502 ─────────────
+    return res.status(502).json({
+      error: geminiResponse.error || "AI provider unavailable. Please try again shortly.",
+    });
   });
 }

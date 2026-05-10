@@ -1,0 +1,109 @@
+Urgent: finish BreedLog AI assistant reliability + mobile refresh button placement.
+
+The AI assistant UI is cleaner now, but the assistant is still not functioning because it returns:
+“AI quota is temporarily exhausted. Please try again in a few minutes.”
+
+This means the Gemini provider is connected, but the app currently fails when Gemini quota is exhausted. BreedLog must not become useless just because the external AI quota is empty.
+
+Required AI fix:
+
+1. Add a local deterministic BreedLog Assistant fallback.
+   The assistant must answer useful read-only questions from the user’s existing BreedLog records even when Gemini/API quota is exhausted.
+
+The fallback should handle at least:
+
+* Herd Overview
+* Data Quality
+* Ram / Sire Performance
+* Ewe Maternal Performance
+* Lamb Growth
+* Breeding / Mating Groups
+* Health Records
+* “What needs my attention first?”
+* “How many animals do I have and how are they distributed?”
+* “Which ram appears to be performing best?”
+* “How complete is my herd data?”
+
+Important:
+This fallback does not need to be fancy LLM text. It must produce clear factual summaries from the actual app records:
+
+* total animals
+* active/sold/dead/culled counts
+* rams/ewes/lambs counts
+* missing tag/photo/class/sex/birth date/weight/sire/dam fields
+* latest health events
+* active mating groups
+* sire/lamb counts where available
+* data-quality warnings
+* priority action list
+
+2. Provider routing logic:
+   Use this order:
+   A. Try Gemini/provider only when configured and quota is available.
+   B. If provider returns 429 / RESOURCE_EXHAUSTED / quota error, automatically fall back to the local BreedLog records answer.
+   C. If provider is down or unavailable, automatically fall back to local BreedLog records answer.
+   D. Never show raw provider JSON to users.
+
+3. The user-facing AI error should not be the final answer if local data exists.
+   Instead of only saying quota exhausted, show something like:
+   “Live AI polish is temporarily unavailable, but here is a record-based BreedLog summary: …”
+
+4. Add AI health/status accuracy:
+   The floating green AI/status indicator must not show fully healthy if the provider quota is exhausted.
+   Show separate states:
+
+* green = app synced and AI provider available
+* amber = app synced but AI provider quota exhausted, local assistant fallback active
+* red = sync/auth/backend issue
+
+5. Add tests for AI fallback:
+
+* Gemini 429 returns local record-based answer, not dead error
+* RESOURCE_EXHAUSTED returns local fallback
+* raw provider JSON is never rendered
+* assistant still answers herd overview from records without external AI
+* assistant still answers data-quality questions from records without external AI
+* assistant still answers ram/sire performance from records without external AI
+* assistant still answers “what needs attention first?” from records without external AI
+
+Second urgent UI fix:
+
+The refresh/sync floating button is still overlapping the BreedLog logo on mobile.
+This is not fixed yet.
+
+Required refresh button fix:
+
+* Remove the mobile fixed/absolute placement that puts the refresh widget over the logo.
+* On mobile, place the sync/refresh indicator as a clean inline status chip below the logo or in a dedicated header row that does not overlap the logo.
+* It must never cover the BreedLog logo, farm name, headings, cards, action buttons, or AI modal.
+* Test on mobile widths 360px, 390px, and 430px.
+* It must look intentional and professional, not floating over branding.
+
+Recommended layout:
+Logo card centered at top.
+Below or beside it in its own row:
+small sync status chip with green/amber/red dot + refresh icon.
+No overlap. No fixed overlay over the logo.
+
+Also keep the previous dark-mode rule:
+All dark-mode buttons must have readable white/high-contrast text.
+
+Run and report:
+
+* files changed
+* AI fallback implementation location
+* provider quota handling logic
+* refresh widget layout fix location
+* npm run check result
+* npm run build result
+* tests added/updated
+* mobile viewport verification result
+
+Acceptance gate:
+This is only complete when:
+
+1. The assistant gives useful BreedLog record-based answers even when Gemini quota is exhausted.
+2. No raw provider errors are shown to users.
+3. The AI status correctly shows degraded/fallback mode when quota is exhausted.
+4. The refresh/sync widget no longer overlaps the BreedLog logo on any mobile page.
+5. Dark-mode button text remains readable everywhere.
