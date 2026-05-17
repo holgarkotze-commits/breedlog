@@ -19,7 +19,9 @@ import { format, differenceInDays } from "date-fns";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
-import { type PDFQuality, getPDFStyles, getPDFFooter } from "@/lib/pdf-utils";
+import { type PDFQuality, getPDFStyles, getPDFFooter, chunkGroupExportRows, GROUP_EXPORT_PAGE_SIZE } from "@/lib/pdf-utils";
+import { buildLambBirthRows, buildLambPerformanceRows } from "@/lib/stamboek-export-fields";
+import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import type { Animal } from "@shared/schema";
 
 function getAgeDays(birthDate: string | null): number {
@@ -90,6 +92,7 @@ export default function Lambs() {
   
   // PDF Export Dialog
   const pdfExport = usePDFExportDialog();
+  const createExportedDoc = useCreateExportedDocument();
   
   // Export Lambs PDF
   const handlePDFExport = async (quality: PDFQuality): Promise<void> => {
@@ -106,6 +109,12 @@ export default function Lambs() {
     const eweLambs = lambs.filter(a => a.sex === "ewe");
     const ramLambs = lambs.filter(a => a.sex === "ram");
     
+    const eweBirthRows = buildLambBirthRows(eweLambs);
+    const ewePerfRows = buildLambPerformanceRows(eweLambs);
+    const ramBirthRows = buildLambBirthRows(ramLambs);
+    const ramPerfRows = buildLambPerformanceRows(ramLambs);
+    const eweChunks = chunkGroupExportRows(eweBirthRows, GROUP_EXPORT_PAGE_SIZE);
+    const ramChunks = chunkGroupExportRows(ramBirthRows, GROUP_EXPORT_PAGE_SIZE);
     const content = `
       <html>
       <head>
@@ -119,7 +128,8 @@ export default function Lambs() {
         </div>
         
         <h3 style="margin-top: 20px;">Ewe Lambs (${eweLambs.length})</h3>
-        <table>
+        ${eweChunks.map((chunk, chunkIndex) => `
+        <table class="${chunkIndex > 0 ? 'page-break' : ''}">
           <thead>
             <tr>
               <th style="width: 30px;">#</th>
@@ -133,26 +143,29 @@ export default function Lambs() {
             </tr>
           </thead>
           <tbody>
-            ${eweLambs.map((lamb, idx) => {
-              const ageDays = getAgeDays(lamb.birthDate);
+            ${chunk.map((lamb, idx) => {
+              const globalIndex = chunkIndex * GROUP_EXPORT_PAGE_SIZE + idx;
+              const perf = ewePerfRows[globalIndex] || {};
               return `
                 <tr>
-                  <td>${idx + 1}</td>
-                  <td><strong>${lamb.tagId}</strong></td>
-                  <td>${lamb.birthDate ? format(new Date(lamb.birthDate), "dd/MM/yyyy") : "-"}</td>
-                  <td>${ageDays}</td>
-                  <td>${lamb.externalDamInfo || "-"}</td>
-                  <td>${lamb.externalSireInfo || "-"}</td>
-                  <td>${lamb.weight100Day ? `${lamb.weight100Day} kg` : "-"}</td>
-                  <td>${getLambStatusBadge(lamb).label}</td>
+                  <td>${globalIndex + 1}</td>
+                  <td><strong>${lamb["Lamb ID"] || "-"}</strong></td>
+                  <td>${lamb["Birth date"] || "-"}</td>
+                  <td>${perf["Age at 100-day weighing"] || "-"}</td>
+                  <td>${lamb["Dam/mother ID"] || "-"}</td>
+                  <td>${lamb["Sire/father ID"] || "-"}</td>
+                  <td>${perf["100-day weight"] ? `${perf["100-day weight"]} kg` : "-"}</td>
+                  <td>${lamb["Birth status"] || "-"}</td>
                 </tr>
               `;
             }).join('')}
           </tbody>
         </table>
+        `).join('')}
         
         <h3 style="margin-top: 30px;">Ram Lambs (${ramLambs.length})</h3>
-        <table>
+        ${ramChunks.map((chunk, chunkIndex) => `
+        <table class="${chunkIndex > 0 ? 'page-break' : ''}">
           <thead>
             <tr>
               <th style="width: 30px;">#</th>
@@ -168,25 +181,27 @@ export default function Lambs() {
             </tr>
           </thead>
           <tbody>
-            ${ramLambs.map((lamb, idx) => {
-              const ageDays = getAgeDays(lamb.birthDate);
+            ${chunk.map((lamb, idx) => {
+              const globalIndex = chunkIndex * GROUP_EXPORT_PAGE_SIZE + idx;
+              const perf = ramPerfRows[globalIndex] || {};
               return `
                 <tr>
-                  <td>${idx + 1}</td>
-                  <td><strong>${lamb.tagId}</strong></td>
-                  <td>${lamb.birthDate ? format(new Date(lamb.birthDate), "dd/MM/yyyy") : "-"}</td>
-                  <td>${ageDays}</td>
-                  <td>${lamb.externalDamInfo || "-"}</td>
-                  <td>${lamb.externalSireInfo || "-"}</td>
-                  <td>${lamb.weight100Day ? `${lamb.weight100Day} kg` : "-"}</td>
-                  <td>${lamb.weight270Day ? `${lamb.weight270Day} kg` : "-"}</td>
-                  <td>${lamb.ramLambClass || "Unclassified"}</td>
-                  <td>${getLambStatusBadge(lamb).label}</td>
+                  <td>${globalIndex + 1}</td>
+                  <td><strong>${lamb["Lamb ID"] || "-"}</strong></td>
+                  <td>${lamb["Birth date"] || "-"}</td>
+                  <td>${perf["Age at 100-day weighing"] || "-"}</td>
+                  <td>${lamb["Dam/mother ID"] || "-"}</td>
+                  <td>${lamb["Sire/father ID"] || "-"}</td>
+                  <td>${perf["100-day weight"] ? `${perf["100-day weight"]} kg` : "-"}</td>
+                  <td>${perf["270-day/post-wean weight"] ? `${perf["270-day/post-wean weight"]} kg` : "-"}</td>
+                  <td>-</td>
+                  <td>${lamb["Birth status"] || "-"}</td>
                 </tr>
               `;
             }).join('')}
           </tbody>
         </table>
+        `).join('')}
         
         ${footer}
       </body>
@@ -199,6 +214,25 @@ export default function Lambs() {
       printWindow.document.close();
       printWindow.print();
     }
+    const pageCount = eweChunks.length + ramChunks.length;
+    createExportedDoc.mutate({
+      name: `Lambs_HerdExport_${new Date().toISOString().slice(0,10)}.pdf`,
+      documentType: "herd",
+      subfolder: "herd",
+      metadata: {
+        exportType: "pdf",
+        category: "lambs",
+        sourceSection: "lambs",
+        animalCount: lambs.length,
+        pageCount,
+        status: "success",
+        rowsSummary: {
+          eweBirthRows: eweBirthRows.length,
+          ramBirthRows: ramBirthRows.length,
+          sample: [...eweBirthRows, ...ramBirthRows].slice(0, 5)
+        },
+      },
+    });
     
     toast({ title: "PDF Ready", description: "Lambs export opened for printing" });
   };

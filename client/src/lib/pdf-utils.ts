@@ -129,7 +129,7 @@ export async function compressImages(
 export function getPDFStyles(): string {
   return `
     @page {
-      size: A4;
+      size: A4 landscape;
       margin: 15mm 10mm 25mm 10mm;
     }
     @media print {
@@ -169,6 +169,7 @@ export function getPDFStyles(): string {
       padding: 10px 0;
       border-bottom: 3px solid #f59e0b;
       margin-bottom: 15px;
+      background: white;
     }
     .header-left {
       display: flex;
@@ -250,7 +251,7 @@ export function getPDFStyles(): string {
       height: 50px;
       padding: 10px 15mm;
       border-top: 2px solid #f59e0b;
-      background: white;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -267,13 +268,12 @@ export function getPDFStyles(): string {
       object-fit: contain;
     }
     .footer-farm-info {
-      color: #444;
+      color: #d8d8d8;
       line-height: 1.3;
     }
     .footer-farm-name {
       font-weight: 600;
       color: #f59e0b;
-      text-shadow: 0 0 1px rgba(0,0,0,0.3);
     }
     .footer-right {
       text-align: right;
@@ -281,13 +281,12 @@ export function getPDFStyles(): string {
     .footer-brand {
       font-size: 14pt;
       font-weight: bold;
-      color: #333;
+      color: #fff;
     }
     .footer-tagline {
       font-size: 8pt;
       color: #f59e0b;
       font-style: italic;
-      text-shadow: 0 0 1px rgba(0,0,0,0.2);
     }
     .animal-photo {
       width: 60px;
@@ -357,6 +356,16 @@ export function getPDFStyles(): string {
       font-weight: 500;
     }
   `;
+}
+
+export const GROUP_EXPORT_PAGE_SIZE = 25;
+
+export function chunkGroupExportRows<T>(rows: T[], pageSize: number = GROUP_EXPORT_PAGE_SIZE): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < rows.length; i += pageSize) {
+    result.push(rows.slice(i, i + pageSize));
+  }
+  return result.length ? result : [[]];
 }
 
 /**

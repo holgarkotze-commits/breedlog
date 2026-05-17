@@ -758,7 +758,7 @@ export async function registerRoutes(
   app.post("/api/exported-documents", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { name, documentType, subfolder, animalId } = req.body;
+      const { name, documentType, subfolder, animalId, metadata } = req.body;
       if (!name || !documentType || !subfolder) {
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -767,6 +767,7 @@ export async function registerRoutes(
         documentType,
         subfolder,
         animalId: animalId || null,
+        metadata: metadata ?? null,
       });
       res.status(201).json(doc);
     } catch (err: any) {

@@ -24,7 +24,7 @@ export function useCreateExportedDocument() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (doc: { name: string; documentType: string; subfolder: string; animalId?: number }) => {
+    mutationFn: async (doc: { name: string; documentType: string; subfolder: string; animalId?: number; metadata?: Record<string, any> }) => {
       const response = await apiRequest("POST", "/api/exported-documents", doc);
       return response.json();
     },

@@ -113,6 +113,7 @@ export function BreedLogAssistantPanel() {
   async function handleSend() {
     const q = question.trim();
     if (!q || loading) return;
+    setQuestion("");
     setLoading(true);
     setError(null);
     setResponse(null);
