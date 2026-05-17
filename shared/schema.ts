@@ -430,6 +430,7 @@ export const exportedDocuments = pgTable("exported_documents", {
   documentType: text("document_type").notNull(), // herd, individual, mating, culled, sold, productivity
   subfolder: text("subfolder").notNull(), // matches documentType or specific category
   animalId: integer("animal_id").references(() => animals.id),
+  metadata: jsonb("metadata"),
   exportedAt: timestamp("exported_at").defaultNow(),
 });
 

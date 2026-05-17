@@ -17,6 +17,9 @@ npm run build
 # Run typecheck
 npm run typecheck
 
+# Run the unit/integration test suite
+npm test
+
 # Generate Drizzle migrations
 npm run generate-migrations
 

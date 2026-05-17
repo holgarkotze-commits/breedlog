@@ -170,7 +170,7 @@ export default function AnimalDetail() {
         {/* Clean Modern Header */}
         <div className="space-y-3">
           {/* Top row: Back + Title + Inline Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <Button variant="ghost" size="icon" className="shrink-0" onClick={() => goBack('/animals')} data-testid="button-back">
               <ArrowLeft className="w-5 h-5" />
             </Button>
@@ -179,8 +179,8 @@ export default function AnimalDetail() {
                 <ArrowLeft className="w-5 h-5 rotate-180" />
               </Button>
             )}
-            <h1 className="text-xl md:text-2xl font-bold flex-1 truncate">{animal.tagId}</h1>
-            <div className="flex items-center gap-2">
+            <h1 className="text-xl md:text-2xl font-bold flex-1 min-w-[8rem] truncate">{animal.tagId}</h1>
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end ml-auto">
               <Button 
                 variant="outline" 
                 size="sm"
@@ -1328,7 +1328,17 @@ ${includeTree ? buildFamilyTreePage() : ''}
         createExportedDoc.mutate({
             name: getDocumentFileName("AnimalProfile", animal.tagId || `ID${animal.id}`),
             documentType: "individual",
-            subfolder: "individual"
+            subfolder: "individual",
+            animalId: animal.id,
+            metadata: {
+              exportType: "pdf",
+              category: includeTree ? "individual-with-family-tree" : "individual",
+              sourceSection: "individual",
+              animalCount: 1,
+              pageCount: includeTree ? 2 : 1,
+              status: "success",
+              rowsSummary: [{ tagId: animal.tagId, sex: animal.sex, breed: animal.breed, status: animal.status }],
+            }
         });
         toast({ title: "PDF Ready", description: `Print dialog opened for ${animal.tagId} profile${includeTree ? ' with family tree' : ''}` });
     };

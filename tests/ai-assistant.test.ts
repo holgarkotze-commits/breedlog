@@ -777,6 +777,14 @@ describe("AI Assistant panel — details collapsed by default", () => {
       "chips must have max-w-full to prevent overflow",
     );
   });
+
+  test("BreedLogAssistantPanel submit captures trimmed question and clears input state", async () => {
+    const { readFileSync } = await import("fs");
+    const src = readFileSync("client/src/components/BreedLogAssistantPanel.tsx", "utf8");
+    assert.ok(src.includes("const q = question.trim();"), "submit must capture a trimmed question");
+    assert.ok(src.includes("setQuestion(\"\");"), "submit must clear controlled input state");
+    assert.ok(src.includes("question: q,"), "request payload must use captured question variable");
+  });
 });
 
 // ── Button contrast (CSS token) ──────────────────────────────────────────────
