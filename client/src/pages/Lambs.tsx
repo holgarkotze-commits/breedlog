@@ -23,42 +23,11 @@ import { type PDFQuality, getPDFStyles, getPDFFooter, chunkGroupExportRows, GROU
 import { buildLambBirthRows, buildLambPerformanceRows } from "@/lib/stamboek-export-fields";
 import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import type { Animal } from "@shared/schema";
+import { calculateLambStage } from "@shared/lamb-stage";
 
 function getAgeDays(birthDate: string | null): number {
   if (!birthDate) return 0;
   return differenceInDays(new Date(), new Date(birthDate));
-}
-
-function getLambStatusBadge(animal: Animal): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } {
-  const ageDays = getAgeDays(animal.birthDate);
-  
-  if (animal.lambStatus === 'moved_to_ewes') {
-    return { label: "EWE MOVED", variant: "secondary" };
-  }
-  if (animal.lambStatus === 'moved_to_rams') {
-    return { label: "RAM MOVED", variant: "secondary" };
-  }
-  if (animal.lambStatus === 'culled' || animal.cullConfirmed) {
-    return { label: "CULLED", variant: "destructive" };
-  }
-  if (animal.lambStatus === 'sold') {
-    return { label: "SOLD", variant: "secondary" };
-  }
-  if (animal.lambStatus === 'deceased') {
-    return { label: "DECEASED", variant: "destructive" };
-  }
-  
-  if (animal.sex === 'ram' && animal.ramLambClass === 'cull') {
-    return { label: "CULL PENDING", variant: "destructive" };
-  }
-  if (animal.sex === 'ram' && animal.ramLambClass === 'stud') {
-    return { label: "STUD CANDIDATE", variant: "default" };
-  }
-  if (animal.sex === 'ram' && animal.ramLambClass === 'commercial') {
-    return { label: "COMMERCIAL", variant: "outline" };
-  }
-  
-  return { label: "ACTIVE", variant: "default" };
 }
 
 export default function Lambs() {
@@ -402,7 +371,7 @@ export default function Lambs() {
           <div className="space-y-2">
             {lambs.map(lamb => {
               const ageDays = getAgeDays(lamb.birthDate);
-              const statusBadge = getLambStatusBadge(lamb);
+              const stage = calculateLambStage(lamb);
               const needs100Day = ageDays >= 100 && !lamb.weight100Day;
               const needs270Day = ageDays >= 270 && !lamb.weight270Day && lamb.sex === "ram" && lamb.ramLambClass === "stud";
               const needsClassification = lamb.sex === "ram" && (!lamb.ramLambClass || lamb.ramLambClass === "unclassified");
@@ -421,8 +390,8 @@ export default function Lambs() {
                             <span className="font-semibold text-sm md:text-base" data-testid={`lamb-tag-${lamb.id}`}>
                               {lamb.tagId}
                             </span>
-                            <Badge variant={statusBadge.variant} className="text-xs" data-testid={`lamb-status-${lamb.id}`}>
-                              {statusBadge.label}
+                            <Badge variant={stage.needsAttention ? "destructive" : "secondary"} className="text-xs" data-testid={`lamb-status-${lamb.id}`}>
+                              {stage.label}
                             </Badge>
                             {lamb.sex === "ram" && (
                               <Badge variant="outline" className="text-xs">RAM</Badge>
@@ -437,6 +406,8 @@ export default function Lambs() {
                             <span>Birth: {lamb.birthStatus || "-"}</span>
                             {lamb.weight100Day && <span>100d: {lamb.weight100Day}kg</span>}
                             {lamb.weight270Day && <span>270d: {lamb.weight270Day}kg</span>}
+                            <span>Reason: {stage.reason}</span>
+                            <span>Next: {stage.nextAction}</span>
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />

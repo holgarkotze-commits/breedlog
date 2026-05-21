@@ -1,4 +1,5 @@
 import type { Animal, BreedingEvent, HealthRecord, PerformanceRecord, FlockHealthEvent, MatingGroup, FarmSettings } from "@shared/schema";
+import { calculateLambStage } from "@shared/lamb-stage";
 
 export interface AnimalContext {
   tagId: string;
@@ -12,10 +13,12 @@ export interface AnimalContext {
   sireTag: string | null;
   damTag: string | null;
   classification: string | null;
+  source: string | null;
   lambingSeason: string | null;
   healthRecordCount: number;
   offspringCount: number;
   missingFields: string[];
+  lambStage?: { value: string; label: string; reason: string; nextAction: string; needsAttention: boolean };
 }
 
 export interface BreedLogAIContext {
@@ -35,6 +38,11 @@ export interface BreedLogAIContext {
     stud: number;
     commercial: number;
     unclassified: number;
+    sourceBornOnFarm: number;
+    sourceBoughtIn: number;
+    sourceUnknown: number;
+    lambStageSummary?: Record<string, number>;
+    lambStageAttention?: Record<string, number>;
   };
   sires: Array<{
     tag: string;
@@ -146,11 +154,23 @@ export function buildBreedLogAIContext(opts: BuildContextOptions): BreedLogAICon
   const rams     = adults.filter((a) => a.sex === "ram").length;
   const ewes     = adults.filter((a) => a.sex === "ewe").length;
   let stud = 0, commercial = 0, unclassified = 0;
+  let sourceBornOnFarm = 0, sourceBoughtIn = 0, sourceUnknown = 0;
+  const lambStageSummary: Record<string, number> = {};
+  const lambStageAttention: Record<string, number> = {};
   for (const a of animals) {
     const c = a.classification || "";
     if (c === "stud") stud++;
     else if (c === "commercial") commercial++;
     else unclassified++;
+    const source = (a as any).animalSource || "unknown_not_recorded";
+    if (source === "born_on_farm") sourceBornOnFarm++;
+    else if (source === "bought_in") sourceBoughtIn++;
+    else sourceUnknown++;
+    const stage = calculateLambStage(a);
+    lambStageSummary[stage.value] = (lambStageSummary[stage.value] || 0) + 1;
+    if (stage.needsAttention) {
+      lambStageAttention[stage.value] = (lambStageAttention[stage.value] || 0) + 1;
+    }
   }
 
   // ── Sire performance ─────────────────────────────────────────────────────
@@ -318,10 +338,12 @@ export function buildBreedLogAIContext(opts: BuildContextOptions): BreedLogAICon
         sireTag: sireAnimal?.tagId || null,
         damTag: damAnimal?.tagId || null,
         classification: a.classification || null,
+        source: (a as any).animalSource || "unknown_not_recorded",
         lambingSeason: a.lambingSeason || null,
         healthRecordCount: animalHealth,
         offspringCount: animalOffspring,
         missingFields: missing,
+        lambStage: calculateLambStage(a),
       };
     }
   }
@@ -343,6 +365,11 @@ export function buildBreedLogAIContext(opts: BuildContextOptions): BreedLogAICon
       stud,
       commercial,
       unclassified,
+      sourceBornOnFarm,
+      sourceBoughtIn,
+      sourceUnknown,
+      lambStageSummary,
+      lambStageAttention,
     },
     sires,
     ewes: {

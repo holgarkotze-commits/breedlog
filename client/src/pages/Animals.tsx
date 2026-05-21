@@ -32,8 +32,10 @@ import { Label } from "@/components/ui/label";
 import { DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import logo from "@/assets/breedlog-logo-mark.png";
 import type { PDFQuality } from "@/lib/pdf-utils";
+import { getHerdCounts } from "@/lib/herd-counts";
 import { api } from "@shared/routes";
 import { nextTagRawSequence, splitTagInput } from "@shared/tag-utils";
+import { calculateLambStage } from "@shared/lamb-stage";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 const PDFExportDialog = lazy(() => import("@/components/PDFExportDialog").then((m) => ({ default: m.PDFExportDialog })));
 const ANIMALS_INITIAL_VISIBLE_COUNT = 50;
@@ -1440,6 +1442,7 @@ export default function Animals() {
     [safeFilteredAnimals, visibleAnimalsCount]
   );
   const hasMoreFilteredAnimals = safeFilteredAnimals.length > visibleAnimals.length;
+  const herdCounts = getHerdCounts(allAnimals || []);
 
   useEffect(() => {
     setVisibleAnimalsCount(ANIMALS_INITIAL_VISIBLE_COUNT);
@@ -1450,8 +1453,13 @@ export default function Animals() {
       <div className="space-y-2.5 md:space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col gap-2">
           <h1 className="text-lg md:text-3xl font-bold tracking-tight leading-tight" data-testid="page-title">
-            {displayName ? `${displayName} - My Herd` : "My Herd"} ({allAnimals?.length || 0})
+            {displayName ? `${displayName} - My Herd` : "My Herd"} ({herdCounts.activeHerdAnimals})
           </h1>
+          <p className="text-xs text-muted-foreground" data-testid="herd-count-summary">
+            Farm records: {herdCounts.totalFarmRecords} · Active herd (excl. archive): {herdCounts.activeHerdAnimals} ·
+            Lamb stage (not admitted): {herdCounts.nonAdmittedLambStageAnimals} · Admitted herd: {herdCounts.admittedHerdAnimals} ·
+            Mature herd: {herdCounts.matureHerdAnimals} · Archive: {herdCounts.archiveAnimals}
+          </p>
           <div className="flex flex-wrap gap-2 items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1522,8 +1530,8 @@ export default function Animals() {
 
         {/* Total Herd Section - Primary browsing experience with search/filters inside */}
         <SectionRibbon
-          title="Total Herd"
-          count={(allAnimals || []).filter(a => a.status === 'active').length}
+          title="Total Herd (Active, excl. archive)"
+          count={herdCounts.activeHerdAnimals}
           isExpanded={totalHerdExpanded}
           onToggle={() => setTotalHerdExpanded(!totalHerdExpanded)}
           testId="ribbon-total-herd"
@@ -2692,13 +2700,6 @@ function LambsSection({
     });
   };
 
-  const getLambStatusBadge = (animal: Animal): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } => {
-    if (animal.ramLambClass === 'cull') return { label: "CULL PENDING", variant: "destructive" };
-    if (animal.ramLambClass === 'stud') return { label: "STUD", variant: "default" };
-    if (animal.ramLambClass === 'commercial') return { label: "COMMERCIAL", variant: "secondary" };
-    return { label: "ACTIVE", variant: "default" };
-  };
-
   const exportButton = (
     <Button 
       variant="outline" 
@@ -2791,7 +2792,7 @@ function LambsSection({
             <tbody>
               {lambs.map((lamb, idx) => {
                 const ageDays = getAgeDays(lamb.birthDate);
-                const statusBadge = getLambStatusBadge(lamb);
+                const stage = calculateLambStage(lamb);
                 const needs100Day = ageDays >= 100 && !lamb.weight100Day;
                 const needs270Day = ageDays >= 270 && !lamb.weight270Day && lamb.sex === 'ram' && lamb.ramLambClass === 'stud';
                 
@@ -2850,12 +2851,15 @@ function LambsSection({
                     </td>
                     <td className="p-2.5">
                       <Badge 
-                        variant={statusBadge.variant}
+                        variant={stage.needsAttention ? "destructive" : "secondary"}
                         className="text-[10px] px-1.5"
                         data-testid={`badge-lamb-status-${lamb.id}`}
                       >
-                        {statusBadge.label}
+                        {stage.label}
                       </Badge>
+                      <div className="text-[10px] text-muted-foreground mt-1 max-w-[220px] truncate" title={`${stage.reason} Next: ${stage.nextAction}`}>
+                        {stage.reason}
+                      </div>
                     </td>
                     <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
@@ -3259,6 +3263,9 @@ function AnimalListRow({ animal, selectionMode, isSelected, onToggleSelect, onLo
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground truncate">{animal.breed || "Meatmaster"}</p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              Source: {animal.animalSource === "born_on_farm" ? "Born on farm" : animal.animalSource === "bought_in" ? "Bought in" : "Unknown / not recorded"}
+            </p>
           </div>
           <div className="text-right flex-shrink-0">
             <span className={cn(
@@ -3344,6 +3351,7 @@ function CreateAnimalDialog({
       breed: "Meatmaster",
       status: "active",
       classification: "unclassified" as string,
+      animalSource: "unknown_not_recorded" as string,
       birthDate: new Date().toISOString().split('T')[0],
       birthStatus: "single" as string,
       birthWeight: null as string | null,
@@ -3601,6 +3609,28 @@ function CreateAnimalDialog({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="animalSource"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Source</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || "unknown_not_recorded"}>
+                      <FormControl>
+                        <SelectTrigger className="rugged-input" data-testid="select-animal-source">
+                          <SelectValue placeholder="Select source" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="born_on_farm">Born on farm</SelectItem>
+                        <SelectItem value="bought_in">Bought in</SelectItem>
+                        <SelectItem value="unknown_not_recorded">Unknown / not recorded</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="birthDate"

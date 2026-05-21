@@ -15,7 +15,10 @@ npm run dev
 npm run build
 
 # Run typecheck
-npm run typecheck
+npm run check
+
+# Run the unit/integration test suite
+npm test
 
 # Run the unit/integration test suite
 npm test

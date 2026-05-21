@@ -9,6 +9,7 @@ export const BREEDLOG_CSV_HEADERS = [
   "sex",
   "status",
   "classification",
+  "animalSource",
   "birthDate",
   "birthType",
   "birthWeightKg",
@@ -39,6 +40,7 @@ const HEADER_ALIASES: Record<BreedLogCsvHeader, string[]> = {
   sex: ["sex", "Sex"],
   status: ["status", "Status"],
   classification: ["classification", "Classification", "breed", "Breed"],
+  animalSource: ["animalSource", "Animal Source", "source", "Source"],
   birthDate: ["birthDate", "Birth Date"],
   birthType: ["birthType", "birthStatus", "Birth Type"],
   birthWeightKg: ["birthWeightKg", "birthWeight", "Birth Weight Kg", "Birth Weight"],
@@ -86,6 +88,15 @@ function parseBooleanFlag(value: string): boolean {
   return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "y";
 }
 
+function normalizeAnimalSource(value: string): "born_on_farm" | "bought_in" | "unknown_not_recorded" {
+  const v = value.trim().toLowerCase();
+  if (!v) return "unknown_not_recorded";
+  if (["born on farm", "farm born", "born", "born_on_farm"].includes(v)) return "born_on_farm";
+  if (["bought in", "bought", "purchased", "bought_in"].includes(v)) return "bought_in";
+  if (["unknown", "not recorded", "unknown_not_recorded"].includes(v)) return "unknown_not_recorded";
+  return "unknown_not_recorded";
+}
+
 function parseDateOrNull(value: string, field: string, rowNum: number, errors: string[]): string | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -123,6 +134,7 @@ export function buildBreedLogCsvRows(animals: Animal[], fallbackStudPrefix?: str
       sex: animal.sex || "",
       status: animal.status || "",
       classification: animal.classification || "",
+      animalSource: animal.animalSource || "unknown_not_recorded",
       birthDate: animal.birthDate || "",
       birthType: animal.birthStatus || "",
       birthWeightKg: animal.birthWeight ? String(animal.birthWeight) : "",
@@ -230,6 +242,7 @@ export function parseBreedLogCsvRecords(records: Record<string, string>[], exist
       sex,
       status: getFirstRecordValue(record, "status") || "active",
       classification: getFirstRecordValue(record, "classification") || "unclassified",
+      animalSource: normalizeAnimalSource(getFirstRecordValue(record, "animalSource")),
       birthDate,
       birthStatus: getFirstRecordValue(record, "birthType") || null,
       birthWeight,

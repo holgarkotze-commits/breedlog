@@ -11,6 +11,8 @@ import { registerAudioRoutes } from "./replit_integrations/audio/routes";
 import { registerAIRoutes } from "./ai/breedlog-ai-routes";
 import { parse } from "csv-parse/sync";
 import { buildBreedLogCsvContent, buildBreedLogCsvRows, parseBreedLogCsvRecords, buildBreedLogImportTemplateCsv } from "@shared/import-export";
+import { buildBreedLogSimulationDataset } from "@shared/breedlog-simulation";
+import { MASTER_SIMULATION_ACCESS_CODE, MASTER_SIMULATION_BATCH_MARKER, isMasterSimulationCode } from "@shared/master-simulation";
 
 // Helper to extract userId from device session
 function getUserId(req: Request): string {
@@ -23,6 +25,51 @@ function getUserId(req: Request): string {
 
 // Middleware to require device authentication
 const requireAuth = requireDeviceAuth;
+
+async function seedMasterSimulationIfNeeded(targetUserId: string, code: string) {
+  if (!isMasterSimulationCode(code)) return;
+  const existing = await storage.getAnimals(targetUserId, {});
+  if (existing.some((a: any) => (a.notes || "").includes(MASTER_SIMULATION_BATCH_MARKER))) return; // idempotent/current batch already present
+  const ds = buildBreedLogSimulationDataset();
+  const idMap = new Map<number, number>();
+  const mark = (txt?: string | null) => [txt, MASTER_SIMULATION_BATCH_MARKER].filter(Boolean).join(" | ");
+
+  for (const a of ds.animals) {
+    const { id: _id, userId: _userId, ...rest } = a as any;
+    const created = await storage.createAnimal(targetUserId, { ...rest, sireId: null, damId: null, notes: mark(rest.notes) });
+    idMap.set(a.id, created.id);
+  }
+  for (const a of ds.animals) {
+    const newId = idMap.get(a.id)!;
+    const sireId = a.sireId ? idMap.get(a.sireId) || null : null;
+    const damId = a.damId ? idMap.get(a.damId) || null : null;
+    if (sireId || damId) await storage.updateAnimal(targetUserId, newId, { sireId, damId, notes: mark((a as any).notes) });
+  }
+
+  for (const g of ds.matingGroups) {
+    await storage.createMatingGroup(targetUserId, { ...(g as any), ramId: idMap.get((g as any).ramId)!, eweIds: ((g as any).eweIds || []).map((id: number) => idMap.get(id)).filter(Boolean), notes: mark((g as any).notes) });
+  }
+  for (const e of ds.breedingEvents) {
+    await storage.createBreedingEvent(targetUserId, { ...(e as any), eweId: idMap.get((e as any).eweId)!, ramId: idMap.get((e as any).ramId)!, notes: mark((e as any).notes), matingGroupId: null });
+  }
+
+  for (const h of ds.healthRecords) {
+    const animalId = idMap.get((h as any).animalId);
+    if (!animalId) continue;
+    await storage.createHealthRecord(targetUserId, { ...(h as any), animalId, notes: mark((h as any).notes) });
+  }
+
+  const flockEvent = await storage.createFlockHealthEvent(targetUserId, {
+    date: '2026-01-15',
+    title: `Master Simulation Batch ${MASTER_SIMULATION_BATCH_MARKER}`,
+    category: 'vaccination',
+    severity: 'info',
+    status: 'completed',
+    affectedCount: 400,
+    notes: `Seeded by ${MASTER_SIMULATION_BATCH_MARKER}`,
+  } as any);
+  await storage.createFlockHealthTreatments(targetUserId, [{ eventId: flockEvent.id, treatmentType: 'vaccine', product: 'Routine', dosage: 'batch', notes: `Seeded by ${MASTER_SIMULATION_BATCH_MARKER}` } as any]);
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1139,6 +1186,7 @@ export async function registerRoutes(
           }
           // Use the effective userId (sharedUserId takes priority) for the session
           const effectiveUserId = user.sharedUserId || userId;
+          await seedMasterSimulationIfNeeded(effectiveUserId, inviteCode!.code);
           req.session.deviceId = deviceId;
           req.session.userId = effectiveUserId;
           return res.json({ 
@@ -1240,6 +1288,7 @@ export async function registerRoutes(
 
         req.session.deviceId = deviceId;
         req.session.userId = switchEffectiveUserId;
+        await seedMasterSimulationIfNeeded(switchEffectiveUserId, inviteCode!.code);
 
         console.log(`[Beta Validate] Workspace switched: device ${deviceId} now on code ${inviteCode!.code}, workspace ${switchEffectiveUserId}`);
 
@@ -1290,7 +1339,7 @@ export async function registerRoutes(
       // Using actual active-slot count instead of usesCount avoids blocking the mobile slot
       // when desktop has already activated (which was a bug for old codes with maxUses=1).
       const activeOtherDevices = activeForCode.filter(a => a.deviceId !== deviceId).length;
-      if (activeOtherDevices >= 2) {
+      if (!isMasterSimulationCode(inviteCode!.code) && activeOtherDevices >= 2) {
         return res.status(400).json({ message: 'This code already has both device slots occupied (one desktop + one mobile). Contact the admin to reset a slot.', reasonCode: 'DEVICE_SLOT_ALREADY_USED' });
       }
       
@@ -1335,6 +1384,7 @@ export async function registerRoutes(
       // Set session using the effective workspace userId
       req.session.deviceId = deviceId;
       req.session.userId = effectiveUserId;
+      await seedMasterSimulationIfNeeded(effectiveUserId, inviteCode!.code);
       
       // STEP 3: Upsert activation (atomic — only after all checks pass).
       // CRITICAL: user_activations has UNIQUE(userId), so if this user already
