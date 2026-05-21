@@ -163,7 +163,7 @@ export default function Lambs() {
                   <td>${lamb["Sire/father ID"] || "-"}</td>
                   <td>${perf["100-day weight"] ? `${perf["100-day weight"]} kg` : "-"}</td>
                   <td>${perf["270-day/post-wean weight"] ? `${perf["270-day/post-wean weight"]} kg` : "-"}</td>
-                  <td>${lamb["Ram lamb class"] || lamb.ramLambClass || lamb.classification || "-"}</td>
+                  <td>-</td>
                   <td>${lamb["Birth status"] || "-"}</td>
                 </tr>
               `;
