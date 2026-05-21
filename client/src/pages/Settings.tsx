@@ -69,6 +69,8 @@ export default function Settings() {
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [debugPendingItems, setDebugPendingItems] = useState<SyncQueueItem[]>([]);
   const [isLoadingDebug, setIsLoadingDebug] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [dataOpen, setDataOpen] = useState(false);
   
   // Fetch pending sync items for debugging
   const handleShowDebug = async () => {
@@ -606,7 +608,6 @@ export default function Settings() {
             <tbody>
               ${pageAnimals.map((a: any, i: number) => `
                 <tr>
-                  <td style="width:32px;"><div style="width:28px;height:28px;border-radius:3px;overflow:hidden;background:#f0f0f0;">${a.photo ? `<img src="${a.photo}" style="width:100%;height:100%;object-fit:cover;"/>` : ''}</div></td>
                   <td><strong>${a.tagId}</strong></td>
                   <td>${a.name || "-"}</td>
                   <td>${a.sex === "male" ? "M" : a.sex === "female" ? "F" : a.sex}</td>
@@ -752,12 +753,13 @@ export default function Settings() {
         </h1>
 
         <Card className="rugged-card">
-          <CardHeader>
-            <CardTitle className="uppercase flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-primary" /> Farm Details
+          <CardHeader className="cursor-pointer" onClick={() => setProfileOpen((v) => !v)}>
+            <CardTitle className="uppercase flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2"><User className="w-5 h-5 text-primary" /> Profile</span>
+              <span className="text-xs text-muted-foreground">{profileOpen ? "Expanded" : "Collapsed"}</span>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          {profileOpen && <CardContent>
             {isLoading ? (
               <div className="space-y-4">
                 <Skeleton className="h-10 w-full" />
@@ -920,22 +922,13 @@ export default function Settings() {
                     {saveMutation.isPending ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
                     ) : (
-                      <><Save className="w-4 h-4 mr-2" /> Save Farm Details</>
+                      <><Save className="w-4 h-4 mr-2" /> Save Profile Details</>
                     )}
                   </Button>
                 </form>
               </Form>
             )}
-          </CardContent>
-        </Card>
-
-        <Card className="rugged-card">
-          <CardHeader>
-            <CardTitle className="uppercase flex items-center gap-2">
-              <Image className="w-5 h-5 text-primary" /> Farm Logo
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
+          
             <p className="text-sm text-muted-foreground">
               Upload your farm or stud logo to include on exported documents. This creates a professional branded footer on all your PDF, Word, and other exports.
             </p>
@@ -1074,55 +1067,25 @@ export default function Settings() {
                 )}
               </Button>
             </div>
-          </CardContent>
+          </CardContent>}
         </Card>
 
         <Card className="rugged-card">
-          <CardHeader>
-            <CardTitle className="uppercase flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" /> Profile
+          <CardHeader className="cursor-pointer" onClick={() => setDataOpen((v) => !v)}>
+            <CardTitle className="uppercase flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2"><Download className="w-5 h-5" /> Data Management</span>
+              <span className="text-xs text-muted-foreground">{dataOpen ? "Expanded" : "Collapsed"}</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
+          {dataOpen && <CardContent className="space-y-6">
             <div className="space-y-4">
-               <div className="flex items-center gap-4 p-4 bg-secondary/30 rounded border border-border">
-                  <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center font-black text-2xl text-black">
-                    D
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold">Device Registered</h3>
-                    <p className="text-muted-foreground text-xs font-mono truncate max-w-[200px]">
-                      {user?.deviceId || "Not registered"}
-                    </p>
-                  </div>
-               </div>
                {user && (
                  <Button onClick={async () => { if (await guardRiskyAction()) { await performLogout(); } }} variant="outline" data-testid="button-logout" className="w-full rugged-btn">
                    <LogOut className="w-4 h-4 mr-2" /> Log Out
                  </Button>
                )}
-               <Button onClick={() => setShowClearCacheDialog(true)} variant="secondary" data-testid="button-clear-local-cache" className="w-full rugged-btn">
-                 <Database className="w-4 h-4 mr-2" /> Reset This Device Session
-               </Button>
-               <p className="text-xs text-muted-foreground">
-                 Pending sync items: <span className="font-semibold">{pendingSyncCount}</span>. Local reset is blocked while unsynced records exist.
-               </p>
-               <Button asChild variant="outline" className="w-full rugged-btn" data-testid="button-admin">
-                 <Link href="/admin">
-                   <ShieldCheck className="w-4 h-4 mr-2" /> Beta Admin Panel
-                 </Link>
-               </Button>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rugged-card">
-           <CardHeader>
-            <CardTitle className="uppercase flex items-center gap-2">
-              <Download className="w-5 h-5" /> Data Management
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          
              <div className="p-4 bg-secondary rounded border border-border">
                 <h4 className="font-bold text-sm uppercase mb-2">Save Settings</h4>
                 <p className="text-xs text-muted-foreground mb-4">Save all your farm details, branding, and preferences.</p>
@@ -1247,7 +1210,7 @@ export default function Settings() {
                   )}
                 </div>
              </div>
-          </CardContent>
+          </CardContent>}
         </Card>
 
         <Card className="rugged-card">

@@ -207,7 +207,8 @@ export default function Records() {
     createExportedDoc.mutate({
       name: getDocumentFileName("CulledReport", "All"),
       documentType: "culled",
-      subfolder: "culled"
+      subfolder: "culled",
+      metadata: { exportType: "pdf", category: "culled", sourceSection: "records-culled", animalCount: culledAnimals.length, pageCount: 1, status: "success" }
     });
     toast({ title: "PDF Ready", description: "Culled report opened for printing" });
   };
@@ -265,7 +266,8 @@ export default function Records() {
     createExportedDoc.mutate({
       name: getDocumentFileName("SoldReport", "All"),
       documentType: "sold",
-      subfolder: "sold"
+      subfolder: "sold",
+      metadata: { exportType: "pdf", category: "sold", sourceSection: "records-sold", animalCount: soldAnimals.length, pageCount: 1, status: "success" }
     });
     toast({ title: "PDF Ready", description: "Sold/Removed report opened for printing" });
   };
@@ -322,7 +324,8 @@ export default function Records() {
     createExportedDoc.mutate({
       name: getDocumentFileName("DeceasedReport", "All"),
       documentType: "deceased",
-      subfolder: "deceased"
+      subfolder: "deceased",
+      metadata: { exportType: "pdf", category: "deceased", sourceSection: "records-deceased", animalCount: deceasedAnimals.length, pageCount: 1, status: "success" }
     });
     toast({ title: "PDF Ready", description: "Deceased report opened for printing" });
   };
@@ -468,13 +471,18 @@ export default function Records() {
         <>
           <div className="space-y-2">
             {docs.map((doc) => (
+              // Backward-compatible metadata parsing
+              // Old records may not include metadata.
+              (() => {
+                const meta = (doc as any).metadata || {};
+                return (
               <Card 
                 key={doc.id} 
                 className="p-3 flex items-center justify-between gap-3 cursor-pointer hover:border-primary transition-colors" 
                 data-testid={`doc-${doc.id}`}
                 onClick={() => toast({
                   title: "Export Record",
-                  description: `"${doc.name}" was exported on ${doc.exportedAt ? format(new Date(doc.exportedAt), "dd MMM yyyy 'at' HH:mm") : "unknown date"}. To re-export, go to the original section and export again.`
+                  description: `"${doc.name}" exported on ${doc.exportedAt ? format(new Date(doc.exportedAt), "dd MMM yyyy 'at' HH:mm") : "unknown date"} • ${meta.category || doc.documentType || "unknown"} • ${meta.animalCount ?? "?"} animals • ${meta.pageCount ?? "?"} pages • ${meta.status || "unknown"}.`
                 })}
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -483,6 +491,9 @@ export default function Records() {
                     <p className="font-medium text-sm truncate">{doc.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {doc.exportedAt ? format(new Date(doc.exportedAt), "dd MMM yyyy, HH:mm") : "—"}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {(meta.category || doc.documentType || "unknown")} • animals: {meta.animalCount ?? "—"} • pages: {meta.pageCount ?? "—"} • {meta.status || "unknown"}
                     </p>
                   </div>
                 </div>
@@ -499,6 +510,8 @@ export default function Records() {
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </Card>
+                );
+              })()
             ))}
           </div>
 

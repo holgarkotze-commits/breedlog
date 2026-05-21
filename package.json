@@ -8,6 +8,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test": "npm run test:cert",
     "db:push": "drizzle-kit push",
     "test:cert": "NODE_ENV=test USE_IN_MEMORY_STORAGE=1 tsx --test tests/*.test.ts",
     "test:browser-cert": "bash scripts/run-browser-cert.sh",

@@ -30,6 +30,7 @@ import { calculateEweBreedingStats } from "@/lib/breeding-stats";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { splitTagInput } from "@shared/tag-utils";
 import { isMetricWeight, resolveBirthWeight, resolveWeaningWeight } from "@shared/animal-lifecycle";
+import { calculateLambStage } from "@shared/lamb-stage";
 
 function ZoomableImagePreview({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   const [scale, setScale] = useState(1);
@@ -163,6 +164,7 @@ export default function AnimalDetail() {
       </Layout>
     );
   }
+  const lambStage = calculateLambStage(animal as Animal);
 
   return (
     <Layout>
@@ -170,7 +172,7 @@ export default function AnimalDetail() {
         {/* Clean Modern Header */}
         <div className="space-y-3">
           {/* Top row: Back + Title + Inline Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <Button variant="ghost" size="icon" className="shrink-0" onClick={() => goBack('/animals')} data-testid="button-back">
               <ArrowLeft className="w-5 h-5" />
             </Button>
@@ -179,8 +181,8 @@ export default function AnimalDetail() {
                 <ArrowLeft className="w-5 h-5 rotate-180" />
               </Button>
             )}
-            <h1 className="text-xl md:text-2xl font-bold flex-1 truncate">{animal.tagId}</h1>
-            <div className="flex items-center gap-2">
+            <h1 className="text-xl md:text-2xl font-bold flex-1 min-w-[8rem] truncate">{animal.tagId}</h1>
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end ml-auto">
               <Button 
                 variant="outline" 
                 size="sm"
@@ -214,6 +216,9 @@ export default function AnimalDetail() {
               {animal.status}
             </Badge>
             <span className="text-xs text-muted-foreground">{animal.name || "Unnamed"} • {animal.breed}</span>
+            {lambStage.isActiveLambStage && (
+              <span className="text-xs text-muted-foreground">Lamb Stage: {lambStage.label} · {lambStage.reason} · Next: {lambStage.nextAction}</span>
+            )}
           </div>
         </div>
         
@@ -887,6 +892,7 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
                 sex: animal.sex,
                 breed: animal.breed,
                 status: animal.status,
+                source: (animal as any).animalSource || "unknown_not_recorded",
                 birthDate: animal.birthDate,
                 birthStatus: animal.birthStatus,
             },
@@ -981,6 +987,7 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
             ["Sex", data.basicInfo.sex || ""],
             ["Breed", data.basicInfo.breed || ""],
             ["Status", data.basicInfo.status || ""],
+            ["Source", data.basicInfo.source || "unknown_not_recorded"],
             ["Birth Date", data.basicInfo.birthDate || ""],
             ["Electronic ID", data.identification.electronicId || ""],
             ["Tattoo ID", data.identification.tattooId || ""],
@@ -1041,6 +1048,7 @@ BASIC INFORMATION
 Sex: ${data.basicInfo.sex || "N/A"}
 Breed: ${data.basicInfo.breed || "N/A"}
 Status: ${data.basicInfo.status || "N/A"}
+Source: ${data.basicInfo.source || "unknown_not_recorded"}
 Birth Date: ${data.basicInfo.birthDate || "N/A"}
 
 ═══════════════════════════════════════════
@@ -1132,6 +1140,7 @@ ${data.notes || "No notes recorded."}
     <tr><td class="label">Date of Birth</td><td class="value">${formatDate(data.basicInfo.birthDate)}</td></tr>
     <tr><td class="label">Birth Status</td><td class="value">${data.basicInfo.birthStatus ? data.basicInfo.birthStatus.charAt(0).toUpperCase() + data.basicInfo.birthStatus.slice(1) : "—"}</td></tr>
     <tr><td class="label">Current Status</td><td class="value">${data.basicInfo.status ? data.basicInfo.status.charAt(0).toUpperCase() + data.basicInfo.status.slice(1) : "—"}</td></tr>
+    <tr><td class="label">Source</td><td class="value">${data.basicInfo.source || "unknown_not_recorded"}</td></tr>
     
     <tr><td class="section-header" colspan="2">PARENTAGE</td></tr>
     <tr><td class="label">Sire (Father)</td><td class="value">${data.parentage.sireTagId || data.parentage.externalSireInfo || "—"}</td></tr>
@@ -1328,7 +1337,17 @@ ${includeTree ? buildFamilyTreePage() : ''}
         createExportedDoc.mutate({
             name: getDocumentFileName("AnimalProfile", animal.tagId || `ID${animal.id}`),
             documentType: "individual",
-            subfolder: "individual"
+            subfolder: "individual",
+            animalId: animal.id,
+            metadata: {
+              exportType: "pdf",
+              category: includeTree ? "individual-with-family-tree" : "individual",
+              sourceSection: "individual",
+              animalCount: 1,
+              pageCount: includeTree ? 2 : 1,
+              status: "success",
+              rowsSummary: [{ tagId: animal.tagId, sex: animal.sex, breed: animal.breed, status: animal.status }],
+            }
         });
         toast({ title: "PDF Ready", description: `Print dialog opened for ${animal.tagId} profile${includeTree ? ' with family tree' : ''}` });
     };
@@ -1387,6 +1406,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
         sex: animal.sex || "ewe",
         breed: animal.breed || "Meatmaster",
         classification: animal.classification || "unclassified",
+        animalSource: (animal as any).animalSource || "unknown_not_recorded",
         status: animal.status || "active",
         birthDate: animal.birthDate || "",
         birthStatus: animal.birthStatus || "",
@@ -1508,6 +1528,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
             weight100Day: weaning.value,
             weight100DayEstimated: weaning.estimated,
             birthStatus: formData.birthStatus || null,
+            animalSource: formData.animalSource || "unknown_not_recorded",
             weaningStatus: formData.weaningStatus || null,
             electronicId: formData.electronicId?.trim() || null,
         };
@@ -1617,6 +1638,17 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                                     <SelectItem value="stud">Stud</SelectItem>
                                     <SelectItem value="commercial">Commercial</SelectItem>
                                     <SelectItem value="slaughter_cull">Slaughter/Cull</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Source</Label>
+                            <Select value={formData.animalSource || "unknown_not_recorded"} onValueChange={(val) => setFormData(prev => ({...prev, animalSource: val}))}>
+                                <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-animal-source"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="born_on_farm">Born on farm</SelectItem>
+                                    <SelectItem value="bought_in">Bought in</SelectItem>
+                                    <SelectItem value="unknown_not_recorded">Unknown / not recorded</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

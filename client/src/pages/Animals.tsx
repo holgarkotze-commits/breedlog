@@ -4,6 +4,7 @@ import { useAnimals, useCreateAnimal, useDeleteAnimal, useRemoveFromHerd, useCla
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useBreedingEvents } from "@/hooks/use-breeding";
 import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
+import { buildCullSoldRows, buildEweExportRows, buildLambBirthRows, buildLambPerformanceRows, buildRamExportRows } from "@/lib/stamboek-export-fields";
 import { AnimalCard } from "@/components/AnimalCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,9 +15,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAnimalSchema, type Animal, type BreedingEvent } from "@shared/schema";
-import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3, LogOut, Scale, Tag, ChevronRight, UserPlus, ChevronDown } from "lucide-react";
+import { Search, Plus, Filter, Camera, X, Image, FileText, Trash2, MoreVertical, Download, LayoutGrid, List, Grid3X3, LogOut, Scale, Tag, ChevronRight, UserPlus, ChevronDown, Edit } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
+import { useCreateHealthRecord, useCreatePerformanceRecord } from "@/hooks/use-records";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
@@ -30,8 +32,10 @@ import { Label } from "@/components/ui/label";
 import { DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import logo from "@/assets/breedlog-logo-mark.png";
 import type { PDFQuality } from "@/lib/pdf-utils";
+import { getHerdCounts } from "@/lib/herd-counts";
 import { api } from "@shared/routes";
 import { nextTagRawSequence, splitTagInput } from "@shared/tag-utils";
+import { calculateLambStage } from "@shared/lamb-stage";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 const PDFExportDialog = lazy(() => import("@/components/PDFExportDialog").then((m) => ({ default: m.PDFExportDialog })));
 const ANIMALS_INITIAL_VISIBLE_COUNT = 50;
@@ -148,8 +152,8 @@ export default function Animals() {
   const [viewMode, setViewMode] = useState<"detailed" | "list" | "thumbnail">("detailed");
   const isMobile = useIsMobile();
   
-  // Collapsible section states - Total Herd expanded by default, sections collapsed
-  const [totalHerdExpanded, setTotalHerdExpanded] = useState(true);
+  // Collapsible section states - all collapsed by default
+  const [totalHerdExpanded, setTotalHerdExpanded] = useState(false);
   const [ramsExpanded, setRamsExpanded] = useState(false);
   const [ewesExpanded, setEwesExpanded] = useState(false);
   const [lambsExpanded, setLambsExpanded] = useState(false);
@@ -167,6 +171,13 @@ export default function Animals() {
   const moveToRamsMutation = useMoveToRams();
   const updateAnimalMutation = useUpdateAnimal();
   const createExportedDoc = useCreateExportedDocument();
+  const createHealthRecord = useCreateHealthRecord();
+  const createPerformanceRecord = useCreatePerformanceRecord();
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedAnimalIds, setSelectedAnimalIds] = useState<number[]>([]);
+  const [bulkAction, setBulkAction] = useState<string>("");
+  const [bulkValue, setBulkValue] = useState("");
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // PDF Export Dialog state
   const [isPdfExportDialogOpen, setIsPdfExportDialogOpen] = useState(false);
@@ -223,6 +234,44 @@ export default function Animals() {
       }
     );
   };
+  const toggleSelected = (id: number) => setSelectedAnimalIds((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const startSelectionByLongPress = (id: number) => {
+    setSelectionMode(true);
+    setSelectedAnimalIds((prev) => prev.includes(id) ? prev : [...prev, id]);
+  };
+  const clearSelection = () => { setSelectionMode(false); setSelectedAnimalIds([]); };
+  const createBulkTrace = (actionType: string, status: "success" | "failure", extra?: Record<string, any>) => {
+    const selected = (allAnimals || []).filter(a => selectedAnimalIds.includes(a.id));
+    createExportedDoc.mutate({
+      name: `BulkAction_${actionType}_${new Date().toISOString().slice(0,10)}`,
+      documentType: "productivity",
+      subfolder: "productivity",
+      metadata: { actionType, dateTime: new Date().toISOString(), selectedAnimalCount: selected.length, selectedAnimalIds, selectedTagIds: selected.map(a => a.tagId), status, ...extra }
+    });
+  };
+  const runBulkAction = async () => {
+    const selected = (allAnimals || []).filter(a => selectedAnimalIds.includes(a.id));
+    try {
+      if (bulkAction === "assign-sire") {
+        for (const a of selected) updateAnimalMutation.mutate({ id: a.id, externalSireInfo: bulkValue } as any);
+      } else if (bulkAction === "assign-dam") {
+        for (const a of selected) updateAnimalMutation.mutate({ id: a.id, externalDamInfo: bulkValue } as any);
+      } else if (bulkAction === "health-event") {
+        for (const a of selected) await createHealthRecord.mutateAsync({ animalId: a.id, date: new Date().toISOString().slice(0,10), treatment: bulkValue || "Group health event", diagnosis: null } as any);
+      } else if (bulkAction === "record-weight") {
+        for (const a of selected) await createPerformanceRecord.mutateAsync({ animalId: a.id, date: new Date().toISOString().slice(0,10), weight: bulkValue } as any);
+      } else if (bulkAction === "mark-sold" || bulkAction === "mark-deceased" || bulkAction === "mark-removed" || bulkAction === "mark-culled") {
+        const reason = bulkAction === "mark-sold" ? "sold" : bulkAction === "mark-deceased" ? "deceased" : "transferred";
+        for (const a of selected) removeFromHerdMutation.mutate({ id: a.id, reason: reason as any, notes: "" });
+      }
+      createBulkTrace(bulkAction, "success", { affectedField: bulkAction, value: bulkValue || "" });
+      toast({ title: "Bulk action completed", description: `${bulkAction} applied to ${selected.length} animals` });
+      clearSelection();
+    } catch {
+      createBulkTrace(bulkAction, "failure");
+    } finally {
+    }
+  };
 
   // Full Herd Export PDF with Rams, Ewes, Lambs sections
   const exportFullHerdPDF = () => {
@@ -248,9 +297,9 @@ export default function Animals() {
     let pageNum = 1;
     
     // Count total pages
-    const ramsPerPage = 20;
-    const ewesPerPage = 18;
-    const lambsPerPage = 22;
+    const ramsPerPage = 25;
+    const ewesPerPage = 25;
+    const lambsPerPage = 25;
     const ramsPages = Math.max(1, Math.ceil(rams.length / ramsPerPage));
     const ewesPages = Math.max(1, Math.ceil(ewes.length / ewesPerPage));
     const lambsPages = Math.max(1, Math.ceil(lambs.length / lambsPerPage));
@@ -258,28 +307,25 @@ export default function Animals() {
     
     // SECTION 1: RAMS
     if (rams.length > 0) {
-      const ramsWithStats = rams.map(ram => {
-        const stats = calculateRamBreedingStats(ram.id, breedingEvents, allAnimals);
-        return { ...ram, stats };
-      });
+      const ramRows = buildRamExportRows(rams, breedingEvents, allAnimals, []);
       
       for (let page = 0; page < ramsPages; page++) {
         const startIdx = page * ramsPerPage;
-        const pageRams = ramsWithStats.slice(startIdx, startIdx + ramsPerPage);
+        const pageRams = ramRows.slice(startIdx, startIdx + ramsPerPage);
         
         const tableRows = pageRams.map((ram, idx) => {
           const rowNum = startIdx + idx + 1;
           return `<tr>
             <td class="row-num">${rowNum}</td>
-            <td><strong>${ram.tagId}</strong></td>
-            <td>${ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : '-'}</td>
-            <td>${ram.stats.totalLambs || 0}</td>
-            <td>${ram.stats.avgBirthWeight || '-'}</td>
-            <td>${ram.stats.avgWeight100Day || '-'}</td>
-            <td>${ram.stats.avgWeight270Day || '-'}</td>
-            <td>${ram.stats.twinCount || 0}</td>
-            <td>${ram.stats.avgWeanWeight || '-'}</td>
-            <td><span class="status status-${ram.status}">${ram.status}</span></td>
+            <td><strong>${ram["Ram ID"] || "-"}</strong></td>
+            <td>${ram["Date of birth"] || '-'}</td>
+            <td>${ram["Number of lambs born from this sire"] || 0}</td>
+            <td>-</td>
+            <td>${ram["Average 100-day progeny weight"] || '-'}</td>
+            <td>${ram["Average 270-day progeny weight"] || '-'}</td>
+            <td>${ram["Number of ewes joined"] || 0}</td>
+            <td>-</td>
+            <td><span class="status status-${ram["Status"] || "active"}">${ram["Status"] || "-"}</span></td>
           </tr>`;
         }).join('');
         
@@ -337,27 +383,24 @@ export default function Animals() {
     
     // SECTION 2: EWES
     if (ewes.length > 0) {
-      const ewesWithStats = ewes.map(ewe => {
-        const stats = calculateEweBreedingStats(ewe.id, breedingEvents, allAnimals);
-        return { ...ewe, stats };
-      });
+      const eweRows = buildEweExportRows(ewes, breedingEvents, []);
       
       for (let page = 0; page < ewesPages; page++) {
         const startIdx = page * ewesPerPage;
-        const pageEwes = ewesWithStats.slice(startIdx, startIdx + ewesPerPage);
+        const pageEwes = eweRows.slice(startIdx, startIdx + ewesPerPage);
         
         const tableRows = pageEwes.map((ewe, idx) => {
           const rowNum = startIdx + idx + 1;
           return `<tr>
             <td class="row-num">${rowNum}</td>
-            <td><strong>${ewe.tagId}</strong></td>
-            <td>${ewe.birthDate ? format(new Date(ewe.birthDate), "dd/MM/yyyy") : '-'}</td>
-            <td>${ewe.stats.firstLambDate ? format(new Date(ewe.stats.firstLambDate), "dd/MM/yyyy") : '-'}</td>
-            <td>${ewe.stats.totalLambs}</td>
-            <td>${ewe.stats.avgILP || '-'}</td>
-            <td>${ewe.stats.lambsWeaned}</td>
-            <td>${ewe.stats.avgWeanWeight || '-'}</td>
-            <td><span class="status status-${ewe.status}">${ewe.status}</span></td>
+            <td><strong>${ewe["Ewe ID"] || "-"}</strong></td>
+            <td>${ewe["Date of birth"] || '-'}</td>
+            <td>${ewe["Last lambing date"] || '-'}</td>
+            <td>${ewe["Lambs born total"] || 0}</td>
+            <td>-</td>
+            <td>${ewe["Lambs weaned total"] || '-'}</td>
+            <td>-</td>
+            <td><span class="status status-${ewe["Status"] || "active"}">${ewe["Status"] || "-"}</span></td>
           </tr>`;
         }).join('');
         
@@ -414,21 +457,26 @@ export default function Animals() {
     
     // SECTION 3: LAMBS
     if (lambs.length > 0) {
+      const lambBirthRows = buildLambBirthRows(lambs);
+      const lambPerfRows = buildLambPerformanceRows(lambs);
       for (let page = 0; page < lambsPages; page++) {
         const startIdx = page * lambsPerPage;
-        const pageLambs = lambs.slice(startIdx, startIdx + lambsPerPage);
+        const pageLambBirthRows = lambBirthRows.slice(startIdx, startIdx + lambsPerPage);
+        const pageLambPerfRows = lambPerfRows.slice(startIdx, startIdx + lambsPerPage);
         
-        const tableRows = pageLambs.map((lamb, idx) => {
+        const tableRows = pageLambBirthRows.map((lamb, idx) => {
+          const perf = pageLambPerfRows[idx] || {};
           const rowNum = startIdx + idx + 1;
           return `<tr>
             <td class="row-num">${rowNum}</td>
-            <td><strong>${lamb.tagId}</strong></td>
-            <td>${lamb.name || '-'}</td>
-            <td>${lamb.sex || '-'}</td>
-            <td>${lamb.birthDate ? format(new Date(lamb.birthDate), "dd/MM/yyyy") : '-'}</td>
-            <td>${lamb.birthWeight ? lamb.birthWeight + ' kg' : '-'}</td>
-            <td>${lamb.currentWeight ? lamb.currentWeight + ' kg' : '-'}</td>
-            <td><span class="status status-${lamb.status}">${lamb.status}</span></td>
+            <td><strong>${lamb["Lamb ID"] || "-"}</strong></td>
+            <td>${lamb["Birth status"] || '-'}</td>
+            <td>${lamb["Sex"] || '-'}</td>
+            <td>${lamb["Birth date"] || '-'}</td>
+            <td>${perf["100-day weight"] || '-'}</td>
+            <td>${perf["270-day/post-wean weight"] || '-'}</td>
+            <td>${perf["Latest/current weight"] || '-'}</td>
+            <td><span class="status status-active">active</span></td>
           </tr>`;
         }).join('');
         
@@ -489,10 +537,10 @@ export default function Animals() {
   <meta charset="UTF-8">
   <title>${fb?.studName || fb?.farmName || "BreedLog"} - Full Herd Register</title>
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 landscape; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 190mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
     .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
@@ -541,7 +589,8 @@ export default function Animals() {
     createExportedDoc.mutate({
       name: getDocumentFileName("HerdExport", "FullHerd"),
       documentType: "herd",
-      subfolder: "herd"
+      subfolder: "herd",
+      metadata: { exportType: "pdf", category: "full-herd", sourceSection: "full herd", animalCount: rams.length + ewes.length + lambs.length, pageCount: totalPages, status: "success", rowsSummary: { rams: rams.length, ewes: ewes.length, lambs: lambs.length } }
     });
     toast({ title: "PDF Ready", description: "Full Herd Register export opened for printing" });
   };
@@ -591,7 +640,7 @@ export default function Animals() {
         return { ...ewe, stats };
       });
       
-      const ewesPerPage = 18;
+      const ewesPerPage = 25;
       const totalPages = Math.ceil(ewesWithStats.length / ewesPerPage);
       
       let pagesHtml = "";
@@ -665,10 +714,10 @@ export default function Animals() {
   <meta charset="UTF-8">
   <title>${fb?.studName || fb?.farmName || "BreedLog"} - ${exportTitle}</title>
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 landscape; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 190mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
     .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
@@ -716,14 +765,15 @@ export default function Animals() {
       createExportedDoc.mutate({
         name: getDocumentFileName("HerdExport", "EwesOnly"),
         documentType: "herd",
-        subfolder: "herd"
+        subfolder: "herd",
+        metadata: { exportType: "pdf", category: "ewes", sourceSection: "ewes", animalCount: ewesWithStats.length, pageCount: Math.max(1, totalPages), status: "success", rowsSummary: { sample: ewesWithStats.slice(0, 3).map(e => e.tagId) } }
       });
       toast({ title: "PDF Ready", description: `${exportTitle} export opened for printing` });
       return;
     }
     
     // Standard export for rams and lambs
-    const animalsPerPage = 22;
+    const animalsPerPage = 25;
     const totalPages = Math.ceil(exportAnimals.length / animalsPerPage);
     
     // Table headers - no photo column
@@ -844,7 +894,8 @@ export default function Animals() {
     createExportedDoc.mutate({
       name: getDocumentFileName("HerdExport", exportType === "rams" ? "RamsOnly" : "LambsOnly"),
       documentType: "herd",
-      subfolder: "herd"
+      subfolder: "herd",
+      metadata: { exportType: "pdf", category: exportType, sourceSection: exportType, animalCount: exportAnimals.length, pageCount: Math.max(1, totalPages), status: "success" }
     });
     toast({ title: "PDF Ready", description: `${exportTitle} export opened for printing` });
   };
@@ -1004,7 +1055,8 @@ export default function Animals() {
     createExportedDoc.mutate({
       name: getDocumentFileName("RamsRegister", "Full"),
       documentType: "herd",
-      subfolder: "herd"
+      subfolder: "herd",
+      metadata: { exportType: "pdf", category: "rams-register", sourceSection: "rams", animalCount: rams.length, pageCount: Math.max(1, totalPages), status: "success" }
     });
     toast({ title: "PDF Ready", description: "Rams Register export opened for printing" });
   };
@@ -1145,7 +1197,8 @@ export default function Animals() {
     createExportedDoc.mutate({
       name: getDocumentFileName("EwesRegister", "Full"),
       documentType: "herd",
-      subfolder: "herd"
+      subfolder: "herd",
+      metadata: { exportType: "pdf", category: "ewes-register", sourceSection: "ewes", animalCount: ewes.length, pageCount: Math.max(1, totalPages), status: "success" }
     });
     toast({ title: "PDF Ready", description: "Ewes Register export opened for printing" });
   };
@@ -1166,31 +1219,26 @@ export default function Animals() {
       return;
     }
     
-    const animalsPerPage = 12;
-    const totalPages = Math.ceil(culledAnimals.length / animalsPerPage);
+    const animalsPerPage = 25;
+    const culledRows = buildCullSoldRows(culledAnimals);
+    const totalPages = Math.ceil(culledRows.length / animalsPerPage);
     
     let pagesHtml = "";
     for (let page = 0; page < Math.max(1, totalPages); page++) {
       const startIdx = page * animalsPerPage;
-      const pageAnimals = culledAnimals.slice(startIdx, startIdx + animalsPerPage);
+      const pageAnimals = culledRows.slice(startIdx, startIdx + animalsPerPage);
       
       const tableRows = pageAnimals.map((animal) => {
-        const ageMonths = animal.birthDate 
-          ? Math.floor((Date.now() - new Date(animal.birthDate).getTime()) / (1000 * 60 * 60 * 24 * 30))
-          : '-';
         return `<tr>
-          <td class="photo-cell">
-            ${animal.photo 
-              ? `<img src="${animal.photo}" class="animal-photo" alt="${animal.tagId}" />`
-              : `<div class="no-photo"></div>`
-            }
-          </td>
-          <td><strong>${animal.tagId}</strong></td>
-          <td>${animal.sex || '-'}</td>
-          <td>${animal.birthDate ? format(new Date(animal.birthDate), "dd/MM/yyyy") : '-'}</td>
-          <td>${ageMonths}</td>
-          <td>${animal.currentWeight || '-'} kg</td>
-          <td>${animal.notes || '-'}</td>
+          <td><strong>${animal["Animal ID"] || "-"}</strong></td>
+          <td>${animal["Sex"] || '-'}</td>
+          <td>${animal["Breed"] || '-'}</td>
+          <td>${animal["Date of birth"] || '-'}</td>
+          <td>${animal["Status"] || '-'}</td>
+          <td>${animal["Status date"] || '-'}</td>
+          <td>${animal["Reason"] || '-'}</td>
+          <td>${animal["Latest weight"] || '-'}</td>
+          <td>${animal["Notes"] || '-'}</td>
         </tr>`;
       }).join('');
       
@@ -1213,12 +1261,14 @@ export default function Animals() {
           <table class="animals-table">
             <thead>
               <tr>
-                <th class="photo-header">Photo</th>
-                <th>Tag ID</th>
+                <th>Animal ID</th>
                 <th>Sex</th>
+                <th>Breed</th>
                 <th>DOB</th>
-                <th>Age (Mo)</th>
-                <th>Weight</th>
+                <th>Status</th>
+                <th>Status date</th>
+                <th>Reason</th>
+                <th>Latest weight</th>
                 <th>Notes</th>
               </tr>
             </thead>
@@ -1313,7 +1363,8 @@ export default function Animals() {
     createExportedDoc.mutate({
       name: getDocumentFileName("CulledAnimals", "Full"),
       documentType: "herd",
-      subfolder: "herd"
+      subfolder: "herd",
+      metadata: { exportType: "pdf", category: "culled", sourceSection: "culled", animalCount: culledRows.length, pageCount: Math.max(1, totalPages), status: "success", rowsSummary: culledRows.slice(0, 5) }
     });
     toast({ title: "PDF Ready", description: "Culled Animals export opened for printing" });
   };
@@ -1391,6 +1442,7 @@ export default function Animals() {
     [safeFilteredAnimals, visibleAnimalsCount]
   );
   const hasMoreFilteredAnimals = safeFilteredAnimals.length > visibleAnimals.length;
+  const herdCounts = getHerdCounts(allAnimals || []);
 
   useEffect(() => {
     setVisibleAnimalsCount(ANIMALS_INITIAL_VISIBLE_COUNT);
@@ -1401,8 +1453,13 @@ export default function Animals() {
       <div className="space-y-2.5 md:space-y-6 animate-in fade-in duration-500">
         <div className="flex flex-col gap-2">
           <h1 className="text-lg md:text-3xl font-bold tracking-tight leading-tight" data-testid="page-title">
-            {displayName ? `${displayName} - My Herd` : "My Herd"} ({allAnimals?.length || 0})
+            {displayName ? `${displayName} - My Herd` : "My Herd"} ({herdCounts.activeHerdAnimals})
           </h1>
+          <p className="text-xs text-muted-foreground" data-testid="herd-count-summary">
+            Farm records: {herdCounts.totalFarmRecords} · Active herd (excl. archive): {herdCounts.activeHerdAnimals} ·
+            Lamb stage (not admitted): {herdCounts.nonAdmittedLambStageAnimals} · Admitted herd: {herdCounts.admittedHerdAnimals} ·
+            Mature herd: {herdCounts.matureHerdAnimals} · Archive: {herdCounts.archiveAnimals}
+          </p>
           <div className="flex flex-wrap gap-2 items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1473,8 +1530,8 @@ export default function Animals() {
 
         {/* Total Herd Section - Primary browsing experience with search/filters inside */}
         <SectionRibbon
-          title="Total Herd"
-          count={(allAnimals || []).filter(a => a.status === 'active').length}
+          title="Total Herd (Active, excl. archive)"
+          count={herdCounts.activeHerdAnimals}
           isExpanded={totalHerdExpanded}
           onToggle={() => setTotalHerdExpanded(!totalHerdExpanded)}
           testId="ribbon-total-herd"
@@ -1592,6 +1649,30 @@ export default function Animals() {
           </div>
 
           {/* Animal List/Grid INSIDE the accordion */}
+          {selectionMode && (
+            <div className="sticky bottom-20 z-20 bg-card border border-border rounded-md p-2 mb-2" data-testid="bulk-selection-toolbar">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge data-testid="bulk-selected-count">{selectedAnimalIds.length} selected</Badge>
+                <Button size="sm" variant="outline" onClick={clearSelection} data-testid="button-clear-selection">Clear</Button>
+                <Select value={bulkAction} onValueChange={setBulkAction}>
+                  <SelectTrigger className="h-8 w-[180px]" data-testid="select-bulk-action"><SelectValue placeholder="Bulk action" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="assign-sire">Assign sire/father</SelectItem>
+                    <SelectItem value="assign-dam">Assign dam/mother</SelectItem>
+                    <SelectItem value="health-event">Record health event</SelectItem>
+                    <SelectItem value="mark-culled">Mark culled</SelectItem>
+                    <SelectItem value="mark-sold">Mark sold</SelectItem>
+                    <SelectItem value="mark-deceased">Mark deceased</SelectItem>
+                    <SelectItem value="mark-removed">Mark removed/archive</SelectItem>
+                    <SelectItem value="record-weight">Record weights</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input className="h-8 w-[140px]" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} placeholder="Value/input" data-testid="input-bulk-value" />
+                <Button size="sm" onClick={() => { if (window.confirm(`Apply ${bulkAction} to ${selectedAnimalIds.length} selected animals?`)) runBulkAction(); }} disabled={!bulkAction || selectedAnimalIds.length === 0} data-testid="button-confirm-bulk-open">Apply</Button>
+              </div>
+              {bulkAction === "record-weight" && <p className="text-[10px] text-muted-foreground mt-1" data-testid="bulk-weight-rule">Apply same weight to all selected animals (explicit action). No automatic average-to-individual overwrite.</p>}
+            </div>
+          )}
           {isLoading ? (
             <div className="space-y-1.5 md:grid md:grid-cols-2 lg:grid-cols-4 md:gap-4 md:space-y-0">
               {[1, 2, 3, 4, 5, 6].map(i => (
@@ -1604,7 +1685,10 @@ export default function Animals() {
               {visibleAnimals.map(animal => (
                 <Link key={animal.id} href={`/animals/${animal.id}`}>
                   <div 
-                    className="aspect-square rounded-md bg-secondary overflow-hidden border-2 border-transparent hover:border-primary transition-all cursor-pointer"
+                    className={cn("aspect-square rounded-md bg-secondary overflow-hidden border-2 hover:border-primary transition-all cursor-pointer", selectedAnimalIds.includes(animal.id) ? "border-primary" : "border-transparent")}
+                    onTouchStart={() => { longPressTimerRef.current = setTimeout(() => startSelectionByLongPress(animal.id), 500); }}
+                    onTouchEnd={() => { if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current); }}
+                    onClick={(e) => { if (selectionMode) { e.preventDefault(); toggleSelected(animal.id); } }}
                     data-testid={`thumbnail-${animal.id}`}
                   >
                     {animal.photo ? (
@@ -1640,7 +1724,7 @@ export default function Animals() {
                 </thead>
                 <tbody>
                   {visibleAnimals.map((animal, idx) => (
-                    <ListRow key={animal.id} animal={animal} idx={idx} />
+                    <ListRow key={animal.id} animal={animal} idx={idx} selectionMode={selectionMode} isSelected={selectedAnimalIds.includes(animal.id)} onToggleSelect={toggleSelected} onLongPress={startSelectionByLongPress} />
                   ))}
                 </tbody>
               </table>
@@ -1653,7 +1737,7 @@ export default function Animals() {
           ) : isMobile ? (
             <div className="space-y-1.5">
               {visibleAnimals.map(animal => (
-                <AnimalListRow key={animal.id} animal={animal} />
+                <AnimalListRow key={animal.id} animal={animal} selectionMode={selectionMode} isSelected={selectedAnimalIds.includes(animal.id)} onToggleSelect={toggleSelected} onLongPress={startSelectionByLongPress} />
               ))}
               {safeFilteredAnimals.length === 0 && (
                 <div className="py-8 text-center text-muted-foreground text-xs">
@@ -2142,7 +2226,6 @@ function RamsSection({
         </div>
         )}
       </SectionRibbon>
-      
       {/* Weight Dialog for Rams */}
       <Dialog open={showWeightDialog} onOpenChange={setShowWeightDialog}>
         <DialogContent>
@@ -2617,13 +2700,6 @@ function LambsSection({
     });
   };
 
-  const getLambStatusBadge = (animal: Animal): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } => {
-    if (animal.ramLambClass === 'cull') return { label: "CULL PENDING", variant: "destructive" };
-    if (animal.ramLambClass === 'stud') return { label: "STUD", variant: "default" };
-    if (animal.ramLambClass === 'commercial') return { label: "COMMERCIAL", variant: "secondary" };
-    return { label: "ACTIVE", variant: "default" };
-  };
-
   const exportButton = (
     <Button 
       variant="outline" 
@@ -2716,7 +2792,7 @@ function LambsSection({
             <tbody>
               {lambs.map((lamb, idx) => {
                 const ageDays = getAgeDays(lamb.birthDate);
-                const statusBadge = getLambStatusBadge(lamb);
+                const stage = calculateLambStage(lamb);
                 const needs100Day = ageDays >= 100 && !lamb.weight100Day;
                 const needs270Day = ageDays >= 270 && !lamb.weight270Day && lamb.sex === 'ram' && lamb.ramLambClass === 'stud';
                 
@@ -2775,12 +2851,15 @@ function LambsSection({
                     </td>
                     <td className="p-2.5">
                       <Badge 
-                        variant={statusBadge.variant}
+                        variant={stage.needsAttention ? "destructive" : "secondary"}
                         className="text-[10px] px-1.5"
                         data-testid={`badge-lamb-status-${lamb.id}`}
                       >
-                        {statusBadge.label}
+                        {stage.label}
                       </Badge>
+                      <div className="text-[10px] text-muted-foreground mt-1 max-w-[220px] truncate" title={`${stage.reason} Next: ${stage.nextAction}`}>
+                        {stage.reason}
+                      </div>
                     </td>
                     <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
@@ -3106,7 +3185,7 @@ function CulledSection({
   );
 }
 
-function ListRow({ animal, idx }: { animal: Animal; idx: number }) {
+function ListRow({ animal, idx, selectionMode, isSelected, onToggleSelect, onLongPress }: { animal: Animal; idx: number; selectionMode: boolean; isSelected: boolean; onToggleSelect: (id:number)=>void; onLongPress: (id:number)=>void; }) {
   const [, setLocation] = useLocation();
   
   return (
@@ -3115,10 +3194,11 @@ function ListRow({ animal, idx }: { animal: Animal; idx: number }) {
         "hover:bg-secondary/50 cursor-pointer transition-colors",
         idx % 2 === 0 ? "bg-card" : "bg-secondary/20"
       )}
-      onClick={() => setLocation(`/animals/${animal.id}`)}
+      onTouchStart={() => onLongPress(animal.id)}
+      onClick={() => selectionMode ? onToggleSelect(animal.id) : setLocation(`/animals/${animal.id}`)}
       data-testid={`list-row-${animal.id}`}
     >
-      <td className="p-2.5 font-semibold">{animal.tagId}</td>
+      <td className={cn("p-2.5 font-semibold", isSelected && "text-primary")}>{animal.tagId}</td>
       <td className="p-2.5 hidden sm:table-cell">{animal.name || "—"}</td>
       <td className="p-2.5">
         <span className={cn(
@@ -3144,16 +3224,14 @@ function ListRow({ animal, idx }: { animal: Animal; idx: number }) {
   );
 }
 
-function AnimalListRow({ animal }: { animal: Animal }) {
-  const { mutate: deleteAnimal, isPending } = useDeleteAnimal();
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+function AnimalListRow({ animal, selectionMode, isSelected, onToggleSelect, onLongPress }: { animal: Animal; selectionMode: boolean; isSelected: boolean; onToggleSelect: (id:number)=>void; onLongPress: (id:number)=>void; }) {
   const [showImageDialog, setShowImageDialog] = useState(false);
   const isRam = animal.sex?.toLowerCase() === 'ram';
   const isEwe = animal.sex?.toLowerCase() === 'ewe';
 
   return (
     <>
-      <Card className="flex items-center p-2.5 gap-2.5 hover:border-primary transition-colors cursor-pointer">
+      <Card className={cn("flex items-center p-2.5 gap-2.5 hover:border-primary transition-colors cursor-pointer", isSelected && "border-primary")} onTouchStart={() => onLongPress(animal.id)} onClick={() => selectionMode ? onToggleSelect(animal.id) : undefined}>
         {/* Clickable image thumbnail */}
         <div 
           className="w-12 h-12 rounded-md bg-secondary overflow-hidden flex-shrink-0 cursor-pointer ring-2 ring-transparent hover:ring-primary/50 transition-all"
@@ -3173,7 +3251,7 @@ function AnimalListRow({ animal }: { animal: Animal }) {
         </div>
         
         {/* Rest of row - links to detail page */}
-        <Link href={`/animals/${animal.id}`} className="flex-1 flex items-center gap-2.5 min-w-0">
+        <Link href={`/animals/${animal.id}`} className="flex-1 flex items-center gap-2.5 min-w-0" onClick={(e) => { if (selectionMode) e.preventDefault(); }}>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-semibold text-sm truncate">{animal.tagId}</span>
@@ -3185,6 +3263,9 @@ function AnimalListRow({ animal }: { animal: Animal }) {
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground truncate">{animal.breed || "Meatmaster"}</p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              Source: {animal.animalSource === "born_on_farm" ? "Born on farm" : animal.animalSource === "bought_in" ? "Bought in" : "Unknown / not recorded"}
+            </p>
           </div>
           <div className="text-right flex-shrink-0">
             <span className={cn(
@@ -3202,16 +3283,10 @@ function AnimalListRow({ animal }: { animal: Animal }) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenuItem 
-              className="text-destructive focus:text-destructive"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setShowDeleteDialog(true);
-              }}
-              data-testid={`button-delete-${animal.id}`}
-            >
-              <Trash2 className="w-4 h-4 mr-2" /> Delete
+            <DropdownMenuItem asChild data-testid={`button-edit-${animal.id}`}>
+              <Link href={`/animals/${animal.id}`}>
+                <Edit className="w-4 h-4 mr-2" /> Edit
+              </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -3241,28 +3316,6 @@ function AnimalListRow({ animal }: { animal: Animal }) {
           </div>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Animal Profile</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to permanently delete <strong>{animal.tagId}</strong>
-              {animal.name ? ` (${animal.name})` : ''}? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteAnimal(animal.id)}
-              disabled={isPending}
-              className="bg-white text-red-600 border border-red-200 hover:bg-red-50"
-            >
-              {isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }
@@ -3298,6 +3351,7 @@ function CreateAnimalDialog({
       breed: "Meatmaster",
       status: "active",
       classification: "unclassified" as string,
+      animalSource: "unknown_not_recorded" as string,
       birthDate: new Date().toISOString().split('T')[0],
       birthStatus: "single" as string,
       birthWeight: null as string | null,
@@ -3555,6 +3609,28 @@ function CreateAnimalDialog({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="animalSource"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Source</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || "unknown_not_recorded"}>
+                      <FormControl>
+                        <SelectTrigger className="rugged-input" data-testid="select-animal-source">
+                          <SelectValue placeholder="Select source" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="born_on_farm">Born on farm</SelectItem>
+                        <SelectItem value="bought_in">Bought in</SelectItem>
+                        <SelectItem value="unknown_not_recorded">Unknown / not recorded</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="birthDate"

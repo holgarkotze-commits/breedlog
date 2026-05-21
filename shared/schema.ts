@@ -54,6 +54,7 @@ export const animals = pgTable("animals", {
   sex: text("sex").notNull(), // ram, ewe, wether
   breed: text("breed").default("Meatmaster"),
   classification: text("classification").default("unclassified"), // stud, commercial, slaughter_cull, unclassified
+  animalSource: text("animal_source").default("unknown_not_recorded"), // born_on_farm, bought_in, unknown_not_recorded
   status: text("status").default("active"), // active, sold, dead, culled, lost
   photo: text("photo"), // URL/Path to photo
   
@@ -430,6 +431,7 @@ export const exportedDocuments = pgTable("exported_documents", {
   documentType: text("document_type").notNull(), // herd, individual, mating, culled, sold, productivity
   subfolder: text("subfolder").notNull(), // matches documentType or specific category
   animalId: integer("animal_id").references(() => animals.id),
+  metadata: jsonb("metadata"),
   exportedAt: timestamp("exported_at").defaultNow(),
 });
 

@@ -11,6 +11,7 @@
 // caller; this module never touches storage.
 
 import type { InviteCode, UserActivation } from "@shared/schema";
+import { MASTER_SIMULATION_ACCESS_CODE, MASTER_SIMULATION_MAX_DEVICES } from "@shared/master-simulation";
 
 export type ActivationReasonCode =
   | "OK"
@@ -115,6 +116,21 @@ export function evaluateActivation(params: {
       slotTaken: false,
       selfHoldsSlot: false,
     };
+  }
+
+  if ((code.code || "").toUpperCase() === MASTER_SIMULATION_ACCESS_CODE) {
+    const uniqueDevices = new Set(activeActivationsForCode.filter((a) => a.status === "active").map((a) => a.deviceId));
+    const selfHolds = !!callerDeviceId && uniqueDevices.has(callerDeviceId);
+    if (uniqueDevices.size >= MASTER_SIMULATION_MAX_DEVICES && !selfHolds) {
+      return {
+        ok: false,
+        reasonCode: "DEVICE_SLOT_ALREADY_USED",
+        reason: `Master test code device limit reached (${MASTER_SIMULATION_MAX_DEVICES}).`,
+        slotTaken: true,
+        selfHoldsSlot: false,
+      };
+    }
+    return { ok: true, reasonCode: "OK", reason: null, slotTaken: false, selfHoldsSlot: selfHolds };
   }
 
   const slotHolder = activeActivationsForCode.find(
