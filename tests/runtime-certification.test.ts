@@ -2,7 +2,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process';
 
-const BASE_URL = 'http://127.0.0.1:5000';
+const BASE_URL = 'http://127.0.0.1:5003';
 let server: ChildProcessWithoutNullStreams | null = null;
 let logs = '';
 
@@ -28,7 +28,7 @@ before(async () => {
       USE_IN_MEMORY_STORAGE: '1',
       SESSION_SECRET: 'test-secret',
       ADMIN_PIN: '1234',
-      PORT: '5000',
+      PORT: '5003',
     },
     stdio: 'pipe',
     detached: true,

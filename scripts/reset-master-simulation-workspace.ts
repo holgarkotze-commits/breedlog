@@ -55,11 +55,12 @@ async function main(){
     const damId = a.damId ? idMap.get(a.damId) || null : null;
     if (sireId || damId) await db.update(animals).set({ sireId, damId }).where(and(eq(animals.userId,userId), eq(animals.id,idMap.get(a.id)!)));
   }
-  for (const g of ds.matingGroups as any[]) await db.insert(matingGroups).values({ ...g, userId, ramId: idMap.get(g.ramId)!, eweIds:(g.eweIds||[]).map((x:number)=>idMap.get(x)).filter(Boolean), notes: mark(g.notes) });
-  for (const e of ds.breedingEvents as any[]) await db.insert(breedingEvents).values({ ...e, userId, eweId:idMap.get(e.eweId)!, ramId:idMap.get(e.ramId)!, matingGroupId:null, notes: mark(e.notes) });
-  for (const h of ds.healthRecords as any[]) { const aid=idMap.get(h.animalId); if(aid) await db.insert(healthRecords).values({ ...h, userId, animalId:aid, notes: mark(h.notes) }); }
-  const fe = await db.insert(flockHealthEvents).values({ userId, date: '2026-01-15', title:`Master Simulation ${MASTER_SIMULATION_BATCH_MARKER}`, category:'vaccination', status:'completed', notes:mark('seed') }).returning({id:flockHealthEvents.id});
-  await db.insert(flockHealthTreatments).values({ userId, eventId: fe[0].id, treatmentType: 'vaccine', product: 'Routine', notes: mark('seed') } as any);
+  for (const g of ds.matingGroups as any[]) { const { id:_, userId:_u, ...gRest } = g; await db.insert(matingGroups).values({ ...gRest, userId, ramId: idMap.get(g.ramId)!, eweIds:(g.eweIds||[]).map((x:number)=>idMap.get(x)).filter(Boolean), notes: mark(g.notes) }); }
+  for (const e of ds.breedingEvents as any[]) { const { id:_, userId:_u, ...eRest } = e; await db.insert(breedingEvents).values({ ...eRest, userId, eweId:idMap.get(e.eweId)!, ramId:idMap.get(e.ramId)!, matingGroupId:null, notes: mark(e.notes) }); }
+  for (const h of ds.healthRecords as any[]) { const { id:_, userId:_u, ...hRest } = h; const aid=idMap.get(h.animalId); if(aid) await db.insert(healthRecords).values({ ...hRest, userId, animalId:aid, notes: mark(h.notes) }); }
+  const firstAnimalDbId = Array.from(idMap.values())[0];
+  const fe = await db.insert(flockHealthEvents).values({ userId, eventDate: '2026-01-15', eventName:`Master Simulation ${MASTER_SIMULATION_BATCH_MARKER}`, eventType:'vaccination', productName:'Routine Vaccination', route:'injection', notes:mark('seed') }).returning({id:flockHealthEvents.id});
+  if (firstAnimalDbId) await db.insert(flockHealthTreatments).values({ userId, eventId: fe[0].id, animalId: firstAnimalDbId, route:'injection', notes: mark('seed') } as any);
 
   const after = {
     animals: (await db.select().from(animals).where(eq(animals.userId,userId))).length,

@@ -1,0 +1,121 @@
+Replit Agent, complete the BreedLog release gate end-to-end now. Minimize back-and-forth. Do not ask for step-by-step approval unless a safety stop condition is hit.
+
+Current accepted state:
+
+* HEAD: 86de9f1
+* Working tree was clean
+* npm run check: PASS
+* npm run build: PASS
+* Phase 5E/6/7 targeted tests: PASS
+* PR #8 regressions fixed
+* U2A2ZAVQ reset/reseed not run yet
+
+Objective:
+Complete all remaining gates in one run:
+
+1. GitHub sync
+2. production/preview DB schema readiness
+3. certification failures
+4. U2A2ZAVQ dry-run/apply reset-reseed
+5. final verification
+6. publish readiness decision
+
+Hard safety rules:
+
+* Do not delete normal user data.
+* Do not seed simulation data into any code except U2A2ZAVQ.
+* Do not run destructive reset against any workspace except the resolved workspace for U2A2ZAVQ.
+* Do not publish if check/build/test gates fail.
+* Do not publish if production DB schema is missing animal_source.
+* Do not publish if U2A2ZAVQ reset/reseed fails or targets the wrong workspace.
+
+Step 1 — Sync this Replit fix to GitHub
+Push/sync current HEAD 86de9f1 to GitHub main.
+If direct push is blocked, create the smallest PR for the Replit checkpoint commit only.
+Report whether GitHub contains 86de9f1 or the equivalent merge commit containing:
+
+* stamboek export "Lamb stage" fix
+* animal_source schema-compatible state
+
+Step 2 — DB schema readiness
+Confirm current DB environment and whether production DB is reachable from this workspace.
+Ensure the animals table has:
+animal_source text DEFAULT 'unknown_not_recorded'
+
+Use safe idempotent migration only:
+ALTER TABLE animals ADD COLUMN IF NOT EXISTS animal_source text DEFAULT 'unknown_not_recorded';
+
+Do not alter/drop existing data.
+If db:push prompts about unrelated constraints, do not choose destructive truncation. Choose the safe non-destructive option or use the idempotent ALTER TABLE above.
+
+Step 3 — Fix certification failures
+Investigate the remaining 5 failures:
+
+* online CRUD
+* duplicate electronicId
+* idempotency
+* duplicate tagId
+* debug endpoint security
+
+Fix them if they are real current-code failures.
+If they are environment/dirty-test-data failures, isolate/prove that clearly and make test setup deterministic so certification can pass cleanly.
+Do not weaken or delete tests.
+
+Step 4 — Run full gates
+Run:
+npm run check
+npm run build
+npm run test:cert
+
+Certification target:
+0 failures.
+Report exact pass/fail/skipped count.
+
+Step 5 — U2A2ZAVQ reset/reseed
+Only after Step 4 passes, run dry-run:
+npx tsx scripts/reset-master-simulation-workspace.ts --access-code U2A2ZAVQ --confirm-master-simulation-reset
+
+If dry-run confirms:
+
+* targetAccessCode = U2A2ZAVQ
+* resolved workspace userId exists
+* no other access code is targeted
+
+Then apply:
+npx tsx scripts/reset-master-simulation-workspace.ts --access-code U2A2ZAVQ --confirm-master-simulation-reset --apply
+
+Verify:
+
+* U2A2ZAVQ receives the full Kwantam simulation data
+* normal generated codes remain clean
+* no duplicate KW tags
+* KW26 animals = 0
+* KW22001 and KW22002 exist
+* KW22003 through KW22102 exist
+* batch marker KWANTAM_SIMULATION_2022_TO_2026_V1 exists where supported
+* U2A2ZAVQ multi-device exception still works
+* normal codes still enforce 1 mobile + 1 desktop
+
+Step 6 — Final publish readiness
+If all gates pass, report READY TO PUBLISH.
+If the environment allows safe publish and all gates are green, publish only after confirming the current Replit deployment will use the verified HEAD/schema/data state. If publish requires manual button click, say exactly that.
+
+Final report only:
+
+* final HEAD
+* GitHub sync status
+* DB schema status
+* certification result
+* U2A2ZAVQ dry-run result
+* U2A2ZAVQ apply result
+* final simulation counts
+* normal-code clean proof
+* multi-device proof
+* npm run check result
+* npm run build result
+* npm run test:cert result
+* publish status
+* working tree status
+* any remaining blockers
+
+Do not return partial progress unless blocked by a real safety issue.
