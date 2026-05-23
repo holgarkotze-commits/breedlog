@@ -12,7 +12,7 @@ import { registerAIRoutes } from "./ai/breedlog-ai-routes";
 import { parse } from "csv-parse/sync";
 import { buildBreedLogCsvContent, buildBreedLogCsvRows, parseBreedLogCsvRecords, buildBreedLogImportTemplateCsv } from "@shared/import-export";
 import { buildBreedLogSimulationDataset } from "@shared/breedlog-simulation";
-import { MASTER_SIMULATION_ACCESS_CODE, MASTER_SIMULATION_BATCH_MARKER, isMasterSimulationCode } from "@shared/master-simulation";
+import { MASTER_SIMULATION_ACCESS_CODE, MASTER_SIMULATION_BATCH_MARKER, MASTER_SIMULATION_MAX_DEVICES, isMasterSimulationCode } from "@shared/master-simulation";
 
 // Helper to extract userId from device session
 function getUserId(req: Request): string {
@@ -1614,13 +1614,31 @@ export async function registerRoutes(
         }
       }
 
+      const isMasterCode = isMasterSimulationCode(inviteCode.code);
+      const masterSimulationBlock = isMasterCode ? {
+        isMasterTestCode: true,
+        label: "Master test / simulation code — multi-device allowed",
+        maxDevices: MASTER_SIMULATION_MAX_DEVICES,
+        activeDeviceCount: activeForCode.length,
+        activeDevices: activeForCode.map(a => ({
+          userId: a.userId,
+          deviceId: a.deviceId,
+          deviceType: a.deviceType,
+          activatedAt: a.activatedAt,
+        })),
+        slotsRemaining: Math.max(0, MASTER_SIMULATION_MAX_DEVICES - activeForCode.length),
+      } : null;
+
       res.json({
         found: true,
         code: inviteCode,
         codeStatus,
         blockReason,
         licenseActivatedAt,
-        slots: {
+        slots: isMasterCode ? {
+          desktop: { taken: false, canActivate: true, reason: null, reasonCode: 'OK', note: 'Master test code — no per-type limit' },
+          mobile: { taken: false, canActivate: true, reason: null, reasonCode: 'OK', note: 'Master test code — no per-type limit' },
+        } : {
           desktop: desktopSlot
             ? { taken: true, deviceId: desktopSlot.deviceId, activatedAt: desktopSlot.activatedAt, canActivate: false, reason: 'Desktop slot already taken', reasonCode: desktopSummary.reasonCode }
             : { taken: false, canActivate: desktopSummary.canActivate, reason: desktopSummary.canActivate ? null : (desktopSummary.reason ?? blockReason), reasonCode: desktopSummary.reasonCode },
@@ -1628,6 +1646,7 @@ export async function registerRoutes(
             ? { taken: true, deviceId: mobileSlot.deviceId, activatedAt: mobileSlot.activatedAt, canActivate: false, reason: 'Mobile slot already taken', reasonCode: mobileSummary.reasonCode }
             : { taken: false, canActivate: mobileSummary.canActivate, reason: mobileSummary.canActivate ? null : (mobileSummary.reason ?? blockReason), reasonCode: mobileSummary.reasonCode },
         },
+        masterSimulation: masterSimulationBlock,
         workspace: {
           userId: workspaceUserId ?? null,
           animalCount: workspaceAnimalCount,

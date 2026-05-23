@@ -1,0 +1,57 @@
+Replit Agent, stop. Publish readiness is blocked.
+
+Your report says U2A2ZAVQ is NOT configured as a multi-device master test code and still enforces the normal 1 desktop + 1 mobile rule. That contradicts the locked product requirement.
+
+Requirement:
+U2A2ZAVQ must be a controlled master test/simulation code that allows multiple devices for Haka’s testing across phone, PC, browser, and tablet.
+
+Normal codes must remain limited to 1 mobile + 1 desktop.
+
+Implement this now, surgically.
+
+Rules:
+
+* Only U2A2ZAVQ gets the multi-device exception.
+* Do not weaken normal code limits.
+* Do not give U2A2ZAVQ admin privileges.
+* All U2A2ZAVQ devices must resolve to the same simulation workspace userId.
+* Use a safe cap, for example 20 or 50 devices.
+* Existing revoked records must not double-count.
+* Existing active records must not block new U2A2ZAVQ activations until the master cap is reached.
+* Normal codes must still block extra mobiles/desktops as before.
+
+Implementation:
+
+* Add/confirm centralized constant:
+  MASTER_SIMULATION_ACCESS_CODE = "U2A2ZAVQ"
+  MASTER_SIMULATION_MAX_DEVICES = 50
+* Update all activation paths, including final safety checks, to bypass the 1-mobile + 1-desktop rule only for U2A2ZAVQ.
+* Keep normal code logic unchanged.
+* Update admin diagnostic/lookup so U2A2ZAVQ reports master test code / multi-device allowed clearly.
+
+Tests:
+Add or update tests proving:
+
+* U2A2ZAVQ activates at least 3 mobile-like devices and 3 desktop-like devices.
+* All U2A2ZAVQ activations share the same workspace userId.
+* U2A2ZAVQ does not duplicate simulation records.
+* Normal generated code still allows only 1 mobile + 1 desktop.
+* Normal generated code blocks a 3rd mobile/desktop.
+* Revoked U2A2ZAVQ entries do not count against the active master cap.
+
+Run:
+npm run check
+npm run build
+npm run test:cert
+
+Final report:
+
+* files changed
+* commit hash
+* U2A2ZAVQ multi-device proof
+* normal-code limit proof
+* check/build/test:cert results
+* working tree status
+
+Do not publish.
+Do not run production publish until this is fixed and verified.
