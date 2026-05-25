@@ -1,0 +1,67 @@
+Replit Agent, complete the final production database migration gate only.
+
+Do not rebuild the app unless required.
+Do not publish yet.
+Do not run U2A2ZAVQ reset/reseed again.
+Do not touch animal data except adding the missing column.
+Do not delete, truncate, reset, or reseed any table.
+
+Current confirmed state:
+- Final HEAD: 11fe64c
+- GitHub synced: YES
+- npm run check: PASS
+- npm run build: PASS
+- npm run test:cert: PASS, 277/277
+- U2A2ZAVQ multi-device proof: PASS
+- Normal code limits: PASS
+- Remaining blocker: production database needs animals.animal_source column
+
+Task:
+Apply or confirm this exact safe migration on the production database:
+
+ALTER TABLE animals
+ADD COLUMN IF NOT EXISTS animal_source text DEFAULT 'unknown_not_recorded';
+
+Required steps:
+
+1. Identify which database this Replit environment can access.
+Report:
+- DATABASE_URL present: YES/NO
+- PROD_DATABASE_URL present: YES/NO
+- which database is being used for the deployed/production app, if identifiable
+
+2. Before applying the migration, check whether the production animals table already has the column:
+animal_source
+
+3. If the production database is reachable, run only this idempotent SQL:
+ALTER TABLE animals ADD COLUMN IF NOT EXISTS animal_source text DEFAULT 'unknown_not_recorded';
+
+4. Verify after migration:
+- animals.animal_source exists
+- default is unknown_not_recorded
+- existing animal rows were not deleted
+- row count before and after is the same
+
+5. If production database is not reachable from here, stop and report:
+MANUAL PRODUCTION DB MIGRATION REQUIRED
+
+Then provide the exact SQL that must be run manually:
+ALTER TABLE animals ADD COLUMN IF NOT EXISTS animal_source text DEFAULT 'unknown_not_recorded';
+
+6. After migration or confirmation, run:
+npm run check
+npm run build
+
+Do not run U2A2ZAVQ reset/reseed.
+Do not publish.
+
+Final report only:
+- production DB reachable YES/NO
+- animal_source existed before YES/NO
+- migration applied YES/NO
+- row count before
+- row count after
+- npm run check PASS/FAIL
+- npm run build PASS/FAIL
+- production DB migration ready YES/NO
+- publish readiness YES/NO
