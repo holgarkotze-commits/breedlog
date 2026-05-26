@@ -35,7 +35,7 @@ test("CSV export uses required BreedLog headers and field mapping", () => {
   assert.equal(one.studPrefix, "KW");
   assert.equal(one.sex, "ram");
   assert.equal(one.birthDate.startsWith("2022-"), true);
-  assert.equal(one.birthWeightEstimated, "false");
+  assert.equal(one.birthWeightEstimated, "true"); // founders have estimated birth weights
   assert.equal(one.weaningWeightEstimated, "false");
 });
 

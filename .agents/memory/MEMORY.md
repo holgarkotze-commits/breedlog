@@ -1,0 +1,1 @@
+- [Simulation rewrite lessons](simulation-rewrite.md) — breedlog-simulation.ts rebuild: key correctness rules for weights, lamb stages, ram disposal, and cap-blocked ewe treatment.
