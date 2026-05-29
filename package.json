@@ -92,7 +92,7 @@
     "vite-plugin-pwa": "^1.2.0",
     "workbox-window": "^7.4.1",
     "wouter": "^3.3.5",
-    "ws": "^8.18.0",
+    "ws": "^8.21.0",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.5.4"
   },
@@ -124,7 +124,13 @@
   "overrides": {
     "drizzle-kit": {
       "@esbuild-kit/esm-loader": "npm:tsx@^4.20.4"
-    }
+    },
+    "@babel/plugin-transform-modules-systemjs": "^7.29.7",
+    "fast-uri": "^3.1.2",
+    "brace-expansion": "^5.0.6",
+    "protobufjs": "^7.6.1",
+    "qs": "^6.15.2",
+    "ws": "^8.21.0"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
