@@ -47,16 +47,19 @@ async function seedMasterSimulationIfNeeded(targetUserId: string, code: string) 
   }
 
   for (const g of ds.matingGroups) {
-    await storage.createMatingGroup(targetUserId, { ...(g as any), ramId: idMap.get((g as any).ramId)!, eweIds: ((g as any).eweIds || []).map((id: number) => idMap.get(id)).filter(Boolean), notes: mark((g as any).notes) });
+    const { id: _gid, userId: _guid, ...gRest } = g as any;
+    await storage.createMatingGroup(targetUserId, { ...gRest, ramId: idMap.get(gRest.ramId)!, eweIds: (gRest.eweIds || []).map((id: number) => idMap.get(id)).filter(Boolean), notes: mark(gRest.notes) });
   }
   for (const e of ds.breedingEvents) {
-    await storage.createBreedingEvent(targetUserId, { ...(e as any), eweId: idMap.get((e as any).eweId)!, ramId: idMap.get((e as any).ramId)!, notes: mark((e as any).notes), matingGroupId: null });
+    const { id: _eid, userId: _euid, ...eRest } = e as any;
+    await storage.createBreedingEvent(targetUserId, { ...eRest, eweId: idMap.get(eRest.eweId)!, ramId: idMap.get(eRest.ramId)!, notes: mark(eRest.notes), matingGroupId: null });
   }
 
   for (const h of ds.healthRecords) {
-    const animalId = idMap.get((h as any).animalId);
+    const { id: _hid, userId: _huid, ...hRest } = h as any;
+    const animalId = idMap.get(hRest.animalId);
     if (!animalId) continue;
-    await storage.createHealthRecord(targetUserId, { ...(h as any), animalId, notes: mark((h as any).notes) });
+    await storage.createHealthRecord(targetUserId, { ...hRest, animalId, notes: mark(hRest.notes) });
   }
 
   const flockEvent = await storage.createFlockHealthEvent(targetUserId, {
@@ -1860,6 +1863,103 @@ export async function registerRoutes(
       res.json({ success: true, maxTesters });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  // One-time admin endpoint: force-reseed master simulation workspace on whichever DB this process is connected to.
+  // Protected by ADMIN_PIN. Only operates on U2A2ZAVQ. Safe to call multiple times (idempotent via delete+insert).
+  app.post("/api/admin/reseed-simulation", requireAdminPin, async (req, res) => {
+    try {
+      const { confirm } = req.body as { confirm?: string };
+      if (confirm !== "RESEED_U2A2ZAVQ") {
+        return res.status(400).json({ message: 'Body must include confirm:"RESEED_U2A2ZAVQ"' });
+      }
+
+      // Mirror scripts/reset-master-simulation-workspace.ts exactly — direct db, no storage wrapper
+      const { db: _db } = await import("./db");
+      const {
+        animals: animalsT, breedingEvents: breedingEventsT, healthRecords: healthRecordsT,
+        matingGroups: matingGroupsT, flockHealthEvents: flockHealthEventsT,
+        flockHealthTreatments: flockHealthTreatmentsT,
+        inviteCodes: inviteCodesT, userActivations: userActivationsT, users: usersT,
+      } = await import("../shared/schema");
+      const { eq, and } = await import("drizzle-orm");
+
+      // Resolve workspace user ID
+      const codeRows = await _db.select().from(inviteCodesT).where(eq(inviteCodesT.code, MASTER_SIMULATION_ACCESS_CODE));
+      if (!codeRows.length) return res.status(404).json({ message: `Access code ${MASTER_SIMULATION_ACCESS_CODE} not found in this database` });
+
+      const activations = await _db.select().from(userActivationsT).where(
+        and(eq(userActivationsT.inviteCodeId, codeRows[0].id), eq(userActivationsT.status, "active"))
+      );
+      if (!activations.length) return res.status(404).json({ message: `No active activation for ${MASTER_SIMULATION_ACCESS_CODE}` });
+
+      const userRows = await _db.select().from(usersT).where(eq(usersT.id, activations[0].userId));
+      if (!userRows.length) return res.status(404).json({ message: "Activation user missing" });
+      const userId = userRows[0].sharedUserId || userRows[0].id;
+
+      const count = async (table: typeof animalsT | typeof breedingEventsT | typeof healthRecordsT | typeof matingGroupsT | typeof flockHealthEventsT) =>
+        (await (_db.select() as any).from(table).where(eq((table as any).userId, userId))).length;
+
+      const before = {
+        animals:           await count(animalsT),
+        matingGroups:      await count(matingGroupsT),
+        breedingEvents:    await count(breedingEventsT),
+        healthRecords:     await count(healthRecordsT),
+        flockHealthEvents: await count(flockHealthEventsT),
+      };
+
+      // Wipe in dependency order
+      await _db.delete(flockHealthTreatmentsT).where(eq(flockHealthTreatmentsT.userId, userId));
+      await _db.delete(flockHealthEventsT).where(eq(flockHealthEventsT.userId, userId));
+      await _db.delete(healthRecordsT).where(eq(healthRecordsT.userId, userId));
+      await _db.delete(breedingEventsT).where(eq(breedingEventsT.userId, userId));
+      await _db.delete(matingGroupsT).where(eq(matingGroupsT.userId, userId));
+      await _db.delete(animalsT).where(eq(animalsT.userId, userId));
+
+      // Insert fresh dataset — id always excluded, idMap handles all FK resolution
+      const ds = buildBreedLogSimulationDataset();
+      const idMap = new Map<number, number>();
+      const mark = (txt?: string | null) => [txt, MASTER_SIMULATION_BATCH_MARKER].filter(Boolean).join(" | ");
+
+      for (const a of ds.animals as any[]) {
+        const { id, userId: _u, ...rest } = a;
+        const ins = await _db.insert(animalsT).values({ ...rest, userId, sireId: null, damId: null, notes: mark(rest.notes) }).returning({ id: animalsT.id });
+        idMap.set(id, ins[0].id);
+      }
+      for (const a of ds.animals as any[]) {
+        const sireId = a.sireId ? idMap.get(a.sireId) ?? null : null;
+        const damId  = a.damId  ? idMap.get(a.damId)  ?? null : null;
+        if (sireId || damId) await _db.update(animalsT).set({ sireId, damId }).where(and(eq(animalsT.userId, userId), eq(animalsT.id, idMap.get(a.id)!)));
+      }
+      for (const g of ds.matingGroups as any[]) {
+        const { id: _id, userId: _u, ...gRest } = g;
+        await _db.insert(matingGroupsT).values({ ...gRest, userId, ramId: idMap.get(g.ramId)!, eweIds: (g.eweIds || []).map((x: number) => idMap.get(x)).filter(Boolean), notes: mark(g.notes) });
+      }
+      for (const e of ds.breedingEvents as any[]) {
+        const { id: _id, userId: _u, ...eRest } = e;
+        await _db.insert(breedingEventsT).values({ ...eRest, userId, eweId: idMap.get(e.eweId)!, ramId: idMap.get(e.ramId)!, matingGroupId: null, notes: mark(e.notes) });
+      }
+      for (const h of ds.healthRecords as any[]) {
+        const { id: _id, userId: _u, ...hRest } = h;
+        const animalId = idMap.get(h.animalId);
+        if (animalId) await _db.insert(healthRecordsT).values({ ...hRest, userId, animalId, notes: mark(h.notes) });
+      }
+      const fe = await _db.insert(flockHealthEventsT).values({ userId, eventDate: "2026-01-15", eventName: `Master Simulation ${MASTER_SIMULATION_BATCH_MARKER}`, eventType: "vaccination", productName: "Routine Vaccination", route: "injection", notes: mark("seed") }).returning({ id: flockHealthEventsT.id });
+      const firstDbId = Array.from(idMap.values())[0];
+      if (firstDbId) await _db.insert(flockHealthTreatmentsT).values({ userId, eventId: fe[0].id, animalId: firstDbId, route: "injection", notes: mark("seed") } as any);
+
+      const after = {
+        animals:           await count(animalsT),
+        matingGroups:      await count(matingGroupsT),
+        breedingEvents:    await count(breedingEventsT),
+        healthRecords:     await count(healthRecordsT),
+        flockHealthEvents: await count(flockHealthEventsT),
+      };
+
+      res.json({ success: true, resolvedWorkspaceUserId: userId, before, after });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message, stack: err.stack });
     }
   });
 
