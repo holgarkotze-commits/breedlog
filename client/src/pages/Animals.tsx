@@ -297,9 +297,9 @@ export default function Animals() {
     let pageNum = 1;
     
     // Count total pages
-    const ramsPerPage = 25;
-    const ewesPerPage = 25;
-    const lambsPerPage = 25;
+    const ramsPerPage = 20;
+    const ewesPerPage = 20;
+    const lambsPerPage = 20;
     const ramsPages = Math.max(1, Math.ceil(rams.length / ramsPerPage));
     const ewesPages = Math.max(1, Math.ceil(ewes.length / ewesPerPage));
     const lambsPages = Math.max(1, Math.ceil(lambs.length / lambsPerPage));
@@ -640,7 +640,7 @@ export default function Animals() {
         return { ...ewe, stats };
       });
       
-      const ewesPerPage = 25;
+      const ewesPerPage = 20;
       const totalPages = Math.ceil(ewesWithStats.length / ewesPerPage);
       
       let pagesHtml = "";
@@ -773,7 +773,7 @@ export default function Animals() {
     }
     
     // Standard export for rams and lambs
-    const animalsPerPage = 25;
+    const animalsPerPage = 20;
     const totalPages = Math.ceil(exportAnimals.length / animalsPerPage);
     
     // Table headers - no photo column
@@ -845,10 +845,10 @@ export default function Animals() {
   <meta charset="UTF-8">
   <title>${fb?.studName || fb?.farmName || "BreedLog"} - ${exportTitle}</title>
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 landscape; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 190mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
     .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
@@ -857,25 +857,26 @@ export default function Animals() {
     .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
     .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
     .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; padding: 10px 12px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-    .animals-table td { padding: 10px 12px; border-bottom: 1px solid #e0e0e0; font-size: 9pt; vertical-align: middle; text-align: left; }
-    .animals-table tbody tr { height: 32pt; }
+    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
+    .animals-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
+    .animals-table tbody tr { height: auto; }
     .animals-table tr:nth-child(even) { background: #fafafa; }
-    .status { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 7pt; font-weight: 600; text-transform: uppercase; }
+    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
     .status-active { background: #22c55e20; color: #16a34a; }
     .status-sold { background: #f59e0b20; color: #d97706; }
     .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
     .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
     .footer-info { flex: 1; }
-    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
-    .footer-info p { font-size: 7pt; margin-top: 2px; }
+    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
+    .footer-info p { font-size: 7pt; margin-top: 2px; color: #d8d8d8; }
     .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
     .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
     .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-    @media print { 
-      .page { page-break-after: always; } 
+    @media print {
+      .page { page-break-after: always; }
       .page:last-child { page-break-after: avoid; }
       thead { display: table-header-group; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
   </style>
 </head>
@@ -919,7 +920,7 @@ export default function Animals() {
       return { ...ram, stats };
     });
     
-    const ramsPerPage = 8; // Fewer per page due to images
+    const ramsPerPage = 20;
     const totalPages = Math.ceil(ramsWithStats.length / ramsPerPage);
     
     let pagesHtml = "";
@@ -929,12 +930,6 @@ export default function Animals() {
       
       const tableRows = pageRams.map((ram) => {
         return `<tr>
-          <td class="photo-cell">
-            ${ram.photo 
-              ? `<img src="${ram.photo}" class="ram-photo" alt="${ram.tagId}" />`
-              : `<div class="no-photo"></div>`
-            }
-          </td>
           <td><strong>${ram.tagId}</strong></td>
           <td>${ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : '-'}</td>
           <td>${ram.stats.totalLambs || 0}</td>
@@ -966,7 +961,6 @@ export default function Animals() {
           <table class="rams-table">
             <thead>
               <tr>
-                <th class="photo-header">Photo</th>
                 <th>Ram ID</th>
                 <th>DOB</th>
                 <th>Total Lambs</th>
@@ -1002,10 +996,10 @@ export default function Animals() {
   <meta charset="UTF-8">
   <title>${fb?.studName || fb?.farmName || "BreedLog"} - Rams Register</title>
   <style>
-    @page { size: A4 portrait; margin: 10mm; }
+    @page { size: A4 landscape; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 190mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
     .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
@@ -1015,28 +1009,25 @@ export default function Animals() {
     .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
     .rams-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .rams-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-    .rams-table td { padding: 8px 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
+    .rams-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
     .rams-table tbody tr { height: auto; }
     .rams-table tr:nth-child(even) { background: #fafafa; }
-    .photo-header { width: 50px; }
-    .photo-cell { width: 50px; padding: 4px !important; }
-    .ram-photo { width: 42px; height: 42px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
-    .no-photo { width: 42px; height: 42px; background: #f0f0f0; border-radius: 4px; border: 1px solid #ddd; }
     .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
     .status-active { background: #22c55e20; color: #16a34a; }
     .status-sold { background: #f59e0b20; color: #d97706; }
     .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
     .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
     .footer-info { flex: 1; }
-    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
-    .footer-info p { font-size: 7pt; margin-top: 2px; }
+    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
+    .footer-info p { font-size: 7pt; margin-top: 2px; color: #d8d8d8; }
     .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
     .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
     .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-    @media print { 
-      .page { page-break-after: always; } 
+    @media print {
+      .page { page-break-after: always; }
       .page:last-child { page-break-after: avoid; }
       thead { display: table-header-group; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
   </style>
 </head>
@@ -1083,7 +1074,7 @@ export default function Animals() {
       return { ...ewe, stats };
     });
     
-    const ewesPerPage = 10;
+    const ewesPerPage = 20;
     const totalPages = Math.ceil(ewesWithStats.length / ewesPerPage);
     
     let pagesHtml = "";
@@ -1156,29 +1147,37 @@ export default function Animals() {
 <head>
   <title>Ewes Register - ${fb?.studName || fb?.farmName || "BreedLog"}</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: Arial, sans-serif; background: #fff; color: #222; }
-    .page { width: 210mm; min-height: 297mm; padding: 10mm; position: relative; }
-    .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 2px solid #FFC300; margin-bottom: 15px; }
-    .header-center h1 { font-size: 20px; color: #333; }
-    .header-center .subtitle { font-size: 11px; color: #666; }
-    .header-right { text-align: right; font-size: 10px; color: #666; }
-    .ewes-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-    .ewes-table th { background: #FFC300; color: #000; padding: 8px; text-align: left; font-weight: bold; }
-    .ewes-table td { padding: 8px; border-bottom: 1px solid #ddd; }
-    .ewes-table tr:nth-child(even) { background: #f9f9f9; }
-    .status { padding: 2px 6px; border-radius: 3px; font-size: 9px; text-transform: uppercase; }
-    .status-active { background: #166534; color: #fff; }
-    .footer { position: absolute; bottom: 10mm; left: 10mm; right: 10mm; display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid #ddd; }
-    .footer-info { font-size: 10px; color: #666; }
-    .footer-title { font-weight: bold; color: #333; }
-    .footer-branding { text-align: right; }
-    .breedlog-text { font-size: 14px; font-weight: bold; color: #FFC300; letter-spacing: 2px; }
-    .tagline { font-size: 8px; color: #999; }
+    @page { size: A4 landscape; margin: 10mm; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
+    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    .page:last-child { page-break-after: avoid; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
+    .header-left { width: 60px; flex-shrink: 0; }
+    .header-center { flex: 1; text-align: center; }
+    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
+    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
+    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
+    .ewes-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .ewes-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
+    .ewes-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
+    .ewes-table tbody tr:nth-child(even) { background: #fafafa; }
+    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
+    .status-active { background: #22c55e20; color: #16a34a; }
+    .status-sold { background: #f59e0b20; color: #d97706; }
+    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
+    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
+    .footer-info { flex: 1; }
+    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
+    .footer-info p { font-size: 7pt; margin-top: 2px; color: #d8d8d8; }
+    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
+    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
     @media print {
-      .page { page-break-after: always; } 
+      .page { page-break-after: always; }
       .page:last-child { page-break-after: avoid; }
       thead { display: table-header-group; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
   </style>
 </head>
@@ -1219,7 +1218,7 @@ export default function Animals() {
       return;
     }
     
-    const animalsPerPage = 25;
+    const animalsPerPage = 20;
     const culledRows = buildCullSoldRows(culledAnimals);
     const totalPages = Math.ceil(culledRows.length / animalsPerPage);
     
@@ -1298,56 +1297,36 @@ export default function Animals() {
   <style>
     @page { size: A4 landscape; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; background: #000; color: #FCD34D; }
-    .page { 
-      width: 277mm; height: 190mm; 
-      background: #000; padding: 8mm;
-      page-break-after: always;
-      display: flex; flex-direction: column;
-    }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
+    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
-    .header { 
-      display: flex; justify-content: space-between; 
-      align-items: center; margin-bottom: 6mm;
-      padding-bottom: 4mm; border-bottom: 2px solid #FCD34D;
-    }
-    .header-center h1 { font-size: 20pt; color: #FCD34D; }
-    .header-center .subtitle { font-size: 10pt; color: #888; }
-    .header-right { text-align: right; font-size: 9pt; color: #888; }
-    .animals-table { 
-      width: 100%; border-collapse: collapse; 
-      flex: 1; font-size: 9pt;
-    }
-    .animals-table th, .animals-table td { 
-      padding: 4px 6px; text-align: left; 
-      border-bottom: 1px solid #333;
-    }
-    .animals-table th { 
-      background: #1a1a1a; color: #FCD34D; 
-      font-weight: bold; font-size: 8pt;
-    }
-    .photo-header { width: 50px; }
-    .photo-cell { width: 50px; padding: 2px; }
-    .animal-photo { 
-      width: 45px; height: 45px; 
-      object-fit: cover; border-radius: 4px;
-      border: 1px solid #FCD34D;
-    }
-    .no-photo { 
-      width: 45px; height: 45px; 
-      background: #1a1a1a; border-radius: 4px;
-      border: 1px solid #333;
-    }
-    .footer { 
-      display: flex; justify-content: space-between;
-      padding-top: 4mm; margin-top: auto;
-      border-top: 1px solid #333; font-size: 8pt;
-    }
-    .footer-title { color: #FCD34D; font-weight: bold; }
-    .breedlog-text { color: #FCD34D; font-weight: bold; letter-spacing: 2px; }
-    .tagline { color: #666; font-size: 7pt; }
+    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
+    .header-left { width: 60px; flex-shrink: 0; }
+    .header-center { flex: 1; text-align: center; }
+    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
+    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
+    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
+    .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
+    .animals-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
+    .animals-table tbody tr:nth-child(even) { background: #fafafa; }
+    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
+    .status-active { background: #22c55e20; color: #16a34a; }
+    .status-culled { background: #ef444420; color: #dc2626; }
+    .status-sold { background: #f59e0b20; color: #d97706; }
+    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
+    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
+    .footer-info { flex: 1; }
+    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
+    .footer-info p { font-size: 7pt; margin-top: 2px; color: #d8d8d8; }
+    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
+    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
     @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .page { page-break-after: always; }
+      .page:last-child { page-break-after: avoid; }
+      thead { display: table-header-group; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
   </style>
 </head>

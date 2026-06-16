@@ -358,7 +358,7 @@ export function getPDFStyles(): string {
   `;
 }
 
-export const GROUP_EXPORT_PAGE_SIZE = 25;
+export const GROUP_EXPORT_PAGE_SIZE = 20;
 
 export function chunkGroupExportRows<T>(rows: T[], pageSize: number = GROUP_EXPORT_PAGE_SIZE): T[][] {
   const result: T[][] = [];

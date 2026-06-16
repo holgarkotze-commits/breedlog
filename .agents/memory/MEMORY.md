@@ -1,1 +1,2 @@
 - [Simulation rewrite lessons](simulation-rewrite.md) — breedlog-simulation.ts rebuild: key correctness rules for weights, lamb stages, ram disposal, and cap-blocked ewe treatment.
+- [PDF export canonical standard](pdf-export-canonical.md) — canonical template created; all group exports now landscape A4, 20 rows/page, dark gradient footer. Details of what was fixed per function.
