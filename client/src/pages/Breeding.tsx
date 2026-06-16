@@ -106,31 +106,6 @@ export default function Breeding() {
     URL.revokeObjectURL(url);
   };
 
-  const exportJSON = () => {
-    const exportData = getExportData();
-    if (exportData.length === 0) return;
-    
-    const content = JSON.stringify({
-      exportDate: new Date().toISOString(),
-      farm: displayName || "BreedLog Export",
-      farmBranding: farmSettings ? {
-        studName: farmSettings.studName || null,
-        farmName: farmSettings.farmName || null,
-        ownerName: farmSettings.ownerName || null,
-        ownerEmail: farmSettings.ownerEmail || null,
-        ownerPhone: farmSettings.ownerPhone || null,
-        farmLocation: farmSettings.farmLocation || null,
-        farmAddress: farmSettings.farmAddress || null,
-        membershipNumber: farmSettings.membershipNumber || null,
-        registrationNumber: farmSettings.registrationNumber || null,
-        logoUrl: farmSettings.logoUrl || null,
-        logoSize: farmSettings.logoSize || "medium",
-      } : null,
-      matingGroups: exportData,
-    }, null, 2);
-    downloadFile(content, `mating-groups-${format(new Date(), "yyyy-MM-dd")}.json`, "application/json");
-  };
-
   const exportCSV = () => {
     const exportData = getExportData();
     if (exportData.length === 0) return;
@@ -425,9 +400,6 @@ ${g.notes ? `<p style="margin-top: 8px; font-size: 9pt; color: #555; padding: 0 
                         <DropdownMenuItem onClick={exportCSV} data-testid="menu-export-csv">
                           Export as CSV
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={exportJSON} data-testid="menu-export-json">
-                          Export as JSON
-                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )}
@@ -660,7 +632,7 @@ function CreateMatingGroupDialog({ open, onOpenChange }: { open: boolean, onOpen
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm" data-testid="button-new-mating-group" className="rugged-btn bg-primary text-primary-foreground">
+        <Button size="sm" variant="default" data-testid="button-new-mating-group" className="rugged-btn">
           <Plus className="w-4 h-4 mr-1" /> New Group
         </Button>
       </DialogTrigger>

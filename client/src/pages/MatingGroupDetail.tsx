@@ -133,22 +133,6 @@ export default function MatingGroupDetail() {
     URL.revokeObjectURL(url);
   };
   
-  const exportJSON = () => {
-    const exportData = getGroupExportData();
-    const content = JSON.stringify({
-      exportDate: new Date().toISOString(),
-      farm: displayName || "BreedLog Export",
-      farmBranding: farmSettings ? {
-        studName: farmSettings.studName || null,
-        farmName: farmSettings.farmName || null,
-        ownerName: farmSettings.ownerName || null,
-      } : null,
-      matingGroup: exportData,
-    }, null, 2);
-    const safeName = group.name.replace(/[^a-zA-Z0-9]/g, '_');
-    downloadFile(content, `${safeName}-${format(new Date(), "yyyy-MM-dd")}.json`, "application/json");
-  };
-  
   const exportCSV = () => {
     const g = getGroupExportData();
     const farmInfo = farmSettings ? [

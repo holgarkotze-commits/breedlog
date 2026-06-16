@@ -1382,8 +1382,6 @@ export default function Animals() {
       setRamsExpanded(false);
       setEwesExpanded(false);
       setLambsExpanded(false);
-    } else if (section === "total" || section === null || section === "") {
-      setTotalHerdExpanded(true);
     }
   }, [searchParams]);
 
@@ -1435,17 +1433,14 @@ export default function Animals() {
             {displayName ? `${displayName} - My Herd` : "My Herd"} ({herdCounts.activeHerdAnimals})
           </h1>
           <p className="text-xs text-muted-foreground" data-testid="herd-count-summary">
-            Farm records: {herdCounts.totalFarmRecords} · Active herd (excl. archive): {herdCounts.activeHerdAnimals} ·
-            Lamb stage (not admitted): {herdCounts.nonAdmittedLambStageAnimals} · Admitted herd: {herdCounts.admittedHerdAnimals} ·
-            Mature herd: {herdCounts.matureHerdAnimals} · Archive: {herdCounts.archiveAnimals}
+            Active animals on farm: {herdCounts.activeHerdAnimals} · Farm records: {herdCounts.totalFarmRecords} · Archive: {herdCounts.archiveAnimals}
           </p>
           <div className="flex flex-wrap gap-2 items-center">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button 
-                  variant="outline" 
+                  variant="default" 
                   size="sm"
-                  className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
                   disabled={!allAnimals || allAnimals.length === 0}
                   data-testid="button-export-herd"
                 >
@@ -1509,16 +1504,15 @@ export default function Animals() {
 
         {/* Total Herd Section - Primary browsing experience with search/filters inside */}
         <SectionRibbon
-          title="Total Herd (Active, excl. archive)"
+          title="Total Herd (Active)"
           count={herdCounts.activeHerdAnimals}
           isExpanded={totalHerdExpanded}
           onToggle={() => setTotalHerdExpanded(!totalHerdExpanded)}
           testId="ribbon-total-herd"
           actions={
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
-              className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
               onClick={async (e) => {
                 e.stopPropagation();
                 const { isApiReachable } = await import("@/lib/queryClient");
@@ -2032,9 +2026,8 @@ function RamsSection({
 
   const exportButton = (
     <Button 
-      variant="outline" 
+      variant="default" 
       size="sm"
-      className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
       onClick={onExport}
       disabled={rams.length === 0}
       data-testid="button-export-rams-section"
@@ -2351,9 +2344,8 @@ function EwesSection({
 
   const exportButton = (
     <Button 
-      variant="outline" 
+      variant="default" 
       size="sm"
-      className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
       onClick={onExport}
       disabled={ewes.length === 0}
       data-testid="button-export-ewes-section"
@@ -2681,9 +2673,8 @@ function LambsSection({
 
   const exportButton = (
     <Button 
-      variant="outline" 
+      variant="default" 
       size="sm"
-      className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
       onClick={onExport}
       disabled={lambs.length === 0}
       data-testid="button-export-lambs-section"
@@ -3068,9 +3059,8 @@ function CulledSection({
 
   const exportButton = (
     <Button
-      variant="outline"
+      variant="default"
       size="sm"
-      className="text-white border-white/70 hover:border-white [&_svg]:text-primary"
       onClick={onExport}
       disabled={allCulled.length === 0}
       data-testid="button-export-culled-section"
@@ -3468,7 +3458,7 @@ function CreateAnimalDialog({
     <>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button data-testid="button-add-animal" className="rugged-btn bg-primary text-primary-foreground hover:bg-primary/90">
+        <Button variant="default" data-testid="button-add-animal" className="rugged-btn">
           <Plus className="w-5 h-5 mr-2" /> Add Animal
         </Button>
       </DialogTrigger>
@@ -4141,8 +4131,8 @@ function EidScanDialog({
     <Dialog open={open} onOpenChange={handleDialogChange}>
       <DialogTrigger asChild>
         <Button
-          variant="outline"
-          className="rugged-btn border-white/70 text-white hover:border-white [&_svg]:text-primary"
+          variant="default"
+          className="rugged-btn"
           data-testid="button-open-eid-scan"
         >
           <Tag className="w-4 h-4 mr-2" />

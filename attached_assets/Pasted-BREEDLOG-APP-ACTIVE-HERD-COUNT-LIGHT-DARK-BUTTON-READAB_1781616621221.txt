@@ -1,0 +1,289 @@
+BREEDLOG APP — ACTIVE HERD COUNT, LIGHT/DARK BUTTON READABILITY, EXPORT FORMAT RESTRICTION, AND MY HERD DEFAULT MINIMIZED FIX
+
+Status before starting:
+The PDF export standardization task is complete and saved. HEAD is clean at commit 5f3197e. Do not modify the completed export-template work unless absolutely required by this task. This task must be isolated to the issues listed below.
+
+Objective:
+Fix the listed BreedLog app issues only. Do not redesign the app. Do not change animal data models unless required for the active-count correction. Do not change breeding logic, sync logic, database structure, PDF template work, animal movement rules, or unrelated screens except where button/tab readability must be corrected globally.
+
+This task covers four controlled fixes:
+
+1. Home / My Herd must show only the number of active animals currently on the farm.
+2. All buttons and tabs must be readable in both light mode and dark mode.
+3. Normal phone/sector exports must only allow PDF, CSV, or Word. JSON must not be available as a normal user export format.
+4. My Herd must open with all herd sections minimized, including Total Herd.
+
+PHASE 1 — ACTIVE ANIMAL COUNT FIX
+
+Current issue:
+The Home / My Herd area is showing the full farm record total or lifetime animal record total. That is wrong for the main app screen.
+
+Required behavior:
+The main Home / My Herd count must show only active animals currently still on the farm.
+
+Active animals must exclude any animal that is:
+
+* Sold
+* Dead
+* Culled
+* Archived
+* Removed
+* Transferred out
+* Historical only
+* Inactive according to the app’s existing animal status system
+
+Important rules:
+
+1. Do not delete historical animal records.
+2. Do not hide historical records from the Data tab.
+3. Do not change stored historical data.
+4. Do not remove full farm-record reporting.
+5. The main Home / My Herd screen must show current active animals only.
+6. Lifetime/full farm-record totals may only be displayed in the Data tab or reporting/data area.
+7. If active rams, active ewes, active lambs, or active total herd counts exist, they must all use the same active-animal filtering logic.
+8. Create or centralize a helper such as `isActiveAnimal(animal)` and/or `getActiveAnimals(animals)` if no reliable shared helper exists.
+9. Do not duplicate fragile status checks across multiple components.
+
+Acceptance proof:
+Report the exact active-status logic used and prove that inactive/historical animals are excluded from the Home / My Herd count but remain available in the Data tab.
+
+PHASE 2 — GLOBAL LIGHT/DARK BUTTON AND TAB READABILITY FIX
+
+Current issue:
+Some buttons and tabs are unreadable.
+
+Known examples:
+
+1. In light mode, some buttons still have white backgrounds with white text.
+2. In dark mode, some buttons/tabs still have dark backgrounds with dark text.
+3. In dark mode under My Herd, the Add Animal button has dark text on a dark button/tab.
+4. Under Breeding → Mating Groups, the Add New Group button has dark text on a dark button/tab.
+
+Required global rule:
+Every button and every tab in every window must be readable in both light mode and dark mode.
+
+Light mode rule:
+All primary buttons, action buttons, navigation tabs, and functional tabs must use a dark background with white text.
+
+Dark mode rule:
+All primary buttons, action buttons, navigation tabs, and functional tabs must use a dark background with white text.
+
+Non-negotiable contrast rules:
+
+1. No white text on white/light background.
+2. No dark text on dark background.
+3. No transparent/inherited text color that becomes unreadable.
+4. No page-specific button style that breaks the global rule.
+5. Hover, active, focus, selected, and disabled states must remain readable.
+
+Required implementation approach:
+
+1. Audit all button and tab components across the app.
+2. Find hardcoded class names causing unreadable text.
+3. Find theme-dependent inherited text colors causing unreadable text.
+4. Centralize the button/tab fix through shared button classes, shared tab classes, design tokens, or component variants.
+5. Do not only patch the two known broken buttons. Those examples prove a wider styling problem.
+6. Apply the rule globally wherever buttons/tabs appear.
+
+Minimum areas to inspect:
+
+* Home
+* My Herd
+* Total Herd
+* Rams
+* Ewes
+* Lambs
+* Add Animal
+* Edit Animal
+* Breeding
+* Mating Groups
+* Add New Group
+* Health
+* Weights
+* Records
+* Data
+* Exports
+* Settings
+* Modals
+* Mobile action menus
+* Tabbed sections
+* Any dashboard cards with action buttons
+
+Specific known fixes required:
+
+1. My Herd → Add Animal button must have white readable text in dark mode.
+2. Breeding → Mating Groups → Add New Group button must have white readable text in dark mode.
+3. Light mode buttons/tabs must not be white text on white background.
+4. Dark mode buttons/tabs must not be dark text on dark background.
+
+Acceptance proof:
+Provide before/after evidence or code references proving the fix is global and reusable.
+
+PHASE 3 — REMOVE JSON FROM NORMAL USER-FACING EXPORTS
+
+Current issue:
+Some normal app export flows allow JSON export. That is not acceptable for normal phone/sector exports.
+
+Required behavior:
+When the user exports data from normal app sectors, only these formats may be available:
+
+* PDF
+* CSV
+* Word
+
+JSON must not be shown or generated as a normal user-facing sector export.
+
+Important distinction:
+If JSON is used internally for backup/restore, migration, debug tooling, or developer/system recovery, do not destroy that internal capability unless it is incorrectly exposed as a normal sector export. Backup/restore is not the same as normal export.
+
+Rules:
+
+1. Remove JSON from normal export dropdowns.
+2. Remove JSON from export modals.
+3. Remove JSON from phone/mobile export menus.
+4. Remove JSON from sector export buttons.
+5. Do not generate `.json` files from normal user-facing exports.
+6. Do not label JSON as a normal report/export format.
+7. Keep PDF export working.
+8. Keep CSV export working.
+9. Keep Word export working.
+10. Do not change the exported data fields unless a separate real export-field bug is found.
+11. Do not modify the completed PDF template system from the previous task unless absolutely necessary.
+
+Minimum export areas to check:
+
+* My Herd
+* Rams
+* Ewes
+* Lambs
+* Breeding
+* Mating Groups
+* Health
+* Weights
+* Records
+* Data
+* Settings export areas
+* Mobile/phone export menus
+* Old export helpers still exposing JSON
+
+Acceptance proof:
+
+1. No normal user-facing sector export menu shows JSON.
+2. No normal user-facing sector export generates `.json`.
+3. PDF, CSV, and Word remain available where exports are supported.
+4. Internal backup/restore JSON, if present, remains separated from normal sector exports.
+
+PHASE 4 — MY HERD DEFAULT MINIMIZED STATE
+
+Current issue:
+When opening My Herd, the Total Herd section is open/expanded while other sections are minimized. This is wrong.
+
+Required behavior:
+When My Herd opens, every herd section must start minimized/closed by default.
+
+This includes:
+
+* Total Herd
+* Rams
+* Ewes
+* Lambs
+* Any other herd group panel, accordion, or tabbed section shown inside My Herd
+
+Rules:
+
+1. Do not auto-expand Total Herd on page load.
+2. Do not auto-expand the first section by default.
+3. All My Herd group panels must start minimized.
+4. The user must still be able to manually open and close each section.
+5. Refreshing the page must not force Total Herd open unless the app already has an intentional saved user preference and the user previously selected it.
+6. Do not remove the tabs/sections.
+7. Do not change the animal data inside the sections.
+8. Only correct the default open/closed state.
+
+Acceptance proof:
+Open My Herd fresh and confirm:
+
+1. Total Herd is minimized.
+2. Rams is minimized.
+3. Ewes is minimized.
+4. Lambs is minimized.
+5. The user can manually open and close each section normally.
+
+PHASE 5 — TESTING AND HARDENING
+
+Add or update regression tests so these issues do not return.
+
+Required coverage:
+
+1. Home / My Herd count uses active animals only.
+2. Sold/dead/culled/archived/inactive animals are excluded from the Home / My Herd count.
+3. Historical/full farm-record totals remain available only in the Data tab or reporting area.
+4. Light mode buttons/tabs do not render unreadable text/background combinations.
+5. Dark mode buttons/tabs do not render unreadable text/background combinations.
+6. My Herd Add Animal button has readable white text in dark mode.
+7. Breeding → Mating Groups → Add New Group button has readable white text in dark mode.
+8. Normal user-facing export menus do not include JSON.
+9. Normal user-facing exports do not generate `.json`.
+10. PDF export remains available.
+11. CSV export remains available.
+12. Word export remains available.
+13. My Herd opens with all sections minimized.
+14. Total Herd is not expanded by default.
+
+Manual verification required:
+Perform a visual pass in both light mode and dark mode.
+
+Minimum manual visual pass:
+
+* Home
+* My Herd
+* My Herd Add Animal button
+* Total Herd section
+* Rams section
+* Ewes section
+* Lambs section
+* Breeding
+* Mating Groups
+* Add New Group button
+* Data tab
+* Export menus
+* Settings/theme switching
+* Mobile view if the app supports responsive testing
+
+PHASE 6 — COMMANDS TO RUN
+
+Run:
+
+npm run check
+npm run build
+npm test
+
+Also run any targeted UI/export tests already present in the repo.
+
+If `npm test` times out because of the already-known full-suite runtime issue, report it honestly and run the same grouped/individual proof method used after the export task. Do not claim full-suite pass if it timed out.
+
+PHASE 7 — FINAL REPORT REQUIRED
+
+When complete, report:
+
+1. Branch name.
+2. Latest commit hash.
+3. Working tree status.
+4. Files changed.
+5. Exact active-animal logic used.
+6. Confirmation that Home / My Herd now shows active animals only.
+7. Confirmation that historical/full farm-record totals remain in Data/reporting only.
+8. Confirmation that light mode buttons/tabs are readable.
+9. Confirmation that dark mode buttons/tabs are readable.
+10. Confirmation that My Herd Add Animal button is fixed.
+11. Confirmation that Breeding → Mating Groups → Add New Group button is fixed.
+12. Confirmation that JSON is removed from normal user-facing exports.
+13. Confirmation that PDF, CSV, and Word remain available.
+14. Confirmation that internal backup/restore JSON, if present, was not confused with normal sector exports.
+15. Confirmation that My Herd opens with all sections minimized, including Total Herd.
+16. Test commands run and exact results.
+17. Manual visual verification performed.
+18. Any remaining risks or blocked items.
+
+Definition of Done:
+This task is only complete when the main app/Home/My Herd count shows only active animals currently on the farm, all buttons and tabs are readable in both light and dark mode, normal user-facing exports only allow PDF/CSV/Word and not JSON, and My Herd opens with all herd sections minimized by default. No unrelated app behavior, data structure, breeding logic, sync logic, completed PDF template work, or animal movement rules may be changed.

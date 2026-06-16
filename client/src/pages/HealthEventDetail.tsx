@@ -152,38 +152,6 @@ ${eventAnimals.map((animal, idx) => `<tr>
     toast({ title: "PDF Exported", description: "Health event PDF opened for printing" });
   };
 
-  const exportJSON = () => {
-    if (!event) return;
-    
-    const exportData = {
-      eventName: event.eventName,
-      eventDate: event.eventDate,
-      productName: event.productName,
-      route: event.route,
-      treatAllAnimals: event.treatAllAnimals,
-      notes: event.notes,
-      animalsTreated: eventAnimals.map(a => ({
-        tagId: a?.tagId,
-        name: a?.name,
-        sex: a?.sex,
-        breed: a?.breed,
-      })),
-      exportedAt: new Date().toISOString(),
-    };
-    
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `health-event-${event.id}-${format(new Date(event.eventDate), "yyyy-MM-dd")}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    toast({ title: "JSON Exported", description: "Health event data downloaded" });
-  };
-
   if (isLoading) {
     return (
       <Layout>

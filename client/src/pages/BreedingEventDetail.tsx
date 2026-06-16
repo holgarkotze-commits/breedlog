@@ -76,35 +76,6 @@ export default function BreedingEventDetail() {
     URL.revokeObjectURL(url);
   };
   
-  const exportJSON = () => {
-    const content = JSON.stringify({
-      exportDate: new Date().toISOString(),
-      farm: displayName || "BreedLog Export",
-      breedingEvent: {
-        id: event.id,
-        matingDate: format(matingDate, "yyyy-MM-dd"),
-        matingType: event.matingType,
-        expectedDueDate: format(expectedDueDate, "yyyy-MM-dd"),
-        lambingDate: event.lambingDate || null,
-        lambCount: event.lambCount || null,
-        ewe: ewe ? {
-          id: ewe.id,
-          tagId: ewe.tagId,
-          name: ewe.name,
-          breed: ewe.breed,
-        } : { id: event.eweId },
-        ram: ram ? {
-          id: ram.id,
-          tagId: ram.tagId,
-          name: ram.name,
-          breed: ram.breed,
-        } : { id: event.ramId },
-        notes: event.notes || null,
-      }
-    }, null, 2);
-    downloadFile(content, `breeding-event-${event.id}-${format(new Date(), "yyyy-MM-dd")}.json`, "application/json");
-  };
-  
   const exportPDF = () => {
     const content = `
 <!DOCTYPE html>
