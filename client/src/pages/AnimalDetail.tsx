@@ -1272,7 +1272,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1
 
 .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
 .header-left { width: 60px; flex-shrink: 0; }
-.logo { width: 50px; height: 50px; object-fit: contain; }
+.logo { width: 60px; height: 60px; object-fit: contain; }
 .header-center { flex: 1; text-align: center; }
 .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; margin: 0; }
 .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }

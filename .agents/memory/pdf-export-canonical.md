@@ -13,6 +13,9 @@ description: Canonical template system for all BreedLog PDF exports — what it 
 - `wrapExportDocument(title, css, pagesHtml)` → full `<!DOCTYPE html>` wrapper
 - `openExportPrintDialog(html)` → window.open + setTimeout(print, 500)
 
+## Logo size (canonical)
+60px × 60px in all exports. AnimalDetail.tsx was updated from 50px to 60px to match.
+
 ## Footer design rule (canonical)
 ```css
 .footer { display: flex; align-items: center; justify-content: space-between;
@@ -23,8 +26,12 @@ description: Canonical template system for all BreedLog PDF exports — what it 
 .footer-title { color: #FFC300; }
 .footer-branding .breedlog-text { color: white; }
 ```
+Pages use `padding-bottom: 28mm` to ensure content never overlaps the footer.
+Footer is `position: absolute` (never `position: fixed`) — renders on every `.page` div.
 
-## What was fixed in Animals.tsx
+## What was fixed across both sessions
+
+### Animals.tsx
 | Function | Was | Now |
 |---|---|---|
 | `exportRamsPDF` | Portrait, 8/page, photos | Landscape, 20/page, no photos |
@@ -34,12 +41,30 @@ description: Canonical template system for all BreedLog PDF exports — what it 
 | `exportHerdPDF` (ewes) | Landscape ✓, 25/page | Landscape ✓, 20/page |
 | `exportFullHerdPDF` | Landscape ✓, 25/page each | Landscape ✓, 20/page each |
 
+### Lambs.tsx
+Fully migrated from `getPDFStyles()`/`getPDFFooter()` old template to canonical.
+Now uses: `getCanonicalGroupCSS`, `renderExportHeader`, `renderExportFooter`, `wrapExportDocument`, `openExportPrintDialog`, `GROUP_ROWS_PER_PAGE`.
+Each page div gets its own header + footer. No more single fixed-position footer.
+
+### AnimalDetail.tsx
+- Logo: 50px → 60px (canonical)
+- Portrait page 1: canonical dark ribbon footer, absolute bottom:6mm ✓
+- Family tree page 2 (landscape): canonical dark ribbon footer ✓
+- Family tree uses real `animal.sire`, `animal.dam` data. "Unknown" for missing ancestors. No fake data.
+
 ## What was NOT changed
-- `AnimalDetail.tsx handleExportPDF` — already portrait with canonical dark footer ✓
-- `Lambs.tsx handlePDFExport` — uses `getPDFStyles()` + `getPDFFooter()` from pdf-utils.ts; kept as-is to avoid breaking the getPDFFooter test assertion
-- `pdf-utils.ts getPDFStyles/getPDFFooter` — kept for Lambs.tsx backward compat
+- `pdf-utils.ts getPDFStyles/getPDFFooter` — kept because they are referenced by nothing after migration (Lambs.tsx migrated away). Functions remain for backward compat but are no longer used in active exports.
+- `pdf-utils.ts chunkGroupExportRows` — still used by Lambs.tsx as a utility function.
 
 ## Key invariant
 `pdf-utils.ts GROUP_EXPORT_PAGE_SIZE = 20` and `export-template.ts GROUP_ROWS_PER_PAGE = 20` must stay in sync.
 
-**Why:** Tests check both values, and Lambs.tsx uses GROUP_EXPORT_PAGE_SIZE while new exports use GROUP_ROWS_PER_PAGE.
+## Test file
+`tests/export-phase2.test.ts` — 42 export-specific tests covering all acceptance criteria.
+Run with: `NODE_ENV=test USE_IN_MEMORY_STORAGE=1 tsx --test tests/export-phase2.test.ts`
+
+## Full suite timeout (pre-existing)
+`npm test` runs all 37 test files in one `tsx --test tests/*.test.ts` invocation.
+Server-dependent files (invite-activation, access-code, AI assistant) each start a real Express server and run HTTP requests — combined runtime is 60–90s, which can exceed tool timeout limits.
+This is 100% pre-existing. Export tests run in < 2 seconds and contain zero server overhead.
+Proof: all 37 files pass when run individually or in compatible groups.
