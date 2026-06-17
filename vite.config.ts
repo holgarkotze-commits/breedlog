@@ -30,6 +30,41 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("recharts") || id.includes("/d3-") || id.includes("victory")) {
+            return "vendor-charts";
+          }
+          if (id.includes("@radix-ui")) {
+            return "vendor-radix";
+          }
+          if (id.includes("date-fns")) {
+            return "vendor-datefns";
+          }
+          if (id.includes("lucide-react")) {
+            return "vendor-icons";
+          }
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/react-hook-form") ||
+            id.includes("node_modules/@hookform") ||
+            id.includes("node_modules/wouter") ||
+            id.includes("node_modules/zod")
+          ) {
+            return "vendor-react";
+          }
+          if (id.includes("@tanstack")) {
+            return "vendor-query";
+          }
+          if (id.includes("jspdf") || id.includes("pdfmake") || id.includes("docx")) {
+            return "vendor-pdf";
+          }
+        },
+      },
+    },
   },
   server: {
     fs: {

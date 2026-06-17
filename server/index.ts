@@ -1,4 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
+import compression from "compression";
+import { rateLimit } from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -7,7 +9,6 @@ import { pool } from "./db";
 const app = express();
 const httpServer = createServer(app);
 
-// Increase payload size limits for image uploads
 httpServer.maxHeadersCount = 0;
 httpServer.headersTimeout = 120000;
 httpServer.requestTimeout = 120000;
@@ -18,19 +19,83 @@ declare module "http" {
   }
 }
 
-// Configure body parsers with large limits for base64 image data
+// Remove fingerprinting header
+app.disable("x-powered-by");
+
+// Trust proxy in production (Replit uses a reverse proxy)
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
+// Gzip/brotli compression for all responses
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.headers["x-no-compression"]) return false;
+    return compression.filter(req, res);
+  },
+}));
+
+// Security headers — applied to every response
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=*,microphone=(),geolocation=()");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
+// Rate limiting — auth/activation endpoints (strict)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later" },
+  skip: () => process.env.NODE_ENV === "test",
+});
+
+// Rate limiting — admin endpoints (moderate)
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later" },
+  skip: () => process.env.NODE_ENV === "test",
+});
+
+// Rate limiting — general API (generous, just prevents abuse)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later" },
+  skip: () => process.env.NODE_ENV === "test",
+});
+
+app.use("/api/beta/validate", authLimiter);
+app.use("/api/device/register", authLimiter);
+app.use("/api/admin", adminLimiter);
+app.use("/api", apiLimiter);
+
+// Body parsers — 10 MB covers compressed base64 images with room to spare
 app.use(
   express.json({
-    limit: '100mb',
+    limit: "10mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
-
-app.use(express.urlencoded({ extended: true, limit: '100mb', parameterLimit: 50000 }));
-app.use(express.text({ limit: '100mb' }));
-app.use(express.raw({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: "10mb", parameterLimit: 10000 }));
+app.use(express.text({ limit: "10mb" }));
+app.use(express.raw({ limit: "10mb" }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -224,15 +289,31 @@ async function runStartupMigrations() {
       );
     `);
 
-    // Add shared_user_id to users table (added for shared workspace feature)
+    // Incremental schema migrations
     await client.query(`
       ALTER TABLE users ADD COLUMN IF NOT EXISTS shared_user_id varchar;
     `);
-    // Add device_type to user_activations table (added for 1-desktop+1-mobile slot model)
     await client.query(`
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS device_type varchar DEFAULT 'unknown';
     `);
-    console.log("[Startup] Schema migrations applied successfully");
+
+    // Performance indexes — dramatically speed up per-user queries at scale
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_animals_user_id        ON animals(user_id);
+      CREATE INDEX IF NOT EXISTS idx_animals_user_tag        ON animals(user_id, tag_id);
+      CREATE INDEX IF NOT EXISTS idx_breeding_events_user_id ON breeding_events(user_id);
+      CREATE INDEX IF NOT EXISTS idx_breeding_events_ewe     ON breeding_events(user_id, ewe_id);
+      CREATE INDEX IF NOT EXISTS idx_health_records_user_id  ON health_records(user_id);
+      CREATE INDEX IF NOT EXISTS idx_health_records_animal   ON health_records(user_id, animal_id);
+      CREATE INDEX IF NOT EXISTS idx_perf_records_user_id    ON performance_records(user_id);
+      CREATE INDEX IF NOT EXISTS idx_perf_records_animal     ON performance_records(user_id, animal_id);
+      CREATE INDEX IF NOT EXISTS idx_mating_groups_user_id   ON mating_groups(user_id);
+      CREATE INDEX IF NOT EXISTS idx_sessions_expire         ON sessions(expire);
+      CREATE INDEX IF NOT EXISTS idx_user_activations_user   ON user_activations(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_activations_device ON user_activations(device_id);
+    `);
+
+    console.log("[Startup] Schema migrations and indexes applied successfully");
   } catch (err) {
     console.error("[Startup] Migration error:", err);
     throw err;
@@ -245,22 +326,25 @@ async function runStartupMigrations() {
   await runStartupMigrations();
   await registerRoutes(httpServer, app);
 
-  // Global error handler - always returns JSON
+  // Global error handler — always returns JSON, never leaks stack traces in production
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-    
-    console.error(`[Error] ${status}: ${message}`, err.stack || '');
-    
-    // Always return JSON for API errors
+    const message =
+      process.env.NODE_ENV === "production" && status >= 500
+        ? "Internal Server Error"
+        : err.message || "Internal Server Error";
+
+    if (process.env.NODE_ENV !== "production") {
+      console.error(`[Error] ${status}: ${err.message}`, err.stack || "");
+    } else {
+      console.error(`[Error] ${status}: ${err.message}`);
+    }
+
     if (!res.headersSent) {
       res.status(status).json({ message, error: true });
     }
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -268,10 +352,6 @@ async function runStartupMigrations() {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
