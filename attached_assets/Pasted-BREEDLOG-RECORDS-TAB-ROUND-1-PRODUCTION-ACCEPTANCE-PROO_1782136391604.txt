@@ -1,0 +1,114 @@
+BREEDLOG RECORDS TAB ROUND 1 — PRODUCTION ACCEPTANCE PROOF REQUIRED
+
+Good work on the Records tab Round 1 implementation. Before this task is accepted as complete, provide final production-mode proof and commit confirmation.
+
+This task must be treated as production work, not demo-only work.
+
+Required final proof:
+
+1. Confirm branch name.
+2. Confirm latest commit hash.
+3. Confirm working tree status.
+4. List all files changed.
+5. Confirm the build was run in production mode.
+6. Confirm no completed PDF export-template work was broken.
+7. Confirm no unrelated app logic was changed.
+
+Run and report:
+
+git status --short
+git rev-parse --short HEAD
+git log -1 --oneline
+npm run check
+npm run build
+
+If tests exist for Records, exports, or exported documents, run them and report the exact results. If no tests exist for the new Records/exported-documents behavior, add focused tests now.
+
+Required verification for Records tab Round 1:
+
+1. Records tab filters:
+
+   * Confirm Culled records have working filters.
+   * Confirm Sold records have working filters.
+   * Confirm Deceased records have working filters.
+   * Confirm filters support relevant criteria such as search, sex, reason/status, and date range where applicable.
+   * Confirm filter counts update correctly.
+
+2. Productivity logs:
+
+   * Confirm Productivity Logs now have export buttons.
+   * Confirm Lambing Events can export.
+   * Confirm Mating Groups can export.
+   * Confirm exported productivity files are logged under Exported Documents → Productivity Exports.
+
+3. Exported Documents structure:
+
+   * Confirm exported documents are grouped into correctly labelled folders.
+   * Confirm Health Records exports appear under Health Records Exports.
+   * Confirm Herd exports appear under Herd Registers & Exports.
+   * Confirm Individual Animal exports appear under Individual Animal Reports.
+   * Confirm Breeding/Mating exports appear under Breeding & Mating Reports.
+   * Confirm Culled exports appear under Culled Animal Reports.
+   * Confirm Sold/Removed exports appear under Sold / Removed Reports.
+   * Confirm Deceased exports appear under Deceased Reports.
+   * Confirm Productivity exports appear under Productivity Exports.
+
+4. Exported Documents folder filters:
+
+   * Confirm every folder has filter controls.
+   * Confirm search filter works inside folders.
+   * Confirm date range filter works inside folders.
+   * Confirm file type/category/status metadata displays correctly.
+   * Confirm the user can filter before choosing what to export/view.
+
+5. Export sync proof:
+   Provide code-level proof showing how each export action logs to the exported-documents list/folder system.
+
+   At minimum prove the export logging path for:
+
+   * Health records export.
+   * Herd export.
+   * Individual animal export.
+   * Breeding/mating export.
+   * Culled export.
+   * Sold/removed export.
+   * Deceased export.
+   * Productivity export.
+
+6. Production UI proof:
+   The previous screenshot attempt could not authenticate through the access-code wall. Use access code DEVTEST01 or the correct production/test code and manually verify the Records tab renders.
+
+   Confirm:
+
+   * Records tab opens.
+   * New filters are visible.
+   * Productivity export buttons are visible.
+   * Exported Documents folders are visible.
+   * Folder filters are visible.
+   * No runtime crash in the browser.
+   * Mobile layout remains usable.
+
+7. Test proof:
+   Add or run targeted tests for:
+
+   * Culled/Sold/Deceased filters.
+   * Productivity export buttons.
+   * Exported Documents folder grouping.
+   * Exported Documents search/date filtering.
+   * Correct export category logging.
+   * No JSON user-facing export regression.
+   * Existing PDF/CSV/Word exports remain intact.
+
+Final corrected report required:
+
+Task | Status | Proof
+Records filters expanded | |
+Productivity Logs export buttons added | |
+Exported Documents folders structured | |
+Exports sync to correct folders | |
+Folder-level filters added | |
+Production build clean | |
+Records UI manually verified | |
+Working tree clean | |
+
+Do not mark this Records tab Round 1 task complete until the final report includes commit proof, production build proof, browser/manual verification, and export-sync proof for each relevant export category.
