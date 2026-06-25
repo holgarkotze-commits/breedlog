@@ -31,6 +31,7 @@ import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { splitTagInput } from "@shared/tag-utils";
 import { isMetricWeight, resolveBirthWeight, resolveWeaningWeight } from "@shared/animal-lifecycle";
 import { calculateLambStage } from "@shared/lamb-stage";
+import { buildAnimalPerformanceProfile } from "@/lib/animal-performance";
 
 function ZoomableImagePreview({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   const [scale, setScale] = useState(1);
@@ -840,6 +841,7 @@ function BreedingStatsView({ animal }: { animal: AnimalWithRelations }) {
 function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelations, farmSettings?: { farmName?: string | null, studName?: string | null, studPrefix?: string | null, ownerName?: string | null, ownerEmail?: string | null, ownerPhone?: string | null, farmLocation?: string | null, farmAddress?: string | null, membershipNumber?: string | null, registrationNumber?: string | null, logoUrl?: string | null, logoSize?: string | null, logoWidth?: number | null, logoHeight?: number | null } | null }) {
     const { data: breedingEvents } = useAnimalBreedingEvents(animal.id, animal.sex);
     const { data: allAnimals } = useAnimals({});
+    const { data: healthRecords } = useHealthRecords(animal.id);
     const { toast } = useToast();
     const createExportedDoc = useCreateExportedDocument();
     
@@ -1084,264 +1086,391 @@ ${data.notes || "No notes recorded."}
         toast({ title: "Word Document Exported", description: `${animal.tagId} profile downloaded as Word document` });
     };
     
-    const handleExportPDF = (includeTree: boolean = false) => {
-        const data = getProfileData();
+    const handleExportPDF = async (includeTree: boolean = false) => {
+        toast({ title: "Preparing PDF…", description: "Building performance datasheet, please wait." });
+
+        // Convert photo to base64 so it loads correctly in the print window
+        // (blob: URLs from IndexedDB are not accessible in a new window context)
+        let photoBase64: string | null = null;
+        if (animal.photo) {
+            try {
+                const resp = await fetch(animal.photo);
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    photoBase64 = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                }
+            } catch { photoBase64 = null; }
+        }
+
+        const fb = farmSettings;
+        const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
         const formatDate = (dateStr: string | null | undefined) => {
             if (!dateStr) return "Not recorded";
-            try {
-                return format(new Date(dateStr), "dd/MM/yyyy");
-            } catch {
-                return dateStr;
-            }
+            try { return format(new Date(dateStr), "dd/MM/yyyy"); } catch { return String(dateStr); }
         };
         
-        const fb = data.farmBranding;
-        const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-        
-        // Page 1: Main Profile with large centered image
-        const page1 = `
-<div class="page portrait">
-  <div class="header">
-    <div class="header-left">
-      ${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" alt="Farm Logo" />` : ''}
-    </div>
-    <div class="header-center">
-      <h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1>
-      <p class="subtitle">Individual Animal Record</p>
-    </div>
-    <div class="header-right">
-      <p>${exportDate}</p>
-    </div>
-  </div>
-  
-  <!-- Large Centered Animal Photo -->
-  <div class="photo-section">
-    ${animal.photo 
-      ? `<img src="${animal.photo}" class="animal-photo" alt="${data.identification.tagId}" />`
-      : `<div class="no-photo">No Photo Available</div>`
-    }
-  </div>
-  
-  <!-- Title Below Image -->
-  <h2 class="record-title">Individual Animal Record</h2>
-  
-  <!-- Detail Table - Full Details -->
-  <table class="detail-table">
-    <tr><td class="section-header" colspan="2">IDENTIFICATION</td></tr>
-    <tr><td class="label">Animal ID</td><td class="value"><strong>${data.identification.tagId || "—"}</strong></td></tr>
-    <tr><td class="label">Name</td><td class="value">${data.identification.name || "—"}</td></tr>
-    <tr><td class="label">Electronic ID</td><td class="value">${data.identification.electronicId || "—"}</td></tr>
-    <tr><td class="label">Tattoo ID</td><td class="value">${data.identification.tattooId || "—"}</td></tr>
-    <tr><td class="label">Stud Prefix</td><td class="value">${data.identification.studPrefix || "—"}</td></tr>
-    
-    <tr><td class="section-header" colspan="2">BASIC INFORMATION</td></tr>
-    <tr><td class="label">Sex</td><td class="value">${data.basicInfo.sex ? data.basicInfo.sex.toUpperCase() : "—"}</td></tr>
-    <tr><td class="label">Breed</td><td class="value">${data.basicInfo.breed || "Meatmaster"}</td></tr>
-    <tr><td class="label">Date of Birth</td><td class="value">${formatDate(data.basicInfo.birthDate)}</td></tr>
-    <tr><td class="label">Birth Status</td><td class="value">${data.basicInfo.birthStatus ? data.basicInfo.birthStatus.charAt(0).toUpperCase() + data.basicInfo.birthStatus.slice(1) : "—"}</td></tr>
-    <tr><td class="label">Current Status</td><td class="value">${data.basicInfo.status ? data.basicInfo.status.charAt(0).toUpperCase() + data.basicInfo.status.slice(1) : "—"}</td></tr>
-    <tr><td class="label">Source</td><td class="value">${data.basicInfo.source || "unknown_not_recorded"}</td></tr>
-    
-    <tr><td class="section-header" colspan="2">PARENTAGE</td></tr>
-    <tr><td class="label">Sire (Father)</td><td class="value">${data.parentage.sireTagId || data.parentage.externalSireInfo || "—"}</td></tr>
-    <tr><td class="label">Dam (Mother)</td><td class="value">${data.parentage.damTagId || data.parentage.externalDamInfo || "—"}</td></tr>
-    
-    <tr><td class="section-header" colspan="2">GROWTH DATA</td></tr>
-    <tr><td class="label">Birth Weight</td><td class="value">${data.weights.birthWeight ? data.weights.birthWeight + " kg" : "—"}</td></tr>
-    <tr><td class="label">Current Weight</td><td class="value">${data.weights.currentWeight ? data.weights.currentWeight + " kg" : "—"}</td></tr>
-    <tr><td class="label">100-Day Weigh Date</td><td class="value">${formatDate(data.weights.weight100DayDate)}</td></tr>
-    <tr><td class="label">100-Day Weight</td><td class="value">${data.weights.weight100Day ? data.weights.weight100Day + " kg" : "—"}</td></tr>
-    <tr><td class="label">270-Day Weigh Date</td><td class="value">${data.weights.weight270DayDate ? formatDate(data.weights.weight270DayDate) : "—"}</td></tr>
-    <tr><td class="label">270-Day Weight</td><td class="value">${data.weights.weight270Day ? data.weights.weight270Day + " kg" : "—"}</td></tr>
-    <tr><td class="label">Weaning Status</td><td class="value">${data.weaningStatus || "—"}</td></tr>
-    
-    <tr><td class="section-header" colspan="2">OWNERSHIP</td></tr>
-    <tr><td class="label">Breeder</td><td class="value">${data.ownership.breederName || "—"}</td></tr>
-    <tr><td class="label">Owner</td><td class="value">${data.ownership.ownerName || "—"}</td></tr>
-    <tr><td class="label">Farm</td><td class="value">${data.ownership.farmName || "—"}</td></tr>
-    <tr><td class="label">Location</td><td class="value">${data.ownership.location || "—"}</td></tr>
-    ${animal.sex === 'ewe' ? (() => {
-      const eweStats = calculateEweBreedingStats(animal.id, breedingEvents || [], allAnimals || []);
-      const hasBreedingData = (breedingEvents && breedingEvents.length > 0) || (allAnimals && allAnimals.some(a => a.damId === animal.id));
-      return `
-    <tr><td class="section-header" colspan="2">EWE PERFORMANCE (FROM HERD VIEW)</td></tr>
-    <tr><td class="label">Total Lambs Born</td><td class="value">${hasBreedingData ? eweStats.totalLambs : "Not recorded"}</td></tr>
-    <tr><td class="label">First Lamb Date</td><td class="value">${eweStats.firstLambDate ? formatDate(eweStats.firstLambDate.toISOString()) : "—"}</td></tr>
-    <tr><td class="label">Average Inter-Lambing Period (ILP)</td><td class="value">${eweStats.avgILP > 0 ? eweStats.avgILP + " days" : "—"}</td></tr>
-    <tr><td class="label">Lambs Weaned</td><td class="value">${hasBreedingData ? eweStats.lambsWeaned : "Not recorded"}</td></tr>
-    <tr><td class="label">Average Weaning Weight</td><td class="value">${eweStats.avgWeanWeight > 0 ? eweStats.avgWeanWeight + " kg" : "—"}</td></tr>
-      `;
-    })() : ''}
-  </table>
-  
-  <div class="footer">
-    <div class="footer-info">
-      <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-      <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
-    </div>
-    <div class="footer-branding">
-      <p class="breedlog-text">BREEDLOG</p>
-      <p class="tagline">Professional Livestock Management</p>
-    </div>
-  </div>
-</div>`;
+        // Build performance profile from real data
+        const profile = buildAnimalPerformanceProfile(
+            animal,
+            allAnimals || [],
+            breedingEvents || [],
+            healthRecords || []
+        );
 
-        // Page 2: Family Tree (Landscape) - only if requested
-        const buildFamilyTreePage = () => {
-            const sire = animal.sire;
-            const dam = animal.dam;
-            
-            return `
-<div class="page landscape">
-  <div class="header">
-    <div class="header-left">
-      ${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" alt="Farm Logo" />` : ''}
-    </div>
-    <div class="header-center">
-      <h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1>
-      <p class="subtitle">Family Tree / Pedigree Certificate</p>
-    </div>
-    <div class="header-right">
-      <p>${exportDate}</p>
-    </div>
-  </div>
-  
-  <h2 class="tree-title">Pedigree for: ${data.identification.tagId} ${data.identification.name ? `(${data.identification.name})` : ''}</h2>
-  
-  <div class="pedigree-container">
-    <div class="pedigree-tree">
-      <!-- Subject (Center Left) with Photo -->
-      <div class="pedigree-subject">
-        <div class="pedigree-box subject-box">
-          ${animal.photo 
-            ? `<img src="${animal.photo}" class="subject-thumbnail" alt="${data.identification.tagId}" />`
-            : ''
-          }
-          <div class="box-label">SUBJECT</div>
-          <div class="box-id">${data.identification.tagId}</div>
-          <div class="box-details">${data.basicInfo.sex?.toUpperCase() || ""} | ${data.basicInfo.breed || "Meatmaster"}</div>
-          <div class="box-details">${formatDate(data.basicInfo.birthDate)}</div>
-        </div>
-      </div>
-      
-      <!-- Parents Column -->
-      <div class="pedigree-parents">
-        <div class="pedigree-box sire-box">
-          <div class="box-label">SIRE</div>
-          <div class="box-id">${sire?.tagId || data.parentage.externalSireInfo || "Unknown"}</div>
-          ${sire?.name ? `<div class="box-details">${sire.name}</div>` : ''}
-        </div>
-        <div class="pedigree-connector"></div>
-        <div class="pedigree-box dam-box">
-          <div class="box-label">DAM</div>
-          <div class="box-id">${dam?.tagId || data.parentage.externalDamInfo || "Unknown"}</div>
-          ${dam?.name ? `<div class="box-details">${dam.name}</div>` : ''}
-        </div>
-      </div>
-    </div>
-  </div>
-  
-  <div class="footer">
-    <div class="footer-info">
-      <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-      <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
-    </div>
-    <div class="footer-branding">
-      <p class="breedlog-text">BREEDLOG</p>
-      <p class="tagline">Professional Livestock Management</p>
-    </div>
-  </div>
-</div>`;
+        // ── Helpers ──────────────────────────────────────────────────────────
+        const row = (label: string, value: string | null | undefined) =>
+            `<tr><td class="fl">${label}</td><td class="fv">${value || "Not recorded"}</td></tr>`;
+        const sectionHeader = (title: string) =>
+            `<tr><td class="sh" colspan="2">${title}</td></tr>`;
+        const kg = (v: number | null) => v !== null ? `${v} kg` : "—";
+        const gday = (v: number | null) => v !== null ? `${v} g/day` : "—";
+        const pct = (v: number | null) => v !== null ? `${v}%` : "—";
+
+        // ── Rating colors ────────────────────────────────────────────────────
+        const ratingColors: Record<string, string> = {
+            "Excellent": "#16a34a", "Strong": "#2563eb", "Good": "#ca8a04",
+            "Developing": "#9333ea", "Monitor": "#dc2626", "Insufficient data": "#6b7280",
         };
-        
-        const content = `
-<!DOCTYPE html>
+        const ratingColor = ratingColors[profile.overallRating] || "#6b7280";
+
+        // ── Age string ───────────────────────────────────────────────────────
+        const ageStr = (() => {
+            const days = profile.growthMetrics.ageInDays;
+            if (days === null) return "Unknown";
+            if (days < 90) return `${days} days`;
+            const months = Math.floor(days / 30);
+            if (months < 24) return `${months} months`;
+            return `${Math.floor(days / 365)} yr ${Math.floor((days % 365) / 30)} mo`;
+        })();
+
+        // ── Role / confidence labels ─────────────────────────────────────────
+        const roleLabels: Record<string, string> = {
+            "ram": "RAM", "ewe": "EWE", "young-stud-ram": "YOUNG STUD RAM",
+            "young-stud-ewe": "YOUNG STUD EWE", "lamb": "LAMB", "meat-production": "MEAT / PRODUCTION",
+        };
+        const roleLabel = roleLabels[profile.role] || profile.role.toUpperCase();
+        const confidenceLabel: Record<string, string> = {
+            "high": "High confidence", "medium": "Medium confidence",
+            "low": "Low confidence", "insufficient": "Insufficient data",
+        };
+
+        // ── Type-specific section ─────────────────────────────────────────────
+        const buildTypeSpecificSection = () => {
+            const g = profile.growthMetrics;
+            if (profile.role === "ram" || profile.role === "young-stud-ram") {
+                const pm = profile.ramProgenyMetrics;
+                if (!pm) return `<div class="no-data">No progeny data recorded.</div>`;
+                return `<table class="ft">
+                  ${sectionHeader("Progeny Performance")}
+                  ${row("Total Progeny", pm.totalProgeny > 0 ? String(pm.totalProgeny) : "None recorded")}
+                  ${row("Male / Female", pm.totalProgeny > 0 ? `${pm.maleProgeny} / ${pm.femaleProgeny}` : "—")}
+                  ${row("Progeny Live / Lost", pm.totalProgeny > 0 ? `${pm.progenyLive} / ${pm.progenyDead}` : "—")}
+                  ${sectionHeader("Breeding Record")}
+                  ${row("Mating Events", String(pm.matingEvents || 0))}
+                  ${row("Lambing Events", String(pm.lambingEvents || 0))}
+                  ${row("Lambing Rate", pct(pm.lambingRate))}
+                  ${sectionHeader("Progeny Averages")}
+                  ${row("Avg Birth Weight", kg(pm.avgProgenyBirthWeight))}
+                  ${row("Avg 100-Day Weight", kg(pm.avgProgeny100Day))}
+                  ${row("Avg 270-Day Weight", kg(pm.avgProgeny270Day))}
+                </table>`;
+            }
+            if (profile.role === "ewe" || profile.role === "young-stud-ewe") {
+                const em = profile.eweProductivityMetrics;
+                if (!em) return `<div class="no-data">No breeding events recorded.</div>`;
+                return `<table class="ft">
+                  ${sectionHeader("Lambing History")}
+                  ${row("Lambing Events", String(em.totalLambingEvents))}
+                  ${row("Total Lambs Born", String(em.totalLambsBorn))}
+                  ${row("Lambs Live / Lost", em.totalLambsBorn > 0 ? `${em.lambsLive} / ${em.lambsDead}` : "—")}
+                  ${row("Lamb Survival Rate", pct(em.survivalRate))}
+                  ${sectionHeader("Productivity")}
+                  ${row("Mating Events", String(em.matingEvents))}
+                  ${row("Fertility Rate", pct(em.fertilityRate))}
+                  ${row("Avg Inter-Lambing", em.avgILP ? `${em.avgILP} days` : "—")}
+                  ${row("First Lambing", formatDate(em.firstLambDate ?? undefined))}
+                  ${row("Last Lambing", formatDate(em.lastLambDate ?? undefined))}
+                  ${sectionHeader("Lamb Averages")}
+                  ${row("Avg Birth Weight", kg(em.avgLambBirthWeight))}
+                  ${row("Avg 100-Day Weight", kg(em.avgLamb100Day))}
+                  ${row("Avg 270-Day Weight", kg(em.avgLamb270Day))}
+                </table>`;
+            }
+            if (profile.role === "meat-production") {
+                const mm = profile.meatProductionMetrics;
+                if (!mm) return `<div class="no-data">Insufficient production data.</div>`;
+                return `<table class="ft">
+                  ${sectionHeader("Production Metrics")}
+                  ${row("Current Weight", kg(mm.currentWeight))}
+                  ${row("Market Target", `${mm.marketTargetKg} kg`)}
+                  ${row("Progress to Target", pct(mm.percentToTarget))}
+                  ${row("ADG Birth → Current", gday(mm.adgBirthToCurrent))}
+                  ${row("Est. Days to Market", mm.projectedDaysToTarget ? `${mm.projectedDaysToTarget} days` : "—")}
+                  ${row("Age", mm.ageInDays ? `${mm.ageInDays} days` : "—")}
+                </table>`;
+            }
+            // Young stud / lamb
+            const ym = profile.youngAnimalMetrics;
+            return `<table class="ft">
+              ${sectionHeader("Development")}
+              ${row("Age", ym?.ageInDays ? `${ym.ageInDays} days` : "—")}
+              ${row("Stage", ym?.ageCategory ? ym.ageCategory.charAt(0).toUpperCase() + ym.ageCategory.slice(1) : "—")}
+              ${row("Parentage", ym?.hasParentalData ? "Recorded" : "Not recorded")}
+              ${row("Sire", ym?.sireTagId || animal.externalSireInfo || "—")}
+              ${row("Dam", ym?.damTagId || animal.externalDamInfo || "—")}
+              ${row("Weight Records", `${ym?.growthDataPoints ?? 0} recorded`)}
+              ${sectionHeader("Growth Rate")}
+              ${row("ADG Birth → 100d", gday(g.adgBirthTo100))}
+              ${row("ADG Birth → 270d", gday(g.adgBirthTo270))}
+              ${row("ADG Birth → Current", gday(g.adgBirthToCurrent))}
+            </table>`;
+        };
+
+        // ── Pedigree ──────────────────────────────────────────────────────────
+        const sireAnimal = animal.sire;
+        const damAnimal = animal.dam;
+        const pedigreeSection = `
+          <div class="ped-row">
+            <div class="ped-box sire-box">
+              <div class="ped-lbl">SIRE</div>
+              <div class="ped-id">${sireAnimal?.tagId || animal.externalSireInfo || "Unknown"}</div>
+              ${sireAnimal?.name ? `<div class="ped-det">${sireAnimal.name}</div>` : ''}
+              ${sireAnimal?.birthDate ? `<div class="ped-det">DOB: ${formatDate(sireAnimal.birthDate)}</div>` : ''}
+            </div>
+            <div class="ped-box dam-box">
+              <div class="ped-lbl">DAM</div>
+              <div class="ped-id">${damAnimal?.tagId || animal.externalDamInfo || "Unknown"}</div>
+              ${damAnimal?.name ? `<div class="ped-det">${damAnimal.name}</div>` : ''}
+              ${damAnimal?.birthDate ? `<div class="ped-det">DOB: ${formatDate(damAnimal.birthDate)}</div>` : ''}
+            </div>
+          </div>`;
+
+        // ── Health notes ──────────────────────────────────────────────────────
+        const healthSection = profile.recentHealthNotes.length > 0 ? `
+          <div class="full-col" style="margin-bottom:3mm">
+            <div class="sec-title">RECENT HEALTH NOTES</div>
+            <div class="sec-body">
+              ${profile.recentHealthNotes.map(n => `<div class="health-row">${n}</div>`).join('')}
+              ${profile.healthRecordCount > 3 ? `<div class="health-more">+ ${profile.healthRecordCount - 3} more health records on file</div>` : ''}
+            </div>
+          </div>` : '';
+
+        // ── Photo HTML ────────────────────────────────────────────────────────
+        const photoHtml = photoBase64
+            ? `<img src="${photoBase64}" class="id-photo" alt="${animal.tagId || 'animal'}" />`
+            : `<div class="no-photo"><div>No image<br/>recorded</div></div>`;
+
+        // ── Type-specific section title ────────────────────────────────────────
+        const specificTitle = profile.role === "ram" || profile.role === "young-stud-ram"
+            ? "Progeny &amp; Breeding"
+            : profile.role === "ewe" || profile.role === "young-stud-ewe"
+            ? "Productivity &amp; Lambing"
+            : profile.role === "meat-production" ? "Production Metrics" : "Development";
+
+        // ── Family tree page (landscape) — included when requested ────────────
+        const familyTreePage = includeTree ? `
+<div class="page" style="page-break-before:always; width:277mm; min-height:190mm; padding: 6mm 6mm 24mm 6mm; position:relative;">
+  <div class="hdr">
+    <div>${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="hdr-logo" alt="Logo" />` : '<div class="hdr-logo-placeholder"></div>'}</div>
+    <div class="hdr-center">
+      <h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1>
+      <p>Family Tree / Pedigree Certificate</p>
+    </div>
+    <div class="hdr-right"><div style="font-weight:700">${animal.tagId || "—"}</div><div>${exportDate}</div></div>
+  </div>
+  <h2 style="text-align:center;font-size:12pt;margin:4mm 0 6mm;">Pedigree for: ${animal.tagId} ${animal.name ? `(${animal.name})` : ''}</h2>
+  <div style="display:flex;align-items:center;justify-content:center;gap:30mm;padding:10mm;">
+    <div style="border:2px solid #FFC300;border-radius:6px;padding:8px 16px;min-width:80mm;background:linear-gradient(135deg,#FFC300,#ffdb4d);text-align:center;">
+      ${photoBase64 ? `<img src="${photoBase64}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.2);margin-bottom:6px;display:block;margin:0 auto 6px;" />` : ''}
+      <div style="font-size:8pt;font-weight:700;color:#555;text-transform:uppercase;">SUBJECT</div>
+      <div style="font-size:14pt;font-weight:800;">${animal.tagId}</div>
+      <div style="font-size:9pt;color:#555;">${animal.sex?.toUpperCase() || ""} | ${animal.breed || "Meatmaster"}</div>
+      <div style="font-size:9pt;color:#555;">${formatDate(animal.birthDate)}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8mm;">
+      <div style="border:2px solid #3b82f6;border-radius:6px;padding:8px 16px;min-width:80mm;text-align:center;background:white;">
+        <div style="font-size:8pt;font-weight:700;color:#555;text-transform:uppercase;">SIRE</div>
+        <div style="font-size:13pt;font-weight:800;">${sireAnimal?.tagId || animal.externalSireInfo || "Unknown"}</div>
+        ${sireAnimal?.name ? `<div style="font-size:9pt;color:#555;">${sireAnimal.name}</div>` : ''}
+      </div>
+      <div style="border:2px solid #ec4899;border-radius:6px;padding:8px 16px;min-width:80mm;text-align:center;background:white;">
+        <div style="font-size:8pt;font-weight:700;color:#555;text-transform:uppercase;">DAM</div>
+        <div style="font-size:13pt;font-weight:800;">${damAnimal?.tagId || animal.externalDamInfo || "Unknown"}</div>
+        ${damAnimal?.name ? `<div style="font-size:9pt;color:#555;">${damAnimal.name}</div>` : ''}
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <div class="footer-info"><p class="footer-farm">${fb?.studName || fb?.farmName || "BreedLog"}</p><p>${fb?.ownerName || ""}</p></div>
+    <div class="footer-branding"><div class="bl">BREEDLOG</div><div class="tag">Professional Livestock Management</div></div>
+  </div>
+</div>` : '';
+
+        // ── Full HTML document ────────────────────────────────────────────────
+        const content = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
-<title>${data.identification.tagId} - Individual Animal Record</title>
+<title>${animal.tagId || 'Animal'} — Performance Datasheet</title>
 <style>
-@page { size: A4 portrait; margin: 10mm; }
-@page landscape { size: A4 landscape; margin: 10mm; }
+${includeTree ? '@page { margin: 8mm 10mm; } @page landscape-page { size: A4 landscape; }' : '@page { size: A4 portrait; margin: 8mm 10mm; }'}
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-
-.page { width: 190mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
-.page:last-child { page-break-after: avoid; }
-.page.landscape { width: 277mm; min-height: 190mm; }
-
-.header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
-.header-left { width: 60px; flex-shrink: 0; }
-.logo { width: 60px; height: 60px; object-fit: contain; }
-.header-center { flex: 1; text-align: center; }
-.header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; margin: 0; }
-.header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
-.header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
-
-.photo-section { text-align: center; margin: 10mm 0; }
-.animal-photo { max-width: 120mm; max-height: 100mm; object-fit: contain; border: 2px solid #ddd; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-.no-photo { width: 120mm; height: 80mm; margin: 0 auto; background: #f5f5f5; border: 2px dashed #ccc; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 12pt; }
-
-.record-title { text-align: center; font-size: 14pt; font-weight: 700; color: #1a1a1a; margin: 6mm 0 4mm 0; text-transform: uppercase; letter-spacing: 1px; }
-
-.detail-table { width: 100%; border-collapse: collapse; margin-top: 4mm; }
-.detail-table td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; text-align: left; vertical-align: middle; }
-.detail-table tr:nth-child(even) { background: #fafafa; }
-.detail-table .label { width: 45%; font-weight: 600; color: #555; }
-.detail-table .value { color: #222; }
-.detail-table .section-header { background: #FFC300; color: #000; font-weight: 700; font-size: 8pt; text-transform: uppercase; padding: 6px 10px; }
-
-.tree-title { text-align: center; font-size: 12pt; font-weight: 700; color: #1a1a1a; margin: 4mm 0 6mm 0; }
-
-.pedigree-container { padding: 10mm; }
-.pedigree-tree { display: flex; align-items: center; justify-content: center; gap: 30mm; }
-.pedigree-subject, .pedigree-parents { display: flex; flex-direction: column; gap: 8mm; }
-.pedigree-box { border: 2px solid #FFC300; border-radius: 6px; padding: 8px 12px; min-width: 80mm; background: white; text-align: center; }
-.subject-box { background: linear-gradient(135deg, #FFC300 0%, #ffdb4d 100%); }
-.subject-thumbnail { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-bottom: 6px; }
-.sire-box { border-color: #3b82f6; }
-.dam-box { border-color: #ec4899; }
-.box-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; color: #666; margin-bottom: 3px; }
-.box-id { font-size: 14pt; font-weight: 800; color: #1a1a1a; }
-.box-details { font-size: 9pt; color: #555; margin-top: 2px; }
-.pedigree-connector { width: 2px; height: 15mm; background: #ccc; margin: 0 auto; }
-
-.footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
+body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1a1a; background: white; }
+.page { width: 190mm; min-height: 257mm; padding-bottom: 22mm; position: relative; }
+.hdr { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; border-bottom: 2.5px solid #FFC300; margin-bottom: 3mm; }
+.hdr-logo { width: 46px; height: 46px; object-fit: contain; }
+.hdr-logo-placeholder { width: 46px; }
+.hdr-center { flex: 1; text-align: center; }
+.hdr-center h1 { font-size: 13pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+.hdr-center p { font-size: 7.5pt; color: #666; margin-top: 2px; }
+.hdr-right { text-align: right; font-size: 7.5pt; color: #666; white-space: nowrap; }
+.id-block { display: flex; gap: 5mm; margin-bottom: 3mm; align-items: flex-start; }
+.id-photo { width: 52mm; height: 42mm; object-fit: cover; border: 1.5px solid #ddd; border-radius: 4px; display: block; }
+.no-photo { width: 52mm; height: 42mm; background: #f5f5f5; border: 1.5px dashed #bbb; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 8pt; text-align: center; }
+.id-tag { font-size: 16pt; font-weight: 800; letter-spacing: .5px; line-height: 1; }
+.id-name { font-size: 10pt; color: #444; margin-bottom: 2mm; margin-top: 1px; }
+.ft { width: 100%; border-collapse: collapse; }
+.ft td { padding: 2.5px 5px; font-size: 8pt; border-bottom: 1px solid #efefef; vertical-align: top; }
+.fl { width: 44%; font-weight: 600; color: #555; }
+.fv { color: #1a1a1a; }
+.sh { background: #FFC300; color: #000; font-weight: 700; font-size: 7.5pt; text-transform: uppercase; padding: 3px 5px; }
+.rating-strip { display: flex; align-items: center; gap: 3mm; background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 3px; padding: 2mm 3mm; margin-bottom: 3mm; flex-wrap: wrap; }
+.rating-badge { background: ${ratingColor}; color: white; font-weight: 700; font-size: 8.5pt; padding: 2px 7px; border-radius: 3px; text-transform: uppercase; white-space: nowrap; }
+.rating-role { font-weight: 700; font-size: 8pt; color: #333; text-transform: uppercase; letter-spacing: .5px; }
+.rating-conf { font-size: 7.5pt; color: #666; }
+.rating-reason { font-size: 7.5pt; color: #444; flex: 1; font-style: italic; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-bottom: 3mm; }
+.section { border: 1px solid #e0e0e0; border-radius: 3px; overflow: hidden; }
+.full-col { border: 1px solid #e0e0e0; border-radius: 3px; overflow: hidden; margin-bottom: 3mm; }
+.sec-title { background: #FFC300; color: #000; font-weight: 700; font-size: 7.5pt; text-transform: uppercase; padding: 3px 6px; }
+.sec-body { padding: 2mm; }
+.no-data { padding: 4mm; color: #888; font-style: italic; font-size: 8pt; text-align: center; }
+.ped-row { display: flex; gap: 3mm; padding: 2mm; }
+.ped-box { flex: 1; border-radius: 3px; padding: 2mm 3mm; }
+.sire-box { background: #eff6ff; border: 1px solid #bfdbfe; }
+.dam-box { background: #fdf2f8; border: 1px solid #f9a8d4; }
+.ped-lbl { font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #666; }
+.ped-id { font-size: 11pt; font-weight: 800; color: #1a1a1a; }
+.ped-det { font-size: 7.5pt; color: #555; margin-top: 1px; }
+.health-row { font-size: 7.5pt; color: #333; padding: 1.5px 0; border-bottom: 1px solid #f5f5f5; }
+.health-more { font-size: 7pt; color: #888; margin-top: 2px; font-style: italic; }
+.summary-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 3px; padding: 3mm; margin-bottom: 3mm; }
+.summary-lbl { font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #92400e; margin-bottom: 2px; letter-spacing: .5px; }
+.summary-text { font-size: 8.5pt; color: #1a1a1a; line-height: 1.5; }
+.footer { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 3mm 5mm; border-top: 2.5px solid #FFC300; border-radius: 2mm; position: absolute; bottom: 0; left: 0; right: 0; }
 .footer-info { flex: 1; }
-.footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
-.footer-info p { font-size: 7pt; margin-top: 2px; }
-.footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-.footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
-.footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-
-@page landscape { size: A4 landscape; margin: 10mm; }
-@media print { 
-  .page { page-break-after: always; }
-  .page:last-child { page-break-after: avoid; }
-  .page.landscape { page: landscape; }
-}
+.footer-farm { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
+.footer-info p { font-size: 7pt; margin-top: 1px; color: #ccc; }
+.footer-branding { text-align: right; }
+.bl { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; }
+.tag { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 1px; }
+@media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
 <body>
-${page1}
-${includeTree ? buildFamilyTreePage() : ''}
+<div class="page">
+  <div class="hdr">
+    <div>${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="hdr-logo" alt="Logo" />` : '<div class="hdr-logo-placeholder"></div>'}</div>
+    <div class="hdr-center"><h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1><p>Individual Animal Performance Datasheet</p></div>
+    <div class="hdr-right"><div style="font-weight:700">${animal.tagId || "—"}</div><div>${exportDate}</div></div>
+  </div>
+  <div class="id-block">
+    <div style="width:52mm;flex-shrink:0">${photoHtml}</div>
+    <div style="flex:1">
+      <div class="id-tag">${animal.tagId || "—"}</div>
+      ${animal.name ? `<div class="id-name">${animal.name}</div>` : ''}
+      <table class="ft">
+        ${row("Sex", animal.sex ? animal.sex.charAt(0).toUpperCase() + animal.sex.slice(1) : null)}
+        ${row("Breed", animal.breed || "Meatmaster")}
+        ${row("Date of Birth", formatDate(animal.birthDate))}
+        ${row("Age", ageStr)}
+        ${row("Status", animal.status ? animal.status.charAt(0).toUpperCase() + animal.status.slice(1) : null)}
+        ${row("Classification", animal.classification ? animal.classification.replace(/_/g, ' ') : null)}
+        ${row("Lambing Season", animal.lambingSeason)}
+        ${row("Birth Type", animal.birthStatus ? animal.birthStatus.charAt(0).toUpperCase() + animal.birthStatus.slice(1) : null)}
+        ${row("Electronic ID", animal.electronicId)}
+      </table>
+    </div>
+  </div>
+  <div class="rating-strip">
+    <span class="rating-badge">${profile.overallRating}</span>
+    <span class="rating-role">${roleLabel}</span>
+    <span class="rating-conf">· ${confidenceLabel[profile.dataConfidence]}</span>
+    <span class="rating-reason">${profile.ratingReason}</span>
+  </div>
+  <div class="two-col">
+    <div class="section">
+      <div class="sec-title">Growth Performance</div>
+      <div class="sec-body"><table class="ft">
+        ${row("Birth Weight", kg(profile.growthMetrics.birthWeight))}
+        ${row("100-Day Weight", kg(profile.growthMetrics.weight100Day))}
+        ${row("270-Day Weight", kg(profile.growthMetrics.weight270Day))}
+        ${row("Current Weight", kg(profile.growthMetrics.currentWeight))}
+        ${row("ADG Birth → 100d", gday(profile.growthMetrics.adgBirthTo100))}
+        ${row("ADG Birth → 270d", gday(profile.growthMetrics.adgBirthTo270))}
+        ${row("ADG Birth → Current", gday(profile.growthMetrics.adgBirthToCurrent))}
+      </table></div>
+    </div>
+    <div class="section">
+      <div class="sec-title">${specificTitle}</div>
+      <div class="sec-body">${buildTypeSpecificSection()}</div>
+    </div>
+  </div>
+  <div class="full-col">
+    <div class="sec-title">Pedigree</div>
+    ${pedigreeSection}
+  </div>
+  ${healthSection}
+  <div class="summary-box">
+    <div class="summary-lbl">Performance Summary</div>
+    <div class="summary-text">${profile.summary}</div>
+  </div>
+  <div class="footer">
+    <div class="footer-info">
+      <p class="footer-farm">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+      <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "· " + fb.ownerPhone : ""}</p>
+    </div>
+    <div class="footer-branding"><div class="bl">BREEDLOG</div><div class="tag">Professional Livestock Management</div></div>
+  </div>
+</div>
+${familyTreePage}
 </body>
 </html>`;
-        
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-            printWindow.document.write(content);
-            printWindow.document.close();
-            setTimeout(() => printWindow.print(), 500);
+
+        // ── Print via blob URL + onload ───────────────────────────────────────
+        // Blob URL avoids cross-origin issues in the print window and works
+        // reliably in PWA standalone mode where window.open('','_blank') + document.write fails.
+        const blob = new Blob([content], { type: "text/html; charset=utf-8" });
+        const blobUrl = URL.createObjectURL(blob);
+        const printWindow = window.open(blobUrl, "_blank");
+        if (!printWindow) {
+            URL.revokeObjectURL(blobUrl);
+            toast({
+                title: "Pop-up blocked",
+                description: "Allow pop-ups for BreedLog in your browser settings, then try again.",
+                variant: "destructive",
+            });
+            return;
         }
+        // onload fires once the blob page is fully rendered; fallback at 2.5s for browsers that don't fire it
+        printWindow.onload = () => {
+            setTimeout(() => { printWindow.print(); URL.revokeObjectURL(blobUrl); }, 400);
+        };
+        setTimeout(() => { try { printWindow.print(); } catch {} URL.revokeObjectURL(blobUrl); }, 2500);
+
         createExportedDoc.mutate({
-            name: getDocumentFileName("AnimalProfile", animal.tagId || `ID${animal.id}`),
+            name: getDocumentFileName("PerformanceDatasheet", animal.tagId || `ID${animal.id}`),
             documentType: "individual",
             subfolder: "individual",
             animalId: animal.id,
             metadata: {
               exportType: "pdf",
-              category: includeTree ? "individual-with-family-tree" : "individual",
+              category: includeTree ? "individual-with-family-tree" : "individual-performance",
               sourceSection: "individual",
               animalCount: 1,
               pageCount: includeTree ? 2 : 1,
@@ -1349,7 +1478,7 @@ ${includeTree ? buildFamilyTreePage() : ''}
               rowsSummary: [{ tagId: animal.tagId, sex: animal.sex, breed: animal.breed, status: animal.status }],
             }
         });
-        toast({ title: "PDF Ready", description: `Print dialog opened for ${animal.tagId} profile${includeTree ? ' with family tree' : ''}` });
+        toast({ title: "PDF Ready", description: `Performance datasheet opened for ${animal.tagId}` });
     };
     
     return (

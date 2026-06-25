@@ -346,9 +346,19 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
   const [isRetrying, setIsRetrying] = useState(false);
   const [showInstallFirst, setShowInstallFirst] = useState(false);
 
-  // Decide if we should show the install-first screen
+  // Decide if we should show the install-first screen.
+  // Check matchMedia directly (synchronous) to avoid the race condition where
+  // isLoading → false before isInstalled → true, causing the install screen to
+  // flash even when the app is already running as a standalone PWA.
   useEffect(() => {
-    if (!isInstalled && !hasSkippedInstall() && !isLoading) {
+    const isStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as { standalone?: boolean }).standalone === true;
+    if (isInstalled || isStandalone) {
+      setShowInstallFirst(false);
+      return;
+    }
+    if (!hasSkippedInstall() && !isLoading) {
       setShowInstallFirst(true);
     }
   }, [isInstalled, isLoading]);
