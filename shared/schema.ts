@@ -506,6 +506,38 @@ export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit
 export type SystemSetting = typeof systemSettings.$inferSelect;
 export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
 
+// === FIELD TEST ISSUE REPORTS ===
+export const fieldIssues = pgTable("field_issues", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id), // nullable — allows unauthenticated reports
+  inviteCodeRef: varchar("invite_code_ref", { length: 64 }), // safe code reference (not secret)
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  area: varchar("area", { length: 64 }).notNull(), // app area e.g. "My Herd", "Sync"
+  severity: varchar("severity", { length: 20 }).notNull().default("medium"), // low|medium|high|blocking
+  deviceType: varchar("device_type", { length: 20 }), // phone|desktop|tablet
+  appMode: varchar("app_mode", { length: 20 }), // installed|browser|unknown
+  contactName: text("contact_name"), // optional user name/contact
+  currentRoute: text("current_route"), // page the user was on
+  appVersion: text("app_version"), // version label at time of report
+  status: varchar("status", { length: 20 }).notNull().default("new"), // new|reviewing|in_progress|fixed|closed
+  adminNotes: text("admin_notes"),
+  emailSent: boolean("email_sent").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertFieldIssueSchema = createInsertSchema(fieldIssues).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  status: true,
+  adminNotes: true,
+  emailSent: true,
+});
+export type FieldIssue = typeof fieldIssues.$inferSelect;
+export type InsertFieldIssue = z.infer<typeof insertFieldIssueSchema>;
+
 // === BETA ACCESS - INVITE CODES ===
 export const inviteCodes = pgTable("invite_codes", {
   id: serial("id").primaryKey(),

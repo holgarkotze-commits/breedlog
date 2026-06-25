@@ -31,6 +31,8 @@ const Lambs = lazy(() => import("@/pages/Lambs"));
 const Analysis = lazy(() => import("@/pages/Analysis"));
 const Records = lazy(() => import("@/pages/Records"));
 const Admin = lazy(() => import("@/pages/Admin"));
+const Help = lazy(() => import("@/pages/Help"));
+const ReportIssue = lazy(() => import("@/pages/ReportIssue"));
 
 // Loading fallback for lazy loaded pages
 
@@ -88,6 +90,8 @@ function Router() {
         <Route path="/records" component={Records} />
         <Route path="/settings" component={Settings} />
         <Route path="/admin" component={Admin} />
+        <Route path="/help" component={Help} />
+        <Route path="/report-issue" component={ReportIssue} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

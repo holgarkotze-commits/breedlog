@@ -837,6 +837,96 @@ export async function registerRoutes(
     }
   });
 
+  // === FIELD TEST ISSUE REPORTS ===
+  app.post("/api/field-issues", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { title, description, area, severity, deviceType, appMode, contactName, currentRoute, appVersion } = req.body;
+      if (!title || !description || !area) {
+        return res.status(400).json({ message: "title, description, and area are required" });
+      }
+      // Get safe invite code reference (not the secret code itself, just a display identifier)
+      let inviteCodeRef: string | undefined;
+      try {
+        const activation = await storage.getUserActivation(userId);
+        if (activation) {
+          const code = await storage.getInviteCodeByCode
+            ? undefined
+            : undefined;
+          inviteCodeRef = `code:${activation.inviteCodeId}`;
+        }
+      } catch {}
+
+      const issue = await storage.createFieldIssue({
+        userId,
+        inviteCodeRef,
+        title: String(title).slice(0, 120),
+        description: String(description).slice(0, 2000),
+        area: String(area).slice(0, 64),
+        severity: ["low", "medium", "high", "blocking"].includes(severity) ? severity : "medium",
+        deviceType: deviceType ? String(deviceType).slice(0, 20) : undefined,
+        appMode: appMode ? String(appMode).slice(0, 20) : undefined,
+        contactName: contactName ? String(contactName).slice(0, 80) : undefined,
+        currentRoute: currentRoute ? String(currentRoute).slice(0, 200) : undefined,
+        appVersion: appVersion ? String(appVersion).slice(0, 100) : undefined,
+      });
+
+      // Send email notification (non-blocking)
+      import("./email").then(({ sendIssueNotification }) => {
+        sendIssueNotification(issue).then((sent) => {
+          if (sent) {
+            storage.updateFieldIssue(issue.id, { emailSent: true }).catch(() => {});
+          }
+        }).catch(() => {});
+      }).catch(() => {});
+
+      res.status(201).json(issue);
+    } catch (err: any) {
+      console.error("Create field issue error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin: list all issues (admin auth required)
+  app.get("/api/admin/field-issues", async (req, res) => {
+    try {
+      const adminPin = process.env.ADMIN_PIN;
+      const authHeader = req.headers.authorization || "";
+      if (!adminPin || authHeader !== `AdminPin ${adminPin}`) {
+        return res.status(401).json({ message: "Admin authentication required" });
+      }
+      const { status, severity, area, search } = req.query as Record<string, string>;
+      const issues = await storage.getFieldIssues({ status, severity, area, search });
+      res.json(issues);
+    } catch (err: any) {
+      console.error("Get field issues error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Admin: update issue status/notes
+  app.patch("/api/admin/field-issues/:id", async (req, res) => {
+    try {
+      const adminPin = process.env.ADMIN_PIN;
+      const authHeader = req.headers.authorization || "";
+      if (!adminPin || authHeader !== `AdminPin ${adminPin}`) {
+        return res.status(401).json({ message: "Admin authentication required" });
+      }
+      const id = Number(req.params.id);
+      const { status, adminNotes } = req.body;
+      const validStatuses = ["new", "reviewing", "in_progress", "fixed", "closed"];
+      const updates: { status?: string; adminNotes?: string } = {};
+      if (status && validStatuses.includes(status)) updates.status = status;
+      if (adminNotes !== undefined) updates.adminNotes = String(adminNotes).slice(0, 2000);
+      const updated = await storage.updateFieldIssue(id, updates);
+      if (!updated) return res.status(404).json({ message: "Issue not found" });
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Update field issue error:", err);
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // === FLOCK HEALTH EVENTS ===
   app.get("/api/flock-health-events", requireAuth, async (req, res) => {
     try {

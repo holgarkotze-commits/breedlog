@@ -10,9 +10,31 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2, Pencil, Check, X, Monitor, Smartphone, Search, RotateCcw, CalendarPlus } from "lucide-react";
+import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2, Pencil, Check, X, Monitor, Smartphone, Search, RotateCcw, CalendarPlus, Bug, ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { Link } from "wouter";
+
+interface FieldIssue {
+  id: number;
+  userId: string | null;
+  inviteCodeRef: string | null;
+  title: string;
+  description: string;
+  area: string;
+  severity: string;
+  deviceType: string | null;
+  appMode: string | null;
+  contactName: string | null;
+  currentRoute: string | null;
+  appVersion: string | null;
+  status: string;
+  adminNotes: string | null;
+  emailSent: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface InviteCode {
   id: number;
@@ -367,6 +389,38 @@ export default function AdminPage() {
   const [lookupCode, setLookupCode] = useState("");
   const [lookupResult, setLookupResult] = useState<any>(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+
+  // Field Issues state
+  const [issueStatusFilter, setIssueStatusFilter] = useState("all");
+  const [issueSeverityFilter, setIssueSeverityFilter] = useState("all");
+  const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
+  const [issueNotesMap, setIssueNotesMap] = useState<Record<number, string>>({});
+
+  const { data: fieldIssues = [], isLoading: loadingIssues } = useQuery<FieldIssue[]>({
+    queryKey: ["/api/admin/field-issues", issueStatusFilter, issueSeverityFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (issueStatusFilter !== "all") params.set("status", issueStatusFilter);
+      if (issueSeverityFilter !== "all") params.set("severity", issueSeverityFilter);
+      const res = await adminApiRequest("GET", `/api/admin/field-issues?${params.toString()}`);
+      return res.json();
+    },
+    enabled: isAuthenticated === true,
+  });
+
+  const updateIssueMutation = useMutation({
+    mutationFn: async ({ id, status, adminNotes }: { id: number; status?: string; adminNotes?: string }) => {
+      const res = await adminApiRequest("PATCH", `/api/admin/field-issues/${id}`, { status, adminNotes });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/field-issues"] });
+      toast({ title: "Issue updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
 
   const handleLookupCode = async () => {
     if (!lookupCode.trim()) return;
@@ -987,6 +1041,157 @@ export default function AdminPage() {
                     ))}
                   </TableBody>
                 </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        {/* Field Test Issues */}
+        <Card data-testid="card-field-issues">
+          <CardHeader>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Bug className="h-4 w-4 text-primary" /> Field Test Issues
+                </CardTitle>
+                <CardDescription>
+                  Reports submitted by testers via the Report an Issue form.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={issueSeverityFilter} onValueChange={setIssueSeverityFilter}>
+                  <SelectTrigger className="w-32" data-testid="select-issue-severity-filter">
+                    <SelectValue placeholder="Severity" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All severities</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                    <SelectItem value="major">Major</SelectItem>
+                    <SelectItem value="minor">Minor</SelectItem>
+                    <SelectItem value="feedback">Feedback</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={issueStatusFilter} onValueChange={setIssueStatusFilter}>
+                  <SelectTrigger className="w-32" data-testid="select-issue-status-filter">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All statuses</SelectItem>
+                    <SelectItem value="new">New</SelectItem>
+                    <SelectItem value="in_progress">In Progress</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                    <SelectItem value="wont_fix">Won't Fix</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingIssues ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : fieldIssues.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Bug className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                <p className="text-sm">No issues reported yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {fieldIssues.map((issue) => {
+                  const isExpanded = expandedIssue === issue.id;
+                  const severityColor =
+                    issue.severity === "critical" ? "destructive" :
+                    issue.severity === "major" ? "secondary" :
+                    "outline";
+                  const statusColor =
+                    issue.status === "resolved" ? "default" :
+                    issue.status === "in_progress" ? "secondary" :
+                    issue.status === "wont_fix" ? "outline" :
+                    "secondary";
+                  return (
+                    <div key={issue.id} className="border rounded-lg overflow-hidden" data-testid={`issue-row-${issue.id}`}>
+                      <button
+                        className="w-full text-left px-4 py-3 flex items-start justify-between gap-3 hover:bg-muted/40 transition-colors"
+                        onClick={() => setExpandedIssue(isExpanded ? null : issue.id)}
+                      >
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant={severityColor} className="uppercase text-xs shrink-0">{issue.severity}</Badge>
+                            <Badge variant={statusColor} className="text-xs shrink-0">{issue.status.replace("_", " ")}</Badge>
+                            <span className="font-medium truncate">{issue.title}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                            <span>{issue.area}</span>
+                            {issue.contactName && <span>· {issue.contactName}</span>}
+                            {issue.deviceType && <span>· {issue.deviceType}</span>}
+                            <span>· {format(new Date(issue.createdAt), "MMM d, yyyy HH:mm")}</span>
+                          </div>
+                        </div>
+                        {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />}
+                      </button>
+                      {isExpanded && (
+                        <div className="px-4 pb-4 space-y-4 border-t bg-muted/20">
+                          <div className="pt-3 space-y-2">
+                            <div className="text-xs text-muted-foreground uppercase font-medium">Description</div>
+                            <p className="text-sm whitespace-pre-wrap">{issue.description}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            {issue.appVersion && <div><span className="font-medium">Version:</span> {issue.appVersion}</div>}
+                            {issue.currentRoute && <div><span className="font-medium">Route:</span> {issue.currentRoute}</div>}
+                            {issue.appMode && <div><span className="font-medium">Mode:</span> {issue.appMode}</div>}
+                            {issue.inviteCodeRef && <div><span className="font-medium">Code:</span> {issue.inviteCodeRef}</div>}
+                          </div>
+                          {issue.adminNotes && (
+                            <div className="space-y-1">
+                              <div className="text-xs text-muted-foreground uppercase font-medium flex items-center gap-1">
+                                <MessageSquare className="h-3 w-3" /> Admin Notes
+                              </div>
+                              <p className="text-sm whitespace-pre-wrap border rounded p-2 bg-background">{issue.adminNotes}</p>
+                            </div>
+                          )}
+                          <div className="flex flex-col gap-3 pt-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs text-muted-foreground font-medium">Update status:</span>
+                              {["new", "in_progress", "resolved", "wont_fix"].map((s) => (
+                                <Button
+                                  key={s}
+                                  size="sm"
+                                  variant={issue.status === s ? "default" : "outline"}
+                                  className="text-xs h-7"
+                                  onClick={() => updateIssueMutation.mutate({ id: issue.id, status: s })}
+                                  disabled={updateIssueMutation.isPending}
+                                  data-testid={`button-issue-status-${s}-${issue.id}`}
+                                >
+                                  {s.replace("_", " ")}
+                                </Button>
+                              ))}
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-xs text-muted-foreground font-medium">Admin notes (optional):</div>
+                              <Textarea
+                                placeholder="Add admin notes..."
+                                className="text-sm min-h-[60px]"
+                                value={issueNotesMap[issue.id] ?? issue.adminNotes ?? ""}
+                                onChange={(e) => setIssueNotesMap((prev) => ({ ...prev, [issue.id]: e.target.value }))}
+                                data-testid={`textarea-issue-notes-${issue.id}`}
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs"
+                                onClick={() => updateIssueMutation.mutate({ id: issue.id, adminNotes: issueNotesMap[issue.id] ?? "" })}
+                                disabled={updateIssueMutation.isPending}
+                                data-testid={`button-save-notes-${issue.id}`}
+                              >
+                                Save Notes
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

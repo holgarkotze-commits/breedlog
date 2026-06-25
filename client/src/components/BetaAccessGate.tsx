@@ -4,8 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Lock, Shield, WifiOff, Loader2, RefreshCw } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Lock, Shield, WifiOff, Loader2, RefreshCw, Download, Smartphone, Monitor, Share, Plus, ArrowRight, ArrowUpRight, ChevronRight } from "lucide-react";
 import { apiRequest, setDeviceToken, getDeviceToken } from "@/lib/queryClient";
+import { usePWAInstall } from "@/hooks/use-pwa-install";
+import { cn } from "@/lib/utils";
 
 interface AccessStatus {
   hasAccess: boolean;
@@ -17,6 +21,8 @@ interface AccessStatus {
 
 const OFFLINE_GRACE_DAYS = 7;
 const LOCAL_STORAGE_KEY = "breedlog_beta_access";
+const SAVED_CODE_KEY = "breedlog_saved_code";
+const INSTALL_SKIPPED_KEY = "breedlog_install_skipped";
 
 export function clearBetaAccessStorage(): void {
   localStorage.removeItem(LOCAL_STORAGE_KEY);
@@ -40,10 +46,229 @@ function storeAccess(expiresAt?: string): void {
   }));
 }
 
+function getSavedCode(): string {
+  try {
+    return localStorage.getItem(SAVED_CODE_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveCode(code: string): void {
+  try {
+    localStorage.setItem(SAVED_CODE_KEY, code);
+  } catch {}
+}
+
+function clearSavedCode(): void {
+  try {
+    localStorage.removeItem(SAVED_CODE_KEY);
+  } catch {}
+}
+
+function hasSkippedInstall(): boolean {
+  try {
+    const ts = localStorage.getItem(INSTALL_SKIPPED_KEY);
+    if (!ts) return false;
+    // Reset skip after 24h so we remind them again
+    const skippedAt = parseInt(ts, 10);
+    return Date.now() - skippedAt < 24 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
+
+function markInstallSkipped(): void {
+  try {
+    localStorage.setItem(INSTALL_SKIPPED_KEY, Date.now().toString());
+  } catch {}
+}
+
+// Platform detection
+function detectPlatform(): "ios" | "android" | "desktop-chrome" | "desktop-edge" | "other" {
+  const ua = navigator.userAgent.toLowerCase();
+  const isIOS = /iphone|ipad|ipod/.test(ua) && /webkit/.test(ua) && !/crios|fxios/.test(ua);
+  if (isIOS) return "ios";
+  const isAndroid = /android/.test(ua);
+  if (isAndroid) return "android";
+  const isEdge = /edg\//.test(ua);
+  if (isEdge) return "desktop-edge";
+  const isChrome = /chrome/.test(ua) && !isEdge;
+  if (isChrome) return "desktop-chrome";
+  return "other";
+}
+
+function isMobilePlatform(): boolean {
+  const ua = navigator.userAgent.toLowerCase();
+  return /iphone|ipad|ipod|android/.test(ua);
+}
+
+// ============================================================
+// Install-first screen component
+// ============================================================
+function InstallFirstScreen({ onSkip }: { onSkip: () => void }) {
+  const { isInstallable, isIOS, promptInstall } = usePWAInstall();
+  const platform = detectPlatform();
+  const isMobile = isMobilePlatform();
+
+  const handleInstall = async () => {
+    if (isInstallable) {
+      const ok = await promptInstall();
+      if (ok) return; // app will reload in standalone mode
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="text-center pb-2">
+          <div className="mx-auto mb-3 h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+            {isMobile
+              ? <Smartphone className="h-8 w-8 text-primary" />
+              : <Monitor className="h-8 w-8 text-primary" />
+            }
+          </div>
+          <CardTitle className="text-xl">Install BreedLog First</CardTitle>
+          <CardDescription className="text-sm mt-1">
+            For the best experience — especially offline in the field — install BreedLog as an app on your device before entering your access code.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {/* iOS Safari */}
+          {platform === "ios" && (
+            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3" data-testid="install-instructions-ios">
+              <p className="text-sm font-semibold">iPhone / iPad (Safari)</p>
+              <ol className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-primary shrink-0">1.</span>
+                  <span>Tap the <Share className="inline h-4 w-4 mx-0.5 text-primary" /> <strong>Share</strong> button at the bottom of Safari</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-primary shrink-0">2.</span>
+                  <span>Scroll down and tap <strong>"Add to Home Screen"</strong> <Plus className="inline h-3.5 w-3.5 mx-0.5" /></span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold text-primary shrink-0">3.</span>
+                  <span>Tap <strong>"Add"</strong> — then open BreedLog from your home screen</span>
+                </li>
+              </ol>
+              <Alert className="py-2">
+                <AlertDescription className="text-xs">
+                  On iPhone, you must use <strong>Safari</strong>. Chrome on iPhone does not support Add to Home Screen.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          {/* Android */}
+          {platform === "android" && (
+            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3" data-testid="install-instructions-android">
+              <p className="text-sm font-semibold">Android Phone (Chrome)</p>
+              {isInstallable ? (
+                <>
+                  <p className="text-sm text-muted-foreground">Tap the button below to install BreedLog directly.</p>
+                  <Button className="w-full" onClick={handleInstall} data-testid="button-install-pwa-android">
+                    <Download className="mr-2 h-4 w-4" />
+                    Install BreedLog
+                  </Button>
+                </>
+              ) : (
+                <ol className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold text-primary shrink-0">1.</span>
+                    <span>Tap the <strong>three-dot menu</strong> (⋮) in Chrome</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold text-primary shrink-0">2.</span>
+                    <span>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold text-primary shrink-0">3.</span>
+                    <span>Tap <strong>"Install"</strong> — then open BreedLog from your home screen</span>
+                  </li>
+                </ol>
+              )}
+            </div>
+          )}
+
+          {/* Desktop Chrome/Edge */}
+          {(platform === "desktop-chrome" || platform === "desktop-edge") && (
+            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3" data-testid="install-instructions-desktop">
+              <p className="text-sm font-semibold">
+                Desktop {platform === "desktop-edge" ? "Edge" : "Chrome"}
+              </p>
+              {isInstallable ? (
+                <>
+                  <p className="text-sm text-muted-foreground">Click the button below to install BreedLog as a desktop app.</p>
+                  <Button className="w-full" onClick={handleInstall} data-testid="button-install-pwa-desktop">
+                    <Download className="mr-2 h-4 w-4" />
+                    Install BreedLog App
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Or look for the <Monitor className="inline h-3.5 w-3.5 mx-0.5" /> install icon in your browser address bar
+                  </p>
+                </>
+              ) : (
+                <ol className="space-y-2 text-sm text-muted-foreground">
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold text-primary shrink-0">1.</span>
+                    <span>Look for the <strong>install icon</strong> <Monitor className="inline h-3.5 w-3.5 mx-0.5" /> in the browser address bar (top right)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold text-primary shrink-0">2.</span>
+                    <span>Click it and select <strong>"Install"</strong></span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-bold text-primary shrink-0">3.</span>
+                    <span>BreedLog opens as a standalone app — use it from there</span>
+                  </li>
+                </ol>
+              )}
+            </div>
+          )}
+
+          {/* Other browser */}
+          {platform === "other" && (
+            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3" data-testid="install-instructions-other">
+              <p className="text-sm font-semibold">Install BreedLog</p>
+              <p className="text-sm text-muted-foreground">
+                For the best experience, open BreedLog in <strong>Chrome</strong> or <strong>Edge</strong> on desktop, or <strong>Safari</strong> on iPhone/iPad, and use the install option in the browser menu.
+              </p>
+            </div>
+          )}
+
+          {/* Why install */}
+          <div className="rounded-lg bg-primary/5 border border-primary/15 p-3">
+            <p className="text-xs font-semibold text-primary mb-1.5">Why install?</p>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              <li className="flex items-center gap-1.5"><span className="text-primary">✓</span> Works fully offline — record data without internet</li>
+              <li className="flex items-center gap-1.5"><span className="text-primary">✓</span> Opens instantly from home screen or dock</li>
+              <li className="flex items-center gap-1.5"><span className="text-primary">✓</span> Syncs automatically when you reconnect</li>
+            </ul>
+          </div>
+
+          <button
+            onClick={() => { markInstallSkipped(); onSkip(); }}
+            className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-2 flex items-center justify-center gap-1"
+            data-testid="button-skip-install"
+          >
+            Skip — continue in browser
+            <ChevronRight className="h-3 w-3" />
+          </button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ============================================================
+// useBetaAccess hook
+// ============================================================
 export function useBetaAccess(deviceId?: string) {
   const queryClient = useQueryClient();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  
+
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -54,10 +279,7 @@ export function useBetaAccess(deviceId?: string) {
       window.removeEventListener("offline", handleOffline);
     };
   }, []);
-  
-  // Always try the server query - don't gate on navigator.onLine
-  // navigator.onLine is unreliable on mobile (reports false even with 4G)
-  // If the fetch fails, React Query error handling + offline fallback kicks in
+
   const { data: accessStatus, isLoading, error, refetch } = useQuery<AccessStatus>({
     queryKey: ["/api/beta/access"],
     enabled: !!deviceId,
@@ -65,55 +287,48 @@ export function useBetaAccess(deviceId?: string) {
     retryDelay: 2000,
     staleTime: 1000 * 60 * 5,
   });
-  
+
   const getOfflineAccess = (): AccessStatus => {
     if (!deviceId) return { hasAccess: false, needsCode: true };
-    
     const stored = getStoredAccess();
     if (!stored || !stored.hasAccess) return { hasAccess: false, needsCode: true };
-    
     const lastCheck = new Date(stored.lastCheck);
     const gracePeriod = OFFLINE_GRACE_DAYS * 24 * 60 * 60 * 1000;
-    
     if (Date.now() - lastCheck.getTime() > gracePeriod) {
-      return { 
-        hasAccess: false, 
-        offlineGraceExpired: true,
-        reason: "Offline grace period expired. Please connect to the internet."
-      };
+      return { hasAccess: false, offlineGraceExpired: true, reason: "Offline grace period expired. Please connect to the internet." };
     }
-    
     return { hasAccess: true };
   };
-  
-  // Determine if we actually got a server response
+
   const serverReachable = !!accessStatus && !error;
-  
+
   useEffect(() => {
     if (accessStatus?.hasAccess && serverReachable) {
       storeAccess(accessStatus.expiresAt);
     }
   }, [accessStatus, serverReachable]);
-  
-  // Use server response if available; fall back to offline check only on actual failure
+
   const effectiveStatus = serverReachable
     ? accessStatus!
     : (error || (!isLoading && !accessStatus))
       ? getOfflineAccess()
       : { hasAccess: false, needsCode: true };
-  
+
   return {
     hasAccess: effectiveStatus.hasAccess,
     needsCode: effectiveStatus.needsCode,
     reason: effectiveStatus.reason,
     offlineGraceExpired: effectiveStatus.offlineGraceExpired,
-    isLoading: isLoading,
+    isLoading,
     isOnline: isOnline || serverReachable,
     refetch,
     queryClient
   };
 }
 
+// ============================================================
+// BetaAccessGate main component
+// ============================================================
 interface BetaAccessGateProps {
   children: React.ReactNode;
   deviceId: string;
@@ -122,36 +337,39 @@ interface BetaAccessGateProps {
 export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
   const queryClient = useQueryClient();
   const { hasAccess, needsCode, reason, offlineGraceExpired, isLoading, isOnline, refetch } = useBetaAccess(deviceId);
-  const [code, setCode] = useState("");
+  const { isInstalled } = usePWAInstall();
+
+  const savedCode = getSavedCode();
+  const [code, setCode] = useState(savedCode);
+  const [rememberCode, setRememberCode] = useState(!!savedCode);
   const [errorMessage, setErrorMessage] = useState("");
   const [isRetrying, setIsRetrying] = useState(false);
+  const [showInstallFirst, setShowInstallFirst] = useState(false);
 
-  // Clear any stale error message whenever the access code screen is first shown.
-  // This prevents a previous session's "Access revoked or expired" reason from the
-  // server appearing as a pre-entry alert before the user has typed anything.
+  // Decide if we should show the install-first screen
+  useEffect(() => {
+    if (!isInstalled && !hasSkippedInstall() && !isLoading) {
+      setShowInstallFirst(true);
+    }
+  }, [isInstalled, isLoading]);
+
   useEffect(() => {
     setErrorMessage("");
   }, []);
-  
+
   const handleRetryConnection = async () => {
     setIsRetrying(true);
     setErrorMessage("");
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
-      const response = await fetch("/api/version", { 
-        signal: controller.signal,
-        cache: "no-store" 
-      });
+      const response = await fetch("/api/version", { signal: controller.signal, cache: "no-store" });
       clearTimeout(timeout);
       if (response.ok) {
-        // Server is reachable - refetch beta access status
-        // This will either grant access (if activation exists) or show invite code screen
         const result = await refetch();
         if (result.data?.hasAccess) {
           storeAccess(result.data.expiresAt);
         }
-        // Force reload to reset all state cleanly
         window.location.reload();
       } else {
         setErrorMessage("Server responded with an error. Please try again.");
@@ -162,54 +380,51 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
       setIsRetrying(false);
     }
   };
-  
+
   const validateMutation = useMutation({
     mutationFn: async (inputCode: string) => {
-      const response = await apiRequest("POST", "/api/beta/validate", { 
-        code: inputCode,
-        deviceId 
-      });
+      const response = await apiRequest("POST", "/api/beta/validate", { code: inputCode, deviceId });
       return response.json();
     },
     onSuccess: (data) => {
       if (data.success) {
-        // Store device token for future API requests (more reliable than cookies)
         if (data.token) {
           setDeviceToken(data.token);
-          console.log("[BetaAccess] Token stored successfully");
         }
         queryClient.invalidateQueries({ queryKey: ["/api/beta/access"] });
         queryClient.invalidateQueries({ queryKey: ["/api/device/info"] });
         storeAccess(data.expiresAt);
+        if (rememberCode) {
+          saveCode(code.trim().toUpperCase());
+        } else {
+          clearSavedCode();
+        }
         setErrorMessage("");
       }
     },
     onError: (err: Error) => {
-      // Extract user-friendly message from error
       let message = err.message || "Invalid access code";
-      // Remove status code prefix if present (e.g., "400: {...")
       if (message.includes('{"message":')) {
         try {
           const jsonStart = message.indexOf('{');
           const json = JSON.parse(message.substring(jsonStart));
           message = json.message || message;
-        } catch {
-          // Keep original message
-        }
+        } catch {}
       } else if (message.match(/^\d{3}:/)) {
         message = message.replace(/^\d{3}:\s*/, '');
       }
       setErrorMessage(message);
     }
   });
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (code.trim()) {
       validateMutation.mutate(code.trim().toUpperCase());
     }
   };
-  
+
+  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -220,11 +435,13 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
       </div>
     );
   }
-  
+
+  // Has access — render the app
   if (hasAccess) {
     return <>{children}</>;
   }
-  
+
+  // Offline grace period expired
   if (offlineGraceExpired) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -244,29 +461,16 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
                 BreedLog works offline for up to {OFFLINE_GRACE_DAYS} days. After that, you need to reconnect to verify your access.
               </AlertDescription>
             </Alert>
-            
             {errorMessage && (
               <Alert variant="destructive">
                 <AlertDescription>{errorMessage}</AlertDescription>
               </Alert>
             )}
-            
-            <Button 
-              onClick={handleRetryConnection} 
-              className="w-full"
-              disabled={isRetrying}
-              data-testid="button-retry-connection"
-            >
+            <Button onClick={handleRetryConnection} className="w-full" disabled={isRetrying} data-testid="button-retry-connection">
               {isRetrying ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Checking Connection...
-                </>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Checking Connection...</>
               ) : (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Retry Connection
-                </>
+                <><RefreshCw className="mr-2 h-4 w-4" />Retry Connection</>
               )}
             </Button>
           </CardContent>
@@ -274,8 +478,13 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
       </div>
     );
   }
-  
-  // Show access code entry screen
+
+  // Show install-first screen if running in browser (not installed) and not yet skipped
+  if (showInstallFirst) {
+    return <InstallFirstScreen onSkip={() => setShowInstallFirst(false)} />;
+  }
+
+  // Access code entry screen
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
@@ -290,7 +499,7 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
+            <div className="space-y-1.5">
               <Input
                 type="text"
                 placeholder="Enter your access code"
@@ -300,36 +509,49 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
                 maxLength={16}
                 data-testid="input-access-code"
                 autoComplete="off"
-                autoFocus
+                autoFocus={!savedCode}
               />
+              {savedCode && code === savedCode && (
+                <p className="text-xs text-center text-muted-foreground">
+                  Saved code pre-filled.{" "}
+                  <button
+                    type="button"
+                    className="underline hover:text-foreground transition-colors"
+                    onClick={() => { clearSavedCode(); setCode(""); setRememberCode(false); }}
+                  >
+                    Clear
+                  </button>
+                </p>
+              )}
             </div>
-            
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="remember-code"
+                checked={rememberCode}
+                onCheckedChange={(v) => setRememberCode(!!v)}
+                data-testid="checkbox-remember-code"
+              />
+              <Label htmlFor="remember-code" className="text-sm text-muted-foreground cursor-pointer select-none">
+                Remember my access code on this device
+              </Label>
+            </div>
+
             {errorMessage && (
               <Alert variant="destructive">
                 <AlertDescription>{errorMessage}</AlertDescription>
               </Alert>
             )}
-            
-            <Button 
-              type="submit" 
-              className="w-full" 
-              disabled={!code.trim() || validateMutation.isPending}
-              data-testid="button-validate-code"
-            >
+
+            <Button type="submit" className="w-full" disabled={!code.trim() || validateMutation.isPending} data-testid="button-validate-code">
               {validateMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Validating...
-                </>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Validating...</>
               ) : (
-                <>
-                  <Lock className="mr-2 h-4 w-4" />
-                  Activate Access
-                </>
+                <><Lock className="mr-2 h-4 w-4" />Activate Access</>
               )}
             </Button>
           </form>
-          
+
           <p className="text-xs text-muted-foreground text-center mt-4">
             Don't have a code? Contact the BreedLog team to request beta access.
           </p>

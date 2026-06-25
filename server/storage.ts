@@ -18,6 +18,8 @@ import {
   inviteCodes,
   userActivations,
   systemSettings,
+  fieldIssues,
+  type FieldIssue,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -176,6 +178,12 @@ export interface IStorage {
   // System Settings (global app config)
   getSystemSetting(key: string): Promise<string | undefined>;
   setSystemSetting(key: string, value: string, description?: string): Promise<void>;
+
+  // Field Test Issue Reports
+  createFieldIssue(data: { userId?: string; inviteCodeRef?: string; title: string; description: string; area: string; severity: string; deviceType?: string; appMode?: string; contactName?: string; currentRoute?: string; appVersion?: string }): Promise<import("@shared/schema").FieldIssue>;
+  getFieldIssues(filters?: { status?: string; severity?: string; area?: string; search?: string }): Promise<import("@shared/schema").FieldIssue[]>;
+  getFieldIssue(id: number): Promise<import("@shared/schema").FieldIssue | undefined>;
+  updateFieldIssue(id: number, updates: { status?: string; adminNotes?: string; emailSent?: boolean }): Promise<import("@shared/schema").FieldIssue | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -765,6 +773,53 @@ export class DatabaseStorage implements IStorage {
         set: { value, updatedAt: new Date() }
       });
   }
+
+  // === FIELD TEST ISSUES ===
+  async createFieldIssue(data: { userId?: string; inviteCodeRef?: string; title: string; description: string; area: string; severity: string; deviceType?: string; appMode?: string; contactName?: string; currentRoute?: string; appVersion?: string }): Promise<FieldIssue> {
+    const [issue] = await db.insert(fieldIssues).values({
+      userId: data.userId || null,
+      inviteCodeRef: data.inviteCodeRef || null,
+      title: data.title,
+      description: data.description,
+      area: data.area,
+      severity: data.severity,
+      deviceType: data.deviceType || null,
+      appMode: data.appMode || null,
+      contactName: data.contactName || null,
+      currentRoute: data.currentRoute || null,
+      appVersion: data.appVersion || null,
+      status: "new",
+      emailSent: false,
+    }).returning();
+    return issue;
+  }
+
+  async getFieldIssues(filters?: { status?: string; severity?: string; area?: string; search?: string }): Promise<FieldIssue[]> {
+    let query = db.select().from(fieldIssues).$dynamic();
+    const conditions = [];
+    if (filters?.status) conditions.push(eq(fieldIssues.status, filters.status));
+    if (filters?.severity) conditions.push(eq(fieldIssues.severity, filters.severity));
+    if (filters?.area) conditions.push(eq(fieldIssues.area, filters.area));
+    if (filters?.search) {
+      const s = `%${filters.search}%`;
+      conditions.push(or(ilike(fieldIssues.title, s), ilike(fieldIssues.description, s)));
+    }
+    if (conditions.length > 0) query = query.where(and(...conditions));
+    return query.orderBy(desc(fieldIssues.createdAt));
+  }
+
+  async getFieldIssue(id: number): Promise<FieldIssue | undefined> {
+    const [issue] = await db.select().from(fieldIssues).where(eq(fieldIssues.id, id));
+    return issue;
+  }
+
+  async updateFieldIssue(id: number, updates: { status?: string; adminNotes?: string; emailSent?: boolean }): Promise<FieldIssue | undefined> {
+    const [updated] = await db.update(fieldIssues)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(fieldIssues.id, id))
+      .returning();
+    return updated;
+  }
 }
 
 class InMemoryStorage implements IStorage {
@@ -990,6 +1045,32 @@ class InMemoryStorage implements IStorage {
   async updateUserLastSeen(_userId: string): Promise<void> {}
   async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
   async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }
+
+  private fieldIssueSeq = 1;
+  private fieldIssuesMap = new Map<number, FieldIssue>();
+  async createFieldIssue(data: { userId?: string; inviteCodeRef?: string; title: string; description: string; area: string; severity: string; deviceType?: string; appMode?: string; contactName?: string; currentRoute?: string; appVersion?: string }): Promise<FieldIssue> {
+    const id = this.fieldIssueSeq++;
+    const now = this.now();
+    const issue: FieldIssue = { id, status: "new", adminNotes: null, emailSent: false, createdAt: now, updatedAt: now, userId: data.userId || null, inviteCodeRef: data.inviteCodeRef || null, title: data.title, description: data.description, area: data.area, severity: data.severity, deviceType: data.deviceType || null, appMode: data.appMode || null, contactName: data.contactName || null, currentRoute: data.currentRoute || null, appVersion: data.appVersion || null };
+    this.fieldIssuesMap.set(id, issue);
+    return issue;
+  }
+  async getFieldIssues(filters?: { status?: string; severity?: string; area?: string; search?: string }): Promise<FieldIssue[]> {
+    let results = [...this.fieldIssuesMap.values()];
+    if (filters?.status) results = results.filter(i => i.status === filters.status);
+    if (filters?.severity) results = results.filter(i => i.severity === filters.severity);
+    if (filters?.area) results = results.filter(i => i.area === filters.area);
+    if (filters?.search) { const s = filters.search.toLowerCase(); results = results.filter(i => i.title.toLowerCase().includes(s) || i.description.toLowerCase().includes(s)); }
+    return results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }
+  async getFieldIssue(id: number): Promise<FieldIssue | undefined> { return this.fieldIssuesMap.get(id); }
+  async updateFieldIssue(id: number, updates: { status?: string; adminNotes?: string; emailSent?: boolean }): Promise<FieldIssue | undefined> {
+    const issue = this.fieldIssuesMap.get(id);
+    if (!issue) return undefined;
+    const updated = { ...issue, ...updates, updatedAt: this.now() } as FieldIssue;
+    this.fieldIssuesMap.set(id, updated);
+    return updated;
+  }
 }
 
 export const storage = process.env.USE_IN_MEMORY_STORAGE === "1"

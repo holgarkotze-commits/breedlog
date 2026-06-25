@@ -1548,13 +1548,29 @@ export default function Settings() {
             <p className="text-xs text-muted-foreground">
               Report issues with version, device, browser, screen, steps, online/offline state, and screenshot/video when possible.
             </p>
-            <a
-              href={`mailto:support@breedlog.app?subject=${encodeURIComponent(`[${FIELD_TEST_VERSION_LABEL}] Field Test Issue`)}`}
-              className="inline-flex items-center text-primary underline text-sm"
-              data-testid="link-report-field-test-issue"
-            >
-              Report Issue by Email
-            </a>
+            <div className="flex flex-col gap-2 pt-1">
+              <a
+                href="/report-issue"
+                className="inline-flex items-center gap-1.5 text-primary underline text-sm font-medium"
+                data-testid="link-report-field-test-issue"
+              >
+                Report an Issue (in-app form)
+              </a>
+              <a
+                href={`mailto:support@breedlog.app?subject=${encodeURIComponent(`[${FIELD_TEST_VERSION_LABEL}] Field Test Issue`)}`}
+                className="inline-flex items-center text-muted-foreground underline text-xs"
+                data-testid="link-report-field-test-issue-email"
+              >
+                Or report by email
+              </a>
+              <a
+                href="/help"
+                className="inline-flex items-center gap-1.5 text-primary underline text-sm font-medium"
+                data-testid="link-help-center"
+              >
+                Help & Information
+              </a>
+            </div>
           </CardContent>
         </Card>
 

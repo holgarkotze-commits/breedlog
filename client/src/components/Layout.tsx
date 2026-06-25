@@ -14,6 +14,7 @@ import {
   Shield,
   X,
   Bot,
+  HelpCircle,
 } from "lucide-react";
 import { useAIStatus } from "@/hooks/use-ai-status";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/health", icon: Syringe, label: "Health" },
     { href: "/records", icon: FileText, label: "Records" },
     { href: "/settings", icon: Settings, label: "Settings" },
+    { href: "/help", icon: HelpCircle, label: "Help & Info" },
   ];
 
   // Mobile bottom-bar primary tabs (5 max for thumb-reach comfort).
@@ -122,6 +124,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/health", icon: Syringe, label: "Health" },
     { href: "/records", icon: FileText, label: "Records" },
     { href: "/settings", icon: Settings, label: "Settings" },
+    { href: "/help", icon: HelpCircle, label: "Help & Info" },
     { href: "/admin", icon: Shield, label: "Admin" },
   ];
 
@@ -129,6 +132,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     location === "/health" ||
     location === "/records" ||
     location === "/settings" ||
+    location === "/help" ||
+    location === "/report-issue" ||
     location.startsWith("/admin");
 
   const displayName = farmSettings?.studName || farmSettings?.farmName || null;
