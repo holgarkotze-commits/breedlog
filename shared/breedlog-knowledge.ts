@@ -123,18 +123,15 @@ Your access code is only stored on your own device. BreedLog does not share your
   },
   {
     id: "my-herd",
-    title: "My Herd and Active Animal Count",
+    title: "My Herd",
     category: "My Herd",
     audience: "farmer",
-    summary: "What My Herd shows, how active animal counts work, and the difference between My Herd and farm records.",
+    summary: "My Herd shows your current animals on farm. The count always reflects active animals only.",
     body: `**What is My Herd?**
-My Herd is your main animal list. It shows all animals recorded in BreedLog for your farm.
+My Herd shows your current animals on farm — the animals that are here right now.
 
-**What does "active" mean?**
-Active animals are those with status "Active" — meaning they are currently on your farm. Animals you have marked as Culled, Sold, or Deceased are no longer shown in My Herd's default view.
-
-**Active animal count:**
-The count shown at the top of My Herd is your active animals only. This is the number of animals currently on your farm. Culled, sold, and deceased animals are tracked separately in the Records tab.
+**What does the count mean?**
+The count at the top of My Herd is your active animals only. This is always your current farm count. It only changes when you add a new animal or mark one as sold, culled, or deceased.
 
 **My Herd starts minimized:**
 When you open My Herd, the animal list may start collapsed into summary cards. Tap a card or use the expand button to see the full list.
@@ -142,20 +139,17 @@ When you open My Herd, the animal list may start collapsed into summary cards. T
 **Filtering:**
 You can filter by sex (rams, ewes, lambs), classification (stud, commercial), and status. Use the search bar to find animals by tag ID or name.
 
-**Why might my count be different from farm records?**
-Farm records include all animals ever recorded, including culled, sold, and deceased. My Herd shows only active animals. The Data tab reports on historical records including removed animals.
-
-**Quick tip:**
-If you cannot find an animal, check the Records tab → Culled, Sold, or Deceased sections. The animal may have been removed from active status.`,
+**Can't find an animal?**
+If you cannot find an animal, check the Records tab → Culled, Sold, or Deceased sections. The animal may have been removed from your active herd.`,
     relatedAppArea: "animals",
     keywords: ["my herd", "active", "count", "animals", "filter", "status", "culled", "sold", "deceased"],
     suggestedQuestions: [
-      "Why is my active animal count different from farm records?",
       "Why can't I see a sold animal in My Herd?",
-      "How many active animals are on the farm?",
+      "How do I find a culled animal?",
       "What does 'active' mean in BreedLog?",
+      "How do I filter by rams or ewes?",
     ],
-    lastUpdated: "2026-06-01",
+    lastUpdated: "2026-06-25",
   },
   {
     id: "add-edit-animals",
@@ -904,7 +898,7 @@ A: Yes. BreedLog exports PDF and CSV files. JSON export is not supported. Export
 A: Sold/removed animals are moved out of My Herd. Go to Records → Sold/Removed to find them.
 
 **Q: What is the difference between My Herd and Data?**
-A: My Herd shows your current active animals. The Data tab shows historical performance analysis across all your records, including removed animals.
+A: My Herd is your current farm — animals on the property right now. The Data tab is your analytics centre — it analyses your recorded breeding, growth, and health data to surface performance insights.
 
 **Q: How do I add a ram?**
 A: Go to My Herd → Add Animal → set Sex to "Ram" and choose a ram classification.

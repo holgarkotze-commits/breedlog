@@ -63,7 +63,6 @@ export const QUESTION_BANK: QuestionChip[] = [
 
   // ---- App Help (knowledge) ----
   { id: "help-herd-vs-data", label: "My Herd vs Data tab?", questionText: "What is the difference between My Herd and Data?", answerSourceType: "knowledge", requiredKnowledgeIds: ["my-herd", "data-tab"], requiredDataCapabilities: [], appArea: "app-help", enabled: true },
-  { id: "help-active-count", label: "Why is my count different?", questionText: "Why is my active animal count different from farm records?", answerSourceType: "knowledge", requiredKnowledgeIds: ["my-herd"], requiredDataCapabilities: [], appArea: "app-help", enabled: true },
   { id: "help-add-ram", label: "How to add a ram?", questionText: "How do I add a ram?", answerSourceType: "knowledge", requiredKnowledgeIds: ["rams"], requiredDataCapabilities: [], appArea: "app-help", enabled: true },
   { id: "help-record-lambing", label: "How to record a ewe lambing?", questionText: "How do I record a ewe lambing?", answerSourceType: "knowledge", requiredKnowledgeIds: ["breeding", "productivity-logs"], requiredDataCapabilities: [], appArea: "app-help", enabled: true },
   { id: "help-mating-group", label: "How to create a mating group?", questionText: "How do I create a mating group?", answerSourceType: "knowledge", requiredKnowledgeIds: ["mating-groups"], requiredDataCapabilities: [], appArea: "app-help", enabled: true },

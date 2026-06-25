@@ -40,9 +40,6 @@ export default function Dashboard() {
   // Ewes = female animals 8 months or older and active
   // Rams = male animals 8 months or older and active
   const activeAnimals = animals?.filter(a => a.status === 'active').length || 0;
-  const soldAnimals = animals?.filter(a => a.status === 'sold').length || 0;
-  const deadAnimals = animals?.filter(a => a.status === 'dead').length || 0;
-  const culledAnimals = animals?.filter(a => a.status === 'culled').length || 0;
   
   // Helper function to check if animal is under 8 months old (240 days)
   const isLamb = (animal: { birthDate?: string | null; status?: string | null }) => {
@@ -262,26 +259,21 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {!loadingAnimals && (
-                  <div className="mt-2 md:mt-3 pt-2 border-t border-border/50 grid grid-cols-2 gap-1 text-[10px] md:text-xs">
+                  <div className="mt-2 md:mt-3 pt-2 border-t border-border/50 grid grid-cols-3 gap-1 text-[10px] md:text-xs">
                     <div className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-green-500 shrink-0"></span>
-                      <span className="text-muted-foreground">Active:</span>
-                      <span className="font-bold text-foreground">{activeAnimals}</span>
+                      <span className="w-2 h-2 rounded-full bg-primary shrink-0"></span>
+                      <span className="text-muted-foreground">Rams:</span>
+                      <span className="font-bold text-foreground">{activeRams}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
-                      <span className="text-muted-foreground">Sold:</span>
-                      <span className="font-bold text-foreground">{soldAnimals}</span>
+                      <span className="w-2 h-2 rounded-full bg-pink-500 shrink-0"></span>
+                      <span className="text-muted-foreground">Ewes:</span>
+                      <span className="font-bold text-foreground">{activeEwes}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
-                      <span className="text-muted-foreground">Dead:</span>
-                      <span className="font-bold text-foreground">{deadAnimals}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0"></span>
-                      <span className="text-muted-foreground">Culled:</span>
-                      <span className="font-bold text-foreground">{culledAnimals}</span>
+                      <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                      <span className="text-muted-foreground">Lambs:</span>
+                      <span className="font-bold text-foreground">{totalAnimals - activeRams - activeEwes}</span>
                     </div>
                   </div>
                 )}

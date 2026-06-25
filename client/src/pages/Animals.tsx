@@ -1433,7 +1433,7 @@ export default function Animals() {
             {displayName ? `${displayName} - My Herd` : "My Herd"} ({herdCounts.activeHerdAnimals})
           </h1>
           <p className="text-xs text-muted-foreground" data-testid="herd-count-summary">
-            Active animals on farm: {herdCounts.activeHerdAnimals} · Farm records: {herdCounts.totalFarmRecords} · Archive: {herdCounts.archiveAnimals}
+            {herdCounts.activeHerdAnimals} active {herdCounts.activeHerdAnimals === 1 ? "animal" : "animals"} on farm
           </p>
           <div className="flex flex-wrap gap-2 items-center">
             <DropdownMenu>
@@ -1733,7 +1733,7 @@ export default function Animals() {
           {safeFilteredAnimals.length > 0 && (
             <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <p className="text-xs text-muted-foreground" data-testid="animals-visible-count">
-                Showing {visibleAnimals.length} of {safeFilteredAnimals.length} filtered animals ({allAnimals?.length || 0} total)
+                Showing {visibleAnimals.length} of {safeFilteredAnimals.length} animals
               </p>
               {hasMoreFilteredAnimals && (
                 <Button
