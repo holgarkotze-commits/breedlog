@@ -180,7 +180,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <div className="rounded-lg border border-white/10 bg-black/20 p-3 backdrop-blur-sm">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-mono text-slate-100/75">BreedLog v1.0.0</p>
-              <SyncStatusBadge />
+              <div className="flex items-center gap-1.5">
+                <SyncStatusBadge />
+                <GlobalRefreshButton location="sidebar" />
+              </div>
             </div>
             <NetworkStatusIndicator />
             <p className="mt-2 text-center text-[10px] font-medium tracking-wide text-cyan-100/70">Breeding Livestock Management</p>
