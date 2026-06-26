@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
 import { Layout } from "@/components/Layout";
-import { useAnimals, useCreateAnimal, useDeleteAnimal, useRemoveFromHerd, useClassifyRamLamb, useConfirmCull, useMoveToEwes, useMoveToRams, useUpdateAnimal } from "@/hooks/use-animals";
+import { useAnimals, useCreateAnimal, useDeleteAnimal, useRemoveFromHerd, useClassifyRamLamb, useConfirmCull, useMoveToEwes, useMoveToRams, useUpdateAnimal, useSetRamType } from "@/hooks/use-animals";
+import { buildBreedLogCsvRows, buildBreedLogCsvContent } from "@shared/import-export";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useBreedingEvents } from "@/hooks/use-breeding";
 import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
@@ -1643,7 +1644,7 @@ export default function Animals() {
                 <Input className="h-8 w-[140px]" value={bulkValue} onChange={(e) => setBulkValue(e.target.value)} placeholder="Value/input" data-testid="input-bulk-value" />
                 <Button size="sm" onClick={() => { if (window.confirm(`Apply ${bulkAction} to ${selectedAnimalIds.length} selected animals?`)) runBulkAction(); }} disabled={!bulkAction || selectedAnimalIds.length === 0} data-testid="button-confirm-bulk-open">Apply</Button>
               </div>
-              {bulkAction === "record-weight" && <p className="text-[10px] text-muted-foreground mt-1" data-testid="bulk-weight-rule">Apply same weight to all selected animals (explicit action). No automatic average-to-individual overwrite.</p>}
+              {bulkAction === "record-weight" && <p className="text-xs text-muted-foreground mt-1" data-testid="bulk-weight-rule">Apply same weight to all selected animals (explicit action). No automatic average-to-individual overwrite.</p>}
             </div>
           )}
           {isLoading ? (
@@ -1672,7 +1673,7 @@ export default function Animals() {
                       </div>
                     )}
                   </div>
-                  <p className="text-[10px] text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
+                  <p className="text-xs text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
                 </Link>
               ))}
               {safeFilteredAnimals.length === 0 && (
@@ -1955,7 +1956,8 @@ function RamsSection({
   const [showWeightDialog, setShowWeightDialog] = useState(false);
   const [weightValue, setWeightValue] = useState("");
   const [weightType, setWeightType] = useState<"100" | "270" | "current">("current");
-  
+  const setRamTypeMutation = useSetRamType();
+
   const handleSaveWeight = () => {
     if (!selectedAnimal || !weightValue) return;
     const today = format(new Date(), "yyyy-MM-dd");
@@ -1977,12 +1979,8 @@ function RamsSection({
     });
   };
   
-  const handleClassify = (animal: Animal, classification: string) => {
-    classifyMutation.mutate({ id: animal.id, ramLambClass: classification }, {
-      onSuccess: () => {
-        toast({ title: "Classification Updated", description: `${animal.tagId} marked as ${classification}` });
-      }
-    });
+  const handleClassify = (animal: Animal, ramType: 'breeding_ram' | 'stud_ram' | 'commercial_ram') => {
+    setRamTypeMutation.mutate({ id: animal.id, ramType });
   };
   
   // Helper: check if animal is under 8 months old (240 days = lamb)
@@ -2024,17 +2022,41 @@ function RamsSection({
   const studCount = allRams.filter(r => r.ramType === 'stud_ram').length;
   const commercialCount = allRams.filter(r => r.ramType === 'commercial_ram').length;
 
+  const handleExportCsv = () => {
+    const rows = buildBreedLogCsvRows(rams);
+    const csv = buildBreedLogCsvContent(rows);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `breedlog-rams-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const exportButton = (
-    <Button 
-      variant="default" 
-      size="sm"
-      onClick={onExport}
-      disabled={rams.length === 0}
-      data-testid="button-export-rams-section"
-    >
-      <Download className="w-4 h-4 mr-2" />
-      Export PDF
-    </Button>
+    <div className="flex gap-1.5">
+      <Button 
+        variant="outline" 
+        size="sm"
+        onClick={handleExportCsv}
+        disabled={rams.length === 0}
+        data-testid="button-export-rams-csv"
+      >
+        <FileText className="w-4 h-4 mr-1.5" />
+        CSV
+      </Button>
+      <Button 
+        variant="default" 
+        size="sm"
+        onClick={onExport}
+        disabled={rams.length === 0}
+        data-testid="button-export-rams-section"
+      >
+        <Download className="w-4 h-4 mr-1.5" />
+        PDF
+      </Button>
+    </div>
   );
 
   return (
@@ -2134,7 +2156,7 @@ function RamsSection({
                   </td>
                   <td className="p-2.5 font-semibold">{ram.tagId}</td>
                   <td className="p-2.5 hidden sm:table-cell">
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-xs">
                       {ram.ramType === 'breeding_ram' ? 'Breeding' : 
                        ram.ramType === 'stud_ram' ? 'Stud' : 
                        ram.ramType === 'commercial_ram' ? 'Commercial' : '—'}
@@ -2151,8 +2173,8 @@ function RamsSection({
                   <td className="p-2.5 text-center hidden md:table-cell">{ram.stats.avgWeanWeight || "—"}</td>
                   <td className="p-2.5">
                     <Badge variant="secondary" className={cn(
-                      "text-[10px] px-1.5",
-                      ram.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-red-900/80 text-red-100"
+                      "text-xs px-1.5",
+                      ram.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-secondary text-foreground"
                     )}>
                       {ram.status}
                     </Badge>
@@ -2176,17 +2198,17 @@ function RamsSection({
                           <Scale className="w-4 h-4 mr-2" />
                           Record Weight
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleClassify(ram, 'stud')} data-testid={`ram-stud-${ram.id}`}>
+                        <DropdownMenuItem onClick={() => handleClassify(ram, 'breeding_ram')} data-testid={`ram-breeding-${ram.id}`}>
                           <Tag className="w-4 h-4 mr-2" />
-                          Mark as Stud
+                          Mark as Breeding Ram
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleClassify(ram, 'commercial')} data-testid={`ram-commercial-${ram.id}`}>
+                        <DropdownMenuItem onClick={() => handleClassify(ram, 'stud_ram')} data-testid={`ram-stud-${ram.id}`}>
                           <Tag className="w-4 h-4 mr-2" />
-                          Mark as Commercial
+                          Mark as Stud Ram
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleClassify(ram, 'slaughter_cull')} data-testid={`ram-cull-${ram.id}`}>
+                        <DropdownMenuItem onClick={() => handleClassify(ram, 'commercial_ram')} data-testid={`ram-commercial-${ram.id}`}>
                           <Tag className="w-4 h-4 mr-2" />
-                          Mark for Cull
+                          Mark as Commercial Ram
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -2342,17 +2364,41 @@ function EwesSection({
     return { ...ewe, stats };
   });
 
+  const handleExportEwesCsv = () => {
+    const rows = buildBreedLogCsvRows(ewes);
+    const csv = buildBreedLogCsvContent(rows);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `breedlog-ewes-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const exportButton = (
-    <Button 
-      variant="default" 
-      size="sm"
-      onClick={onExport}
-      disabled={ewes.length === 0}
-      data-testid="button-export-ewes-section"
-    >
-      <Download className="w-4 h-4 mr-2" />
-      Export PDF
-    </Button>
+    <div className="flex gap-1.5">
+      <Button 
+        variant="outline" 
+        size="sm"
+        onClick={handleExportEwesCsv}
+        disabled={ewes.length === 0}
+        data-testid="button-export-ewes-csv"
+      >
+        <FileText className="w-4 h-4 mr-1.5" />
+        CSV
+      </Button>
+      <Button 
+        variant="default" 
+        size="sm"
+        onClick={onExport}
+        disabled={ewes.length === 0}
+        data-testid="button-export-ewes-section"
+      >
+        <Download className="w-4 h-4 mr-1.5" />
+        PDF
+      </Button>
+    </div>
   );
 
   return (
@@ -2450,7 +2496,7 @@ function EwesSection({
                   <td className="p-2.5">
                     <Badge 
                       variant={ewe.status === 'active' ? "default" : "secondary"}
-                      className="text-[10px] px-1.5"
+                      className="text-xs px-1.5"
                       data-testid={`badge-ewe-status-${ewe.id}`}
                     >
                       {ewe.status}
@@ -2671,17 +2717,41 @@ function LambsSection({
     });
   };
 
+  const handleExportLambsCsv = () => {
+    const rows = buildBreedLogCsvRows(lambs);
+    const csv = buildBreedLogCsvContent(rows);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `breedlog-lambs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const exportButton = (
-    <Button 
-      variant="default" 
-      size="sm"
-      onClick={onExport}
-      disabled={lambs.length === 0}
-      data-testid="button-export-lambs-section"
-    >
-      <Download className="w-4 h-4 mr-2" />
-      Export PDF
-    </Button>
+    <div className="flex gap-1.5">
+      <Button 
+        variant="outline" 
+        size="sm"
+        onClick={handleExportLambsCsv}
+        disabled={lambs.length === 0}
+        data-testid="button-export-lambs-csv"
+      >
+        <FileText className="w-4 h-4 mr-1.5" />
+        CSV
+      </Button>
+      <Button 
+        variant="default" 
+        size="sm"
+        onClick={onExport}
+        disabled={lambs.length === 0}
+        data-testid="button-export-lambs-section"
+      >
+        <Download className="w-4 h-4 mr-1.5" />
+        PDF
+      </Button>
+    </div>
   );
 
   return (
@@ -2805,7 +2875,7 @@ function LambsSection({
                       {lamb.weight100Day ? (
                         `${lamb.weight100Day} kg`
                       ) : needs100Day ? (
-                        <Badge variant="outline" className="text-[10px]" data-testid={`badge-100day-due-${lamb.id}`}>
+                        <Badge variant="outline" className="text-xs" data-testid={`badge-100day-due-${lamb.id}`}>
                           Due
                         </Badge>
                       ) : "—"}
@@ -2814,7 +2884,7 @@ function LambsSection({
                       {lamb.weight270Day ? (
                         `${lamb.weight270Day} kg`
                       ) : needs270Day ? (
-                        <Badge variant="outline" className="text-[10px]" data-testid={`badge-270day-due-${lamb.id}`}>
+                        <Badge variant="outline" className="text-xs" data-testid={`badge-270day-due-${lamb.id}`}>
                           Due
                         </Badge>
                       ) : "—"}
@@ -2822,12 +2892,12 @@ function LambsSection({
                     <td className="p-2.5">
                       <Badge 
                         variant={stage.needsAttention ? "destructive" : "secondary"}
-                        className="text-[10px] px-1.5"
+                        className="text-xs px-1.5"
                         data-testid={`badge-lamb-status-${lamb.id}`}
                       >
                         {stage.label}
                       </Badge>
-                      <div className="text-[10px] text-muted-foreground mt-1 max-w-[220px] truncate" title={`${stage.reason} Next: ${stage.nextAction}`}>
+                      <div className="text-xs text-muted-foreground mt-1 max-w-[220px] truncate" title={`${stage.reason} Next: ${stage.nextAction}`}>
                         {stage.reason}
                       </div>
                     </td>
@@ -3057,17 +3127,41 @@ function CulledSection({
 
   const allCulled = allAnimals.filter(a => a.status === 'culled' || a.cullConfirmed === true);
 
+  const handleExportCulledCsv = () => {
+    const rows = buildBreedLogCsvRows(allCulled);
+    const csv = buildBreedLogCsvContent(rows);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `breedlog-culled-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const exportButton = (
-    <Button
-      variant="default"
-      size="sm"
-      onClick={onExport}
-      disabled={allCulled.length === 0}
-      data-testid="button-export-culled-section"
-    >
-      <Download className="w-4 h-4 mr-2" />
-      Export PDF
-    </Button>
+    <div className="flex gap-1.5">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleExportCulledCsv}
+        disabled={allCulled.length === 0}
+        data-testid="button-export-culled-csv"
+      >
+        <FileText className="w-4 h-4 mr-1.5" />
+        CSV
+      </Button>
+      <Button
+        variant="default"
+        size="sm"
+        onClick={onExport}
+        disabled={allCulled.length === 0}
+        data-testid="button-export-culled-section"
+      >
+        <Download className="w-4 h-4 mr-1.5" />
+        PDF
+      </Button>
+    </div>
   );
 
   if (isLoading) {
@@ -3131,7 +3225,7 @@ function CulledSection({
                     <td className="p-2.5 font-semibold">
                       <div className="flex items-center gap-2 flex-wrap">
                         {animal.tagId}
-                        <Badge variant="outline" className="text-[10px] px-1.5 border-yellow-500/50 text-yellow-500">CULLED</Badge>
+                        <Badge variant="outline" className="text-xs px-1.5 border-yellow-500/50 text-yellow-500">CULLED</Badge>
                       </div>
                     </td>
                     <td className="p-2.5 capitalize hidden sm:table-cell">{animal.sex || "—"}</td>
@@ -3183,8 +3277,8 @@ function ListRow({ animal, idx, selectionMode, isSelected, onToggleSelect, onLon
       </td>
       <td className="p-2.5">
         <Badge variant="secondary" className={cn(
-          "text-[10px] px-1.5",
-          animal.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-red-900/80 text-red-100"
+          "text-xs px-1.5",
+          animal.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-secondary text-foreground"
         )}>
           {animal.status}
         </Badge>
@@ -3225,14 +3319,14 @@ function AnimalListRow({ animal, selectionMode, isSelected, onToggleSelect, onLo
             <div className="flex items-center gap-1.5">
               <span className="font-semibold text-sm truncate">{animal.tagId}</span>
               <Badge variant="secondary" className={cn(
-                "text-[10px] px-1.5",
-                animal.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-red-900/80 text-red-100"
+                "text-xs px-1.5",
+                animal.status === 'active' ? "bg-green-900/80 text-green-100" : "bg-secondary text-foreground"
               )}>
                 {animal.status}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground truncate">{animal.breed || "Meatmaster"}</p>
-            <p className="text-[10px] text-muted-foreground truncate">
+            <p className="text-xs text-muted-foreground truncate">
               Source: {animal.animalSource === "born_on_farm" ? "Born on farm" : animal.animalSource === "bought_in" ? "Bought in" : "Unknown / not recorded"}
             </p>
           </div>
@@ -3480,11 +3574,11 @@ function CreateAnimalDialog({
                       <Input placeholder="e.g. 24-001" className="rugged-input" data-testid="input-tag-id" {...field} />
                     </FormControl>
                     {studPrefix ? (
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         Display tag preview: <strong>{normalizedTagPreview || "—"}</strong>
                       </p>
                     ) : (
-                      <p className="text-[11px] text-amber-600">
+                      <p className="text-xs text-amber-600">
                         Set stud prefix in Farm Details to apply automatic prefix normalization.
                       </p>
                     )}
@@ -3719,7 +3813,7 @@ function CreateAnimalDialog({
                       </SelectContent>
                     </Select>
                     {(birthStatus !== "twin" && birthStatus !== "triplet") && (
-                      <p className="text-[10px] text-muted-foreground">Only applicable for twin/triplet births</p>
+                      <p className="text-xs text-muted-foreground">Only applicable for twin/triplet births</p>
                     )}
                     <FormMessage />
                   </FormItem>

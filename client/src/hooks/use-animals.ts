@@ -761,6 +761,39 @@ export function useClassifyRamLamb() {
   });
 }
 
+export function useSetRamType() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, ramType }: { id: number; ramType: 'breeding_ram' | 'stud_ram' | 'commercial_ram' }) => {
+      const { getDeviceToken } = await import("@/lib/queryClient");
+      const token = getDeviceToken();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`/api/animals/${id}/move-to-rams`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ ramType }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to set ram type");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] === api.animals.list.path
+      });
+      queryClient.invalidateQueries({ queryKey: [api.animals.get.path, data.id] });
+      const label = data.ramType === 'breeding_ram' ? 'Breeding Ram' : data.ramType === 'stud_ram' ? 'Stud Ram' : 'Commercial Ram';
+      toast({ title: "Ram Type Updated", description: `${data.tagId} classified as ${label}` });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useMoveToEwes() {
   const queryClient = useQueryClient();
   const { toast } = useToast();

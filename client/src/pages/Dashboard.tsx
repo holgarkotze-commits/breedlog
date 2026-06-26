@@ -6,8 +6,8 @@ import { useTheme } from "@/components/ThemeProvider";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
-import { Clock, Beef, Dna, Settings, ChevronRight, Heart, Shield, BarChart3, PlusCircle } from "lucide-react";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend } from "recharts";
+import { Clock, Beef, Dna, Settings, ChevronRight, Heart, Shield, BarChart3, PlusCircle, TrendingUp, Award, Scale, Baby } from "lucide-react";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend, PieChart, Pie, Cell } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -62,9 +62,44 @@ export default function Dashboard() {
     a.status === 'active' && 
     !isLamb(a)
   ).length || 0;
-  
+
+  // Active lambs
+  const activeLambs = animals?.filter(a => a.status === 'active' && isLamb(a)).length || 0;
+
   // Total herd = all active animals
   const totalAnimals = activeAnimals;
+
+  // Key Performance Metrics
+  const animalsWithBirthWeight = animals?.filter(a => a.birthWeight) || [];
+  const avgBirthWeight = animalsWithBirthWeight.length > 0
+    ? (animalsWithBirthWeight.reduce((s, a) => s + parseFloat(a.birthWeight || '0'), 0) / animalsWithBirthWeight.length).toFixed(1)
+    : null;
+
+  const animalsWithWeanWeight = animals?.filter(a => a.weight100Day) || [];
+  const avgWeanWeight = animalsWithWeanWeight.length > 0
+    ? (animalsWithWeanWeight.reduce((s, a) => s + parseFloat(a.weight100Day || '0'), 0) / animalsWithWeanWeight.length).toFixed(1)
+    : null;
+
+  const currentYear = new Date().getFullYear();
+  const lambsThisYear = animals?.filter(a => a.birthDate && new Date(a.birthDate).getFullYear() === currentYear).length || 0;
+
+  const activeSires = new Set(animals?.filter(a => a.sireId).map(a => a.sireId) || []).size;
+
+  // Herd distribution for donut chart
+  const herdDistribution = [
+    { name: 'Ewes', value: activeEwes, color: '#ec4899' },
+    { name: 'Rams', value: activeRams, color: '#3b82f6' },
+    { name: 'Lambs', value: activeLambs, color: '#f59e0b' },
+  ].filter(d => d.value > 0);
+
+  // Top sires by progeny count
+  const sireProgenyMap = new Map<number, number>();
+  animals?.forEach(a => { if (a.sireId) sireProgenyMap.set(a.sireId, (sireProgenyMap.get(a.sireId) || 0) + 1); });
+  const topSires = Array.from(sireProgenyMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([sireId, count]) => ({ sire: animals?.find(a => a.id === sireId), count }))
+    .filter(({ sire }) => !!sire);
 
   // Calculate average weight of slaughter/cull animals by month
   const getSlaughterCullWeightData = () => {
@@ -259,7 +294,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {!loadingAnimals && (
-                  <div className="mt-2 md:mt-3 pt-2 border-t border-border/50 grid grid-cols-3 gap-1 text-[10px] md:text-xs">
+                  <div className="mt-2 md:mt-3 pt-2 border-t border-border/50 grid grid-cols-3 gap-1 text-xs">
                     <div className="flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-primary shrink-0"></span>
                       <span className="text-muted-foreground">Rams:</span>
@@ -297,14 +332,165 @@ export default function Dashboard() {
             href="/animals?section=rams"
           />
           <StatCard 
-            title="Analysis" 
-            value="Open" 
+            title="Lambs" 
+            value={activeLambs} 
             loading={loadingAnimals} 
-            icon={BarChart3} 
-            className="border-l-2 md:border-l-4 border-l-yellow-500"
-            href="/analysis"
+            icon={Baby} 
+            className="border-l-2 md:border-l-4 border-l-amber-400"
+            href="/animals?section=lambs"
           />
         </div>
+
+        {/* Key Performance Metrics */}
+        {!loadingAnimals && totalAnimals > 0 && (
+          <div className="space-y-2">
+            <h3 className="text-sm md:text-base font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" /> Key Performance Metrics
+            </h3>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+              <Card className="rugged-card bg-card">
+                <CardContent className="p-3 md:p-5">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-xs md:text-sm font-semibold text-muted-foreground uppercase tracking-wide">Avg Birth Wt</p>
+                    <div className="rounded-lg border border-accent/40 bg-secondary/60 p-1.5 text-primary">
+                      <Scale className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <p className="text-xl md:text-3xl font-bold text-foreground">
+                    {avgBirthWeight ? `${avgBirthWeight} kg` : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">{animalsWithBirthWeight.length} records</p>
+                </CardContent>
+              </Card>
+              <Card className="rugged-card bg-card">
+                <CardContent className="p-3 md:p-5">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-xs md:text-sm font-semibold text-muted-foreground uppercase tracking-wide">Avg Wean Wt</p>
+                    <div className="rounded-lg border border-accent/40 bg-secondary/60 p-1.5 text-primary">
+                      <Scale className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <p className="text-xl md:text-3xl font-bold text-foreground">
+                    {avgWeanWeight ? `${avgWeanWeight} kg` : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">{animalsWithWeanWeight.length} records</p>
+                </CardContent>
+              </Card>
+              <Card className="rugged-card bg-card">
+                <CardContent className="p-3 md:p-5">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-xs md:text-sm font-semibold text-muted-foreground uppercase tracking-wide">Born {currentYear}</p>
+                    <div className="rounded-lg border border-accent/40 bg-secondary/60 p-1.5 text-primary">
+                      <Baby className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <p className="text-xl md:text-3xl font-bold text-foreground">{lambsThisYear}</p>
+                  <p className="text-xs text-muted-foreground mt-1">lambs this season</p>
+                </CardContent>
+              </Card>
+              <Card className="rugged-card bg-card">
+                <CardContent className="p-3 md:p-5">
+                  <div className="flex justify-between items-start mb-2">
+                    <p className="text-xs md:text-sm font-semibold text-muted-foreground uppercase tracking-wide">Active Sires</p>
+                    <div className="rounded-lg border border-accent/40 bg-secondary/60 p-1.5 text-primary">
+                      <Award className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <p className="text-xl md:text-3xl font-bold text-foreground">{activeSires}</p>
+                  <p className="text-xs text-muted-foreground mt-1">sires with progeny</p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Herd Distribution + Top Sires */}
+        {!loadingAnimals && totalAnimals > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-5">
+            {/* Herd Distribution Donut */}
+            <Card className="rugged-card bg-card">
+              <CardHeader className="p-3 md:p-5 pb-1 md:pb-2">
+                <CardTitle className="text-sm md:text-base font-semibold">Herd Distribution</CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 md:p-5 pt-0 flex items-center gap-4">
+                <div className="relative h-[140px] w-[140px] md:h-[160px] md:w-[160px] shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={herdDistribution}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius="58%"
+                        outerRadius="78%"
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {herdDistribution.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} strokeWidth={0} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-2xl md:text-3xl font-bold text-foreground">{totalAnimals}</span>
+                    <span className="text-xs text-muted-foreground">total</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 flex-1">
+                  {herdDistribution.map(d => (
+                    <div key={d.name} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                        <span className="text-sm text-muted-foreground">{d.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground">{d.value}</span>
+                        <span className="text-xs text-muted-foreground">{totalAnimals > 0 ? Math.round(d.value / totalAnimals * 100) : 0}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Top Sires by Progeny */}
+            <Card className="rugged-card bg-card">
+              <CardHeader className="p-3 md:p-5 pb-1 md:pb-2">
+                <CardTitle className="text-sm md:text-base font-semibold flex items-center gap-2">
+                  <Award className="w-4 h-4 text-primary" /> Top Sires by Progeny
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 md:p-5 pt-0">
+                {topSires.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">No sire data recorded yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {topSires.map(({ sire, count }, index) => {
+                      const maxCount = topSires[0].count;
+                      const pct = maxCount > 0 ? Math.round(count / maxCount * 100) : 0;
+                      return (
+                        <Link key={sire!.id} href={`/animals/${sire!.id}`}>
+                          <div className="flex items-center gap-2 group cursor-pointer">
+                            <span className="text-xs font-bold text-muted-foreground w-4 shrink-0">#{index + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex justify-between mb-1">
+                                <span className="text-sm font-semibold truncate group-hover:text-primary transition-colors">{sire!.tagId}</span>
+                                <span className="text-sm font-bold text-foreground shrink-0 ml-2">{count} <span className="text-xs text-muted-foreground font-normal">lambs</span></span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Recently Visited */}
         {recentVisits.length > 0 && (
@@ -358,7 +544,7 @@ export default function Dashboard() {
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs md:text-sm font-medium truncate" data-testid={`text-recent-visit-label-${index}`}>{displayLabel}</p>
-                          <p className="text-[10px] text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             {format(new Date(visit.timestamp), "HH:mm")}
                           </p>
                         </div>
