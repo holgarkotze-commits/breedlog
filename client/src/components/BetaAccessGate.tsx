@@ -202,10 +202,74 @@ function InstallFirstScreen({ onSkip }: { onSkip: () => void }) {
             ) : null}
             <ol className="space-y-1.5">
               <Step n={1}>Open BreedLog in <strong>Chrome</strong> or <strong>Edge</strong></Step>
-              <Step n={2}>Look for the <strong>install icon</strong> <Monitor className="inline h-3.5 w-3.5 mx-0.5 align-text-bottom" /> in the address bar (top right), or open the <strong>three-dot menu ⋮ → "Install BreedLog"</strong></Step>
-              <Step n={3}>Click <strong>"Install"</strong></Step>
+              <Step n={2}>Look for the <strong>install icon</strong> <Monitor className="inline h-3.5 w-3.5 mx-0.5 align-text-bottom" /> in the address bar — <strong>top-right of your browser</strong></Step>
+              <Step n={3}>Click it and select <strong>"Install"</strong></Step>
               <Step n={4}>BreedLog opens as its own app window</Step>
             </ol>
+
+            {/* Animated pointer — only shown on desktop */}
+            {isCurrentPlatform("desktop") && (
+              <div className="relative mt-1 rounded-lg bg-primary/8 border border-primary/20 px-3 py-2.5 overflow-hidden">
+                <style>{`
+                  @keyframes bl-pulse-ring {
+                    0%   { transform: scale(1);   opacity: 0.7; }
+                    50%  { transform: scale(1.55); opacity: 0; }
+                    100% { transform: scale(1);   opacity: 0; }
+                  }
+                  @keyframes bl-bounce-arrow {
+                    0%, 100% { transform: translate(0, 0);   }
+                    40%      { transform: translate(6px, -6px); }
+                    60%      { transform: translate(4px, -4px); }
+                  }
+                  @keyframes bl-flicker {
+                    0%, 100% { opacity: 1; }
+                    45%      { opacity: 1; }
+                    50%      { opacity: 0.4; }
+                    55%      { opacity: 1; }
+                    80%      { opacity: 1; }
+                    85%      { opacity: 0.6; }
+                    90%      { opacity: 1; }
+                  }
+                  .bl-pulse-ring {
+                    animation: bl-pulse-ring 1.6s ease-out infinite;
+                  }
+                  .bl-bounce-arrow {
+                    animation: bl-bounce-arrow 1.6s ease-in-out infinite;
+                  }
+                  .bl-flicker {
+                    animation: bl-flicker 2.4s ease-in-out infinite;
+                  }
+                `}</style>
+
+                <div className="flex items-center gap-3">
+                  {/* Animated glow + arrow icon */}
+                  <div className="relative shrink-0 flex items-center justify-center w-10 h-10">
+                    {/* Pulse rings */}
+                    <div className="bl-pulse-ring absolute inset-0 rounded-full border-2 border-primary/60" />
+                    <div className="bl-pulse-ring absolute inset-0 rounded-full border-2 border-primary/40" style={{ animationDelay: "0.4s" }} />
+                    {/* Glowing background */}
+                    <div className="bl-flicker absolute inset-0 rounded-full bg-primary/20 blur-sm" />
+                    {/* Bouncing arrow */}
+                    <div className="bl-bounce-arrow relative z-10">
+                      <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                        <path
+                          d="M5 17L17 5M17 5H8M17 5V14"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                  {/* Label */}
+                  <div>
+                    <p className="bl-flicker text-xs font-bold text-primary leading-tight">Look top-right of your browser</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">The install icon <Monitor className="inline h-3 w-3 mx-0.5 align-text-bottom" /> glows in your address bar</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Why install */}
