@@ -1,0 +1,123 @@
+BREEDLOG REPLIT TASK — ADDRESS CODEX P2 REVIEW COMMENTS BEFORE MERGE
+
+This instruction is for REPLIT only.
+
+Current GitHub state:
+
+* Repo: holgarkotze-commits/breedlog
+* PR: #9 — Wire genetics persistence and exports
+* Branch: work
+* Current PR head: 3206f1f404871e66520a32754fcf0f1699793986
+* CI was made green after fixing package-lock, workflow db:push, and test assertion issues.
+
+Do not merge yet.
+
+Goal:
+Fix the remaining Codex P2 review comments on PR #9, then rerun CI.
+
+Required fixes:
+
+1. Preserve parent tags in section CSV exports
+   Problem:
+   When exporting the Lambs tab, buildBreedLogCsvRows builds the sire/dam lookup from only the lambs array. Since lambs excludes adult sire/dam parent animals, sire and dam columns can fall back to raw database IDs instead of tag IDs.
+
+Fix:
+Update CSV export logic so the sire/dam lookup is built from the full herd/all animals, while exported rows still only include the selected section animals.
+
+Acceptance:
+
+* Lambs CSV export shows sire/dam tag IDs or readable animal IDs where available.
+* It must not output raw internal DB IDs when the parent animal exists in the herd.
+* Add/adjust a test for this case.
+
+2. Stop treating unknown mobile browsers as desktop
+   Problem:
+   On iPhone/iPad Chrome or Firefox, detectPlatform returns other, but the install guidance currently treats other as desktop. This highlights the desktop Chrome/Edge install section as “Your device,” which is wrong for iOS users.
+
+Fix:
+Update install platform detection and install guidance logic:
+
+* iPhone/iPad Chrome/Firefox must show iOS/Safari-compatible guidance or an explicit instruction to open Safari.
+* other must not automatically be treated as desktop if the user agent is mobile/tablet.
+* Desktop guidance should only be highlighted for real desktop browsers.
+
+Acceptance:
+
+* iOS Safari shows iOS install guidance.
+* iOS Chrome/Firefox shows iOS/Safari fallback guidance, not desktop guidance.
+* Android Chrome shows Android guidance.
+* Desktop Chrome/Edge shows desktop guidance.
+
+3. Include wethers in herd distribution
+   Problem:
+   Dashboard totalAnimals includes all active animals, but the donut/slices only include ewes, rams, and lambs. Active wethers are omitted from slices and percentages.
+
+Fix:
+Include active wethers in the herd distribution calculation and visual slices.
+
+Acceptance:
+
+* Herd distribution slices sum to total active animals.
+* Wethers appear as their own slice/category when present.
+* No divide-by-zero or percentage mismatch.
+
+4. Preserve ram type in exports
+   Problem:
+   When a ram is marked Breeding/Stud/Commercial from the Rams section, the mutation persists ramType, but exporters still mainly read classification. This can lose the ram type in PDF/CSV exports.
+
+Fix:
+Update ram PDF/CSV export logic to serialize ramType correctly.
+Use a safe fallback chain:
+
+* ramType
+* classification
+* existing class/classification fields
+* "-"
+
+Acceptance:
+
+* Rams section PDF/CSV exports show the selected ram type.
+* Existing classification exports do not regress.
+* Add/adjust test coverage.
+
+5. Count birth years without timezone shifts
+   Problem:
+   Date-only values like 2026-01-01 can be parsed as UTC midnight. In UTC-negative timezones, getFullYear can return the previous year. This can break the “Born {currentYear}” dashboard metric.
+
+Fix:
+For date-only birthDate values, compare the stored YYYY substring or parse as a local calendar date. Do not use new Date(dateOnly).getFullYear() for this metric.
+
+Acceptance:
+
+* 2026-01-01 counts as 2026 in all timezones.
+* Existing normal date handling still works.
+* Add/adjust test coverage.
+
+Required commands after fixes:
+npm run check
+npm run build
+npm test
+
+Then push to branch work.
+
+After push:
+
+* Confirm GitHub Actions reruns.
+* Confirm Genetics Module Verification passes.
+* Confirm PR #9 remains open.
+* Confirm whether GitHub reports the PR as mergeable.
+
+Return:
+
+* latest commit hash
+* files changed
+* exact local check/build/test results
+* GitHub Actions run link
+* CI result
+* whether each of the 5 Codex P2 review comments is fixed
+* whether PR #9 is merge-ready or still blocked
+
+Do not start Admin Panel activity dashboard work yet.
+Do not create or delete repositories.
+Do not touch VoiceCore.
+Do not merge PR #9 until these P2 items are fixed and CI is green again.

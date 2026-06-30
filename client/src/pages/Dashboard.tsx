@@ -81,15 +81,24 @@ export default function Dashboard() {
     : null;
 
   const currentYear = new Date().getFullYear();
-  const lambsThisYear = animals?.filter(a => a.birthDate && new Date(a.birthDate).getFullYear() === currentYear).length || 0;
+  // Use string slice to avoid UTC-midnight timezone shifts on date-only strings
+  const lambsThisYear = animals?.filter(a => a.birthDate && a.birthDate.slice(0, 4) === String(currentYear)).length || 0;
 
   const activeSires = new Set(animals?.filter(a => a.sireId).map(a => a.sireId) || []).size;
 
-  // Herd distribution for donut chart
+  // Active wethers (castrated males, adult)
+  const activeWethers = animals?.filter(a =>
+    a.sex === 'wether' &&
+    a.status === 'active' &&
+    !isLamb(a)
+  ).length || 0;
+
+  // Herd distribution for donut chart — all active animal categories
   const herdDistribution = [
     { name: 'Ewes', value: activeEwes, color: '#ec4899' },
     { name: 'Rams', value: activeRams, color: '#3b82f6' },
     { name: 'Lambs', value: activeLambs, color: '#f59e0b' },
+    { name: 'Wethers', value: activeWethers, color: '#8b5cf6' },
   ].filter(d => d.value > 0);
 
   // Top sires by progeny count

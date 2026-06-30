@@ -116,3 +116,59 @@ test("XLSX blocker doc exists with attempted package command and error", () => {
   assert.match(doc, /E403/);
   assert.match(doc, /CSV is the active and supported spreadsheet format/i);
 });
+
+test("CSV sire/dam lookup resolves parent tag IDs from full herd, not just exported subset (fix1)", () => {
+  const dataset = buildBreedLogSimulationDataset();
+  const allAnimals = dataset.animals;
+
+  // Find a young animal (born 2024+) whose sireId points to a founder ram
+  const youngWithSire = allAnimals.find(
+    (a) => a.sireId !== null && a.birthDate && a.birthDate.slice(0, 4) >= "2024"
+  );
+  if (!youngWithSire) return; // safety: skip if dataset changes
+
+  const sire = allAnimals.find((a) => a.id === youngWithSire.sireId);
+  if (!sire) return;
+
+  // Export only the young animal — sire is NOT in the exported subset
+  const rowsNoLookup = buildBreedLogCsvRows([youngWithSire]);
+  assert.equal(
+    rowsNoLookup[0].sire,
+    String(youngWithSire.sireId),
+    "without full-herd lookup, sire falls back to raw DB ID"
+  );
+
+  // With full herd: sire tag ID resolved correctly
+  const rowsWithLookup = buildBreedLogCsvRows([youngWithSire], undefined, allAnimals);
+  assert.equal(
+    rowsWithLookup[0].sire,
+    sire.tagId,
+    "with full-herd lookup, sire shows tag ID not raw DB ID"
+  );
+});
+
+test("CSV export prefers ramType over classification for rams (fix4)", () => {
+  const dataset = buildBreedLogSimulationDataset();
+  const baseRam = dataset.animals.find((a) => a.sex === "ram")!;
+  const ram = { ...baseRam, ramType: "stud_ram" as const, classification: "commercial" };
+
+  const rows = buildBreedLogCsvRows([ram]);
+  assert.equal(
+    rows[0].classification,
+    "stud_ram",
+    "ramType must take precedence over classification in CSV export"
+  );
+});
+
+test("Dashboard birth year uses string slice to avoid timezone shifts (fix5)", () => {
+  const src = fs.readFileSync("client/src/pages/Dashboard.tsx", "utf8");
+  assert.ok(
+    src.includes("birthDate.slice(0, 4)") || src.includes("birthDate.slice(0,4)"),
+    "Dashboard.tsx must use birthDate.slice(0, 4) for year comparison, not new Date().getFullYear()"
+  );
+  assert.doesNotMatch(
+    src,
+    /filter\(a => a\.birthDate && new Date\(a\.birthDate\)\.getFullYear\(\) === currentYear\)/,
+    "Dashboard.tsx must not use new Date(a.birthDate).getFullYear() for the lambsThisYear metric"
+  );
+});

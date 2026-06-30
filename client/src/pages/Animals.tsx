@@ -2023,7 +2023,7 @@ function RamsSection({
   const commercialCount = allRams.filter(r => r.ramType === 'commercial_ram').length;
 
   const handleExportCsv = () => {
-    const rows = buildBreedLogCsvRows(rams);
+    const rows = buildBreedLogCsvRows(rams, undefined, allAnimals || []);
     const csv = buildBreedLogCsvContent(rows);
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -2365,7 +2365,7 @@ function EwesSection({
   });
 
   const handleExportEwesCsv = () => {
-    const rows = buildBreedLogCsvRows(ewes);
+    const rows = buildBreedLogCsvRows(ewes, undefined, allAnimals || []);
     const csv = buildBreedLogCsvContent(rows);
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -2718,7 +2718,7 @@ function LambsSection({
   };
 
   const handleExportLambsCsv = () => {
-    const rows = buildBreedLogCsvRows(lambs);
+    const rows = buildBreedLogCsvRows(lambs, undefined, allAnimals || []);
     const csv = buildBreedLogCsvContent(rows);
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -3128,7 +3128,7 @@ function CulledSection({
   const allCulled = allAnimals.filter(a => a.status === 'culled' || a.cullConfirmed === true);
 
   const handleExportCulledCsv = () => {
-    const rows = buildBreedLogCsvRows(allCulled);
+    const rows = buildBreedLogCsvRows(allCulled, undefined, allAnimals || []);
     const csv = buildBreedLogCsvContent(rows);
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);

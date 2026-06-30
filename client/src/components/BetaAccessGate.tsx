@@ -87,14 +87,18 @@ function markInstallSkipped(): void {
 // Platform detection
 function detectPlatform(): "ios" | "android" | "desktop-chrome" | "desktop-edge" | "other" {
   const ua = navigator.userAgent.toLowerCase();
-  const isIOS = /iphone|ipad|ipod/.test(ua) && /webkit/.test(ua) && !/crios|fxios/.test(ua);
+  // Treat all iPhone/iPad/iPod as iOS regardless of browser — Chrome/Firefox on iOS
+  // still need Safari to install a PWA, so all get the iOS (Safari) guidance.
+  const isIOS = /iphone|ipad|ipod/.test(ua);
   if (isIOS) return "ios";
   const isAndroid = /android/.test(ua);
   if (isAndroid) return "android";
+  // Only classify as desktop when the UA is not a mobile/tablet browser.
+  const isMobileUA = /mobile|tablet/.test(ua);
   const isEdge = /edg\//.test(ua);
-  if (isEdge) return "desktop-edge";
+  if (isEdge && !isMobileUA) return "desktop-edge";
   const isChrome = /chrome/.test(ua) && !isEdge;
-  if (isChrome) return "desktop-chrome";
+  if (isChrome && !isMobileUA) return "desktop-chrome";
   return "other";
 }
 
@@ -118,7 +122,7 @@ function InstallFirstScreen({ onSkip }: { onSkip: () => void }) {
   };
 
   const isCurrentPlatform = (p: string) =>
-    platform === p || (p === "desktop" && (platform === "desktop-chrome" || platform === "desktop-edge" || platform === "other"));
+    platform === p || (p === "desktop" && (platform === "desktop-chrome" || platform === "desktop-edge"));
 
   const sectionClass = (p: string) =>
     cn(
