@@ -1434,7 +1434,7 @@ export default function Animals() {
             {displayName ? `${displayName} - My Herd` : "My Herd"} ({herdCounts.activeHerdAnimals})
           </h1>
           <p className="text-xs text-muted-foreground" data-testid="herd-count-summary">
-            {herdCounts.activeHerdAnimals} active {herdCounts.activeHerdAnimals === 1 ? "animal" : "animals"} on farm
+            Active animals on farm: {herdCounts.activeHerdAnimals}
           </p>
           <div className="flex flex-wrap gap-2 items-center">
             <DropdownMenu>
