@@ -737,7 +737,7 @@ export default function Records() {
                     data-testid={`doc-${doc.id}`}
                     onClick={() => toast({
                       title: "Export Record",
-                      description: `"${doc.name}" — ${doc.exportedAt ? format(new Date(doc.exportedAt), "dd MMM yyyy 'at' HH:mm") : "unknown date"} • ${meta.exportType?.toUpperCase() || "PDF"} • ${meta.animalCount ?? "?"} records • ${meta.status || "unknown"}`
+                      description: `"${doc.name}" — ${doc.exportedAt ? format(new Date(doc.exportedAt), "dd MMM yyyy 'at' HH:mm") : "unknown date"} • ${meta.exportType?.toUpperCase() || "PDF"} • ${meta.pageCount ?? 1} page(s) • ${meta.animalCount ?? "?"} records • ${meta.status || "unknown"}`
                     })}
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
