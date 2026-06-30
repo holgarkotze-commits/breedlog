@@ -52,7 +52,7 @@ jobs:
         run: npm run build
 
       - name: Push DB schema
-        run: npm run db:push
+        run: npm run db-push
 
       - name: Run unit & integration tests
         run: npm test
