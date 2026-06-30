@@ -584,3 +584,73 @@ export const userActivationsRelations = relations(userActivations, ({ one }) => 
 export const insertUserActivationSchema = createInsertSchema(userActivations).omit({ id: true, activatedAt: true, lastOnlineCheck: true });
 export type UserActivation = typeof userActivations.$inferSelect;
 export type InsertUserActivation = z.infer<typeof insertUserActivationSchema>;
+
+// === ACTIVITY TELEMETRY ===
+
+export const userActivityEvents = pgTable("user_activity_events", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  deviceId: varchar("device_id", { length: 64 }),
+  eventType: varchar("event_type", { length: 64 }).notNull(),
+  eventCategory: varchar("event_category", { length: 64 }),
+  route: text("route"),
+  feature: text("feature"),
+  metadata: jsonb("metadata"),
+  occurredAt: timestamp("occurred_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type ActivityEvent = typeof userActivityEvents.$inferSelect;
+export type InsertActivityEvent = typeof userActivityEvents.$inferInsert;
+
+export const userAppSessions = pgTable("user_app_sessions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 128 }).notNull(),
+  deviceId: varchar("device_id", { length: 64 }),
+  sessionId: varchar("session_id", { length: 128 }).notNull().unique(),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+  lastHeartbeatAt: timestamp("last_heartbeat_at").notNull().defaultNow(),
+  endedAt: timestamp("ended_at"),
+  durationSeconds: integer("duration_seconds"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type AppSession = typeof userAppSessions.$inferSelect;
+
+// Admin activity dashboard types
+export interface AdminActivityUser {
+  userId: string;
+  deviceId: string;
+  deviceType: string | null;
+  inviteCode: string | null;
+  activatedAt: Date | null;
+  lastSeen: Date | null;
+  lastSync: Date | null;
+  lastSessionStart: Date | null;
+  lastSessionEnd: Date | null;
+  estimatedTimeSpentSeconds: number;
+  sessionCount: number;
+  activityScore: number;
+  exportDownloadCount: number;
+  lastFeatureUsed: string | null;
+  status: string;
+}
+
+export interface AdminActivitySummary {
+  totalActivatedUsers: number;
+  activeToday: number;
+  activeLast7Days: number;
+  recentlySeen: number;
+  usersWithSyncActivity: number;
+  usersWithNoActivity: number;
+  totalSessions: number;
+  avgSessionDurationSeconds: number;
+  exportDownloadCount: number;
+  mostActiveTesters: AdminActivityUser[];
+}
+
+export interface AdminActivityUserDetail extends AdminActivityUser {
+  recentEvents: ActivityEvent[];
+  sessions7d: AppSession[];
+}

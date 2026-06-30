@@ -8,12 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2, Pencil, Check, X, Monitor, Smartphone, Search, RotateCcw, CalendarPlus, Bug, ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
+import { Plus, Copy, Ban, Users, Key, Calendar, Loader2, ArrowLeft, ShieldCheck, LogOut, RefreshCw, Trash2, Pencil, Check, X, Monitor, Smartphone, Search, RotateCcw, CalendarPlus, Bug, ChevronDown, ChevronUp, MessageSquare, Activity, Clock, TrendingUp, Zap, Download, Timer, Wifi, BarChart2, UserCheck } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
 
 interface FieldIssue {
@@ -55,6 +57,57 @@ interface InviteCodesResponse {
   codes: InviteCode[];
   activeTesters: number;
   maxTesters: number;
+}
+
+interface AdminActivityUser {
+  userId: string;
+  deviceId: string;
+  deviceType: string | null;
+  inviteCode: string | null;
+  activatedAt: string | null;
+  lastSeen: string | null;
+  lastSync: string | null;
+  lastSessionStart: string | null;
+  lastSessionEnd: string | null;
+  estimatedTimeSpentSeconds: number;
+  sessionCount: number;
+  activityScore: number;
+  exportDownloadCount: number;
+  lastFeatureUsed: string | null;
+  status: string;
+}
+
+interface AdminActivitySummary {
+  totalActivatedUsers: number;
+  activeToday: number;
+  activeLast7Days: number;
+  recentlySeen: number;
+  usersWithSyncActivity: number;
+  usersWithNoActivity: number;
+  totalSessions: number;
+  avgSessionDurationSeconds: number;
+  exportDownloadCount: number;
+  mostActiveTesters: AdminActivityUser[];
+}
+
+interface AdminActivityUserDetail extends AdminActivityUser {
+  recentEvents: Array<{
+    id: number;
+    eventType: string;
+    eventCategory: string | null;
+    route: string | null;
+    feature: string | null;
+    occurredAt: string;
+  }>;
+  sessions7d: Array<{
+    id: number;
+    sessionId: string;
+    startedAt: string;
+    lastHeartbeatAt: string;
+    endedAt: string | null;
+    durationSeconds: number | null;
+    isActive: boolean;
+  }>;
 }
 
 interface DbInfo {
@@ -420,6 +473,41 @@ export default function AdminPage() {
     onError: (err: Error) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     },
+  });
+
+  // ── Activity Dashboard state ────────────────────────────────────────────────
+  const [activitySortBy, setActivitySortBy] = useState("activityScore");
+  const [activityFilterBy, setActivityFilterBy] = useState("all");
+  const [selectedActivityUser, setSelectedActivityUser] = useState<string | null>(null);
+
+  const { data: activitySummary, isLoading: loadingActivitySummary, refetch: refetchActivitySummary } = useQuery<AdminActivitySummary>({
+    queryKey: ["/api/admin/activity/summary"],
+    queryFn: async () => {
+      const res = await adminApiRequest("GET", "/api/admin/activity/summary");
+      return res.json();
+    },
+    enabled: isAuthenticated === true,
+    refetchInterval: 60_000,
+  });
+
+  const { data: activityUsers = [], isLoading: loadingActivityUsers } = useQuery<AdminActivityUser[]>({
+    queryKey: ["/api/admin/activity/users", activitySortBy, activityFilterBy],
+    queryFn: async () => {
+      const params = new URLSearchParams({ sortBy: activitySortBy });
+      if (activityFilterBy !== "all") params.set("filterBy", activityFilterBy);
+      const res = await adminApiRequest("GET", `/api/admin/activity/users?${params.toString()}`);
+      return res.json();
+    },
+    enabled: isAuthenticated === true,
+  });
+
+  const { data: selectedUserDetail, isLoading: loadingUserDetail } = useQuery<AdminActivityUserDetail>({
+    queryKey: ["/api/admin/activity/users", selectedActivityUser],
+    queryFn: async () => {
+      const res = await adminApiRequest("GET", `/api/admin/activity/users/${selectedActivityUser}`);
+      return res.json();
+    },
+    enabled: isAuthenticated === true && selectedActivityUser !== null,
   });
 
   const handleLookupCode = async () => {
@@ -1196,7 +1284,326 @@ export default function AdminPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* ── User Activity & Testing Section ─────────────────────────────── */}
+        <Card data-testid="activity-dashboard-section">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-primary" />
+                <CardTitle className="text-base">User Activity &amp; Testing</CardTitle>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-7"
+                onClick={() => refetchActivitySummary()}
+                disabled={loadingActivitySummary}
+                data-testid="button-refresh-activity"
+              >
+                {loadingActivitySummary ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                Refresh
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* KPI cards */}
+            {loadingActivitySummary ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="h-20 rounded-lg bg-muted/30 animate-pulse" />
+                ))}
+              </div>
+            ) : activitySummary ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-testid="activity-kpi-grid">
+                <div className="rounded-lg border bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Users className="h-3 w-3" /> Activated
+                  </div>
+                  <div className="text-2xl font-bold" data-testid="kpi-total-activated">{activitySummary.totalActivatedUsers}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Zap className="h-3 w-3" /> Active today
+                  </div>
+                  <div className="text-2xl font-bold text-primary" data-testid="kpi-active-today">{activitySummary.activeToday}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <TrendingUp className="h-3 w-3" /> Last 7 days
+                  </div>
+                  <div className="text-2xl font-bold" data-testid="kpi-active-7d">{activitySummary.activeLast7Days}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <UserCheck className="h-3 w-3" /> Recently seen
+                  </div>
+                  <div className="text-2xl font-bold" data-testid="kpi-recently-seen">{activitySummary.recentlySeen}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Wifi className="h-3 w-3" /> With sync
+                  </div>
+                  <div className="text-2xl font-bold">{activitySummary.usersWithSyncActivity}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Timer className="h-3 w-3" /> Total sessions
+                  </div>
+                  <div className="text-2xl font-bold">{activitySummary.totalSessions}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Download className="h-3 w-3" /> Exports
+                  </div>
+                  <div className="text-2xl font-bold">{activitySummary.exportDownloadCount}</div>
+                </div>
+                <div className="rounded-lg border bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" /> Avg session
+                  </div>
+                  <div className="text-2xl font-bold">
+                    {activitySummary.avgSessionDurationSeconds > 0
+                      ? `${Math.round(activitySummary.avgSessionDurationSeconds / 60)}m`
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No activity data yet.</div>
+            )}
+
+            {/* Filter / sort row */}
+            <div className="flex flex-wrap gap-2 items-center" data-testid="activity-filter-row">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <BarChart2 className="h-3 w-3" /> Sort:
+              </div>
+              <Select value={activitySortBy} onValueChange={setActivitySortBy}>
+                <SelectTrigger className="h-7 w-36 text-xs" data-testid="select-activity-sort">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="activityScore">Activity score</SelectItem>
+                  <SelectItem value="lastSeen">Last seen</SelectItem>
+                  <SelectItem value="lastSync">Last sync</SelectItem>
+                  <SelectItem value="sessionCount">Session count</SelectItem>
+                  <SelectItem value="activatedAt">Activated date</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground ml-2">
+                Filter:
+              </div>
+              <Select value={activityFilterBy} onValueChange={setActivityFilterBy}>
+                <SelectTrigger className="h-7 w-36 text-xs" data-testid="select-activity-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All users</SelectItem>
+                  <SelectItem value="active_today">Active today</SelectItem>
+                  <SelectItem value="dormant">Dormant (&gt;7d)</SelectItem>
+                  <SelectItem value="no_activity">No activity</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* User activity table */}
+            {loadingActivityUsers ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading users…
+              </div>
+            ) : activityUsers.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-4 text-center">No activated users yet.</div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border" data-testid="activity-users-table">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="text-xs">
+                      <TableHead className="whitespace-nowrap">User / Device</TableHead>
+                      <TableHead className="whitespace-nowrap">Code</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="whitespace-nowrap">Activated</TableHead>
+                      <TableHead className="whitespace-nowrap">Last seen</TableHead>
+                      <TableHead className="whitespace-nowrap">Last sync</TableHead>
+                      <TableHead className="whitespace-nowrap">Sessions</TableHead>
+                      <TableHead className="whitespace-nowrap">Time spent</TableHead>
+                      <TableHead className="whitespace-nowrap">Exports</TableHead>
+                      <TableHead className="whitespace-nowrap">Score</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {activityUsers.map((user) => (
+                      <TableRow key={user.userId} className="text-xs" data-testid={`activity-user-row-${user.userId}`}>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            {user.deviceType === "mobile"
+                              ? <Smartphone className="h-3 w-3 text-muted-foreground shrink-0" />
+                              : <Monitor className="h-3 w-3 text-muted-foreground shrink-0" />}
+                            <span className="font-mono text-[10px] truncate max-w-[80px]" title={user.deviceId}>
+                              {user.deviceId.slice(0, 12)}…
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-mono text-[10px]">{user.inviteCode ?? "—"}</span>
+                        </TableCell>
+                        <TableCell>
+                          <ActivityStatusBadge status={user.status} />
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {user.activatedAt ? format(new Date(user.activatedAt), "MMM d") : "—"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {user.lastSeen
+                            ? formatDistanceToNow(new Date(user.lastSeen), { addSuffix: true })
+                            : "Never"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {user.lastSync
+                            ? formatDistanceToNow(new Date(user.lastSync), { addSuffix: true })
+                            : "—"}
+                        </TableCell>
+                        <TableCell>{user.sessionCount}</TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {user.estimatedTimeSpentSeconds > 0
+                            ? `${Math.round(user.estimatedTimeSpentSeconds / 60)}m`
+                            : "—"}
+                        </TableCell>
+                        <TableCell>{user.exportDownloadCount > 0 ? user.exportDownloadCount : "—"}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 min-w-[70px]">
+                            <Progress value={user.activityScore} className="h-1.5 w-12" />
+                            <span className="text-[10px] font-medium">{user.activityScore}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-xs px-2"
+                            onClick={() => setSelectedActivityUser(user.userId)}
+                            data-testid={`button-activity-detail-${user.userId}`}
+                          >
+                            Detail
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Per-user detail drawer ──────────────────────────────────────── */}
+        <Dialog open={selectedActivityUser !== null} onOpenChange={(open) => { if (!open) setSelectedActivityUser(null); }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <Activity className="h-4 w-4 text-primary" />
+                User Activity Detail
+              </DialogTitle>
+            </DialogHeader>
+            {loadingUserDetail ? (
+              <div className="flex items-center gap-2 py-8 justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">Loading…</span>
+              </div>
+            ) : selectedUserDetail ? (
+              <ScrollArea className="flex-1 overflow-y-auto pr-1">
+                <div className="space-y-5 pb-4">
+                  {/* Identity */}
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                    <div><span className="text-muted-foreground">Device ID:</span> <span className="font-mono text-xs">{selectedUserDetail.deviceId}</span></div>
+                    <div><span className="text-muted-foreground">Type:</span> {selectedUserDetail.deviceType ?? "unknown"}</div>
+                    <div><span className="text-muted-foreground">Code:</span> {selectedUserDetail.inviteCode ?? "—"}</div>
+                    <div><span className="text-muted-foreground">Activated:</span> {selectedUserDetail.activatedAt ? format(new Date(selectedUserDetail.activatedAt), "MMM d, yyyy") : "—"}</div>
+                    <div><span className="text-muted-foreground">First seen:</span> {selectedUserDetail.activatedAt ? format(new Date(selectedUserDetail.activatedAt), "MMM d, yyyy HH:mm") : "—"}</div>
+                    <div><span className="text-muted-foreground">Last seen:</span> {selectedUserDetail.lastSeen ? format(new Date(selectedUserDetail.lastSeen), "MMM d, yyyy HH:mm") : "Never"}</div>
+                    <div><span className="text-muted-foreground">Last sync:</span> {selectedUserDetail.lastSync ? formatDistanceToNow(new Date(selectedUserDetail.lastSync), { addSuffix: true }) : "—"}</div>
+                    <div><span className="text-muted-foreground">Time spent:</span> {selectedUserDetail.estimatedTimeSpentSeconds > 0 ? `${Math.round(selectedUserDetail.estimatedTimeSpentSeconds / 60)} min` : "—"}</div>
+                  </div>
+
+                  {/* Score + status */}
+                  <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/30">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-muted-foreground">Activity Score</span>
+                        <span className="font-bold text-sm">{selectedUserDetail.activityScore} / 100</span>
+                      </div>
+                      <Progress value={selectedUserDetail.activityScore} className="h-2" />
+                    </div>
+                    <ActivityStatusBadge status={selectedUserDetail.status} />
+                  </div>
+
+                  {/* Sessions 7d */}
+                  <div>
+                    <div className="text-xs font-medium uppercase text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Timer className="h-3 w-3" /> Sessions (last 7 days) — {selectedUserDetail.sessions7d.length}
+                    </div>
+                    {selectedUserDetail.sessions7d.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">No sessions in the last 7 days.</div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {selectedUserDetail.sessions7d.map((s) => (
+                          <div key={s.id} className="flex items-center justify-between text-xs border rounded px-3 py-1.5">
+                            <span>{format(new Date(s.startedAt), "MMM d HH:mm")}</span>
+                            <span className="text-muted-foreground">
+                              {s.durationSeconds != null ? `${Math.round(s.durationSeconds / 60)}m` : s.isActive ? "active" : "—"}
+                            </span>
+                            {s.isActive && <Badge variant="secondary" className="text-[10px] h-4 px-1.5">Live</Badge>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recent events timeline */}
+                  <div>
+                    <div className="text-xs font-medium uppercase text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Activity className="h-3 w-3" /> Recent Events (last 50)
+                    </div>
+                    {selectedUserDetail.recentEvents.length === 0 ? (
+                      <div className="text-xs text-muted-foreground">No events recorded.</div>
+                    ) : (
+                      <div className="space-y-1">
+                        {selectedUserDetail.recentEvents.map((ev) => (
+                          <div key={ev.id} className="flex items-start gap-2 text-xs border-l-2 border-muted pl-3 py-0.5">
+                            <span className="text-muted-foreground whitespace-nowrap">
+                              {format(new Date(ev.occurredAt), "MMM d HH:mm")}
+                            </span>
+                            <span className="font-medium">{ev.eventType}</span>
+                            {ev.route && <span className="text-muted-foreground truncate">{ev.route}</span>}
+                            {ev.feature && <Badge variant="outline" className="text-[9px] h-3.5 px-1 ml-auto shrink-0">{ev.feature}</Badge>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
+  );
+}
+
+function ActivityStatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; className: string }> = {
+    "Strong tester": { label: "Strong tester", className: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+    "Active tester": { label: "Active", className: "bg-primary/10 text-primary" },
+    "Light activity": { label: "Light", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400" },
+    "Low use": { label: "Low use", className: "bg-muted text-muted-foreground" },
+    "No activity": { label: "No activity", className: "bg-muted text-muted-foreground" },
+  };
+  const config = map[status] ?? { label: status, className: "bg-muted text-muted-foreground" };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${config.className}`}>
+      {config.label}
+    </span>
   );
 }
