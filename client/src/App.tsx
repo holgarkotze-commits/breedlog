@@ -14,6 +14,7 @@ import { AskBreedLogButton } from "@/components/AskBreedLogButton";
 import { BreedLogAssistantPanel } from "@/components/BreedLogAssistantPanel";
 import { useState, useEffect, lazy, Suspense, Component, type ReactNode } from "react";
 import { normalizePreviewPath } from "@/lib/route-normalization";
+import { initTelemetry, trackRouteView, destroyTelemetry } from "@/lib/telemetry";
 
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/Dashboard";
@@ -154,6 +155,8 @@ function AppContent() {
   const { user, isLoading: authLoading, deviceId } = useAuth();
   const [location, navigate] = useLocation();
   const [versionChecked, setVersionChecked] = useState(false);
+  const [telemetryStarted, setTelemetryStarted] = useState(false);
+
   useEffect(() => {
     const normalized = normalizePreviewPath(location);
     if (normalized !== location) {
@@ -161,7 +164,21 @@ function AppContent() {
     }
   }, [location, navigate]);
 
-  
+  // Start telemetry once the user is known (authenticated)
+  useEffect(() => {
+    if (user && !telemetryStarted) {
+      setTelemetryStarted(true);
+      try { initTelemetry(); } catch { /* never crash */ }
+      return () => { try { destroyTelemetry(); } catch { /* ok */ } };
+    }
+  }, [user, telemetryStarted]);
+
+  // Track route views after telemetry is started
+  useEffect(() => {
+    if (!telemetryStarted) return;
+    try { trackRouteView(location); } catch { /* never crash */ }
+  }, [location, telemetryStarted]);
+
   // Check version on startup
   useEffect(() => {
     checkAndReloadIfVersionMismatch().then(reloading => {

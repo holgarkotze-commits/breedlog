@@ -19,6 +19,8 @@ import {
   userActivations,
   systemSettings,
   fieldIssues,
+  userActivityEvents,
+  userAppSessions,
   type FieldIssue,
   type InsertAnimal,
   type InsertBreedingEvent,
@@ -53,8 +55,14 @@ import {
   type InviteCode,
   type UserActivation,
   type SystemSetting,
+  type ActivityEvent,
+  type InsertActivityEvent,
+  type AppSession,
+  type AdminActivityUser,
+  type AdminActivitySummary,
+  type AdminActivityUserDetail,
 } from "@shared/schema";
-import { eq, desc, and, sql, lt, gte, ilike, or, ne, inArray } from "drizzle-orm";
+import { eq, desc, and, sql, lt, gte, ilike, or, ne, inArray, count, avg, max, min } from "drizzle-orm";
 import { canonicalizeTag, splitTagInput } from "@shared/tag-utils";
 
 export class DuplicateElectronicIdError extends Error {
@@ -184,6 +192,17 @@ export interface IStorage {
   getFieldIssues(filters?: { status?: string; severity?: string; area?: string; search?: string }): Promise<import("@shared/schema").FieldIssue[]>;
   getFieldIssue(id: number): Promise<import("@shared/schema").FieldIssue | undefined>;
   updateFieldIssue(id: number, updates: { status?: string; adminNotes?: string; emailSent?: boolean }): Promise<import("@shared/schema").FieldIssue | undefined>;
+
+  // Activity Telemetry
+  createActivityEvent(data: Omit<InsertActivityEvent, 'id' | 'createdAt'>): Promise<ActivityEvent>;
+  upsertAppSession(sessionId: string, userId: string, deviceId?: string): Promise<AppSession>;
+  heartbeatAppSession(sessionId: string, userId: string): Promise<AppSession | undefined>;
+  endAppSession(sessionId: string, userId: string): Promise<void>;
+  // Admin: Activity
+  getAdminActivitySummary(): Promise<AdminActivitySummary>;
+  getAdminActivityUsers(filters?: { sortBy?: string; filterBy?: string }): Promise<AdminActivityUser[]>;
+  getAdminActivityUserDetail(userId: string): Promise<AdminActivityUserDetail | undefined>;
+  getAdminActivityEvents(filters?: { userId?: string; eventType?: string; limit?: number }): Promise<ActivityEvent[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -820,6 +839,212 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return updated;
   }
+
+  // ── Activity Telemetry ─────────────────────────────────────────────────────
+
+  async createActivityEvent(data: Omit<InsertActivityEvent, 'id' | 'createdAt'>): Promise<ActivityEvent> {
+    const [row] = await db.insert(userActivityEvents).values({ ...data }).returning();
+    return row;
+  }
+
+  async upsertAppSession(sessionId: string, userId: string, deviceId?: string): Promise<AppSession> {
+    const existing = await db.select().from(userAppSessions)
+      .where(eq(userAppSessions.sessionId, sessionId)).limit(1);
+    if (existing.length > 0) return existing[0];
+    const [row] = await db.insert(userAppSessions)
+      .values({ sessionId, userId, deviceId: deviceId ?? null, isActive: true })
+      .returning();
+    return row;
+  }
+
+  async heartbeatAppSession(sessionId: string, userId: string): Promise<AppSession | undefined> {
+    const now = new Date();
+    const [session] = await db.select().from(userAppSessions)
+      .where(and(eq(userAppSessions.sessionId, sessionId), eq(userAppSessions.userId, userId)))
+      .limit(1);
+    if (!session) return undefined;
+    const durationSeconds = Math.round((now.getTime() - session.startedAt.getTime()) / 1000);
+    const [updated] = await db.update(userAppSessions)
+      .set({ lastHeartbeatAt: now, durationSeconds, isActive: true })
+      .where(eq(userAppSessions.sessionId, sessionId))
+      .returning();
+    return updated;
+  }
+
+  async endAppSession(sessionId: string, userId: string): Promise<void> {
+    const [session] = await db.select().from(userAppSessions)
+      .where(and(eq(userAppSessions.sessionId, sessionId), eq(userAppSessions.userId, userId)))
+      .limit(1);
+    if (!session) return;
+    const endedAt = new Date();
+    const durationSeconds = Math.round((endedAt.getTime() - session.startedAt.getTime()) / 1000);
+    await db.update(userAppSessions)
+      .set({ endedAt, durationSeconds, isActive: false })
+      .where(eq(userAppSessions.sessionId, sessionId));
+  }
+
+  private async _buildActivityUser(activation: UserActivation, inviteCode: InviteCode | undefined): Promise<AdminActivityUser> {
+    const uid = activation.userId;
+    const now = new Date();
+    const day1 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const day7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const events = await db.select().from(userActivityEvents)
+      .where(eq(userActivityEvents.userId, uid))
+      .orderBy(desc(userActivityEvents.occurredAt));
+
+    const sessions = await db.select().from(userAppSessions)
+      .where(eq(userAppSessions.userId, uid))
+      .orderBy(desc(userAppSessions.startedAt));
+
+    const lastSeen = events[0]?.occurredAt ?? sessions[0]?.lastHeartbeatAt ?? null;
+    const syncEvents = events.filter(e => e.eventType === 'sync_success');
+    const lastSync = syncEvents[0]?.occurredAt ?? null;
+    const sortedSessions = sessions.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+    const lastSessionStart = sortedSessions[0]?.startedAt ?? null;
+    const lastSessionEnd = sortedSessions[0]?.endedAt ?? sortedSessions[0]?.lastHeartbeatAt ?? null;
+    const totalSeconds = sessions.reduce((s, sess) => s + (sess.durationSeconds ?? 0), 0);
+    const exportEvents = events.filter(e => e.eventCategory === 'export');
+    const lastFeature = events.find(e => e.feature)?.feature ?? null;
+
+    // Activity score
+    let score = 0;
+    const hasRecentOpen = events.some(e => e.eventType === 'app_open' && e.occurredAt >= day1);
+    const hasActiveSession = sessions.some(s => s.lastHeartbeatAt >= day1);
+    const hasSyncLast7d = syncEvents.some(e => e.occurredAt >= day7);
+    const hasRecordLast7d = events.some(e => ['animal_created','animal_updated','breeding_record_created','health_record_created','performance_record_created'].includes(e.eventType) && e.occurredAt >= day7);
+    const hasExport = exportEvents.length > 0;
+    const sessions7d = sessions.filter(s => s.startedAt >= day7);
+    if (hasRecentOpen) score += 15;
+    if (hasActiveSession) score += 20;
+    if (hasSyncLast7d) score += 15;
+    if (hasRecordLast7d) score += 20;
+    if (hasExport) score += 10;
+    if (sessions7d.length > 1) score += 20;
+    score = Math.min(100, score);
+
+    let status = 'No activity';
+    if (score >= 80) status = 'Strong tester';
+    else if (score >= 50) status = 'Active tester';
+    else if (score >= 20) status = 'Light activity';
+    else if (score >= 1) status = 'Low use';
+
+    return {
+      userId: uid,
+      deviceId: activation.deviceId,
+      deviceType: activation.deviceType,
+      inviteCode: inviteCode?.code ?? null,
+      activatedAt: activation.activatedAt,
+      lastSeen,
+      lastSync,
+      lastSessionStart,
+      lastSessionEnd,
+      estimatedTimeSpentSeconds: totalSeconds,
+      sessionCount: sessions.length,
+      activityScore: score,
+      exportDownloadCount: exportEvents.length,
+      lastFeatureUsed: lastFeature,
+      status,
+    };
+  }
+
+  async getAdminActivitySummary(): Promise<AdminActivitySummary> {
+    const now = new Date();
+    const day1 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const day7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const min30 = new Date(now.getTime() - 30 * 60 * 1000);
+
+    const [totalActivatedUsers] = await db.select({ c: count() }).from(userActivations)
+      .where(eq(userActivations.status, 'active'));
+    const [activeToday] = await db.select({ c: sql<number>`count(distinct ${userActivityEvents.userId})` })
+      .from(userActivityEvents).where(gte(userActivityEvents.occurredAt, day1));
+    const [activeLast7Days] = await db.select({ c: sql<number>`count(distinct ${userActivityEvents.userId})` })
+      .from(userActivityEvents).where(gte(userActivityEvents.occurredAt, day7));
+    const [recentlySeen] = await db.select({ c: sql<number>`count(distinct ${userActivityEvents.userId})` })
+      .from(userActivityEvents).where(gte(userActivityEvents.occurredAt, min30));
+    const [withSync] = await db.select({ c: sql<number>`count(distinct ${userActivityEvents.userId})` })
+      .from(userActivityEvents).where(eq(userActivityEvents.eventType, 'sync_success'));
+    const [totalSessions] = await db.select({ c: count() }).from(userAppSessions);
+    const [avgDur] = await db.select({ a: avg(userAppSessions.durationSeconds) }).from(userAppSessions)
+      .where(sql`${userAppSessions.durationSeconds} is not null`);
+    const [exportCount] = await db.select({ c: count() }).from(userActivityEvents)
+      .where(eq(userActivityEvents.eventCategory, 'export'));
+
+    const activations = await db.select().from(userActivations).where(eq(userActivations.status, 'active'));
+    const codes = await db.select().from(inviteCodes);
+    const codeMap = new Map(codes.map(c => [c.id, c]));
+
+    const allUsers = await Promise.all(activations.map(a => this._buildActivityUser(a, codeMap.get(a.inviteCodeId))));
+    const usersWithNoActivity = allUsers.filter(u => u.activityScore === 0).length;
+    const mostActiveTesters = [...allUsers].sort((a, b) => b.activityScore - a.activityScore).slice(0, 5);
+
+    return {
+      totalActivatedUsers: Number(totalActivatedUsers?.c ?? 0),
+      activeToday: Number(activeToday?.c ?? 0),
+      activeLast7Days: Number(activeLast7Days?.c ?? 0),
+      recentlySeen: Number(recentlySeen?.c ?? 0),
+      usersWithSyncActivity: Number(withSync?.c ?? 0),
+      usersWithNoActivity,
+      totalSessions: Number(totalSessions?.c ?? 0),
+      avgSessionDurationSeconds: Number(avgDur?.a ?? 0),
+      exportDownloadCount: Number(exportCount?.c ?? 0),
+      mostActiveTesters,
+    };
+  }
+
+  async getAdminActivityUsers(filters?: { sortBy?: string; filterBy?: string }): Promise<AdminActivityUser[]> {
+    const activations = await db.select().from(userActivations).where(eq(userActivations.status, 'active'));
+    const codes = await db.select().from(inviteCodes);
+    const codeMap = new Map(codes.map(c => [c.id, c]));
+    let users = await Promise.all(activations.map(a => this._buildActivityUser(a, codeMap.get(a.inviteCodeId))));
+
+    if (filters?.filterBy === 'active_today') {
+      const day1 = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      users = users.filter(u => u.lastSeen && u.lastSeen >= day1);
+    } else if (filters?.filterBy === 'dormant') {
+      const day7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      users = users.filter(u => !u.lastSeen || u.lastSeen < day7);
+    } else if (filters?.filterBy === 'no_activity') {
+      users = users.filter(u => u.activityScore === 0);
+    }
+
+    const sortBy = filters?.sortBy ?? 'activityScore';
+    users.sort((a, b) => {
+      if (sortBy === 'lastSeen') return (b.lastSeen?.getTime() ?? 0) - (a.lastSeen?.getTime() ?? 0);
+      if (sortBy === 'lastSync') return (b.lastSync?.getTime() ?? 0) - (a.lastSync?.getTime() ?? 0);
+      if (sortBy === 'sessionCount') return b.sessionCount - a.sessionCount;
+      if (sortBy === 'activatedAt') return (b.activatedAt?.getTime() ?? 0) - (a.activatedAt?.getTime() ?? 0);
+      return b.activityScore - a.activityScore;
+    });
+    return users;
+  }
+
+  async getAdminActivityUserDetail(userId: string): Promise<AdminActivityUserDetail | undefined> {
+    const activation = await db.select().from(userActivations)
+      .where(eq(userActivations.userId, userId)).limit(1);
+    if (!activation.length) return undefined;
+    const codes = await db.select().from(inviteCodes);
+    const codeMap = new Map(codes.map(c => [c.id, c]));
+    const base = await this._buildActivityUser(activation[0], codeMap.get(activation[0].inviteCodeId));
+    const recentEvents = await db.select().from(userActivityEvents)
+      .where(eq(userActivityEvents.userId, userId))
+      .orderBy(desc(userActivityEvents.occurredAt)).limit(50);
+    const day7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const sessions7d = await db.select().from(userAppSessions)
+      .where(and(eq(userAppSessions.userId, userId), gte(userAppSessions.startedAt, day7)))
+      .orderBy(desc(userAppSessions.startedAt));
+    return { ...base, recentEvents, sessions7d };
+  }
+
+  async getAdminActivityEvents(filters?: { userId?: string; eventType?: string; limit?: number }): Promise<ActivityEvent[]> {
+    let query = db.select().from(userActivityEvents).$dynamic();
+    const conditions = [];
+    if (filters?.userId) conditions.push(eq(userActivityEvents.userId, filters.userId));
+    if (filters?.eventType) conditions.push(eq(userActivityEvents.eventType, filters.eventType));
+    if (conditions.length) query = query.where(and(...conditions));
+    query = query.orderBy(desc(userActivityEvents.occurredAt)).limit(filters?.limit ?? 100);
+    return query;
+  }
 }
 
 class InMemoryStorage implements IStorage {
@@ -1070,6 +1295,170 @@ class InMemoryStorage implements IStorage {
     const updated = { ...issue, ...updates, updatedAt: this.now() } as FieldIssue;
     this.fieldIssuesMap.set(id, updated);
     return updated;
+  }
+
+  // ── Activity Telemetry (in-memory) ─────────────────────────────────────────
+  private activityEventSeq = 1;
+  private activityEvents = new Map<number, ActivityEvent>();
+  private appSessionMap = new Map<string, AppSession>();
+  private appSessionIdSeq = 1;
+
+  async createActivityEvent(data: Omit<InsertActivityEvent, 'id' | 'createdAt'>): Promise<ActivityEvent> {
+    const id = this.activityEventSeq++;
+    const now = this.now();
+    const ev: ActivityEvent = { id, createdAt: now, occurredAt: data.occurredAt ?? now, userId: data.userId, deviceId: data.deviceId ?? null, eventType: data.eventType, eventCategory: data.eventCategory ?? null, route: data.route ?? null, feature: data.feature ?? null, metadata: data.metadata ?? null };
+    this.activityEvents.set(id, ev);
+    return ev;
+  }
+
+  async upsertAppSession(sessionId: string, userId: string, deviceId?: string): Promise<AppSession> {
+    const existing = this.appSessionMap.get(sessionId);
+    if (existing) return existing;
+    const id = this.appSessionIdSeq++;
+    const now = this.now();
+    const s: AppSession = { id, sessionId, userId, deviceId: deviceId ?? null, startedAt: now, lastHeartbeatAt: now, endedAt: null, durationSeconds: null, isActive: true, createdAt: now };
+    this.appSessionMap.set(sessionId, s);
+    return s;
+  }
+
+  async heartbeatAppSession(sessionId: string, userId: string): Promise<AppSession | undefined> {
+    const s = this.appSessionMap.get(sessionId);
+    if (!s || s.userId !== userId) return undefined;
+    const now = this.now();
+    const durationSeconds = Math.round((now.getTime() - s.startedAt.getTime()) / 1000);
+    const updated: AppSession = { ...s, lastHeartbeatAt: now, durationSeconds, isActive: true };
+    this.appSessionMap.set(sessionId, updated);
+    return updated;
+  }
+
+  async endAppSession(sessionId: string, userId: string): Promise<void> {
+    const s = this.appSessionMap.get(sessionId);
+    if (!s || s.userId !== userId) return;
+    const endedAt = this.now();
+    const durationSeconds = Math.round((endedAt.getTime() - s.startedAt.getTime()) / 1000);
+    this.appSessionMap.set(sessionId, { ...s, endedAt, durationSeconds, isActive: false });
+  }
+
+  private _computeScore(events: ActivityEvent[], sessions: AppSession[]): number {
+    const now = Date.now();
+    const day1 = new Date(now - 24 * 60 * 60 * 1000);
+    const day7 = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    let score = 0;
+    if (events.some(e => e.eventType === 'app_open' && e.occurredAt >= day1)) score += 15;
+    if (sessions.some(s => s.lastHeartbeatAt >= day1)) score += 20;
+    if (events.some(e => e.eventType === 'sync_success' && e.occurredAt >= day7)) score += 15;
+    if (events.some(e => ['animal_created','animal_updated','breeding_record_created','health_record_created','performance_record_created'].includes(e.eventType) && e.occurredAt >= day7)) score += 20;
+    if (events.some(e => e.eventCategory === 'export')) score += 10;
+    if (sessions.filter(s => s.startedAt >= day7).length > 1) score += 20;
+    return Math.min(100, score);
+  }
+
+  private _activityStatus(score: number): string {
+    if (score >= 80) return 'Strong tester';
+    if (score >= 50) return 'Active tester';
+    if (score >= 20) return 'Light activity';
+    if (score >= 1) return 'Low use';
+    return 'No activity';
+  }
+
+  private _buildMemActivityUser(activation: UserActivation, inviteCode?: InviteCode): AdminActivityUser {
+    const uid = activation.userId;
+    const events = [...this.activityEvents.values()].filter(e => e.userId === uid).sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+    const sessions = [...this.appSessionMap.values()].filter(s => s.userId === uid).sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+    const score = this._computeScore(events, sessions);
+    const syncEvents = events.filter(e => e.eventType === 'sync_success');
+    const exportEvents = events.filter(e => e.eventCategory === 'export');
+    return {
+      userId: uid,
+      deviceId: activation.deviceId,
+      deviceType: activation.deviceType,
+      inviteCode: inviteCode?.code ?? null,
+      activatedAt: activation.activatedAt,
+      lastSeen: events[0]?.occurredAt ?? sessions[0]?.lastHeartbeatAt ?? null,
+      lastSync: syncEvents[0]?.occurredAt ?? null,
+      lastSessionStart: sessions[0]?.startedAt ?? null,
+      lastSessionEnd: sessions[0]?.endedAt ?? sessions[0]?.lastHeartbeatAt ?? null,
+      estimatedTimeSpentSeconds: sessions.reduce((s, sess) => s + (sess.durationSeconds ?? 0), 0),
+      sessionCount: sessions.length,
+      activityScore: score,
+      exportDownloadCount: exportEvents.length,
+      lastFeatureUsed: events.find(e => e.feature)?.feature ?? null,
+      status: this._activityStatus(score),
+    };
+  }
+
+  async getAdminActivitySummary(): Promise<AdminActivitySummary> {
+    const now = Date.now();
+    const day1 = new Date(now - 24 * 60 * 60 * 1000);
+    const day7 = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const min30 = new Date(now - 30 * 60 * 1000);
+    const allEvents = [...this.activityEvents.values()];
+    const allSessions = [...this.appSessionMap.values()];
+    const activations = [...this.activations.values()].filter(a => a.status === 'active');
+    const codes = [...this.inviteCodes.values()];
+    const codeMap = new Map(codes.map(c => [c.id, c]));
+    const allUsers = activations.map(a => this._buildMemActivityUser(a, codeMap.get(a.inviteCodeId)));
+    const activeUserIds = new Set(allEvents.map(e => e.userId));
+    const todayIds = new Set(allEvents.filter(e => e.occurredAt >= day1).map(e => e.userId));
+    const week7Ids = new Set(allEvents.filter(e => e.occurredAt >= day7).map(e => e.userId));
+    const recentIds = new Set(allEvents.filter(e => e.occurredAt >= min30).map(e => e.userId));
+    const syncIds = new Set(allEvents.filter(e => e.eventType === 'sync_success').map(e => e.userId));
+    const totalSeconds = allSessions.filter(s => s.durationSeconds != null).map(s => s.durationSeconds!);
+    const avgDur = totalSeconds.length > 0 ? totalSeconds.reduce((a, b) => a + b, 0) / totalSeconds.length : 0;
+    return {
+      totalActivatedUsers: activations.length,
+      activeToday: todayIds.size,
+      activeLast7Days: week7Ids.size,
+      recentlySeen: recentIds.size,
+      usersWithSyncActivity: syncIds.size,
+      usersWithNoActivity: allUsers.filter(u => u.activityScore === 0).length,
+      totalSessions: allSessions.length,
+      avgSessionDurationSeconds: Math.round(avgDur),
+      exportDownloadCount: allEvents.filter(e => e.eventCategory === 'export').length,
+      mostActiveTesters: [...allUsers].sort((a, b) => b.activityScore - a.activityScore).slice(0, 5),
+    };
+  }
+
+  async getAdminActivityUsers(filters?: { sortBy?: string; filterBy?: string }): Promise<AdminActivityUser[]> {
+    const activations = [...this.activations.values()].filter(a => a.status === 'active');
+    const codes = [...this.inviteCodes.values()];
+    const codeMap = new Map(codes.map(c => [c.id, c]));
+    let users = activations.map(a => this._buildMemActivityUser(a, codeMap.get(a.inviteCodeId)));
+    if (filters?.filterBy === 'active_today') {
+      const day1 = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      users = users.filter(u => u.lastSeen && u.lastSeen >= day1);
+    } else if (filters?.filterBy === 'dormant') {
+      const day7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      users = users.filter(u => !u.lastSeen || u.lastSeen < day7);
+    } else if (filters?.filterBy === 'no_activity') {
+      users = users.filter(u => u.activityScore === 0);
+    }
+    const sortBy = filters?.sortBy ?? 'activityScore';
+    users.sort((a, b) => {
+      if (sortBy === 'lastSeen') return (b.lastSeen?.getTime() ?? 0) - (a.lastSeen?.getTime() ?? 0);
+      if (sortBy === 'lastSync') return (b.lastSync?.getTime() ?? 0) - (a.lastSync?.getTime() ?? 0);
+      if (sortBy === 'sessionCount') return b.sessionCount - a.sessionCount;
+      return b.activityScore - a.activityScore;
+    });
+    return users;
+  }
+
+  async getAdminActivityUserDetail(userId: string): Promise<AdminActivityUserDetail | undefined> {
+    const activation = [...this.activations.values()].find(a => a.userId === userId);
+    if (!activation) return undefined;
+    const inviteCode = [...this.inviteCodes.values()].find(c => c.id === activation.inviteCodeId);
+    const base = this._buildMemActivityUser(activation, inviteCode);
+    const recentEvents = [...this.activityEvents.values()].filter(e => e.userId === userId).sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime()).slice(0, 50);
+    const day7 = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const sessions7d = [...this.appSessionMap.values()].filter(s => s.userId === userId && s.startedAt >= day7).sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+    return { ...base, recentEvents, sessions7d };
+  }
+
+  async getAdminActivityEvents(filters?: { userId?: string; eventType?: string; limit?: number }): Promise<ActivityEvent[]> {
+    let events = [...this.activityEvents.values()];
+    if (filters?.userId) events = events.filter(e => e.userId === filters.userId);
+    if (filters?.eventType) events = events.filter(e => e.eventType === filters.eventType);
+    return events.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime()).slice(0, filters?.limit ?? 100);
   }
 }
 

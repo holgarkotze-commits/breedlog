@@ -1956,5 +1956,101 @@ export async function registerRoutes(
     }
   });
 
+  // ── Activity Telemetry — authenticated user endpoints ──────────────────────
+
+  // POST /api/activity/event — record a telemetry event
+  app.post("/api/activity/event", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const deviceId = getDeviceId(req) ?? undefined;
+      const { eventType, eventCategory, route, feature, metadata, occurredAt, sessionId } = req.body;
+      if (!eventType || typeof eventType !== 'string') {
+        return res.status(400).json({ message: 'eventType is required' });
+      }
+      const ev = await storage.createActivityEvent({
+        userId,
+        deviceId: deviceId ?? null,
+        eventType,
+        eventCategory: eventCategory ?? null,
+        route: route ?? null,
+        feature: feature ?? null,
+        metadata: metadata ?? null,
+        occurredAt: occurredAt ? new Date(occurredAt) : new Date(),
+      });
+      // If a sessionId is included, upsert the session too
+      if (sessionId && typeof sessionId === 'string') {
+        await storage.upsertAppSession(sessionId, userId, deviceId);
+      }
+      res.json({ ok: true, id: ev.id });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/activity/session/heartbeat — update session heartbeat
+  app.post("/api/activity/session/heartbeat", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const deviceId = getDeviceId(req) ?? undefined;
+      const { sessionId } = req.body;
+      if (!sessionId || typeof sessionId !== 'string') {
+        return res.status(400).json({ message: 'sessionId is required' });
+      }
+      await storage.upsertAppSession(sessionId, userId, deviceId);
+      const session = await storage.heartbeatAppSession(sessionId, userId);
+      res.json({ ok: true, session });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Activity Telemetry — admin-only endpoints ──────────────────────────────
+
+  // GET /api/admin/activity/summary
+  app.get("/api/admin/activity/summary", requireAdminPin, async (_req, res) => {
+    try {
+      const summary = await storage.getAdminActivitySummary();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/admin/activity/users
+  app.get("/api/admin/activity/users", requireAdminPin, async (req, res) => {
+    try {
+      const sortBy = typeof req.query.sortBy === 'string' ? req.query.sortBy : undefined;
+      const filterBy = typeof req.query.filterBy === 'string' ? req.query.filterBy : undefined;
+      const users = await storage.getAdminActivityUsers({ sortBy, filterBy });
+      res.json(users);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/admin/activity/users/:userId
+  app.get("/api/admin/activity/users/:userId", requireAdminPin, async (req, res) => {
+    try {
+      const detail = await storage.getAdminActivityUserDetail(req.params.userId);
+      if (!detail) return res.status(404).json({ message: 'User not found' });
+      res.json(detail);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/admin/activity/events
+  app.get("/api/admin/activity/events", requireAdminPin, async (req, res) => {
+    try {
+      const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+      const eventType = typeof req.query.eventType === 'string' ? req.query.eventType : undefined;
+      const limit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : 100;
+      const events = await storage.getAdminActivityEvents({ userId, eventType, limit: isNaN(limit) ? 100 : limit });
+      res.json(events);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }
