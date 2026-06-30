@@ -107,136 +107,106 @@ function isMobilePlatform(): boolean {
 // Install-first screen component
 // ============================================================
 function InstallFirstScreen({ onSkip }: { onSkip: () => void }) {
-  const { isInstallable, isIOS, promptInstall } = usePWAInstall();
+  const { isInstallable, promptInstall } = usePWAInstall();
   const platform = detectPlatform();
-  const isMobile = isMobilePlatform();
 
   const handleInstall = async () => {
     if (isInstallable) {
       const ok = await promptInstall();
-      if (ok) return; // app will reload in standalone mode
+      if (ok) return;
     }
   };
+
+  const isCurrentPlatform = (p: string) =>
+    platform === p || (p === "desktop" && (platform === "desktop-chrome" || platform === "desktop-edge" || platform === "other"));
+
+  const sectionClass = (p: string) =>
+    cn(
+      "rounded-lg border p-4 space-y-2.5",
+      isCurrentPlatform(p)
+        ? "border-primary/40 bg-primary/5"
+        : "border-border bg-muted/20"
+    );
+
+  const Step = ({ n, children }: { n: number; children: React.ReactNode }) => (
+    <li className="flex items-start gap-2 text-sm text-muted-foreground">
+      <span className="font-bold text-primary shrink-0 w-5">{n}.</span>
+      <span>{children}</span>
+    </li>
+  );
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto mb-3 h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-            {isMobile
-              ? <Smartphone className="h-8 w-8 text-primary" />
-              : <Monitor className="h-8 w-8 text-primary" />
-            }
+          <div className="mx-auto mb-3 h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Download className="h-7 w-7 text-primary" />
           </div>
           <CardTitle className="text-xl">Install BreedLog First</CardTitle>
           <CardDescription className="text-sm mt-1">
-            For the best experience — especially offline in the field — install BreedLog as an app on your device before entering your access code.
+            Install BreedLog as an app before entering your access code — it works fully offline in the field.
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          {/* iOS Safari */}
-          {platform === "ios" && (
-            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3" data-testid="install-instructions-ios">
-              <p className="text-sm font-semibold">iPhone / iPad (Safari)</p>
-              <ol className="space-y-2 text-sm text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-primary shrink-0">1.</span>
-                  <span>Tap the <Share className="inline h-4 w-4 mx-0.5 text-primary" /> <strong>Share</strong> button at the bottom of Safari</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-primary shrink-0">2.</span>
-                  <span>Scroll down and tap <strong>"Add to Home Screen"</strong> <Plus className="inline h-3.5 w-3.5 mx-0.5" /></span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-primary shrink-0">3.</span>
-                  <span>Tap <strong>"Add"</strong> — then open BreedLog from your home screen</span>
-                </li>
-              </ol>
-              <Alert className="py-2">
-                <AlertDescription className="text-xs">
-                  On iPhone, you must use <strong>Safari</strong>. Chrome on iPhone does not support Add to Home Screen.
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
+        <CardContent className="space-y-3">
+
+          {/* iPhone / iPad */}
+          <div className={sectionClass("ios")} data-testid="install-instructions-ios">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-primary" /> iPhone / iPad (Safari)
+              {isCurrentPlatform("ios") && <span className="ml-auto text-[10px] font-semibold text-primary uppercase tracking-wide">Your device</span>}
+            </p>
+            <ol className="space-y-1.5">
+              <Step n={1}>Open BreedLog in <strong>Safari</strong> (not Chrome)</Step>
+              <Step n={2}>Tap the <Share className="inline h-4 w-4 mx-0.5 align-text-bottom text-primary" /> <strong>Share</strong> button at the bottom of the screen</Step>
+              <Step n={3}>Tap <strong>"Add to Home Screen"</strong></Step>
+              <Step n={4}>Tap <strong>"Add"</strong> in the top right</Step>
+              <Step n={5}>Open BreedLog from your home screen</Step>
+            </ol>
+          </div>
 
           {/* Android */}
-          {platform === "android" && (
-            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3" data-testid="install-instructions-android">
-              <p className="text-sm font-semibold">Android Phone (Chrome)</p>
-              {isInstallable ? (
-                <>
-                  <p className="text-sm text-muted-foreground">Tap the button below to install BreedLog directly.</p>
-                  <Button className="w-full" onClick={handleInstall} data-testid="button-install-pwa-android">
-                    <Download className="mr-2 h-4 w-4" />
-                    Install BreedLog
-                  </Button>
-                </>
-              ) : (
-                <ol className="space-y-2 text-sm text-muted-foreground">
-                  <li className="flex items-start gap-2">
-                    <span className="font-bold text-primary shrink-0">1.</span>
-                    <span>Tap the <strong>three-dot menu</strong> (⋮) in Chrome</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="font-bold text-primary shrink-0">2.</span>
-                    <span>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="font-bold text-primary shrink-0">3.</span>
-                    <span>Tap <strong>"Install"</strong> — then open BreedLog from your home screen</span>
-                  </li>
-                </ol>
-              )}
-            </div>
-          )}
+          <div className={sectionClass("android")} data-testid="install-instructions-android">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-primary" /> Android Phone (Chrome)
+              {isCurrentPlatform("android") && <span className="ml-auto text-[10px] font-semibold text-primary uppercase tracking-wide">Your device</span>}
+            </p>
+            {isCurrentPlatform("android") && isInstallable ? (
+              <Button className="w-full" size="sm" onClick={handleInstall} data-testid="button-install-pwa-android">
+                <Download className="mr-2 h-4 w-4" /> Install BreedLog
+              </Button>
+            ) : (
+              <ol className="space-y-1.5">
+                <Step n={1}>Open BreedLog in <strong>Chrome</strong></Step>
+                <Step n={2}>Tap the <strong>three-dot menu ⋮</strong> in the top right</Step>
+                <Step n={3}>Tap <strong>"Add to Home screen"</strong> or <strong>"Install app"</strong></Step>
+                <Step n={4}>Tap <strong>"Install"</strong> or <strong>"Add"</strong></Step>
+                <Step n={5}>Open BreedLog from your home screen</Step>
+              </ol>
+            )}
+          </div>
 
-          {/* Desktop Chrome/Edge */}
-          {(platform === "desktop-chrome" || platform === "desktop-edge") && (
-            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3" data-testid="install-instructions-desktop">
-              <p className="text-sm font-semibold">
-                Desktop {platform === "desktop-edge" ? "Edge" : "Chrome"}
-              </p>
-              {isInstallable ? (
-                <>
-                  <p className="text-sm text-muted-foreground">Click the button below to install BreedLog as a desktop app.</p>
-                  <Button className="w-full" onClick={handleInstall} data-testid="button-install-pwa-desktop">
-                    <Download className="mr-2 h-4 w-4" />
-                    Install BreedLog App
-                  </Button>
-                  <p className="text-xs text-muted-foreground text-center">
-                    Or look for the <Monitor className="inline h-3.5 w-3.5 mx-0.5" /> install icon in your browser address bar
-                  </p>
-                </>
-              ) : (
-                <ol className="space-y-2 text-sm text-muted-foreground">
-                  <li className="flex items-start gap-2">
-                    <span className="font-bold text-primary shrink-0">1.</span>
-                    <span>Look for the <strong>install icon</strong> <Monitor className="inline h-3.5 w-3.5 mx-0.5" /> in the browser address bar (top right)</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="font-bold text-primary shrink-0">2.</span>
-                    <span>Click it and select <strong>"Install"</strong></span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="font-bold text-primary shrink-0">3.</span>
-                    <span>BreedLog opens as a standalone app — use it from there</span>
-                  </li>
-                </ol>
-              )}
-            </div>
-          )}
-
-          {/* Other browser */}
-          {platform === "other" && (
-            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3" data-testid="install-instructions-other">
-              <p className="text-sm font-semibold">Install BreedLog</p>
-              <p className="text-sm text-muted-foreground">
-                For the best experience, open BreedLog in <strong>Chrome</strong> or <strong>Edge</strong> on desktop, or <strong>Safari</strong> on iPhone/iPad, and use the install option in the browser menu.
-              </p>
-            </div>
-          )}
+          {/* Desktop */}
+          <div className={sectionClass("desktop")} data-testid="install-instructions-desktop">
+            <p className="text-sm font-semibold flex items-center gap-2">
+              <Monitor className="h-4 w-4 text-primary" /> Desktop (Chrome or Edge)
+              {isCurrentPlatform("desktop") && <span className="ml-auto text-[10px] font-semibold text-primary uppercase tracking-wide">Your device</span>}
+            </p>
+            {isCurrentPlatform("desktop") && isInstallable ? (
+              <>
+                <Button className="w-full" size="sm" onClick={handleInstall} data-testid="button-install-pwa-desktop">
+                  <Download className="mr-2 h-4 w-4" /> Install BreedLog App
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">or use the steps below</p>
+              </>
+            ) : null}
+            <ol className="space-y-1.5">
+              <Step n={1}>Open BreedLog in <strong>Chrome</strong> or <strong>Edge</strong></Step>
+              <Step n={2}>Look for the <strong>install icon</strong> <Monitor className="inline h-3.5 w-3.5 mx-0.5 align-text-bottom" /> in the address bar (top right), or open the <strong>three-dot menu ⋮ → "Install BreedLog"</strong></Step>
+              <Step n={3}>Click <strong>"Install"</strong></Step>
+              <Step n={4}>BreedLog opens as its own app window</Step>
+            </ol>
+          </div>
 
           {/* Why install */}
           <div className="rounded-lg bg-primary/5 border border-primary/15 p-3">
