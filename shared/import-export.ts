@@ -117,8 +117,12 @@ function parseWeightOrNull(value: string, field: string, rowNum: number, errors:
   return parsed.toFixed(2);
 }
 
-export function buildBreedLogCsvRows(animals: Animal[], fallbackStudPrefix?: string | null): BreedLogCsvRow[] {
-  const byId = new Map(animals.map((animal) => [animal.id, animal]));
+export function buildBreedLogCsvRows(
+  animals: Animal[],
+  fallbackStudPrefix?: string | null,
+  allAnimalsForLookup?: Animal[]
+): BreedLogCsvRow[] {
+  const byId = new Map((allAnimalsForLookup ?? animals).map((animal) => [animal.id, animal]));
 
   return animals.map((animal) => {
     const prefix = animal.studPrefix || fallbackStudPrefix || "";
@@ -133,7 +137,7 @@ export function buildBreedLogCsvRows(animals: Animal[], fallbackStudPrefix?: str
       name: animal.name || "",
       sex: animal.sex || "",
       status: animal.status || "",
-      classification: animal.classification || "",
+      classification: animal.ramType || animal.classification || "",
       animalSource: animal.animalSource || "unknown_not_recorded",
       birthDate: animal.birthDate || "",
       birthType: animal.birthStatus || "",
