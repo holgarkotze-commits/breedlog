@@ -272,16 +272,6 @@ function InstallFirstScreen({ onSkip }: { onSkip: () => void }) {
             )}
           </div>
 
-          {/* Why install */}
-          <div className="rounded-lg bg-primary/5 border border-primary/15 p-3">
-            <p className="text-xs font-semibold text-primary mb-1.5">Why install?</p>
-            <ul className="text-xs text-muted-foreground space-y-1">
-              <li className="flex items-center gap-1.5"><span className="text-primary">✓</span> Works fully offline — record data without internet</li>
-              <li className="flex items-center gap-1.5"><span className="text-primary">✓</span> Opens instantly from home screen or dock</li>
-              <li className="flex items-center gap-1.5"><span className="text-primary">✓</span> Syncs automatically when you reconnect</li>
-            </ul>
-          </div>
-
           <button
             onClick={() => { markInstallSkipped(); onSkip(); }}
             className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-2 flex items-center justify-center gap-1"
