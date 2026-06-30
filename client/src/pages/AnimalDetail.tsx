@@ -1273,15 +1273,15 @@ ${data.notes || "No notes recorded."}
             : profile.role === "meat-production" ? "Production Metrics" : "Development";
 
         // ── Family tree page (landscape) — included when requested ────────────
-        const familyTreePage = includeTree ? `
-<div class="page" style="page-break-before:always; width:277mm; min-height:190mm; padding: 6mm 6mm 24mm 6mm; position:relative;">
-  <div class="hdr">
-    <div>${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="hdr-logo" alt="Logo" />` : '<div class="hdr-logo-placeholder"></div>'}</div>
-    <div class="hdr-center">
+        const buildFamilyTreePage = includeTree ? `
+<div class="page landscape" style="page-break-before:always; padding: 6mm 6mm 24mm 6mm; position:relative;">
+  <div class="header">
+    <div class="header-left">${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" alt="Logo" />` : '<div class="logo-placeholder"></div>'}</div>
+    <div class="header-center">
       <h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1>
       <p>Family Tree / Pedigree Certificate</p>
     </div>
-    <div class="hdr-right"><div style="font-weight:700">${animal.tagId || "—"}</div><div>${exportDate}</div></div>
+    <div class="header-right"><div style="font-weight:700">${animal.tagId || "—"}</div><div>${exportDate}</div></div>
   </div>
   <h2 style="text-align:center;font-size:12pt;margin:4mm 0 6mm;">Pedigree for: ${animal.tagId} ${animal.name ? `(${animal.name})` : ''}</h2>
   <div style="display:flex;align-items:center;justify-content:center;gap:30mm;padding:10mm;">
@@ -1322,13 +1322,15 @@ ${includeTree ? '@page { margin: 8mm 10mm; } @page landscape-page { size: A4 lan
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1a1a; background: white; }
 .page { width: 190mm; min-height: 257mm; padding-bottom: 22mm; position: relative; }
-.hdr { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; border-bottom: 2.5px solid #FFC300; margin-bottom: 3mm; }
-.hdr-logo { width: 46px; height: 46px; object-fit: contain; }
-.hdr-logo-placeholder { width: 46px; }
-.hdr-center { flex: 1; text-align: center; }
-.hdr-center h1 { font-size: 13pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
-.hdr-center p { font-size: 7.5pt; color: #666; margin-top: 2px; }
-.hdr-right { text-align: right; font-size: 7.5pt; color: #666; white-space: nowrap; }
+.page.landscape { width: 277mm; min-height: 190mm; }
+.header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; border-bottom: 2.5px solid #FFC300; margin-bottom: 3mm; }
+.header-left { display: flex; align-items: center; }
+.logo { width: 60px; height: 60px; object-fit: contain; }
+.logo-placeholder { width: 60px; }
+.header-center { flex: 1; text-align: center; }
+.header-center h1 { font-size: 13pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+.header-center p { font-size: 7.5pt; color: #666; margin-top: 2px; }
+.header-right { text-align: right; font-size: 7.5pt; color: #666; white-space: nowrap; }
 .id-block { display: flex; gap: 5mm; margin-bottom: 3mm; align-items: flex-start; }
 .id-photo { width: 52mm; height: 42mm; object-fit: cover; border: 1.5px solid #ddd; border-radius: 4px; display: block; }
 .no-photo { width: 52mm; height: 42mm; background: #f5f5f5; border: 1.5px dashed #bbb; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 8pt; text-align: center; }
@@ -1362,7 +1364,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
 .summary-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 3px; padding: 3mm; margin-bottom: 3mm; }
 .summary-lbl { font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #92400e; margin-bottom: 2px; letter-spacing: .5px; }
 .summary-text { font-size: 8.5pt; color: #1a1a1a; line-height: 1.5; }
-.footer { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 3mm 5mm; border-top: 2.5px solid #FFC300; border-radius: 2mm; position: absolute; bottom: 0; left: 0; right: 0; }
+.footer { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 3mm 5mm; border-top: 2.5px solid #FFC300; border-radius: 2mm; position: absolute; bottom: 6mm; left: 0; right: 0; }
 .footer-info { flex: 1; }
 .footer-farm { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
 .footer-info p { font-size: 7pt; margin-top: 1px; color: #ccc; }
@@ -1374,10 +1376,10 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
 </head>
 <body>
 <div class="page">
-  <div class="hdr">
-    <div>${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="hdr-logo" alt="Logo" />` : '<div class="hdr-logo-placeholder"></div>'}</div>
-    <div class="hdr-center"><h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1><p>Individual Animal Performance Datasheet</p></div>
-    <div class="hdr-right"><div style="font-weight:700">${animal.tagId || "—"}</div><div>${exportDate}</div></div>
+  <div class="header">
+    <div class="header-left">${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" alt="Logo" />` : '<div class="logo-placeholder"></div>'}</div>
+    <div class="header-center"><h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1><p>Individual Animal Performance Datasheet</p></div>
+    <div class="header-right"><div style="font-weight:700">${animal.tagId || "—"}</div><div>${exportDate}</div></div>
   </div>
   <div class="id-block">
     <div style="width:52mm;flex-shrink:0">${photoHtml}</div>
@@ -1438,7 +1440,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
     <div class="footer-branding"><div class="bl">BREEDLOG</div><div class="tag">Professional Livestock Management</div></div>
   </div>
 </div>
-${familyTreePage}
+${buildFamilyTreePage}
 </body>
 </html>`;
 
