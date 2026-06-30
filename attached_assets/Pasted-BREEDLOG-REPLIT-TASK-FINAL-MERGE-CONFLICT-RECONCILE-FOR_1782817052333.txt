@@ -1,0 +1,75 @@
+BREEDLOG REPLIT TASK — FINAL MERGE-CONFLICT RECONCILE FOR PR #9
+
+This instruction is for REPLIT only.
+
+Do not add new features.
+Do not start Admin Panel activity dashboard work.
+Do not touch VoiceCore.
+Do not create or delete repositories.
+Do not change tokens.
+Do not rewrite the genetics feature.
+
+Current PR:
+
+* Repo: holgarkotze-commits/breedlog
+* PR: #9 — Wire genetics persistence and exports
+* Branch: work
+* Latest known head: 6b4788c46dd77dafaf155fe4fd9533fa5d9c9f4e
+* CI was reported green after the P2 fixes.
+* Remaining blocker: GitHub reports the PR as not mergeable / dirty because work has conflicts with main.
+
+Goal:
+Resolve merge conflicts between work and main, preserve the completed genetics/P2 fixes, rerun checks, push, and confirm PR #9 becomes mergeable.
+
+Required actions:
+
+1. Sync latest refs:
+   git fetch origin
+
+2. Switch to work:
+   git checkout work
+
+3. Merge latest main into work:
+   git merge origin/main
+
+4. If conflicts appear:
+
+* Resolve conflicts carefully.
+* Preserve the genetics module.
+* Preserve the P2 fixes:
+
+  * full-herd sire/dam lookup for section CSV exports
+  * iOS Chrome/Firefox install guidance fix
+  * wethers in herd distribution
+  * ramType preserved in exports
+  * birth-year substring/timezone-safe logic
+* Do not remove recent test coverage.
+
+5. After resolving conflicts:
+   git status --short
+   npm run check
+   npm run build
+   npm test
+
+6. Commit the conflict resolution:
+   git add .
+   git commit -m "Resolve PR 9 merge conflicts"
+
+7. Push:
+   git push origin work
+
+8. Confirm GitHub Actions reruns and passes.
+
+Return only:
+
+* latest commit hash
+* files involved in conflict resolution
+* npm run check result
+* npm run build result
+* npm test result
+* GitHub Actions run result
+* whether PR #9 is now mergeable
+* whether any conflict remains
+
+Do not claim merged unless it is actually merged.
+Do not claim complete unless PR #9 is mergeable and CI is green.
