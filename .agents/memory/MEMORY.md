@@ -1,3 +1,4 @@
 - [Simulation rewrite lessons](simulation-rewrite.md) — breedlog-simulation.ts rebuild: key correctness rules for weights, lamb stages, ram disposal, and cap-blocked ewe treatment.
 - [PDF export canonical standard](pdf-export-canonical.md) — canonical template created; all group exports now landscape A4, 20 rows/page, dark gradient footer. Details of what was fixed per function.
 - [Genetics module DB bootstrap](genetics-db-bootstrap.md) — manual SQL required when db:push prompts interactively; schema must include ALL columns (including optional ones like foundation_animal_id) or Drizzle inserts fail at runtime. Invite code U2A2ZAVQ expiry must be maintained current.
+- [Responsive hardening decisions](responsive-hardening.md) — sidebar moved to lg: (1024px) breakpoint; xs/tablet/laptop custom breakpoints added; touch targets 44px via CSS min-height; form grids use xs:grid-cols-2 pattern.

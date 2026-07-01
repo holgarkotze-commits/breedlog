@@ -1022,7 +1022,7 @@ export default function Settings() {
                 </div>
                 
                 {logoSize === "custom" && (
-                  <div className="grid grid-cols-2 gap-4 mt-3 p-3 bg-secondary/30 rounded border border-border">
+                  <div className="grid grid-cols-1 xs:grid-cols-2 gap-4 mt-3 p-3 bg-secondary/30 rounded border border-border">
                     <div>
                       <Label className="text-xs mb-1 block">Width (px)</Label>
                       <Input

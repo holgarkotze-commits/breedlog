@@ -3563,7 +3563,7 @@ function CreateAnimalDialog({
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="tagId"
@@ -3632,7 +3632,7 @@ function CreateAnimalDialog({
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="breed"
@@ -3671,7 +3671,7 @@ function CreateAnimalDialog({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="animalSource"
@@ -3731,7 +3731,7 @@ function CreateAnimalDialog({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="currentWeight"
@@ -3763,7 +3763,7 @@ function CreateAnimalDialog({
             {/* 100-Day Weight Section */}
             <div className="p-3 bg-secondary/30 rounded-md border border-border/50 space-y-3">
               <p className="text-xs font-bold uppercase text-muted-foreground">100-Day Weaning Data</p>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="weight100DayDate"

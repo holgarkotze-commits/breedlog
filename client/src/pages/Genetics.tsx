@@ -119,42 +119,44 @@ function BloodlineDialog({ existing, onClose }: { existing?: Bloodline; onClose:
 
   return (
     <div className="space-y-4 py-2">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2 space-y-1">
+      <div className="space-y-3">
+        <div className="space-y-1">
           <Label>Bloodline Name *</Label>
           <Input data-testid="input-bloodline-name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Baksteen" />
         </div>
-        <div className="space-y-1">
-          <Label>Type</Label>
-          <Select value={type} onValueChange={setType}>
-            <SelectTrigger data-testid="select-bloodline-type"><SelectValue /></SelectTrigger>
-            <SelectContent>{BLOODLINE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-          </Select>
+        <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label>Type</Label>
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger data-testid="select-bloodline-type"><SelectValue /></SelectTrigger>
+              <SelectContent>{BLOODLINE_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>Evidence Status</Label>
+            <Select value={evidenceStatus} onValueChange={setEvidenceStatus}>
+              <SelectTrigger data-testid="select-bloodline-evidence"><SelectValue /></SelectTrigger>
+              <SelectContent>{EVIDENCE_STATUS.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
         </div>
         <div className="space-y-1">
-          <Label>Evidence Status</Label>
-          <Select value={evidenceStatus} onValueChange={setEvidenceStatus}>
-            <SelectTrigger data-testid="select-bloodline-evidence"><SelectValue /></SelectTrigger>
-            <SelectContent>{EVIDENCE_STATUS.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div className="col-span-2 space-y-1">
           <Label>Origin Farm / Breeder</Label>
           <Input data-testid="input-bloodline-origin" value={origin} onChange={e => setOrigin(e.target.value)} placeholder="Farm or breeder name" />
         </div>
-        <div className="col-span-2 space-y-1">
+        <div className="space-y-1">
           <Label>Selected Traits</Label>
           <Input data-testid="input-bloodline-traits" value={traits} onChange={e => setTraits(e.target.value)} placeholder="Growth, Hardiness, Fertility..." />
         </div>
-        <div className="col-span-2 space-y-1">
+        <div className="space-y-1">
           <Label>Known Weaknesses</Label>
           <Input data-testid="input-bloodline-weaknesses" value={weaknesses} onChange={e => setWeaknesses(e.target.value)} placeholder="Any recorded weaknesses" />
         </div>
-        <div className="col-span-2 space-y-1">
+        <div className="space-y-1">
           <Label>Notes</Label>
           <Textarea data-testid="input-bloodline-notes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Additional notes..." />
         </div>
-        <div className="col-span-2 space-y-1">
+        <div className="space-y-1">
           <Label>Status</Label>
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger data-testid="select-bloodline-status"><SelectValue /></SelectTrigger>
@@ -424,7 +426,7 @@ function MatingRiskTab() {
         <p className="text-sm text-muted-foreground mb-4">Select a ram and ewe to assess the relationship risk before mating. BreedLog scans up to 5 recorded generations.</p>
         <Card className="rugged-card">
           <CardContent className="p-4 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Ram *</Label>
                 <Select value={ramId} onValueChange={setRamId}>
@@ -537,7 +539,7 @@ function LinePerformanceTab() {
       {isLoading && <div className="text-sm text-muted-foreground py-6 text-center">Calculating...</div>}
 
       {perf && !isLoading && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 xs:grid-cols-3">
           {[
             { label: "Active Animals", value: perf.activeAnimals },
             { label: "Breeding Rams", value: perf.breedingRams },
