@@ -22,6 +22,8 @@ import { useState, useRef, useEffect } from "react";
 import { format } from "date-fns";
 import { ArrowLeft, Dna, Syringe, Scale, FileText, Plus, Upload, Edit, Camera, Image, X, Download, Heart, LogOut, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
 import { useAnimalBreedingEvents } from "@/hooks/use-breeding";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 import logo from "@/assets/breedlog-logo-mark.png";
 import { useToast } from "@/hooks/use-toast";
@@ -324,6 +326,7 @@ export default function AnimalDetail() {
               
               <TabsContent value="pedigree" className="mt-4">
                 <PedigreeView animal={animal} />
+                <BloodlineAssignmentCard animalId={animal.id} />
               </TabsContent>
               
               {animal.sex === "ewe" && (
@@ -531,6 +534,106 @@ function PedigreeView({ animal }: { animal: any }) {
                         </div>
                     </div>
                 </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function BloodlineAssignmentCard({ animalId }: { animalId: number }) {
+    const { toast } = useToast();
+    const [assigning, setAssigning] = useState(false);
+    const [selectedBloodlineId, setSelectedBloodlineId] = useState("");
+    const [selectedRole, setSelectedRole] = useState("sire_line");
+
+    const { data: bloodlines = [] } = useQuery<any[]>({ queryKey: ["/api/genetics/bloodlines"] });
+    const { data: assignments = [], refetch } = useQuery<any[]>({
+        queryKey: ["/api/genetics/animals", animalId, "bloodlines"],
+        queryFn: () => fetch(`/api/genetics/animals/${animalId}/bloodlines`, { credentials: "include" }).then(r => r.json()),
+    });
+
+    const assignMutation = useMutation({
+        mutationFn: () => apiRequest("POST", `/api/genetics/animals/${animalId}/bloodlines`, { bloodlineId: parseInt(selectedBloodlineId), role: selectedRole }),
+        onSuccess: () => { refetch(); setAssigning(false); toast({ title: "Bloodline assigned" }); },
+        onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    });
+
+    const removeMutation = useMutation({
+        mutationFn: (bloodlineId: number) => apiRequest("DELETE", `/api/genetics/animals/${animalId}/bloodlines/${bloodlineId}`),
+        onSuccess: () => { refetch(); toast({ title: "Bloodline removed" }); },
+        onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    });
+
+    const bloodlineMap = Object.fromEntries(bloodlines.map((b: any) => [b.id, b]));
+
+    return (
+        <Card className="rugged-card mt-4">
+            <CardHeader className="border-b border-border/50 bg-secondary/50 py-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                    <Dna className="w-4 h-4 text-primary" />
+                    <span className="font-bold uppercase tracking-wide">Bloodline Assignments</span>
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 space-y-3">
+                {assignments.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-2">No bloodlines assigned. Assign this animal to a recorded bloodline family.</p>
+                )}
+                {assignments.map((a: any) => {
+                    const bl = bloodlineMap[a.bloodlineId];
+                    return (
+                        <div key={a.id} className="flex items-center justify-between gap-2 text-sm" data-testid={`bloodline-assignment-${a.id}`}>
+                            <div>
+                                <span className="font-semibold">{bl?.name ?? `Bloodline #${a.bloodlineId}`}</span>
+                                <Badge variant="outline" className="ml-2 text-[10px]">{a.role?.replace(/_/g, " ")}</Badge>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" data-testid={`button-remove-bloodline-${a.id}`}
+                                onClick={() => removeMutation.mutate(a.bloodlineId)}>
+                                <X className="w-3.5 h-3.5" />
+                            </Button>
+                        </div>
+                    );
+                })}
+
+                {assigning ? (
+                    <div className="space-y-2 pt-2 border-t border-border/50">
+                        <Select value={selectedBloodlineId} onValueChange={setSelectedBloodlineId}>
+                            <SelectTrigger className="h-8 text-xs" data-testid="select-assign-bloodline">
+                                <SelectValue placeholder="Select bloodline..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {bloodlines.filter((b: any) => b.status === "active").map((b: any) => (
+                                    <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                                ))}
+                                {bloodlines.filter((b: any) => b.status === "active").length === 0 && (
+                                    <SelectItem value="none" disabled>No bloodlines — add them in Genetics</SelectItem>
+                                )}
+                            </SelectContent>
+                        </Select>
+                        <Select value={selectedRole} onValueChange={setSelectedRole}>
+                            <SelectTrigger className="h-8 text-xs" data-testid="select-assign-role">
+                                <SelectValue placeholder="Role..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="sire_line">Sire Line</SelectItem>
+                                <SelectItem value="dam_line">Dam Line</SelectItem>
+                                <SelectItem value="composite">Composite</SelectItem>
+                                <SelectItem value="unknown">Unknown</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <div className="flex gap-2">
+                            <Button size="sm" className="flex-1 text-xs h-7" data-testid="button-confirm-assign-bloodline"
+                                disabled={!selectedBloodlineId || selectedBloodlineId === "none" || assignMutation.isPending}
+                                onClick={() => assignMutation.mutate()}>
+                                {assignMutation.isPending ? "Saving..." : "Assign"}
+                            </Button>
+                            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setAssigning(false)}>Cancel</Button>
+                        </div>
+                    </div>
+                ) : (
+                    <Button size="sm" variant="outline" className="w-full text-xs h-7" data-testid="button-add-bloodline-assignment"
+                        onClick={() => setAssigning(true)}>
+                        <Plus className="w-3 h-3 mr-1" /> Assign Bloodline
+                    </Button>
+                )}
             </CardContent>
         </Card>
     );

@@ -72,6 +72,9 @@ async function seedMasterSimulationIfNeeded(targetUserId: string, code: string) 
     notes: `Seeded by ${MASTER_SIMULATION_BATCH_MARKER}`,
   } as any);
   await storage.createFlockHealthTreatments(targetUserId, [{ eventId: flockEvent.id, treatmentType: 'vaccine', product: 'Routine', dosage: 'batch', notes: `Seeded by ${MASTER_SIMULATION_BATCH_MARKER}` } as any]);
+
+  // Seed Kwantam demo bloodlines for master simulation workspace only
+  await storage.seedGeneticsForUser(targetUserId, ['Baksteen', 'Bosch', 'Zelenski', 'Rolo', 'Nitro']);
 }
 
 export async function registerRoutes(
@@ -2052,5 +2055,222 @@ export async function registerRoutes(
     }
   });
 
+  // ── Genetics Module Routes ─────────────────────────────────────────────────
+
+  // GET /api/genetics/bloodlines
+  app.get("/api/genetics/bloodlines", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const rows = await storage.getBloodlines(userId);
+      res.json(rows);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // POST /api/genetics/bloodlines
+  app.post("/api/genetics/bloodlines", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const row = await storage.createBloodline(userId, req.body);
+      res.status(201).json(row);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // PUT /api/genetics/bloodlines/:id
+  app.put("/api/genetics/bloodlines/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const row = await storage.updateBloodline(userId, parseInt(req.params.id), req.body);
+      if (!row) return res.status(404).json({ message: "Not found" });
+      res.json(row);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // DELETE /api/genetics/bloodlines/:id
+  app.delete("/api/genetics/bloodlines/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      await storage.deleteBloodline(userId, parseInt(req.params.id));
+      res.json({ ok: true });
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // GET /api/genetics/lines
+  app.get("/api/genetics/lines", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const rows = await storage.getGeneticLines(userId);
+      res.json(rows);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // POST /api/genetics/lines
+  app.post("/api/genetics/lines", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const row = await storage.createGeneticLine(userId, req.body);
+      res.status(201).json(row);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // PUT /api/genetics/lines/:id
+  app.put("/api/genetics/lines/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const row = await storage.updateGeneticLine(userId, parseInt(req.params.id), req.body);
+      if (!row) return res.status(404).json({ message: "Not found" });
+      res.json(row);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // DELETE /api/genetics/lines/:id
+  app.delete("/api/genetics/lines/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      await storage.deleteGeneticLine(userId, parseInt(req.params.id));
+      res.json({ ok: true });
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // GET /api/genetics/animal/:animalId/bloodlines
+  app.get("/api/genetics/animal/:animalId/bloodlines", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const rows = await storage.getAnimalBloodlines(userId, parseInt(req.params.animalId));
+      res.json(rows);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // POST /api/genetics/animal/:animalId/bloodlines
+  app.post("/api/genetics/animal/:animalId/bloodlines", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const row = await storage.setAnimalBloodline(userId, { ...req.body, animalId: parseInt(req.params.animalId) });
+      res.status(201).json(row);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // DELETE /api/genetics/animal-bloodlines/:id
+  app.delete("/api/genetics/animal-bloodlines/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      await storage.removeAnimalBloodline(userId, parseInt(req.params.id));
+      res.json({ ok: true });
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // POST /api/genetics/mating-risk  { ramId, eweId }
+  app.post("/api/genetics/mating-risk", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { ramId, eweId } = req.body as { ramId: number; eweId: number };
+      if (!ramId || !eweId) return res.status(400).json({ message: "ramId and eweId required" });
+      const allAnimals = await storage.getAnimals(userId, {});
+      const animalMap = new Map(allAnimals.map((a: any) => [a.id, a]));
+      const ram = animalMap.get(ramId);
+      const ewe = animalMap.get(eweId);
+      if (!ram || !ewe) return res.status(404).json({ message: "Animal not found" });
+      const result = classifyMatingRisk(ram, ewe, animalMap);
+      res.json(result);
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  // GET /api/genetics/line-performance/:bloodlineId
+  app.get("/api/genetics/line-performance/:bloodlineId", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const bloodlineId = parseInt(req.params.bloodlineId);
+      const assignments = await storage.getAnimalBloodlines(userId, 0).catch(() => [] as any[]);
+      const allAssignments: any[] = [];
+      const allAnimals = await storage.getAnimals(userId, {});
+      for (const animal of allAnimals) {
+        const abs = await storage.getAnimalBloodlines(userId, animal.id);
+        abs.forEach(ab => allAssignments.push({ ...ab, animal }));
+      }
+      const relevant = allAssignments.filter(ab => ab.bloodlineId === bloodlineId);
+      const animals = relevant.map(ab => ab.animal);
+      const activeAnimals = animals.filter((a: any) => a.status === 'active');
+      const deadAnimals = animals.filter((a: any) => a.status === 'dead');
+      const rams = activeAnimals.filter((a: any) => a.sex === 'ram');
+      const ewes = activeAnimals.filter((a: any) => a.sex === 'ewe');
+      const breedingEvts = await storage.getBreedingEvents(userId);
+      const ramIds = new Set(rams.map((a: any) => a.id));
+      const eweIds = new Set(ewes.map((a: any) => a.id));
+      const relevantEvents = breedingEvts.filter((e: any) => ramIds.has(e.ramId) || eweIds.has(e.eweId));
+      const lambsBorn = relevantEvents.reduce((s: number, e: any) => s + (e.lambCount || 0), 0);
+      const allBweights = allAnimals.filter((a: any) => {
+        const parentIds = new Set(animals.map((p: any) => p.id));
+        return (parentIds.has(a.sireId) || parentIds.has(a.damId)) && a.birthWeight;
+      }).map((a: any) => parseFloat(a.birthWeight));
+      const avgBW = allBweights.length ? (allBweights.reduce((s, v) => s + v, 0) / allBweights.length).toFixed(1) : null;
+      res.json({
+        bloodlineId,
+        activeAnimals: activeAnimals.length,
+        breedingRams: rams.length,
+        breedingEwes: ewes.length,
+        lambsBorn,
+        animalsSold: animals.filter((a: any) => a.status === 'sold').length,
+        animalsCulled: animals.filter((a: any) => a.status === 'culled').length,
+        animalsDead: deadAnimals.length,
+        avgBirthWeight: avgBW,
+        matingsRecorded: relevantEvents.length,
+      });
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
   return httpServer;
+}
+
+// ── Mating Risk Classifier ─────────────────────────────────────────────────
+function buildAncestorSet(animalId: number | null | undefined, animalMap: Map<number, any>, depth: number): Set<number> {
+  if (!animalId || depth === 0) return new Set();
+  const animal = animalMap.get(animalId);
+  if (!animal) return new Set();
+  const set = new Set<number>();
+  if (animal.sireId) { set.add(animal.sireId); buildAncestorSet(animal.sireId, animalMap, depth - 1).forEach(id => set.add(id)); }
+  if (animal.damId) { set.add(animal.damId); buildAncestorSet(animal.damId, animalMap, depth - 1).forEach(id => set.add(id)); }
+  return set;
+}
+
+function classifyMatingRisk(ram: any, ewe: any, animalMap: Map<number, any>): { risk: string; level: string; explanation: string } {
+  if (ram.id === ewe.id) return { risk: "Critical Inbreeding Risk", level: "critical", explanation: "The same animal is selected on both sides. This mating is not valid." };
+  if (ram.id === ewe.sireId) return { risk: "Critical Inbreeding Risk", level: "critical", explanation: `${ewe.tagId || 'Ewe'} is a daughter of ${ram.tagId || 'Ram'}. Parent-offspring mating causes extreme inbreeding and is not recommended.` };
+  if (ewe.id === ram.damId) return { risk: "Critical Inbreeding Risk", level: "critical", explanation: `${ram.tagId || 'Ram'} is a son of ${ewe.tagId || 'Ewe'}. Parent-offspring mating causes extreme inbreeding and is not recommended.` };
+
+  const ramAncestors1 = buildAncestorSet(ram.id, animalMap, 1);
+  const eweAncestors1 = buildAncestorSet(ewe.id, animalMap, 1);
+  const sharedParents = [...ramAncestors1].filter(id => eweAncestors1.has(id));
+  if (sharedParents.length > 0) {
+    const shared = animalMap.get(sharedParents[0]);
+    const sharedTag = shared?.tagId || 'Unknown';
+    return { risk: "Critical Inbreeding Risk", level: "critical", explanation: `${ram.tagId} and ${ewe.tagId} share a parent (${sharedTag}). They are full or half-siblings — extreme inbreeding.` };
+  }
+
+  const ramAncestors3 = buildAncestorSet(ram.id, animalMap, 3);
+  const eweAncestors3 = buildAncestorSet(ewe.id, animalMap, 3);
+  const sharedClose = [...ramAncestors3].filter(id => eweAncestors3.has(id));
+  if (sharedClose.length > 0) {
+    const shared = animalMap.get(sharedClose[0]);
+    const sharedTag = shared?.tagId || 'Unknown';
+    return { risk: "High Relationship Risk", level: "high", explanation: `${ram.tagId} and ${ewe.tagId} share a recent common ancestor (${sharedTag}). This is half-sibling, grandparent-grandchild, or uncle-niece level relationship. Use with caution.` };
+  }
+
+  const ramAncestors5 = buildAncestorSet(ram.id, animalMap, 5);
+  const eweAncestors5 = buildAncestorSet(ewe.id, animalMap, 5);
+  const sharedDeep = [...ramAncestors5].filter(id => eweAncestors5.has(id));
+  if (sharedDeep.length > 0) {
+    const shared = animalMap.get(sharedDeep[0]);
+    const sharedTag = shared?.tagId || 'Unknown';
+    return { risk: "Managed Linebreeding", level: "managed", explanation: `${ram.tagId} and ${ewe.tagId} share a common ancestor (${sharedTag}) more than 3 generations back. This is managed linebreeding — acceptable if the shared ancestor is a desired type.` };
+  }
+
+  const hasInsufficient = !ram.sireId && !ram.damId && !ewe.sireId && !ewe.damId;
+  if (hasInsufficient) return { risk: "Unknown Risk", level: "unknown", explanation: "Pedigree records are too incomplete to classify this mating safely. Record parentage data before making a decision." };
+
+  if (ram.breed && ewe.breed && ram.breed !== ewe.breed) return { risk: "Crossbreeding", level: "safe", explanation: `${ram.tagId} (${ram.breed}) and ${ewe.tagId} (${ewe.breed}) are different breeds. Crossbreeding can leverage heterosis/hybrid vigor if the breeds are complementary.` };
+
+  const ramHasPed = ram.sireId || ram.damId;
+  const eweHasPed = ewe.sireId || ewe.damId;
+  if (!ramHasPed || !eweHasPed) return { risk: "Unknown Risk", level: "unknown", explanation: "Pedigree data is incomplete for one or both animals. Record parentage to enable a proper risk assessment." };
+
+  return { risk: "Outbreeding", level: "safe", explanation: `No common ancestors found within 5 recorded generations. ${ram.tagId} and ${ewe.tagId} are unrelated within your recorded data — this is an outbreeding mating.` };
 }

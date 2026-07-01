@@ -34,6 +34,7 @@ const Records = lazy(() => import("@/pages/Records"));
 const Admin = lazy(() => import("@/pages/Admin"));
 const Help = lazy(() => import("@/pages/Help"));
 const ReportIssue = lazy(() => import("@/pages/ReportIssue"));
+const Genetics = lazy(() => import("@/pages/Genetics"));
 
 // Loading fallback for lazy loaded pages
 
@@ -93,6 +94,7 @@ function Router() {
         <Route path="/admin" component={Admin} />
         <Route path="/help" component={Help} />
         <Route path="/report-issue" component={ReportIssue} />
+        <Route path="/genetics" component={Genetics} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

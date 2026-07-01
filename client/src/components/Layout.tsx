@@ -105,6 +105,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/animals", icon: Beef, label: "My Herd" },
     { href: "/analysis", icon: BarChart3, label: "Data" },
     { href: "/breeding", icon: Dna, label: "Breeding" },
+    { href: "/genetics", icon: Dna, label: "Genetics" },
     { href: "/health", icon: Syringe, label: "Health" },
     { href: "/records", icon: FileText, label: "Records" },
     { href: "/settings", icon: Settings, label: "Settings" },
@@ -121,6 +122,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   // Items that live in the More sheet on mobile.
   const moreItems = [
+    { href: "/genetics", icon: Dna, label: "Genetics" },
     { href: "/health", icon: Syringe, label: "Health" },
     { href: "/records", icon: FileText, label: "Records" },
     { href: "/settings", icon: Settings, label: "Settings" },
@@ -129,6 +131,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   const isMoreActive =
+    location === "/genetics" ||
     location === "/health" ||
     location === "/records" ||
     location === "/settings" ||
