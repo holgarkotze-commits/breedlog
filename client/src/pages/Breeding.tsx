@@ -700,7 +700,7 @@ function CreateMatingGroupDialog({ open, onOpenChange }: { open: boolean, onOpen
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField name="dateIn" control={form.control} render={({ field }) => (
                 <FormItem>
                   <FormLabel className="flex items-center gap-1">
@@ -805,7 +805,7 @@ function RecordBreedingDialog({ open, onOpenChange }: { open: boolean, onOpenCha
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField name="eweId" control={form.control} render={({ field }) => (
                 <FormItem>
                   <FormLabel className="flex items-center gap-1">
@@ -1022,7 +1022,7 @@ function EditMatingGroupDialog({ group, open, onOpenChange }: { group: MatingGro
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField name="dateIn" control={form.control} render={({ field }) => (
                 <FormItem>
                   <FormLabel className="flex items-center gap-1">

@@ -556,6 +556,59 @@ export const insertInviteCodeSchema = createInsertSchema(inviteCodes).omit({ id:
 export type InviteCode = typeof inviteCodes.$inferSelect;
 export type InsertInviteCode = z.infer<typeof insertInviteCodeSchema>;
 
+// === GENETICS MODULE ===
+
+export const bloodlines = pgTable("bloodlines", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  name: text("name").notNull(),
+  type: text("type").default("unknown"), // sire_line, dam_line, external_line, foundation_line, terminal_line, maternal_line, composite_line, unknown
+  originFarmOrBreeder: text("origin_farm_or_breeder"),
+  foundationAnimalId: integer("foundation_animal_id"),
+  selectedTraits: text("selected_traits"),
+  knownWeaknesses: text("known_weaknesses"),
+  notes: text("notes"),
+  status: text("status").default("active"), // active, archived, under_observation
+  evidenceStatus: text("evidence_status").default("unknown"), // proven, promising, unproven, unknown
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBloodlineSchema = createInsertSchema(bloodlines).omit({ id: true, userId: true, createdAt: true });
+export type Bloodline = typeof bloodlines.$inferSelect;
+export type InsertBloodline = z.infer<typeof insertBloodlineSchema>;
+
+export const geneticLines = pgTable("genetic_lines", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  lineName: text("line_name").notNull(),
+  lineGoal: text("line_goal"),
+  primaryTraits: text("primary_traits"),
+  selectionNotes: text("selection_notes"),
+  activeStatus: boolean("active_status").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertGeneticLineSchema = createInsertSchema(geneticLines).omit({ id: true, userId: true, createdAt: true });
+export type GeneticLine = typeof geneticLines.$inferSelect;
+export type InsertGeneticLine = z.infer<typeof insertGeneticLineSchema>;
+
+export const animalBloodlines = pgTable("animal_bloodlines", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  animalId: integer("animal_id").notNull().references(() => animals.id),
+  bloodlineId: integer("bloodline_id").notNull().references(() => bloodlines.id),
+  role: text("role").default("primary"), // primary, secondary, sire_line, dam_line
+  geneticLineId: integer("genetic_line_id"),
+  breedingSystem: text("breeding_system"), // pure_breeding, out_breeding, inbreeding, linebreeding, crossbreeding, terminal_crossing, rotational_crossing, roto_terminal_crossing, grading_up, composite_breeding
+  sourceConfidence: text("source_confidence").default("unknown"), // known, partially_known, assumed, unknown
+  notes: text("notes"),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+});
+
+export const insertAnimalBloodlineSchema = createInsertSchema(animalBloodlines).omit({ id: true, userId: true, assignedAt: true });
+export type AnimalBloodline = typeof animalBloodlines.$inferSelect;
+export type InsertAnimalBloodline = z.infer<typeof insertAnimalBloodlineSchema>;
+
 // === BETA ACCESS - USER ACTIVATIONS ===
 // Links a user to their invite code and tracks their access status
 export const userActivations = pgTable("user_activations", {

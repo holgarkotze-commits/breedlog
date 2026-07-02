@@ -79,6 +79,12 @@ export const QUESTION_BANK: QuestionChip[] = [
   { id: "help-sync", label: "What does sync mean?", questionText: "What does sync mean in BreedLog?", answerSourceType: "knowledge", requiredKnowledgeIds: ["sync-offline"], requiredDataCapabilities: [], appArea: "app-help", enabled: true },
   { id: "help-save-code", label: "How to save my access code?", questionText: "How do I save my access code?", answerSourceType: "knowledge", requiredKnowledgeIds: ["access-codes"], requiredDataCapabilities: [], appArea: "app-help", enabled: true },
 
+  // ---- Genetics & Bloodlines (knowledge + hybrid) ----
+  { id: "genetics-how-check-risk", label: "How to check mating risk?", questionText: "How do I check mating risk before pairing a ram and ewe?", answerSourceType: "knowledge", requiredKnowledgeIds: ["mating-risk", "genetics-bloodlines"], requiredDataCapabilities: [], appArea: "genetics", enabled: true },
+  { id: "genetics-critical-risk", label: "What does critical mating risk mean?", questionText: "What does critical mating risk mean and what should I do?", answerSourceType: "knowledge", requiredKnowledgeIds: ["mating-risk"], requiredDataCapabilities: [], appArea: "genetics", enabled: true },
+  { id: "genetics-create-bloodline", label: "How to create a bloodline?", questionText: "How do I create a bloodline in BreedLog?", answerSourceType: "knowledge", requiredKnowledgeIds: ["genetics-bloodlines"], requiredDataCapabilities: [], appArea: "genetics", enabled: true },
+  { id: "genetics-ebv-asbv", label: "Does BreedLog generate EBVs?", questionText: "Does BreedLog generate EBVs or ASBVs?", answerSourceType: "knowledge", requiredKnowledgeIds: ["genetics-bloodlines"], requiredDataCapabilities: [], appArea: "genetics", enabled: true },
+
   // ---- Animal Profile Help (hybrid) ----
   { id: "animal-summarize", label: "Summarize this animal", questionText: "Summarize this animal's records.", answerSourceType: "appData", requiredKnowledgeIds: [], requiredDataCapabilities: ["selectedAnimal"], appArea: "animal-profile", enabled: true },
   { id: "animal-missing", label: "What is missing from this profile?", questionText: "What is missing from this animal's profile?", answerSourceType: "hybrid", requiredKnowledgeIds: ["add-edit-animals"], requiredDataCapabilities: ["selectedAnimal"], appArea: "animal-profile", enabled: true },
@@ -137,6 +143,11 @@ export const PROMPT_CATEGORIES: PromptCategory[] = [
     key: "app-help",
     label: "App Help & How-To",
     prompts: QUESTION_BANK.filter((q) => q.appArea === "app-help" && q.enabled).map((q) => q.questionText),
+  },
+  {
+    key: "genetics",
+    label: "Genetics & Bloodlines",
+    prompts: QUESTION_BANK.filter((q) => q.appArea === "genetics" && q.enabled).map((q) => q.questionText),
   },
   {
     key: "animal-profile",

@@ -134,48 +134,96 @@
 }
 
 @layer base {
-  * {
+  *,
+  *::before,
+  *::after {
     @apply border-border;
+    /* Prevent double-tap zoom on touch devices — preserves pinch-zoom */
+    touch-action: manipulation;
+    /* Prevent tap highlight flash on iOS/Android */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    /* Enable smooth scrolling for anchor navigation */
+    scroll-behavior: smooth;
+    /* Prevent content jumping when scrollbar appears/disappears */
+    scroll-padding-top: 4rem;
+    /* Improve text rendering on all screens */
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     @apply min-h-screen bg-background text-foreground font-sans antialiased selection:bg-primary selection:text-primary-foreground;
     background-image: radial-gradient(circle at 10% 10%, hsl(210 58% 82% / 0.3) 0, transparent 36%), radial-gradient(circle at 86% 0, hsl(41 82% 68% / 0.2) 0, transparent 38%);
-    font-size: 14px;
+    /* Base: 15px reads clearly in bright outdoor light */
+    font-size: 15px;
     transition: background-color 0.25s ease, color 0.25s ease;
+    /* Prevent horizontal overflow on mobile */
+    overflow-x: hidden;
   }
 
   .dark body {
     background-image: radial-gradient(circle at 12% 5%, hsl(201 88% 32% / 0.18) 0, transparent 36%), radial-gradient(circle at 90% 0, hsl(44 90% 62% / 0.12) 0, transparent 40%);
   }
 
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
+  h1, h2, h3, h4, h5, h6 {
     @apply font-display font-bold tracking-tight;
   }
 
-  @media (max-width: 768px) {
+  /* ─── Mobile (< 640px) ─────────────────────────────────────────────────── */
+  @media (max-width: 639px) {
     body {
-      font-size: 13px;
+      font-size: 14px;
+    }
+    h1 { @apply text-xl; }
+    h2 { @apply text-lg; }
+    h3, h4, h5, h6 { @apply text-base; }
+
+    /* Minimum 44px touch target for all interactive elements */
+    button,
+    [role="button"],
+    a,
+    input[type="checkbox"],
+    input[type="radio"],
+    select {
+      min-height: 44px;
     }
 
-    h1 {
-      @apply text-xl;
+    /* Inputs: taller on mobile for easier outdoor use with gloves */
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    input[type="password"],
+    input[type="search"],
+    input[type="date"],
+    textarea,
+    select {
+      font-size: 16px; /* Prevents iOS auto-zoom on focus */
+      min-height: 44px;
+    }
+  }
+
+  /* ─── Tablet (640–1023px) ─────────────────────────────────────────────── */
+  @media (min-width: 640px) and (max-width: 1023px) {
+    body {
+      font-size: 15px;
     }
 
-    h2 {
-      @apply text-lg;
+    /* Keep 44px touch targets on tablet */
+    button,
+    [role="button"],
+    a {
+      min-height: 40px;
     }
+  }
 
-    h3,
-    h4,
-    h5,
-    h6 {
-      @apply text-base;
+  /* ─── Desktop (1024px+) ───────────────────────────────────────────────── */
+  @media (min-width: 1024px) {
+    body {
+      font-size: 15px;
     }
   }
 
@@ -194,6 +242,17 @@
     @apply font-bold;
     color: hsl(var(--foreground));
   }
+
+  /* Responsive table: stack on small screens */
+  @media (max-width: 480px) {
+    table {
+      font-size: 12px;
+    }
+    table th,
+    table td {
+      padding: 0.4rem 0.5rem;
+    }
+  }
 }
 
 @layer components {
@@ -202,11 +261,11 @@
   }
 
   .active-elevate-2 {
-    @apply active:translate-y-px active:shadow-sm;
+    @apply active:translate-y-px active:shadow-sm active:scale-[0.99];
   }
 
   .rugged-btn {
-    @apply font-semibold shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg;
+    @apply font-semibold shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-px active:scale-[0.99];
   }
 
   .light .rugged-btn {
@@ -279,9 +338,10 @@
     background: linear-gradient(140deg, hsl(var(--card) / 0.96) 0%, hsl(var(--secondary) / 0.7) 100%);
   }
 
+  /* ─── Scrollbar ─────────────────────────────────────────────────────────── */
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   ::-webkit-scrollbar-track {
@@ -296,5 +356,41 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--primary));
+  }
+
+  /* Hide scrollbar on mobile — use momentum scroll instead */
+  @media (max-width: 767px) {
+    ::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+    }
+  }
+
+  /* ─── Touch-safe overscroll ────────────────────────────────────────────── */
+  .overflow-y-auto,
+  .overflow-x-auto,
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  /* ─── Independent scroll pane (for two-column layouts) ─────────────────── */
+  /* Use .scroll-pane on any container that must scroll independently.        */
+  /* The parent must be a fixed-height flex/grid context.                     */
+  .scroll-pane {
+    overflow-y: auto;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scroll-padding-top: 0.5rem;
+  }
+
+  /* ─── Flex/grid children height safety ─────────────────────────────────── */
+  /* Prevent flex children from growing beyond parent — needed for scrollable */
+  /* panels nested inside flex-column parents.                                */
+  .flex-child-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }

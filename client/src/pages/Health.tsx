@@ -15,7 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Syringe, ChevronRight, Calendar, Users, BookOpen, ShieldAlert } from "lucide-react";
+import { Plus, Syringe, ChevronRight, ChevronDown, Calendar, Users, BookOpen, ShieldAlert } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -90,6 +91,7 @@ export default function Health() {
   const [activePane, setActivePane] = useState<"record" | "records" | "plan">("records");
   const [healthPlanData, setHealthPlanData] = useState<{ disclaimer: string; topics: HealthPlanTopic[] } | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState("");
+  const [mobileOpenTopicId, setMobileOpenTopicId] = useState<string | null>(null);
   const [suggestedEventType, setSuggestedEventType] = useState<HealthEventType>("observation_symptom");
 
   const sortedEvents = [...(healthEvents || [])].sort((a, b) => {
@@ -159,8 +161,68 @@ export default function Health() {
                 <AlertDescription className="font-medium text-sm">{healthPlanData?.disclaimer || "Loading health plan guidance..."}</AlertDescription>
               </Alert>
 
-              <div className="grid grid-cols-1 md:grid-cols-[220px,1fr] gap-4">
-                <div className="space-y-2" data-testid="health-plan-topic-menu">
+              {/* Mobile accordion — visible below md breakpoint */}
+              <div className="md:hidden space-y-2" data-testid="health-plan-topic-menu">
+                {healthPlanData?.topics?.map((topic) => {
+                  const isOpen = mobileOpenTopicId === topic.id;
+                  return (
+                    <div key={topic.id} data-testid={`health-plan-accordion-${topic.id}`}>
+                      <Button
+                        variant={isOpen ? "default" : "outline"}
+                        className="w-full justify-between text-left whitespace-normal h-auto py-2.5 px-3"
+                        onClick={() => setMobileOpenTopicId(isOpen ? null : topic.id)}
+                        data-testid={`health-plan-topic-${topic.id}`}
+                      >
+                        <span className="flex-1 text-left">{topic.label}</span>
+                        <ChevronDown className={cn("ml-2 w-4 h-4 shrink-0 transition-transform duration-200", isOpen && "rotate-180")} />
+                      </Button>
+                      {isOpen && (
+                        <div className="mt-2 ml-1 space-y-3 border-l-2 border-primary/30 pl-3" data-testid={`health-plan-topic-content-mobile-${topic.id}`}>
+                          {topic.cards.map((card, index) => (
+                            <Card key={`${topic.id}-mob-${index}`} className="bg-secondary/40 border-border" data-testid={`health-plan-card-${topic.id}-${index}`}>
+                              <CardHeader className="pb-2 p-3">
+                                <CardTitle className="text-sm">{card.title}</CardTitle>
+                              </CardHeader>
+                              <CardContent className="space-y-2 text-sm p-3 pt-0">
+                                <p className="text-muted-foreground">{card.explanation}</p>
+                                <div>
+                                  <p className="font-semibold">What to watch for</p>
+                                  <ul className="list-disc ml-5 text-muted-foreground">
+                                    {card.watchFor.map((item) => (
+                                      <li key={item}>{item}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <div>
+                                  <p className="font-semibold">What to record in BreedLog</p>
+                                  <ul className="list-disc ml-5 text-muted-foreground">
+                                    {card.recordInBreedLog.map((item) => (
+                                      <li key={item}>{item}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openRecordWithType(card.suggestedEventType)}
+                                  data-testid={`health-plan-action-${topic.id}-${index}`}
+                                >
+                                  {card.suggestedActionLabel}
+                                </Button>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop two-column — visible from md breakpoint */}
+              <div className="hidden md:flex gap-4 min-h-0" style={{ height: "calc(100dvh - 320px)", minHeight: "480px" }}>
+                <div className="w-[220px] shrink-0 overflow-y-auto space-y-2 pr-1" data-testid="health-plan-topic-menu">
                   {healthPlanData?.topics?.map((topic) => (
                     <Button
                       key={topic.id}
@@ -174,7 +236,7 @@ export default function Health() {
                   ))}
                 </div>
 
-                <div className="space-y-3" data-testid="health-plan-topic-content">
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1" data-testid="health-plan-topic-content">
                   <h3 className="font-bold text-base md:text-lg">{selectedTopic?.label || "Loading..."}</h3>
                   {!selectedTopic && <p className="text-sm text-muted-foreground">Loading guide topics...</p>}
                   {selectedTopic?.cards.map((card, index) => (

@@ -21,7 +21,16 @@ import {
   fieldIssues,
   userActivityEvents,
   userAppSessions,
+  bloodlines,
+  geneticLines,
+  animalBloodlines,
   type FieldIssue,
+  type Bloodline,
+  type InsertBloodline,
+  type GeneticLine,
+  type InsertGeneticLine,
+  type AnimalBloodline,
+  type InsertAnimalBloodline,
   type InsertAnimal,
   type InsertBreedingEvent,
   type InsertOffspring,
@@ -203,6 +212,20 @@ export interface IStorage {
   getAdminActivityUsers(filters?: { sortBy?: string; filterBy?: string }): Promise<AdminActivityUser[]>;
   getAdminActivityUserDetail(userId: string): Promise<AdminActivityUserDetail | undefined>;
   getAdminActivityEvents(filters?: { userId?: string; eventType?: string; limit?: number }): Promise<ActivityEvent[]>;
+
+  // Genetics Module
+  getBloodlines(userId: string): Promise<Bloodline[]>;
+  createBloodline(userId: string, data: InsertBloodline): Promise<Bloodline>;
+  updateBloodline(userId: string, id: number, data: Partial<InsertBloodline>): Promise<Bloodline | undefined>;
+  deleteBloodline(userId: string, id: number): Promise<void>;
+  getGeneticLines(userId: string): Promise<GeneticLine[]>;
+  createGeneticLine(userId: string, data: InsertGeneticLine): Promise<GeneticLine>;
+  updateGeneticLine(userId: string, id: number, data: Partial<InsertGeneticLine>): Promise<GeneticLine | undefined>;
+  deleteGeneticLine(userId: string, id: number): Promise<void>;
+  getAnimalBloodlines(userId: string, animalId: number): Promise<AnimalBloodline[]>;
+  setAnimalBloodline(userId: string, data: InsertAnimalBloodline): Promise<AnimalBloodline>;
+  removeAnimalBloodline(userId: string, id: number): Promise<void>;
+  seedGeneticsForUser(userId: string, bloodlineNames: string[]): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1045,9 +1068,65 @@ export class DatabaseStorage implements IStorage {
     query = query.orderBy(desc(userActivityEvents.occurredAt)).limit(filters?.limit ?? 100);
     return query;
   }
+
+  // ── Genetics Module ──────────────────────────────────────────────────────────
+  async getBloodlines(userId: string): Promise<Bloodline[]> {
+    return db.select().from(bloodlines).where(eq(bloodlines.userId, userId)).orderBy(bloodlines.name);
+  }
+  async createBloodline(userId: string, data: InsertBloodline): Promise<Bloodline> {
+    const [row] = await db.insert(bloodlines).values({ ...data, userId }).returning();
+    return row;
+  }
+  async updateBloodline(userId: string, id: number, data: Partial<InsertBloodline>): Promise<Bloodline | undefined> {
+    const [row] = await db.update(bloodlines).set(data).where(and(eq(bloodlines.id, id), eq(bloodlines.userId, userId))).returning();
+    return row;
+  }
+  async deleteBloodline(userId: string, id: number): Promise<void> {
+    await db.delete(bloodlines).where(and(eq(bloodlines.id, id), eq(bloodlines.userId, userId)));
+  }
+  async getGeneticLines(userId: string): Promise<GeneticLine[]> {
+    return db.select().from(geneticLines).where(eq(geneticLines.userId, userId)).orderBy(geneticLines.lineName);
+  }
+  async createGeneticLine(userId: string, data: InsertGeneticLine): Promise<GeneticLine> {
+    const [row] = await db.insert(geneticLines).values({ ...data, userId }).returning();
+    return row;
+  }
+  async updateGeneticLine(userId: string, id: number, data: Partial<InsertGeneticLine>): Promise<GeneticLine | undefined> {
+    const [row] = await db.update(geneticLines).set(data).where(and(eq(geneticLines.id, id), eq(geneticLines.userId, userId))).returning();
+    return row;
+  }
+  async deleteGeneticLine(userId: string, id: number): Promise<void> {
+    await db.delete(geneticLines).where(and(eq(geneticLines.id, id), eq(geneticLines.userId, userId)));
+  }
+  async getAnimalBloodlines(userId: string, animalId: number): Promise<AnimalBloodline[]> {
+    return db.select().from(animalBloodlines).where(and(eq(animalBloodlines.userId, userId), eq(animalBloodlines.animalId, animalId)));
+  }
+  async setAnimalBloodline(userId: string, data: InsertAnimalBloodline): Promise<AnimalBloodline> {
+    const existing = await db.select().from(animalBloodlines)
+      .where(and(eq(animalBloodlines.userId, userId), eq(animalBloodlines.animalId, data.animalId), eq(animalBloodlines.role, data.role ?? 'primary'))).limit(1);
+    if (existing.length) {
+      const [row] = await db.update(animalBloodlines).set({ bloodlineId: data.bloodlineId, geneticLineId: data.geneticLineId, breedingSystem: data.breedingSystem, sourceConfidence: data.sourceConfidence, notes: data.notes })
+        .where(eq(animalBloodlines.id, existing[0].id)).returning();
+      return row;
+    }
+    const [row] = await db.insert(animalBloodlines).values({ ...data, userId }).returning();
+    return row;
+  }
+  async removeAnimalBloodline(userId: string, id: number): Promise<void> {
+    await db.delete(animalBloodlines).where(and(eq(animalBloodlines.id, id), eq(animalBloodlines.userId, userId)));
+  }
+  async seedGeneticsForUser(userId: string, bloodlineNames: string[]): Promise<void> {
+    const existing = await this.getBloodlines(userId);
+    const existingNames = new Set(existing.map(b => b.name));
+    for (const name of bloodlineNames) {
+      if (!existingNames.has(name)) {
+        await this.createBloodline(userId, { name, type: 'foundation_line', status: 'active', evidenceStatus: 'unknown', notes: 'Kwantam demo bloodline' });
+      }
+    }
+  }
 }
 
-class InMemoryStorage implements IStorage {
+export class InMemoryStorage implements IStorage {
   private animalSeq = 1;
   private breedingSeq = 1;
   private matingSeq = 1;
@@ -1459,6 +1538,84 @@ class InMemoryStorage implements IStorage {
     if (filters?.userId) events = events.filter(e => e.userId === filters.userId);
     if (filters?.eventType) events = events.filter(e => e.eventType === filters.eventType);
     return events.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime()).slice(0, filters?.limit ?? 100);
+  }
+
+  // ── Genetics Module (in-memory) ───────────────────────────────────────────
+  private bloodlineSeq = 1;
+  private bloodlinesMap = new Map<number, Bloodline>();
+  private geneticLineSeq = 1;
+  private geneticLinesMap = new Map<number, GeneticLine>();
+  private animalBloodlineSeq = 1;
+  private animalBloodlinesMap = new Map<number, AnimalBloodline>();
+
+  async getBloodlines(userId: string): Promise<Bloodline[]> {
+    return [...this.bloodlinesMap.values()].filter(b => b.userId === userId).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  async createBloodline(userId: string, data: InsertBloodline): Promise<Bloodline> {
+    const id = this.bloodlineSeq++;
+    const row: Bloodline = { id, userId, name: data.name, type: data.type ?? 'unknown', originFarmOrBreeder: data.originFarmOrBreeder ?? null, foundationAnimalId: data.foundationAnimalId ?? null, selectedTraits: data.selectedTraits ?? null, knownWeaknesses: data.knownWeaknesses ?? null, notes: data.notes ?? null, status: data.status ?? 'active', evidenceStatus: data.evidenceStatus ?? 'unknown', createdAt: this.now() };
+    this.bloodlinesMap.set(id, row);
+    return row;
+  }
+  async updateBloodline(userId: string, id: number, data: Partial<InsertBloodline>): Promise<Bloodline | undefined> {
+    const existing = this.bloodlinesMap.get(id);
+    if (!existing || existing.userId !== userId) return undefined;
+    const updated = { ...existing, ...data } as Bloodline;
+    this.bloodlinesMap.set(id, updated);
+    return updated;
+  }
+  async deleteBloodline(userId: string, id: number): Promise<void> {
+    const b = this.bloodlinesMap.get(id);
+    if (b?.userId === userId) this.bloodlinesMap.delete(id);
+  }
+  async getGeneticLines(userId: string): Promise<GeneticLine[]> {
+    return [...this.geneticLinesMap.values()].filter(l => l.userId === userId).sort((a, b) => a.lineName.localeCompare(b.lineName));
+  }
+  async createGeneticLine(userId: string, data: InsertGeneticLine): Promise<GeneticLine> {
+    const id = this.geneticLineSeq++;
+    const row: GeneticLine = { id, userId, lineName: data.lineName, lineGoal: data.lineGoal ?? null, primaryTraits: data.primaryTraits ?? null, selectionNotes: data.selectionNotes ?? null, activeStatus: data.activeStatus ?? true, createdAt: this.now() };
+    this.geneticLinesMap.set(id, row);
+    return row;
+  }
+  async updateGeneticLine(userId: string, id: number, data: Partial<InsertGeneticLine>): Promise<GeneticLine | undefined> {
+    const existing = this.geneticLinesMap.get(id);
+    if (!existing || existing.userId !== userId) return undefined;
+    const updated = { ...existing, ...data } as GeneticLine;
+    this.geneticLinesMap.set(id, updated);
+    return updated;
+  }
+  async deleteGeneticLine(userId: string, id: number): Promise<void> {
+    const l = this.geneticLinesMap.get(id);
+    if (l?.userId === userId) this.geneticLinesMap.delete(id);
+  }
+  async getAnimalBloodlines(userId: string, animalId: number): Promise<AnimalBloodline[]> {
+    return [...this.animalBloodlinesMap.values()].filter(ab => ab.userId === userId && ab.animalId === animalId);
+  }
+  async setAnimalBloodline(userId: string, data: InsertAnimalBloodline): Promise<AnimalBloodline> {
+    const role = data.role ?? 'primary';
+    const existing = [...this.animalBloodlinesMap.values()].find(ab => ab.userId === userId && ab.animalId === data.animalId && ab.role === role);
+    if (existing) {
+      const updated = { ...existing, bloodlineId: data.bloodlineId, geneticLineId: data.geneticLineId ?? null, breedingSystem: data.breedingSystem ?? null, sourceConfidence: data.sourceConfidence ?? 'unknown', notes: data.notes ?? null } as AnimalBloodline;
+      this.animalBloodlinesMap.set(existing.id, updated);
+      return updated;
+    }
+    const id = this.animalBloodlineSeq++;
+    const row: AnimalBloodline = { id, userId, animalId: data.animalId, bloodlineId: data.bloodlineId, role, geneticLineId: data.geneticLineId ?? null, breedingSystem: data.breedingSystem ?? null, sourceConfidence: data.sourceConfidence ?? 'unknown', notes: data.notes ?? null, assignedAt: this.now() };
+    this.animalBloodlinesMap.set(id, row);
+    return row;
+  }
+  async removeAnimalBloodline(userId: string, id: number): Promise<void> {
+    const ab = this.animalBloodlinesMap.get(id);
+    if (ab?.userId === userId) this.animalBloodlinesMap.delete(id);
+  }
+  async seedGeneticsForUser(userId: string, bloodlineNames: string[]): Promise<void> {
+    const existing = await this.getBloodlines(userId);
+    const existingNames = new Set(existing.map(b => b.name));
+    for (const name of bloodlineNames) {
+      if (!existingNames.has(name)) {
+        await this.createBloodline(userId, { name, type: 'foundation_line', status: 'active', evidenceStatus: 'unknown', notes: 'Kwantam demo bloodline' });
+      }
+    }
   }
 }
 

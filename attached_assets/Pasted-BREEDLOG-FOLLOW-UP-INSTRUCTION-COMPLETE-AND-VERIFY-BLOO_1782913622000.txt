@@ -1,0 +1,209 @@
+BREEDLOG FOLLOW-UP INSTRUCTION — COMPLETE AND VERIFY BLOODLINE PEDIGREE MODULE
+
+You created commit ad6cbeb, “Add genetics pedigree foundation,” and opened the PR “Add genetics pedigree foundation.”
+
+Do not treat this as complete yet.
+
+The previous result is accepted only as a foundation pass. The work must now be finished, wired properly, and verified end to end.
+
+Current known status:
+
+* Foundation files were added: shared/genetics.ts, client/src/pages/Genetics.tsx, tests/genetics.test.ts.
+* Schema additions were added for bloodlines, genetic_lines, animal_bloodlines, animal_pedigree_links, mating_relationship_checks, breeding_system_definitions, and line_performance_snapshots.
+* Animal profile was updated to show a basic “Pedigree & Bloodline” summary.
+* A /genetics page route was reportedly added.
+* Tests did not run because tsx was not available.
+* npm install/npm ci was blocked by registry/proxy access.
+* npm run check failed because dependencies/type packages were missing.
+* Runtime app proof, screenshots, and PDF/export proof were not completed.
+
+Completion requirement:
+Do not merge this PR and do not claim complete until the module is actually running, tested, and visually verified.
+
+Required next pass:
+
+1. Dependency and verification environment
+   Use the fastest reliable verification environment with dependency access. Prefer the existing GitHub/Codex/GitHub Actions path if Replit package install remains blocked.
+   Run:
+
+* npm ci
+* npm run check
+* npm run test:cert
+* npm run build
+
+If Replit registry/proxy blocks package restore again, document it clearly and move verification to a clean environment that can install from package-lock. Do not bypass security policy and do not claim tests passed if they did not run.
+
+2. Fix persistence, storage, and API wiring
+   The schema alone is not enough. Add full app wiring for the genetics module:
+
+* storage interface methods for bloodlines
+* storage interface methods for genetic lines
+* storage interface methods for animal bloodline assignments
+* storage interface methods for pedigree links
+* storage interface methods for mating relationship checks
+* database storage implementation
+* in-memory storage implementation for tests
+* API routes
+* shared route definitions in shared/routes.ts
+* React hooks for the Genetics page
+
+Bloodline Manager and Genetic Line Manager must not be static UI only. They must create, edit, archive, and reload real persisted records per authenticated user.
+
+3. Enforce user data isolation
+   Every genetics table and storage method must filter by userId.
+   Normal users must start with clean empty genetics records.
+   Only the U2A2ZAVQ simulation/master workspace may receive Kwantam demo genetics:
+
+* Baksteen
+* Bosch
+* Zelenski
+* Rolo
+* Nitro
+
+No Kwantam demo genetics may leak into normal user workspaces.
+
+4. Complete pedigree depth correctly
+   The AnimalDetail summary currently must not rely only on [animal, animal.sire, animal.dam] if the requirement is 4–6 generations.
+   Extend the family tree/pedigree endpoint and/or data loading so BreedLog can evaluate ancestry up to 4–6 recorded generations.
+
+Required behaviour:
+
+* sire shows correctly
+* dam shows correctly
+* sire’s sire shows correctly
+* sire’s dam shows correctly
+* dam’s sire shows correctly
+* dam’s dam shows correctly
+* deeper common ancestors can be scanned for mating-risk logic
+* missing records display “Unknown,” not blank or “N/A”
+
+5. Complete mating-risk planner
+   The relationship classifier must be available in the actual app UI, not only tests.
+
+The mating planner must classify:
+
+* Critical inbreeding risk: same animal, parent-offspring, full siblings
+* High relationship risk: half-siblings, grandparent-grandchild, uncle/aunt to niece/nephew
+* Managed linebreeding: shared desired ancestor but not extremely close
+* Outbreeding: same breed/type with no common ancestor within 4–6 recorded generations
+* Crossbreeding: different breed or breed composition/type
+* Unknown risk: pedigree too incomplete to judge safely
+
+The UI must show the classification and a plain-language explanation.
+
+6. Complete line-performance dashboard using real records
+   The dashboard must aggregate from actual BreedLog data, not fake/static values.
+
+Required metrics:
+
+* active animals in line
+* lambs born
+* lambs weaned
+* lamb survival percentage
+* average birth weight
+* average weaning weight
+* average ADG where available
+* ewe lambs retained
+* ram lambs retained
+* animals sold
+* animals culled
+* cull reasons
+* top progeny
+* weak progeny
+* number of breeding females
+* number of breeding rams
+* current evidence rating
+
+Do not invent performance claims.
+
+7. Complete export integration
+   The previous foundation did not prove PDF/export completion. Update the individual animal exports so the genetics module appears in the exported document.
+
+For rams, include:
+
+* bloodline
+* sire line
+* dam line
+* pedigree depth
+* progeny count
+* lambs born
+* lambs weaned
+* average progeny birth weight
+* average progeny weaning weight
+* average progeny ADG
+* retained progeny
+* cull/progeny weakness notes
+* AI genetic summary under 500 characters
+
+For ewes, include:
+
+* dam line
+* sire influence
+* lambing history
+* lambs born
+* lambs weaned
+* lamb survival percentage
+* average lamb weaning weight
+* repeat breeding record
+* maternal rating
+* AI summary under 500 characters
+
+For young animals, include:
+
+* parentage
+* bloodline
+* birth type
+* growth record
+* weaning record
+* classification notes
+* retain/sell/cull recommendation
+* AI summary under 500 characters
+
+All exports must remain A4-safe and must not overflow.
+Add subtle footer/signoff where appropriate:
+Developed by STITCH WORX — Software, systems & digital builds.
+
+8. AI summary rules
+   AI genetics summaries must be based only on recorded data.
+   Do not invent EBVs, ASBVs, genetic merit, bloodline superiority, or official values.
+   If no official EBV/ASBV exists, show:
+   “No official EBV/ASBV recorded.”
+
+Every individual animal export summary must stay under 500 characters.
+
+9. UI quality pass
+   The Genetics page must be professional, compact, mobile-friendly, and field usable.
+   Avoid a fake dashboard feel.
+   The module must clearly separate:
+
+* Breed
+* Pedigree
+* Bloodline
+* Genetic line
+* Breeding system
+* Measured performance
+
+10. Required proof before completion
+    Provide final proof with:
+
+* latest branch name
+* latest commit hash
+* files changed
+* npm ci result
+* npm run check result
+* npm run test:cert result
+* npm run build result
+* screenshots or clear runtime proof of:
+
+  * Genetics page
+  * Bloodline Manager
+  * Genetic Line Manager
+  * Animal Profile “Pedigree & Bloodline”
+  * Mating-risk result
+  * Line-performance dashboard
+  * Updated individual animal export
+* confirmation that normal user workspaces stay clean
+* confirmation that U2A2ZAVQ alone receives Kwantam demo genetics
+
+Completion standard:
+Do not claim complete unless the app runs, tests pass, exports are generated, and proof shows the new pedigree/bloodline UI, mating-risk logic, bloodline dashboard, and export output working.

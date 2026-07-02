@@ -1,0 +1,76 @@
+BREEDLOG REPLIT FINALIZE TASK — PUSH UX / SCROLL / SMART ALERTS WORK TO GITHUB
+
+This instruction is for REPLIT only.
+
+Do not do new feature work.
+Do not add unrelated changes.
+Do not ask Haka to do manual GitHub work.
+Do not ask Haka to open a PR.
+Do not ask Haka to run GitHub Actions.
+Do not merge.
+
+You already implemented and locally tested:
+
+* global scroll utilities
+* Health Plan mobile accordion
+* Dashboard performance useMemo improvements
+* AI knowledge updates for Genetics, Mating Risk, Health Plan, and Decision Assist
+* Decision Assist alerts
+* tests for decision alerts and health plan guide
+
+Now finish the GitHub delivery cycle.
+
+Required actions:
+
+1. Check current state:
+   git status --short
+   git branch --show-current
+   git rev-parse HEAD
+   git remote -v
+
+2. Create or switch to branch:
+   ux-scroll-performance-smart-alerts
+
+3. Commit all current UX/scroll/performance/smart-alert changes with message:
+   Improve scrolling, mobile UX, AI context, and smart alerts
+
+4. Push branch to GitHub:
+   ux-scroll-performance-smart-alerts
+
+5. Open PR:
+   Repo: holgarkotze-commits/breedlog
+   Base: main
+   Head: ux-scroll-performance-smart-alerts
+   Title: Improve scrolling, mobile UX, AI context, and smart alerts
+
+6. Monitor GitHub Actions.
+
+7. If CI fails:
+
+* fetch logs
+* fix only the failing cause
+* commit
+* push
+* wait for CI again
+* repeat until CI passes
+
+Required final report:
+
+* branch name
+* latest commit hash
+* files changed
+* PR link
+* GitHub Actions run link
+* GitHub Actions result
+* npm run check result
+* npm run build result
+* npm test result
+* confirmation Health Plan desktop/tablet scroll works
+* confirmation Health Plan mobile accordion works
+* confirmation Decision Assist alerts work
+* confirmation AI knowledge entries were added
+* confirmation no unrelated work was added
+* remaining limitations if any
+
+Completion rule:
+Do not claim complete unless the branch is pushed, PR is open, GitHub Actions passes, and the PR is mergeable.

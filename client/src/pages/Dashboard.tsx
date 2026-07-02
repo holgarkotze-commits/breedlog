@@ -1,18 +1,22 @@
 import { useAnimals } from "@/hooks/use-animals";
-import { useBreedingEvents } from "@/hooks/use-breeding";
+import { useBreedingEvents, useMatingGroups } from "@/hooks/use-breeding";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { useRecentVisits } from "@/hooks/use-recent-visits";
+import { useFlockHealthEvents } from "@/hooks/use-flock-health";
 import { useTheme } from "@/components/ThemeProvider";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/StatCard";
-import { Clock, Beef, Dna, Settings, ChevronRight, Heart, Shield, BarChart3, PlusCircle, TrendingUp, Award, Scale, Baby } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Clock, Beef, Dna, Settings, ChevronRight, Heart, Shield, BarChart3, PlusCircle, TrendingUp, Award, Scale, Baby, Bell, AlertTriangle, Info, X, Calendar, AlertCircle } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, BarChart, Bar, Legend, PieChart, Pie, Cell } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { format } from "date-fns";
+import { useMemo, useState } from "react";
+import { generateAllAlerts, dismissAlert, type DecisionAlert } from "@/lib/decision-alerts";
 
 export default function Dashboard() {
   const { resolvedTheme } = useTheme();
@@ -23,10 +27,14 @@ export default function Dashboard() {
 
   const { data: animals, isLoading: loadingAnimals } = useAnimals();
   const { data: breeding, isLoading: loadingBreeding } = useBreedingEvents();
+  const { data: matingGroups } = useMatingGroups();
+  const { data: flockHealthEvents } = useFlockHealthEvents();
   const { data: farmSettings } = useFarmSettings();
   const { getRecentVisits } = useRecentVisits();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
   const recentVisits = getRecentVisits(4);
+
+  const [dismissedKeys, setDismissedKeys] = useState<string[]>([]);
 
   const getIconForPath = (path: string) => {
     if (path.startsWith("/animals")) return Beef;
@@ -110,130 +118,85 @@ export default function Dashboard() {
     .map(([sireId, count]) => ({ sire: animals?.find(a => a.id === sireId), count }))
     .filter(({ sire }) => !!sire);
 
-  // Calculate average weight of slaughter/cull animals by month
-  const getSlaughterCullWeightData = () => {
+  const slaughterCullWeightData = useMemo(() => {
     const now = new Date();
     const currentYear = now.getFullYear();
-    const monthData = [];
-    
-    for (let m = 0; m < 12; m++) {
+    return Array.from({ length: 12 }, (_, m) => {
       const monthName = format(new Date(currentYear, m, 1), 'MMM');
-      
-      // Get slaughter/cull animals that have a current weight (includes lambs marked as cull)
-      const slaughterCullAnimals = animals?.filter(a => 
+      const culls = animals?.filter(a =>
         (a.classification === 'slaughter_cull' || a.ramLambClass === 'cull') && a.currentWeight
       ) || [];
-      
-      // Calculate average weight (using currentWeight)
-      const totalWeight = slaughterCullAnimals.reduce((sum, a) => sum + parseFloat(a.currentWeight || '0'), 0);
-      const avgWeight = slaughterCullAnimals.length > 0 
-        ? Math.round(totalWeight / slaughterCullAnimals.length) 
-        : 0;
-      
-      monthData.push({
-        month: monthName,
-        avg: avgWeight
-      });
-    }
-    
-    return monthData;
-  };
-  
-  const slaughterCullWeightData = getSlaughterCullWeightData();
-  
-  // Count of slaughter/cull animals with weights for display
-  const slaughterCullCount = animals?.filter(a => 
-    (a.classification === 'slaughter_cull' || a.ramLambClass === 'cull') && a.currentWeight
-  ).length || 0;
-  
-  // Calculate birth ratio data (Ram Lambs vs Ewe Lambs) for current year
-  const getBirthRatioData = () => {
+      const totalWeight = culls.reduce((sum, a) => sum + parseFloat(a.currentWeight || '0'), 0);
+      return { month: monthName, avg: culls.length > 0 ? Math.round(totalWeight / culls.length) : 0 };
+    });
+  }, [animals]);
+
+  const slaughterCullCount = useMemo(() =>
+    (animals?.filter(a =>
+      (a.classification === 'slaughter_cull' || a.ramLambClass === 'cull') && a.currentWeight
+    ).length) || 0,
+  [animals]);
+
+  const birthRatioData = useMemo(() => {
     const now = new Date();
     const currentYear = now.getFullYear();
-    const monthData = [];
-    
-    for (let m = 0; m < 12; m++) {
+    return Array.from({ length: 12 }, (_, m) => {
       const monthStart = new Date(currentYear, m, 1);
       const monthEnd = new Date(currentYear, m + 1, 0);
       const monthName = format(monthStart, 'MMM');
-      
-      // Count ram lambs born in this month (sex='ram' and birthDate in this month)
       const ramLambs = animals?.filter(a => {
         if (!a.birthDate || a.sex !== 'ram') return false;
-        const birthDate = new Date(a.birthDate);
-        return birthDate >= monthStart && birthDate <= monthEnd && birthDate.getFullYear() === currentYear;
+        const bd = new Date(a.birthDate);
+        return bd >= monthStart && bd <= monthEnd && bd.getFullYear() === currentYear;
       }).length || 0;
-      
-      // Count ewe lambs born in this month (sex='ewe' and birthDate in this month)
       const eweLambs = animals?.filter(a => {
         if (!a.birthDate || a.sex !== 'ewe') return false;
-        const birthDate = new Date(a.birthDate);
-        return birthDate >= monthStart && birthDate <= monthEnd && birthDate.getFullYear() === currentYear;
+        const bd = new Date(a.birthDate);
+        return bd >= monthStart && bd <= monthEnd && bd.getFullYear() === currentYear;
       }).length || 0;
-      
-      monthData.push({
-        month: monthName,
-        ramLambs,
-        eweLambs
-      });
-    }
-    
-    return monthData;
-  };
-  
-  const birthRatioData = getBirthRatioData();
-  
-  // Calculate total birth ratio for the year
-  const totalRamLambs = birthRatioData.reduce((sum, m) => sum + m.ramLambs, 0);
-  const totalEweLambs = birthRatioData.reduce((sum, m) => sum + m.eweLambs, 0);
-  const birthRatioText = totalRamLambs > 0 || totalEweLambs > 0 
-    ? `${totalEweLambs} : ${totalRamLambs}` 
+      return { month: monthName, ramLambs, eweLambs };
+    });
+  }, [animals]);
+
+  const totalRamLambs = useMemo(() => birthRatioData.reduce((s, m) => s + m.ramLambs, 0), [birthRatioData]);
+  const totalEweLambs = useMemo(() => birthRatioData.reduce((s, m) => s + m.eweLambs, 0), [birthRatioData]);
+  const birthRatioText = totalRamLambs > 0 || totalEweLambs > 0
+    ? `${totalEweLambs} : ${totalRamLambs}`
     : 'No births recorded';
 
-  // Calculate 12-month herd growth/decline data
-  const getHerdGrowthData = () => {
-    const months = [];
+  const herdGrowthData = useMemo(() => {
     const now = new Date();
-    
-    for (let i = 11; i >= 0; i--) {
+    return Array.from({ length: 12 }, (_, idx) => {
+      const i = 11 - idx;
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
       const monthName = format(date, 'MMM');
-      
-      // Count births (animals born in this month)
       const births = animals?.filter(a => {
         if (!a.birthDate) return false;
-        const birthDate = new Date(a.birthDate);
-        return birthDate >= date && birthDate <= monthEnd;
+        const bd = new Date(a.birthDate);
+        return bd >= date && bd <= monthEnd;
       }).length || 0;
-      
-      // Count additions (animals created/added in this month, excluding births)
       const additions = animals?.filter(a => {
         if (!a.createdAt) return false;
-        const createdDate = new Date(a.createdAt);
-        const hasBirthInMonth = a.birthDate && new Date(a.birthDate) >= date && new Date(a.birthDate) <= monthEnd;
-        return createdDate >= date && createdDate <= monthEnd && !hasBirthInMonth;
+        const cd = new Date(a.createdAt);
+        const hasBirth = a.birthDate && new Date(a.birthDate) >= date && new Date(a.birthDate) <= monthEnd;
+        return cd >= date && cd <= monthEnd && !hasBirth;
       }).length || 0;
-      
-      // For decline, we'd need status change dates which we don't track
-      // So we'll estimate based on non-active animals with createdAt in this period
       const declined = animals?.filter(a => {
         if (!a.createdAt || a.status === 'active') return false;
-        const createdDate = new Date(a.createdAt);
-        return createdDate >= date && createdDate <= monthEnd && ['sold', 'dead', 'culled'].includes(a.status || '');
+        const cd = new Date(a.createdAt);
+        return cd >= date && cd <= monthEnd && ['sold', 'dead', 'culled'].includes(a.status || '');
       }).length || 0;
-      
-      months.push({
-        month: monthName,
-        growth: births + additions,
-        decline: -declined,
-      });
-    }
-    
-    return months;
-  };
-  
-  const herdGrowthData = getHerdGrowthData();
+      return { month: monthName, growth: births + additions, decline: -declined };
+    });
+  }, [animals]);
+
+  const decisionAlerts = useMemo(() =>
+    generateAllAlerts({
+      flockHealthEvents: flockHealthEvents || [],
+      matingGroups: matingGroups || [],
+    }),
+  [flockHealthEvents, matingGroups, dismissedKeys]);
 
   return (
     <Layout>
@@ -249,6 +212,68 @@ export default function Dashboard() {
             {new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
           </div>
         </div>
+
+        {/* Decision Assist Alerts */}
+        {decisionAlerts.length > 0 && (
+          <div className="space-y-2" data-testid="decision-assist-alerts">
+            <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Bell className="w-4 h-4 text-primary" /> Important Alerts
+            </h3>
+            {decisionAlerts.map((alert) => {
+              const isOverdue = alert.severity === "critical";
+              const isImportant = alert.severity === "important";
+              const isDueSoon = alert.severity === "due-soon";
+              return (
+                <div
+                  key={alert.key}
+                  data-testid={`decision-alert-${alert.key}`}
+                  className={cn(
+                    "flex items-start gap-3 rounded-xl border px-4 py-3",
+                    isOverdue && "border-destructive/40 bg-destructive/10",
+                    isImportant && "border-amber-500/40 bg-amber-500/10",
+                    isDueSoon && "border-primary/30 bg-primary/5",
+                    !isOverdue && !isImportant && !isDueSoon && "border-border bg-secondary/40"
+                  )}
+                >
+                  <div className="mt-0.5 shrink-0">
+                    {isOverdue && <AlertCircle className="w-4 h-4 text-destructive" />}
+                    {isImportant && <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
+                    {isDueSoon && <Calendar className="w-4 h-4 text-primary" />}
+                    {!isOverdue && !isImportant && !isDueSoon && <Info className="w-4 h-4 text-muted-foreground" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn(
+                      "text-sm font-bold",
+                      isOverdue && "text-destructive dark:text-foreground",
+                      isImportant && "text-amber-800 dark:text-amber-300",
+                    )}>
+                      {alert.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{alert.message}</p>
+                    {alert.action && alert.actionHref && (
+                      <Link href={alert.actionHref}>
+                        <Button variant="outline" size="sm" className="mt-2 h-7 text-xs">
+                          {alert.action}
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      dismissAlert(alert.key);
+                      setDismissedKeys((prev) => [...prev, alert.key]);
+                    }}
+                    className="shrink-0 mt-0.5 p-1 rounded-md hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+                    aria-label="Dismiss alert"
+                    data-testid={`button-dismiss-alert-${alert.key}`}
+                  >
+                    <X className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Empty State - Show when no animals */}
         {!loadingAnimals && totalAnimals === 0 && (

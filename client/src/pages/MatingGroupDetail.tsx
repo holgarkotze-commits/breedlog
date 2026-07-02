@@ -671,7 +671,7 @@ function EditMatingGroupDialog({ group, open, onOpenChange }: { group: MatingGro
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField name="dateIn" control={form.control} render={({ field }) => (
                 <FormItem>
                   <FormLabel className="flex items-center gap-1">
