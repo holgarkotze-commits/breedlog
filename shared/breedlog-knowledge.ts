@@ -920,6 +920,194 @@ A: BreedLog is developed by STITCH WORX — Software, systems & digital builds.`
     ],
     lastUpdated: "2026-06-01",
   },
+  {
+    id: "genetics-bloodlines",
+    title: "Genetics & Bloodlines Module",
+    category: "Genetics",
+    audience: "farmer",
+    summary: "How the Genetics module works: bloodlines, genetic lines, pedigrees, inbreeding calculation, and line performance.",
+    body: `The Genetics module is accessed from the bottom navigation or desktop sidebar under the DNA icon.
+
+**Bloodline Manager**
+A bloodline represents a named genetic family (e.g. a founder stud or country of origin group). Each bloodline can be linked to a foundation animal in your herd. Bloodlines help you track which genetic families your animals come from.
+
+**Genetic Line Manager**
+A genetic line is a specific breeding line within a bloodline. Lines have evidence categories (e.g. "Stud Performance", "Field Observation", "No Data Yet") and performance notes. These help you record what is actually known about a line — without inventing data.
+
+**Pedigrees**
+You can view an animal's pedigree tree on its profile page. The pedigree shows sire and dam links. The accuracy of pedigree data depends on how completely you have recorded sire/dam relationships in your herd.
+
+**Mating Risk (Inbreeding Check)**
+The Mating Risk tool lets you select a Ram and an Ewe and check their recorded relationship. It calculates a kinship/inbreeding risk based on shared ancestors in the recorded pedigree.
+
+Risk levels:
+- Safe: No close relationship detected.
+- Low Risk: Distant shared ancestor — generally acceptable.
+- Moderate: Consider pairing alternatives.
+- High Risk: Close shared ancestor — use with caution.
+- Critical: Parent-offspring or full-sibling relationship — avoid.
+
+Important: The risk calculation is only as accurate as the recorded pedigree. If sire/dam links are missing, the risk may be underestimated. BreedLog will warn you when pedigree data is incomplete.
+
+**Line Performance**
+Line Performance shows aggregated performance data for each genetic line based on recorded weights and reproductive records. It only shows real data — no invented EBVs or ASBVs.
+
+**What BreedLog does NOT do:**
+- BreedLog does not generate EBVs (Estimated Breeding Values).
+- BreedLog does not generate ASBVs (Australian Sheep Breeding Values).
+- BreedLog does not claim a bloodline is superior without recorded proof.
+- BreedLog is not a replacement for official breed society evaluations.
+
+**How to use the Genetics module:**
+1. Go to Genetics from the navigation.
+2. Create bloodlines in the Bloodline Manager tab.
+3. Create genetic lines and link them to bloodlines.
+4. Check mating risk before pairing a ram and ewe.
+5. View Line Performance after recording weights for animals in each line.`,
+    relatedAppArea: "genetics",
+    keywords: ["genetics", "bloodlines", "bloodline", "genetic line", "pedigree", "inbreeding", "mating risk", "kinship", "line performance", "EBV", "ASBV", "founder", "stud", "DNA"],
+    suggestedQuestions: [
+      "How do I check mating risk?",
+      "How do I create a bloodline?",
+      "What is the difference between a bloodline and a genetic line?",
+    ],
+    lastUpdated: "2026-07-01",
+  },
+  {
+    id: "mating-risk",
+    title: "Mating Risk Tool — Inbreeding Check",
+    category: "Genetics",
+    audience: "farmer",
+    summary: "How to use the Mating Risk tool to check inbreeding risk before pairing a ram and ewe.",
+    body: `The Mating Risk tool is inside the Genetics module under the "Mating Risk" tab.
+
+**How to use it:**
+1. Go to Genetics → Mating Risk tab.
+2. Select a Ram from your herd.
+3. Select an Ewe from your herd.
+4. BreedLog calculates the relationship risk from recorded pedigree data.
+
+**Risk levels and recommended actions:**
+- Safe (Green): No close relationship found. Proceed with confidence.
+- Low Risk (Yellow): Distant shared ancestor. Generally acceptable for commercial flocks. Monitor.
+- Moderate (Orange): Consider choosing a less related ram. Check pedigree completeness first.
+- High Risk (Red): Close shared ancestor. Use only with deliberate linebreeding decision. Document the reason.
+- Critical: Parent-offspring or full sibling. Avoid pairing. Choose an unrelated sire.
+
+**If risk is high or critical, your options are:**
+1. Choose a less related ram from your herd.
+2. Introduce an unrelated sire (outbreeding/outcrossing).
+3. Use a ram from a different bloodline.
+4. First check if sire/dam records are complete — incomplete pedigrees can mask true risk.
+
+**Data accuracy warning:**
+If an animal's sire or dam is not recorded, the risk calculation cannot see those ancestors. Always complete pedigree data before relying on mating risk results.
+
+**What this tool does NOT do:**
+- It does not diagnose genetic disease.
+- It does not claim a pairing is "wrong" — some linebreeding is deliberate and managed.
+- It does not access external breed society databases.
+- It works only from recorded pedigree data in your BreedLog workspace.`,
+    relatedAppArea: "genetics",
+    keywords: ["mating risk", "inbreeding", "kinship", "pedigree", "ram", "ewe", "pairing", "outbreeding", "linebreeding", "critical risk", "safe"],
+    suggestedQuestions: [
+      "How do I check mating risk before pairing a ram?",
+      "What does critical mating risk mean?",
+      "What should I do if mating risk is high?",
+    ],
+    lastUpdated: "2026-07-01",
+  },
+  {
+    id: "health-plan-guide",
+    title: "Health Plan Guide — In-App Livestock Health Reference",
+    category: "Health",
+    audience: "farmer",
+    summary: "What the Health Plan is, how to use it, and its limitations.",
+    body: `The Health Plan is a built-in reference guide inside the Health section of BreedLog.
+
+**How to access it:**
+Go to Health → tap or click "Health Plan".
+
+**What it contains:**
+The Health Plan covers these topics:
+1. Purpose & Safety Notice — what the plan is and what it cannot do.
+2. Daily Animal Observation — signs of healthy vs. sick animals.
+3. Health Planning Principles — core husbandry pillars.
+4. Disease Sources & Risk Factors — infectious vs. management risks.
+5. Vaccination & Prevention — planning and cautions.
+6. Parasite Control — internal/external risks and resistance management.
+7. Medicine Failure Warning Signs — troubleshooting treatment failures.
+8. Sheep & Goat Health Calendar — annual planning and reproductive cycles.
+9. Common Conditions — Pulpy Kidney, Anthrax, Footrot, and more.
+10. Wounds, Footrot & Mastitis — specific injury and infection care.
+11. Deficiencies & Nutrition-Related Health — mineral and vitamin support.
+12. Health Records & Follow-Up — best practices for documentation.
+
+**Mobile use:**
+On mobile devices, tap a topic to expand it. Tap again to collapse it. Only one topic is open at a time. On desktop/tablet, topics appear in a left navigation panel with content on the right.
+
+**Important limitations — the Health Plan does NOT:**
+- Diagnose any animal condition.
+- Replace your local veterinarian.
+- Provide specific dosage recommendations.
+- Guarantee that any treatment will work for your specific situation, location, or animals.
+- Reflect regional disease pressures (it is general guidance only).
+
+**How to record a health event from the Health Plan:**
+Each topic card has a "Record" button. Tapping it opens the Health Event recording form pre-filled with the relevant event type. This lets you record treatments or observations directly from the guide.
+
+**After recording:**
+If a follow-up date was set, BreedLog will remind you via the Dashboard alerts when that follow-up is due or overdue.`,
+    relatedAppArea: "health",
+    keywords: ["health plan", "health guide", "vaccination", "parasite", "dosing", "vet", "livestock health", "disease", "nutrition", "deficiency", "footrot", "mastitis", "follow-up"],
+    suggestedQuestions: [
+      "What is in the Health Plan?",
+      "How do I record a health event from the Health Plan?",
+      "Can the Health Plan diagnose my animals?",
+    ],
+    lastUpdated: "2026-07-01",
+  },
+  {
+    id: "decision-assist",
+    title: "Important Alerts & Decision Assist",
+    category: "Alerts",
+    audience: "farmer",
+    summary: "How the Dashboard alerts work and what types of alerts BreedLog generates.",
+    body: `BreedLog surfaces important alerts on the Dashboard home screen under 'Important Alerts'.
+
+**Alert types:**
+1. Lambing Season Active — shown from 1 July to 31 August. Reminds you to check lambing ewes, record births, and monitor lamb survival.
+2. Lambing Season Approaching — shown mid-June (from 15 June) to prepare for the season.
+3. Health Follow-up Overdue — shown when a recorded health treatment has a follow-up date that has passed.
+4. Health Follow-up Due Soon — shown when a follow-up is within 7 days.
+5. Mating Period Ending — shown when a recorded mating group's end date is within 14 days.
+
+**How alerts are generated:**
+Alerts are generated deterministically from your recorded data only:
+- Health follow-up alerts come from recorded health event follow-up dates.
+- Mating period alerts come from mating group end dates recorded in Breeding.
+- Lambing season alert comes from the calendar date (1 July – 31 August for the Kwantam/BreedLog field-test context).
+
+**No invented alerts:**
+BreedLog does not generate alerts from guessed or estimated data. If no follow-up dates are recorded, no follow-up alert will appear.
+
+**Dismissing alerts:**
+Tap the X on any alert to dismiss it for 7 days. It will reappear if the condition is still active after 7 days.
+
+**Severity levels:**
+- Critical (red): Overdue actions — take action now.
+- Important (amber): Active season or near-critical events.
+- Due Soon (blue): Events coming up within the week or two weeks.
+- Info (grey): Informational reminders.`,
+    relatedAppArea: "dashboard",
+    keywords: ["alerts", "decision assist", "lambing season", "health follow-up", "mating period", "reminders", "notifications", "dashboard"],
+    suggestedQuestions: [
+      "What alerts does BreedLog show?",
+      "How do I dismiss an alert?",
+      "Why is a lambing season alert showing?",
+    ],
+    lastUpdated: "2026-07-01",
+  },
 ];
 
 export function searchKnowledge(query: string): KnowledgeEntry[] {
