@@ -366,16 +366,19 @@
     }
   }
 
-  /* ─── Touch-safe overscroll ────────────────────────────────────────────── */
+  /* ─── Touch momentum scroll for iOS ────────────────────────────────────── */
+  /* Only apply -webkit-overflow-scrolling to enable iOS momentum scrolling.  */
+  /* Do NOT apply overscroll-behavior globally — it traps the mouse wheel     */
+  /* inside inner scroll containers and breaks normal page scrolling.         */
   .overflow-y-auto,
   .overflow-x-auto,
   .overflow-auto {
     -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
   }
 
   /* ─── Independent scroll pane (for two-column layouts) ─────────────────── */
-  /* Use .scroll-pane on any container that must scroll independently.        */
+  /* Use .scroll-pane ONLY on deliberate isolated containers (e.g. Health     */
+  /* Plan two-pane layout). NOT for general page wrappers.                    */
   /* The parent must be a fixed-height flex/grid context.                     */
   .scroll-pane {
     overflow-y: auto;
@@ -387,7 +390,8 @@
 
   /* ─── Flex/grid children height safety ─────────────────────────────────── */
   /* Prevent flex children from growing beyond parent — needed for scrollable */
-  /* panels nested inside flex-column parents.                                */
+  /* panels nested inside flex-column parents. Only use where the parent has  */
+  /* a defined height (e.g. calc(100dvh - N)).                                */
   .flex-child-scroll {
     min-height: 0;
     overflow-y: auto;
