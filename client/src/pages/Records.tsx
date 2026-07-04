@@ -48,7 +48,7 @@ const PDF_CSS = `
   @page { size: A4 landscape; margin: 10mm; }
   * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
   body { background: white; color: #1a1a1a; font-size: 8.5pt; }
-  .page { width: 277mm; min-height: 190mm; position: relative; padding-bottom: 22mm; }
+  .page { width: 277mm; height: 190mm; min-height: 190mm; position: relative; padding-bottom: 22mm; overflow: hidden; }
   .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2.5px solid #FFC300; }
   .header-title { font-size: 15pt; font-weight: bold; }
   .header-right { text-align: right; font-size: 8pt; color: #555; }
@@ -730,6 +730,7 @@ export default function Records() {
             <div className="space-y-2">
               {filteredDocs.map(doc => {
                 const meta = (doc as any).metadata || {};
+                const pageCount = meta.pageCount ?? null;
                 return (
                   <Card
                     key={doc.id}
@@ -751,6 +752,7 @@ export default function Records() {
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{meta.exportType?.toUpperCase() || "PDF"}</Badge>
                           {meta.category && <span className="text-[10px] text-muted-foreground">{meta.category}</span>}
                           {meta.animalCount != null && <span className="text-[10px] text-muted-foreground">{meta.animalCount} records</span>}
+                          {pageCount != null && <span className="text-[10px] text-muted-foreground">{pageCount} pages</span>}
                           {meta.status && <Badge variant={meta.status === "success" ? "outline" : "destructive"} className="text-[10px] px-1.5 py-0">{meta.status}</Badge>}
                         </div>
                       </div>

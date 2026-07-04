@@ -32,6 +32,19 @@ test('individual export still creates exported document with metadata', ()=>{
   assert.match(detail, /animalCount:\s*1/);
 });
 
+test('individual export uses designed pedigree tree instead of plain boxes', ()=>{
+  assert.match(detail, /designedFamilyTreePage/);
+  assert.match(detail, /tree-canvas/);
+  assert.match(detail, /BLOODLINE <span>- ELITE PEDIGREE<\/span>/);
+  assert.match(detail, /renderTreeNode\(animal, "SUBJECT",[\s\S]*"subject"/);
+});
+
+test('export pages use fixed A4 height so footers stay at the bottom', ()=>{
+  assert.match(detail, /\.page \{ width: 190mm; height: 277mm; min-height: 277mm/);
+  assert.match(animals, /\.page \{ width: 277mm; height: 190mm; min-height: 190mm/);
+  assert.match(records, /\.page \{ width: 277mm; height: 190mm; min-height: 190mm/);
+});
+
 test('records page reads metadata safely and old records are tolerated', ()=>{
   assert.match(records, /const meta = \(doc as any\)\.metadata \|\| \{\}/);
   assert.match(records, /meta\.animalCount \?\?/);

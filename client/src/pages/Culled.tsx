@@ -57,7 +57,7 @@ export default function Culled() {
           @page { size: A4 portrait; margin: 10mm; }
           * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
           body { background: white; color: #1a1a1a; font-size: 9pt; }
-          .page { width: 190mm; min-height: 277mm; position: relative; padding-bottom: 25mm; page-break-after: always; }
+          .page { width: 190mm; height: 277mm; min-height: 277mm; position: relative; padding-bottom: 25mm; page-break-after: always; overflow: hidden; }
           .page:last-child { page-break-after: auto; }
           .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #FFC300; }
           .header-left { display: flex; align-items: center; gap: 15px; }

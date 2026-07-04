@@ -62,7 +62,7 @@ export function getCanonicalGroupCSS(): string {
     @page { size: A4 landscape; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    .page { width: 277mm; height: 190mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; overflow: hidden; }
     .page:last-child { page-break-after: avoid; }
     ${CANONICAL_SHARED_CSS}
   `;
@@ -74,7 +74,7 @@ export function getCanonicalPortraitCSS(): string {
     @page { size: A4 portrait; margin: 10mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 190mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    .page { width: 190mm; height: 277mm; min-height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; overflow: hidden; }
     .page:last-child { page-break-after: avoid; }
     ${CANONICAL_SHARED_CSS}
   `;

@@ -159,8 +159,10 @@ export function getPDFStyles(): string {
     }
     .page {
       position: relative;
-      min-height: 100vh;
+      min-height: 190mm;
+      height: 190mm;
       padding-bottom: 60px;
+      overflow: hidden;
     }
     .header {
       display: flex;

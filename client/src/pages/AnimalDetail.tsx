@@ -1234,20 +1234,46 @@ ${data.notes || "No notes recorded."}
         // ── Pedigree ──────────────────────────────────────────────────────────
         const sireAnimal = animal.sire;
         const damAnimal = animal.dam;
+        const animalPhoto = (node?: any, fallbackPhoto?: string | null) => {
+            const src = node?.photo || fallbackPhoto || "";
+            return src
+                ? `<img src="${src}" class="tree-photo-img" alt="${node?.tagId || animal.tagId || 'animal'}" />`
+                : `<img src="${logo}" class="tree-photo-placeholder" alt="" />`;
+        };
+        const sexLabel = (node?: any, fallback?: string) => {
+            const value = node?.sex || fallback || "";
+            return value ? value.toString().toUpperCase() : "";
+        };
+        const renderTreeNode = (
+            node: any,
+            role: string,
+            subrole: string,
+            fallbackId: string,
+            variant: "subject" | "parent" | "grand" = "parent",
+            fallbackPhoto?: string | null,
+        ) => {
+            const displayId = node?.tagId || fallbackId || "Unknown";
+            const nodeSex = sexLabel(node, role === "SIRE" || role.includes("Sire") ? "RAM" : role === "DAM" || role.includes("Dam") ? "EWE" : animal.sex);
+            const isRam = nodeSex.toLowerCase().includes("ram");
+            return `
+              <div class="tree-node ${variant} ${isRam ? "is-ram" : "is-ewe"}">
+                <div class="tree-photo">${animalPhoto(node, fallbackPhoto)}</div>
+                <div class="tree-copy">
+                  <div class="tree-id">ID: <strong>${displayId}</strong></div>
+                  <div class="tree-line">
+                    ${nodeSex ? `<span class="tree-sex">${nodeSex}</span>` : ""}
+                    ${node?.name ? `<span class="tree-name">'${node.name}'</span>` : ""}
+                  </div>
+                  ${node?.birthDate ? `<div class="tree-meta">DOB: ${formatDate(node.birthDate)}</div>` : ""}
+                  <div class="tree-role">${role}</div>
+                  ${subrole ? `<div class="tree-subrole">${subrole}</div>` : ""}
+                </div>
+              </div>`;
+        };
         const pedigreeSection = `
-          <div class="ped-row">
-            <div class="ped-box sire-box">
-              <div class="ped-lbl">SIRE</div>
-              <div class="ped-id">${sireAnimal?.tagId || animal.externalSireInfo || "Unknown"}</div>
-              ${sireAnimal?.name ? `<div class="ped-det">${sireAnimal.name}</div>` : ''}
-              ${sireAnimal?.birthDate ? `<div class="ped-det">DOB: ${formatDate(sireAnimal.birthDate)}</div>` : ''}
-            </div>
-            <div class="ped-box dam-box">
-              <div class="ped-lbl">DAM</div>
-              <div class="ped-id">${damAnimal?.tagId || animal.externalDamInfo || "Unknown"}</div>
-              ${damAnimal?.name ? `<div class="ped-det">${damAnimal.name}</div>` : ''}
-              ${damAnimal?.birthDate ? `<div class="ped-det">DOB: ${formatDate(damAnimal.birthDate)}</div>` : ''}
-            </div>
+          <div class="mini-pedigree">
+            ${renderTreeNode(sireAnimal, "SIRE", "Father", animal.externalSireInfo || "Unknown", "parent")}
+            ${renderTreeNode(damAnimal, "DAM", "Mother", animal.externalDamInfo || "Unknown", "parent")}
           </div>`;
 
         // ── Health notes ──────────────────────────────────────────────────────
@@ -1312,16 +1338,72 @@ ${data.notes || "No notes recorded."}
 </div>` : '';
 
         // ── Full HTML document ────────────────────────────────────────────────
+        const designedFamilyTreePage = includeTree ? `
+<div class="page tree-page">
+  <div class="hdr tree-hdr">
+    <div>${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="hdr-logo" alt="Logo" />` : '<div class="hdr-logo-placeholder"></div>'}</div>
+    <div class="hdr-center">
+      <h1>BLOODLINE <span>- ELITE PEDIGREE</span></h1>
+      <p>${fb?.studName || fb?.farmName || "BreedLog"} pedigree certificate</p>
+    </div>
+    <div class="hdr-right"><div style="font-weight:700">${animal.tagId || "-"}</div><div>${exportDate}</div></div>
+  </div>
+  <div class="tree-canvas">
+    <div class="tree-subject-col">
+      ${renderTreeNode(animal, "SUBJECT", animal.name ? animal.name : "Profile animal", animal.tagId || "Unknown", "subject", photoBase64)}
+    </div>
+    <div class="tree-connector subject-connector"></div>
+    <div class="tree-fork">
+      <div class="tree-trunk"></div>
+      <div class="tree-parent-row sire-row">
+        <div class="tree-branch"></div>
+        ${renderTreeNode(sireAnimal, "SIRE", "Father", animal.externalSireInfo || "Unknown", "parent")}
+        <div class="tree-connector parent-connector"></div>
+        <div class="tree-grand-stack">
+          <div class="tree-grand-row">
+            <div class="tree-grand-branch"></div>
+            ${renderTreeNode((sireAnimal as any)?.sire, "GP Sire", "Sire's Father", "Unknown", "grand")}
+          </div>
+          <div class="tree-grand-row">
+            <div class="tree-grand-branch"></div>
+            ${renderTreeNode((sireAnimal as any)?.dam, "GP Dam", "Sire's Mother", "Unknown", "grand")}
+          </div>
+        </div>
+      </div>
+      <div class="tree-parent-row dam-row">
+        <div class="tree-branch"></div>
+        ${renderTreeNode(damAnimal, "DAM", "Mother", animal.externalDamInfo || "Unknown", "parent")}
+        <div class="tree-connector parent-connector"></div>
+        <div class="tree-grand-stack">
+          <div class="tree-grand-row">
+            <div class="tree-grand-branch"></div>
+            ${renderTreeNode((damAnimal as any)?.sire, "GP Sire", "Dam's Father", "Unknown", "grand")}
+          </div>
+          <div class="tree-grand-row">
+            <div class="tree-grand-branch"></div>
+            ${renderTreeNode((damAnimal as any)?.dam, "GP Dam", "Dam's Mother", "Unknown", "grand")}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <div class="footer-info"><p class="footer-farm">${fb?.studName || fb?.farmName || "BreedLog"}</p><p>${fb?.ownerName || ""}</p></div>
+    <div class="footer-branding"><div class="bl">BREEDLOG</div><div class="tag">Professional Livestock Management</div></div>
+  </div>
+</div>` : '';
+
         const content = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <title>${animal.tagId || 'Animal'} — Performance Datasheet</title>
 <style>
-${includeTree ? '@page { margin: 8mm 10mm; } @page landscape-page { size: A4 landscape; }' : '@page { size: A4 portrait; margin: 8mm 10mm; }'}
+${includeTree ? '@page { size: A4 portrait; margin: 8mm 10mm; } @page pedigree-landscape { size: A4 landscape; margin: 8mm 10mm; }' : '@page { size: A4 portrait; margin: 8mm 10mm; }'}
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1a1a; background: white; }
-.page { width: 190mm; min-height: 257mm; padding-bottom: 22mm; position: relative; }
+.page { width: 190mm; height: 277mm; min-height: 277mm; padding-bottom: 22mm; position: relative; overflow: hidden; page-break-after: always; }
+.page:last-child { page-break-after: avoid; }
 .hdr { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; border-bottom: 2.5px solid #FFC300; margin-bottom: 3mm; }
 .hdr-logo { width: 46px; height: 46px; object-fit: contain; }
 .hdr-logo-placeholder { width: 46px; }
@@ -1350,13 +1432,46 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
 .sec-title { background: #FFC300; color: #000; font-weight: 700; font-size: 7.5pt; text-transform: uppercase; padding: 3px 6px; }
 .sec-body { padding: 2mm; }
 .no-data { padding: 4mm; color: #888; font-style: italic; font-size: 8pt; text-align: center; }
-.ped-row { display: flex; gap: 3mm; padding: 2mm; }
-.ped-box { flex: 1; border-radius: 3px; padding: 2mm 3mm; }
-.sire-box { background: #eff6ff; border: 1px solid #bfdbfe; }
-.dam-box { background: #fdf2f8; border: 1px solid #f9a8d4; }
-.ped-lbl { font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #666; }
-.ped-id { font-size: 11pt; font-weight: 800; color: #1a1a1a; }
-.ped-det { font-size: 7.5pt; color: #555; margin-top: 1px; }
+.mini-pedigree { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; padding: 2mm; }
+.mini-pedigree .tree-node { min-height: 22mm; }
+.tree-page { page: pedigree-landscape; width: 277mm; height: 190mm; min-height: 190mm; padding: 6mm 6mm 24mm 6mm; page-break-before: always; background: linear-gradient(135deg, #f9fafb 0%, #f3f6f8 48%, #fffaf0 100%); }
+.tree-page .tree-hdr { border-bottom: 1.5px solid #cbd5e1; margin-bottom: 0; padding: 2mm 3mm 5mm; }
+.tree-hdr h1 { color: #0f2747; font-size: 14pt; letter-spacing: .2px; }
+.tree-hdr h1 span { color: #d69b00; }
+.tree-hdr p { color: #475569; font-size: 8.5pt; }
+.tree-canvas { position: relative; height: 132mm; margin-top: 7mm; display: flex; align-items: center; justify-content: center; padding: 0 7mm; }
+.tree-subject-col { position: relative; z-index: 2; }
+.tree-fork { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 16mm; z-index: 2; }
+.tree-parent-row, .tree-grand-row { display: flex; align-items: center; position: relative; }
+.tree-grand-stack { position: relative; display: flex; flex-direction: column; gap: 5mm; }
+.tree-trunk { position: absolute; left: 0; top: 30mm; bottom: 30mm; width: 1.2mm; background: #d6a51d; border-radius: 2mm; }
+.tree-connector { height: 1.2mm; background: #d6a51d; flex: 0 0 auto; border-radius: 2mm; }
+.subject-connector { width: 26mm; }
+.parent-connector { width: 10mm; margin-left: 2mm; }
+.tree-branch { width: 9mm; height: 1.2mm; background: #d6a51d; border-radius: 2mm; }
+.tree-grand-branch { width: 6mm; height: .9mm; background: #d6a51d; border-radius: 2mm; }
+.tree-node { display: flex; align-items: center; gap: 3mm; border-radius: 5mm; border: 1.3px dashed #b8c3d1; background: rgba(248, 250, 252, .9); box-shadow: 0 9px 22px rgba(15, 39, 71, .08); color: #233044; }
+.tree-node.subject { width: 78mm; min-height: 34mm; padding: 4mm; border: 1.7px solid #d6a51d; background: linear-gradient(135deg, #ffffff 0%, #edf5fb 100%); box-shadow: 0 12px 26px rgba(15, 39, 71, .16); }
+.tree-node.parent { width: 70mm; min-height: 33mm; padding: 4mm; }
+.tree-node.grand { width: 42mm; min-height: 17mm; padding: 2.5mm; border-radius: 3mm; box-shadow: none; }
+.tree-photo { flex: 0 0 auto; border-radius: 999px; padding: 1.1mm; background: #d6a51d; display: flex; align-items: center; justify-content: center; }
+.tree-node.subject .tree-photo { width: 22mm; height: 22mm; }
+.tree-node.parent .tree-photo { width: 18mm; height: 18mm; background: #64748b; }
+.tree-node.grand .tree-photo { width: 10mm; height: 10mm; background: #cbd5e1; padding: .7mm; }
+.tree-photo-img, .tree-photo-placeholder { width: 100%; height: 100%; object-fit: cover; border-radius: 999px; background: #e2e8f0; }
+.tree-photo-placeholder { object-fit: contain; padding: 2mm; opacity: .38; filter: grayscale(1); }
+.tree-copy { min-width: 0; }
+.tree-id { display: inline-block; background: #d8dee7; color: #4b5563; font-size: 8pt; font-weight: 800; padding: 1mm 2mm; border-radius: 1.5mm; line-height: 1.1; }
+.tree-node.subject .tree-id { background: #f6c438; color: #111827; font-size: 10pt; }
+.tree-node.grand .tree-id { font-size: 6.5pt; padding: .7mm 1.2mm; }
+.tree-line { margin-top: 1.2mm; font-size: 7.5pt; color: #64748b; display: flex; gap: 1.5mm; align-items: center; }
+.tree-sex { font-weight: 900; color: #2563eb; }
+.is-ewe .tree-sex { color: #e14a9b; }
+.tree-name { color: #64748b; }
+.tree-meta { margin-top: .8mm; font-size: 7pt; color: #475569; }
+.tree-role { margin-top: 1.2mm; color: #d6a51d; font-size: 7.5pt; font-weight: 900; letter-spacing: .5px; }
+.tree-node.grand .tree-role { font-size: 6.5pt; color: #334155; }
+.tree-subrole { margin-top: .5mm; font-size: 6.5pt; color: #64748b; }
 .health-row { font-size: 7.5pt; color: #333; padding: 1.5px 0; border-bottom: 1px solid #f5f5f5; }
 .health-more { font-size: 7pt; color: #888; margin-top: 2px; font-style: italic; }
 .summary-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 3px; padding: 3mm; margin-bottom: 3mm; }
@@ -1438,7 +1553,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
     <div class="footer-branding"><div class="bl">BREEDLOG</div><div class="tag">Professional Livestock Management</div></div>
   </div>
 </div>
-${familyTreePage}
+${designedFamilyTreePage}
 </body>
 </html>`;
 
