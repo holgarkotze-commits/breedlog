@@ -4,6 +4,7 @@ const DEVICE_ALERT = 'da01aabb-cc11-2233-4455-667788990011';
 const DEVICE_EMPTY = 'da02aabb-cc11-2233-4455-667788990022';
 const DEVICE_DISMISS = 'da03aabb-cc11-2233-4455-667788990033';
 const DEVICE_REAPPEAR = 'da04aabb-cc11-2233-4455-667788990044';
+const DEVICE_OFFLINE_HEALTH = 'da05aabb-cc11-2233-4455-667788990055';
 const INVITE_CODE = 'U2A2ZAVQ';
 
 async function registerDevice(baseURL: string, deviceId: string): Promise<string> {
@@ -211,5 +212,86 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
 
     // The lambing-season alert must be visible because the 8-day-old dismissal is expired
     await expect(page.locator(`[data-testid="decision-alert-${lambingAlertKey}"]`)).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('offline health record with overdue follow-up shows alert when device comes back online', async ({
+    page,
+    baseURL,
+  }) => {
+    if (!baseURL) throw new Error('Missing baseURL');
+
+    const deviceToken = await registerDevice(baseURL, DEVICE_OFFLINE_HEALTH);
+    await validateInviteCode(baseURL, DEVICE_OFFLINE_HEALTH);
+
+    // Yesterday's date as the overdue follow-up
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const overdueDate = yesterday.toISOString().slice(0, 10);
+
+    // Seed localStorage + IndexedDB syncQueue with a pending offline health event
+    // that has an overdue follow-up date. This simulates: farmer went offline, created
+    // a health record with nextFollowUpDate yesterday, then came back online.
+    await page.addInitScript(
+      ({
+        id,
+        token,
+        overdue,
+      }: {
+        id: string;
+        token: string;
+        overdue: string;
+      }) => {
+        localStorage.setItem('breedlog_device_id', id);
+        localStorage.setItem('breedlog_device_token', token);
+        localStorage.setItem(
+          'breedlog_beta_access',
+          JSON.stringify({ hasAccess: true, lastCheck: new Date().toISOString() }),
+        );
+        localStorage.setItem('breedlog_dismissed_alerts', '[]');
+        localStorage.setItem('breedlog_install_skipped', String(Date.now()));
+
+        // Seed syncQueue via IndexedDB after the page context is ready.
+        // We do this inside addInitScript so it runs before React initialises.
+        const openReq = indexedDB.open('BreedLogDB');
+        openReq.onsuccess = () => {
+          const db = openReq.result;
+          if (!db.objectStoreNames.contains('syncQueue')) return;
+          const tempId = -Date.now();
+          const queueItem = {
+            id: crypto.randomUUID(),
+            action: 'create',
+            entity: 'flockHealthEvents',
+            data: {
+              eventName: 'Offline Vaccination',
+              eventDate: overdue,
+              productName: 'Test Vaccine',
+              route: 'subcutaneous',
+              nextFollowUpDate: overdue,
+              treatAllAnimals: true,
+              treatments: [],
+            },
+            tempId,
+            timestamp: Date.now(),
+            synced: 0,
+            syncStatus: 'pending',
+            failedAttempts: 0,
+          };
+          const tx = db.transaction('syncQueue', 'readwrite');
+          tx.objectStore('syncQueue').put(queueItem);
+        };
+      },
+      { id: DEVICE_OFFLINE_HEALTH, token: deviceToken, overdue: overdueDate },
+    );
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    // Give React Query time to fetch and merge the pending sync queue item
+    await page.waitForTimeout(3_000);
+
+    // The overdue health follow-up alert must be visible
+    await expect(page.locator('[data-testid="decision-assist-alerts"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="decision-alert-health-followup-overdue"]')).toBeVisible({
+      timeout: 5_000,
+    });
   });
 });

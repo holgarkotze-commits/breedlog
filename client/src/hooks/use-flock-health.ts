@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { FlockHealthEvent, InsertFlockHealthEvent, FlockHealthTreatment } from "@shared/schema";
 import { useNetworkStatus } from "@/hooks/use-network-status";
-import { getAllFromStore, putManyInStore, putInStore, addToSyncQueue } from "@/lib/indexeddb";
+import { getAllFromStore, putManyInStore, putInStore, addToSyncQueue, getPendingSyncItems } from "@/lib/indexeddb";
 
 export type FlockHealthEventWithTreatments = FlockHealthEvent & {
   treatments?: FlockHealthTreatment[];
@@ -27,13 +27,29 @@ export function useFlockHealthEvents() {
 
       const res = await fetch("/api/flock-health-events", { credentials: "include", headers });
       if (!res.ok) throw new Error("Failed to fetch flock health events");
-      const data = await res.json();
+      const serverData: FlockHealthEvent[] = await res.json();
       
-      if (data.length > 0) {
-        await putManyInStore('flockHealthEvents', data);
+      if (serverData.length > 0) {
+        await putManyInStore('flockHealthEvents', serverData);
       }
-      
-      return data;
+
+      // Merge any pending offline creates not yet synced to the server.
+      // This ensures follow-up alerts generated from this data include records
+      // the farmer created while offline that haven't reached the server yet.
+      const pendingItems = await getPendingSyncItems();
+      const pendingHealthEvents = pendingItems
+        .filter(item => item.entity === 'flockHealthEvents' && item.action === 'create')
+        .map(item => ({
+          ...(item.data as object),
+          id: item.tempId ?? -(item.timestamp),
+          createdAt: new Date(item.timestamp).toISOString(),
+        } as unknown as FlockHealthEvent));
+
+      if (pendingHealthEvents.length > 0) {
+        console.log(`[useFlockHealthEvents] Merging ${pendingHealthEvents.length} pending offline health event(s) into results`);
+      }
+
+      return [...serverData, ...pendingHealthEvents];
     },
   });
 }
