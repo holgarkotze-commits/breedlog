@@ -228,19 +228,9 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
     yesterday.setDate(yesterday.getDate() - 1);
     const overdueDate = yesterday.toISOString().slice(0, 10);
 
-    // Seed localStorage + IndexedDB syncQueue with a pending offline health event
-    // that has an overdue follow-up date. This simulates: farmer went offline, created
-    // a health record with nextFollowUpDate yesterday, then came back online.
+    // Step 1: Set localStorage auth so the app initialises (and opens IndexedDB) on first load.
     await page.addInitScript(
-      ({
-        id,
-        token,
-        overdue,
-      }: {
-        id: string;
-        token: string;
-        overdue: string;
-      }) => {
+      ({ id, token }: { id: string; token: string }) => {
         localStorage.setItem('breedlog_device_id', id);
         localStorage.setItem('breedlog_device_token', token);
         localStorage.setItem(
@@ -249,13 +239,29 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
         );
         localStorage.setItem('breedlog_dismissed_alerts', '[]');
         localStorage.setItem('breedlog_install_skipped', String(Date.now()));
+      },
+      { id: DEVICE_OFFLINE_HEALTH, token: deviceToken },
+    );
 
-        // Seed syncQueue via IndexedDB after the page context is ready.
-        // We do this inside addInitScript so it runs before React initialises.
-        const openReq = indexedDB.open('BreedLogDB');
+    // Step 2: Load the page so the app opens and upgrades 'breedlog-offline' to v4,
+    // creating the syncQueue object store if it doesn't exist yet.
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Step 3: Seed the syncQueue in the correct database ('breedlog-offline', v4).
+    // We use page.evaluate here — after the app has already opened/upgraded the DB —
+    // so the syncQueue store is guaranteed to exist.
+    const seeded = await page.evaluate(async (overdue: string) => {
+      return new Promise<boolean>((resolve, reject) => {
+        const openReq = indexedDB.open('breedlog-offline', 4);
+        openReq.onerror = () => reject(openReq.error);
         openReq.onsuccess = () => {
           const db = openReq.result;
-          if (!db.objectStoreNames.contains('syncQueue')) return;
+          if (!db.objectStoreNames.contains('syncQueue')) {
+            db.close();
+            resolve(false);
+            return;
+          }
           const tempId = -Date.now();
           const queueItem = {
             id: crypto.randomUUID(),
@@ -278,17 +284,20 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
           };
           const tx = db.transaction('syncQueue', 'readwrite');
           tx.objectStore('syncQueue').put(queueItem);
+          tx.oncomplete = () => { db.close(); resolve(true); };
+          tx.onerror = () => { db.close(); reject(tx.error); };
         };
-      },
-      { id: DEVICE_OFFLINE_HEALTH, token: deviceToken, overdue: overdueDate },
-    );
+      });
+    }, overdueDate);
 
-    await page.goto('/');
+    if (!seeded) throw new Error('Failed to seed syncQueue — store not found in breedlog-offline');
+
+    // Step 4: Reload so React Query re-runs useFlockHealthEvents and merges the pending item.
+    await page.reload();
     await page.waitForLoadState('networkidle');
-    // Give React Query time to fetch and merge the pending sync queue item
     await page.waitForTimeout(3_000);
 
-    // The overdue health follow-up alert must be visible
+    // The overdue health follow-up alert must be visible — driven by the pending offline record.
     await expect(page.locator('[data-testid="decision-assist-alerts"]')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[data-testid="decision-alert-health-followup-overdue"]')).toBeVisible({
       timeout: 5_000,
