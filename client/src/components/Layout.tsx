@@ -141,7 +141,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { quotaExhausted } = useAIStatus();
 
   return (
-    <div className="min-h-screen bg-background abstract-bg flex flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:flex-row lg:pb-0">
+    <div className="h-dvh bg-background abstract-bg flex flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:flex-row lg:pb-0 overflow-hidden">
       <StorageWarningBanner />
 
       {/* Desktop sidebar — visible only on large screens (laptop+) */}
@@ -221,7 +221,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main content */}
-      <main className="min-h-[calc(100vh-4rem)] flex-1 overflow-y-auto px-4 py-4 tablet:px-5 tablet:py-5 lg:ml-72 lg:min-h-screen lg:px-8 lg:py-8">
+      <main className="flex-1 overflow-y-auto px-4 py-4 tablet:px-5 tablet:py-5 lg:ml-72 lg:px-8 lg:py-8">
         <div className="mx-auto max-w-7xl">{children}</div>
       </main>
 

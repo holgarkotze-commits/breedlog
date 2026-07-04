@@ -7,6 +7,9 @@ const syncManagerSource = fs.readFileSync('client/src/lib/sync-manager.ts', 'utf
 const animalsHookSource = fs.readFileSync('client/src/hooks/use-animals.ts', 'utf8');
 const routesSource = fs.readFileSync('server/routes.ts', 'utf8');
 const browserCertRunnerSource = fs.readFileSync('scripts/run-browser-cert.sh', 'utf8');
+const settingsSource = fs.readFileSync('client/src/pages/Settings.tsx', 'utf8');
+const networkStatusSource = fs.readFileSync('client/src/hooks/use-network-status.ts', 'utf8');
+const animalCardSource = fs.readFileSync('client/src/components/AnimalCard.tsx', 'utf8');
 
 // These are release-certification guard tests.
 // They verify critical sync/offline architecture invariants directly from source.
@@ -57,4 +60,39 @@ test('browser certification automation is wired for release gate evidence', () =
   assert.ok(fs.existsSync('tests/browser-cert/specs/offline-sync.spec.ts'));
   assert.match(browserCertRunnerSource, /npx playwright test --config tests\/browser-cert\/playwright\.config\.ts/);
   assert.match(browserCertRunnerSource, /\"passed\": true/);
+});
+
+// ── Task #1: Purge Failed Syncs ────────────────────────────────────────────
+test('purge-failed-syncs: sync manager exposes purgeFailedSyncs with default 3-retry threshold', () => {
+  assert.match(syncManagerSource, /async purgeFailedSyncs\(/);
+  assert.match(syncManagerSource, /maxFailures.*=.*3/);
+});
+
+test('purge-failed-syncs: network-status hook re-exports purgeFailedSyncs to components', () => {
+  assert.match(networkStatusSource, /purgeFailedSyncs/);
+});
+
+test('purge-failed-syncs: Settings page has button wired with testid and purge handler', () => {
+  assert.match(settingsSource, /handlePurgeFailedSyncs/);
+  assert.match(settingsSource, /data-testid="button-purge-failed-syncs"/);
+  assert.match(settingsSource, /purgeFailedSyncs\(\)/);
+});
+
+// ── Task #2: Hide phantom animals (temp IDs not in sync queue) ─────────────
+test('phantom-animals: indexeddb exposes tempIdInSyncQueue and animalExistsInCache guards', () => {
+  assert.match(indexedDbSource, /export async function tempIdInSyncQueue/);
+  assert.match(indexedDbSource, /export async function animalExistsInCache/);
+});
+
+test('phantom-animals: AnimalCard imports and uses phantom guards before rendering', () => {
+  assert.match(animalCardSource, /tempIdInSyncQueue/);
+  assert.match(animalCardSource, /animalExistsInCache/);
+  assert.match(animalCardSource, /phantom/i);
+});
+
+// ── Task #3: Background refresh after save to confirm cloud sync status ─────
+test('background-refresh: create-animal mutation schedules delayed invalidation after optimistic save', () => {
+  assert.match(animalsHookSource, /background.*refresh/i);
+  assert.match(animalsHookSource, /setTimeout/);
+  assert.match(animalsHookSource, /invalidateQueries/);
 });

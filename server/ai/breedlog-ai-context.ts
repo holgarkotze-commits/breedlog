@@ -89,6 +89,13 @@ export interface BreedLogAIContext {
     noSireLink: number;
     noDamLink: number;
   };
+  genetics: {
+    totalActive: number;
+    withSireLinked: number;
+    withDamLinked: number;
+    pedigreeCompletenessPct: number;
+    note: string;
+  };
   selectedAnimal?: AnimalContext;
   contextSection?: string;
 }
@@ -411,6 +418,19 @@ export function buildBreedLogAIContext(opts: BuildContextOptions): BreedLogAICon
       noSireLink,
       noDamLink,
     },
+    genetics: (() => {
+      const totalActive = active.length;
+      const withSireLinked = active.filter((a) => a.sireId).length;
+      const withDamLinked = active.filter((a) => a.damId).length;
+      const pedigreeCompletenessPct = totalActive > 0 ? Math.round((withSireLinked / totalActive) * 100) : 0;
+      const note =
+        pedigreeCompletenessPct < 50
+          ? "Pedigree data is incomplete — mating risk calculations may underestimate inbreeding. Encourage sire/dam recording."
+          : pedigreeCompletenessPct < 80
+          ? "Pedigree data is partially complete. Some mating risk results may be less accurate due to missing sire/dam links."
+          : "Pedigree data is reasonably complete. Mating risk calculations should be reliable for animals with recorded ancestors.";
+      return { totalActive, withSireLinked, withDamLinked, pedigreeCompletenessPct, note };
+    })(),
     selectedAnimal,
     contextSection,
   };

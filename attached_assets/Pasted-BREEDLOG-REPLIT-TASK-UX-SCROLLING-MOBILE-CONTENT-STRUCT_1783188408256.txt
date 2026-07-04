@@ -1,0 +1,359 @@
+BREEDLOG REPLIT TASK — UX SCROLLING, MOBILE CONTENT STRUCTURE, PERFORMANCE, AI KNOWLEDGE, AND SMART ALERTS
+
+This instruction is for REPLIT only.
+
+Do not ask Haka to do manual GitHub work.
+Do not ask Haka to create branches.
+Do not ask Haka to open pull requests.
+Do not ask Haka to run GitHub Actions.
+Do not merge without explicit approval.
+Do not add unrelated features.
+Do not redesign the full visual identity.
+Do not change BreedLog branding.
+Do not change tokens.
+Do not touch VoiceCore.
+Do not create/delete repositories.
+Do not add paid third-party services.
+Do not invent animal/genetic/health facts.
+Do not weaken existing tests or remove existing functionality.
+
+Create a new branch from latest main:
+
+ux-scroll-performance-smart-alerts
+
+Goal:
+Improve BreedLog usability across desktop, tablet, and mobile by fixing scroll behaviour, mobile content layout, app speed/responsiveness, AI app knowledge, and high-value smart alerts based only on factual BreedLog app data.
+
+Scope:
+
+1. Fix scroll behaviour across the app.
+2. Fix Health Plan mobile information layout.
+3. Improve page speed, data-save responsiveness, and navigation smoothness.
+4. Upgrade Ask BreedLog / AI context so it understands current app features and recorded app data.
+5. Add practical smart in-app alerts for important time-based and decision-based events.
+6. Harden with tests and GitHub Actions proof.
+
+PART 1 — GLOBAL SCROLLING AND LAYOUT FIXES
+
+Problem:
+Some screens do not allow normal mouse-wheel scrolling over the visible content. Users must drag the far-right browser/app scrollbar. This is poor UX, especially on desktop/tablet.
+
+Required behaviour:
+
+* Mouse wheel must scroll the visible content area where the pointer is located.
+* Touch scrolling must work naturally on mobile/tablet.
+* Nested panels must scroll independently where appropriate.
+* Fixed/sticky top areas must remain visible where they function as controls.
+* Left navigation/left option panes must stay stable while the right content pane scrolls.
+* Left option panes must only scroll when the pointer/touch is over that left pane.
+* Right content panes must scroll when the pointer/touch is over that right pane.
+* No hidden content may become unreachable.
+
+Apply this across the app, especially:
+
+* Health page / Health Plan
+* Genetics page / Mating Risk
+* Breeding pages with long animal lists
+* My Herd / animal list pages
+* Records pages
+* Data pages
+* Admin page if content exceeds viewport
+* Any page using two-column layouts or long tab panels
+
+Technical requirements:
+
+* Audit layout containers for missing min-height: 0, overflow-y: auto, flex/grid height issues, and trapped body scroll.
+* Use viewport-safe layout heights such as 100dvh where appropriate.
+* Avoid full-page scroll lock unless intentionally used for modals.
+* Sticky headers must use correct z-index and background so content does not bleed behind them.
+* Ensure desktop, tablet, and mobile breakpoints all work.
+* Use CSS utility classes or shared layout components where possible so the fix is consistent, not patched screen by screen.
+* Do not create horizontal overflow.
+
+Health Plan desktop/tablet required behaviour:
+
+* The top Health header and the Health page button row must remain static/sticky.
+* In Health Plan view, the left list of info buttons must remain static/sticky relative to the Health Plan panel.
+* The right Health Plan content panel must scroll with the mouse wheel when the mouse is over it.
+* The left list must scroll only if its own content exceeds height and the mouse/touch is over that left list.
+* The right content must not force the whole page to scroll unnecessarily.
+
+Breeding / long animal list required behaviour:
+
+* Large animal lists must scroll naturally with mouse wheel over the list/table/card area.
+* Page action bars and filters should remain accessible where possible.
+* No list may require dragging the far-right global scrollbar only.
+
+PART 2 — HEALTH PLAN MOBILE ACCORDION FIX
+
+Current mobile problem:
+In Health Plan on mobile, the topic buttons are listed first, and the selected topic content opens far below all buttons. The user must scroll down to the bottom to read the clicked content. This is wrong.
+
+Required mobile behaviour:
+
+* Convert Health Plan topic list into mobile accordion behaviour.
+* When the user taps a topic, the content for that topic must open directly below that specific topic button.
+* Tapping the same topic again must collapse/minimize it.
+* Only the selected/open topic should expand unless the existing design intentionally supports multiple open sections. Prefer one-open-at-a-time for simplicity.
+* The desktop/tablet two-column layout may remain, but mobile must use accordion.
+* The selected topic must scroll into view if necessary, but not jump aggressively.
+* The content must be readable, padded, and not cramped.
+* No duplicated content below the full list on mobile.
+
+Acceptance examples:
+
+* Tap “Parasite Control” on mobile → Parasite Control information opens immediately below the Parasite Control button.
+* Tap “Parasite Control” again → it collapses.
+* Tap “Common Conditions” → Common Conditions opens below that button.
+* The user must not scroll past every button to find the selected information.
+
+PART 3 — PERFORMANCE AND RESPONSIVENESS
+
+Goal:
+Improve perceived speed and operational smoothness without risky rewrites.
+
+Required improvements:
+
+* Audit slow page loads and heavy renders.
+* Reduce unnecessary re-renders in large animal lists/tables.
+* Memoize expensive derived calculations where appropriate.
+* Use React Query cache settings correctly for stable data.
+* Avoid refetching the same data repeatedly without reason.
+* Keep save buttons responsive with clear loading/success/error states.
+* Ensure data save actions do not block the UI longer than necessary.
+* Prevent duplicate submissions during save.
+* Avoid excessive telemetry calls from the recently added activity dashboard.
+* Ensure heartbeat/route telemetry remains lightweight and non-blocking.
+* Keep offline queue retry safe and bounded.
+* Add or keep skeleton/loading states where pages fetch data.
+* Do not replace working architecture with a risky rewrite.
+
+PART 4 — ASK BREEDLOG / AI KNOWLEDGE UPGRADE
+
+Goal:
+Ask BreedLog must understand all current in-app features and recorded app data. It must answer accurately from app facts only.
+
+Required:
+
+* Update the Ask BreedLog context/knowledge builder so it includes current modules:
+
+  * My Herd
+  * Health
+  * Health Plan
+  * Records
+  * Breeding
+  * Genetics & Bloodlines
+  * Pedigrees
+  * Mating Risk
+  * Bloodline Manager
+  * Genetic Line Manager
+  * Line Performance
+  * Exports
+  * Admin activity dashboard where admin only
+  * Sync/offline behaviour
+  * Install/PWA behaviour
+* The AI must use recorded BreedLog data only when making animal-specific, farm-specific, bloodline-specific, health-specific, or breeding-specific claims.
+* The AI must not invent EBVs, ASBVs, health diagnoses, bloodline superiority, animal performance, lambing outcomes, or event dates.
+* If the data is missing, the AI must clearly say that the app does not have enough recorded data.
+* When giving recommendations, the AI must explain which recorded data triggered the recommendation.
+* The AI must be aware of the new Genetics feature and mating-risk logic.
+* The AI must be aware of Health Plan content and limitations.
+* The AI must not replace a veterinarian. Keep existing safety disclaimers where relevant.
+
+AI response rule:
+Every smart recommendation must be based on:
+
+* existing recorded animal data,
+* existing event dates,
+* existing mating/pedigree/bloodline data,
+* existing health records,
+* existing performance records,
+* existing app rules/thresholds,
+* or clearly labelled general app guidance.
+
+PART 5 — SMART IN-APP ALERTS / “SHADOW EYE” ASSISTANT
+
+Goal:
+Add a practical in-app decision-assist alert layer. It must surface important events and risks without spam.
+
+Name internally:
+BreedLog Decision Assist
+
+User-facing wording:
+Use simple names such as:
+
+* Important Alerts
+* Upcoming Actions
+* Decision Assist
+* Needs Attention
+
+Do not call it “shadow eye” in the UI unless already approved elsewhere.
+
+Required alert types:
+
+1. Lambing season alert
+
+* July 1 is the start of lambing season for the current Kwantam/BreedLog field-test context.
+* If the current date is near or after July 1 and lambing season is active, show a relevant alert.
+* Alert must be practical, not noisy.
+* Example: “Lambing season has started. Check expected lambing ewes, record births, monitor lamb survival, and update dam/lamb records.”
+
+2. Breeding window alerts
+
+* If mating/breeding records contain expected follow-up dates, surface them.
+* Remind when breeding season or planned mating events are due.
+* Alert must link to the relevant breeding/mating section where possible.
+
+3. Health follow-up alerts
+
+* If health records include follow-up dates, withdrawal periods, treatment dates, vaccination due dates, or unresolved cases, surface important reminders.
+* Must not diagnose. Must remind based on recorded dates and records.
+
+4. Lambing follow-up alerts
+
+* For lambing/birth records, surface useful follow-ups such as:
+
+  * birth record missing key data
+  * lamb needs weight/check record
+  * dam/lamb relationship missing
+  * lamb survival/weaning follow-up due where data exists
+
+5. Mating-risk decision alerts
+
+* If a selected ram/ewe mating has critical/high relationship risk, show the warning plus practical next steps.
+* Alert must include solutions/options:
+
+  * choose a less related ram/ewe
+  * check missing pedigree data first
+  * avoid critical inbreeding unless deliberately managed
+  * use outbreeding or safer linebreeding where data supports it
+* Do not simply warn; provide safer action options based on available app data.
+
+6. Genetics/bloodline alerts
+
+* If bloodline/pedigree data is incomplete, alert that relationship risk may be unknown.
+* If a line has weak/limited performance evidence, state that the app cannot prove performance yet.
+* Do not claim a bloodline is good or bad without recorded performance proof.
+
+Alert UX requirements:
+
+* Add a compact Important Alerts / Decision Assist area on Home/Dashboard.
+* Add contextual alerts inside relevant pages where useful:
+
+  * Health
+  * Breeding
+  * Genetics / Mating Risk
+  * Animal Detail
+* Alerts must be dismissible or markable as reviewed where appropriate.
+* Alerts must not become clutter.
+* Use severity levels:
+
+  * Critical
+  * Important
+  * Due Soon
+  * Info
+* Alerts must include a clear action or next step.
+* Alerts must be generated from app data/rules, not random AI text.
+* AI may help explain an alert, but the alert trigger itself must be deterministic and testable.
+
+Data model:
+Use existing records where possible.
+Only add a table if necessary for dismissals/review state, for example:
+
+decision_alert_dismissals:
+
+* id
+* userId
+* alertKey
+* dismissedAt
+* createdAt
+
+Do not create a complicated notification system unless needed.
+
+PART 6 — DEVICE-SPECIFIC UI OPTIMIZATION
+
+Required:
+
+* Desktop: efficient two-column layouts, sticky controls, mouse-wheel scrolling in panels.
+* Tablet: touch-friendly spacing, readable side panels, no hidden overflow.
+* Mobile: stacked layout, accordions for long info sections, large touch targets, no horizontal scrolling.
+* All action buttons must remain usable in light/dark themes.
+* Maintain BreedLog visual style.
+* Do not introduce giant cards or clutter.
+
+PART 7 — TESTING REQUIREMENTS
+
+Add or update tests for:
+
+* Health Plan mobile accordion opens selected content directly below selected button.
+* Health Plan accordion closes when selected button is tapped again.
+* Desktop/tablet Health Plan keeps left navigation and top controls stable while right content scrolls.
+* Scroll container class/helpers exist for page panels that need independent scrolling.
+* iOS/Android/desktop layout logic does not regress.
+* Decision Assist generates lambing season alert around July 1.
+* Decision Assist does not generate lambing alert outside the configured window unless data requires it.
+* Health follow-up alerts are generated from recorded follow-up dates only.
+* Mating-risk alert includes both warning and safer next steps.
+* AI context includes Genetics, Bloodlines, Health Plan, Breeding, Records, and current app modules.
+* AI does not invent missing EBV/ASBV or unrecorded performance data.
+* Performance optimization does not break existing data loading/saving.
+* Existing telemetry tests still pass.
+
+Required commands:
+npm run check
+npm run build
+npm test
+
+GitHub workflow:
+
+1. Create branch:
+   ux-scroll-performance-smart-alerts
+
+2. Commit changes with message:
+   Improve app scrolling, mobile UX, AI context, and smart alerts
+
+3. Push branch to GitHub.
+
+4. Open PR:
+   Base: main
+   Head: ux-scroll-performance-smart-alerts
+   Title: Improve scrolling, mobile UX, AI context, and smart alerts
+
+5. Monitor GitHub Actions.
+
+6. If CI fails, fetch logs, fix only the failing cause, push again, and repeat until CI passes.
+
+Required final report:
+Return:
+
+* branch name
+* latest commit hash
+* files changed
+* PR link
+* GitHub Actions run link
+* CI result
+* npm run check result
+* npm run build result
+* npm test result
+* summary of scroll fixes
+* summary of Health mobile accordion fix
+* summary of performance improvements
+* summary of AI context updates
+* summary of Decision Assist alerts
+* confirmation no unrelated features were added
+* remaining limitations, if any
+
+Completion rule:
+Do not claim complete unless:
+
+* mouse-wheel/touch scrolling is fixed in target layouts
+* Health Plan mobile accordion works correctly
+* app still builds
+* tests pass
+* GitHub Actions passes
+* PR is open and mergeable
+* no unrelated work was added
+
+Branding:
+Where a footer/signoff is appropriate in generated reports or documentation, use:
+Developed by STITCH WORX — Software, systems & digital builds.
