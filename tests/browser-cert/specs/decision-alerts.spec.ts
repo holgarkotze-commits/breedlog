@@ -2,6 +2,8 @@ import { test, expect, type Page } from '@playwright/test';
 
 const DEVICE_ALERT = 'da01aabb-cc11-2233-4455-667788990011';
 const DEVICE_EMPTY = 'da02aabb-cc11-2233-4455-667788990022';
+const DEVICE_DISMISS = 'da03aabb-cc11-2233-4455-667788990033';
+const DEVICE_REAPPEAR = 'da04aabb-cc11-2233-4455-667788990044';
 const INVITE_CODE = 'U2A2ZAVQ';
 
 async function registerDevice(baseURL: string, deviceId: string): Promise<string> {
@@ -115,5 +117,99 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
     await page.waitForTimeout(3_000);
 
     await expect(page.locator('[data-testid="decision-assist-alerts"]')).not.toBeVisible({ timeout: 5_000 });
+  });
+
+  test('dismiss button immediately removes alert card from DOM', async ({ page, baseURL }) => {
+    if (!baseURL) throw new Error('Missing baseURL');
+
+    const deviceToken = await registerDevice(baseURL, DEVICE_DISMISS);
+    await validateInviteCode(baseURL, DEVICE_DISMISS);
+
+    // Create a mating group ending within 14 days to guarantee an alert is shown
+    const dateOut = new Date();
+    dateOut.setDate(dateOut.getDate() + 5);
+    const dateOutStr = dateOut.toISOString().slice(0, 10);
+    await fetch(`${baseURL}/api/mating-groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
+      body: JSON.stringify({ name: 'DA Dismiss Test Group', dateOut: dateOutStr }),
+    });
+
+    await prepareAndOpenDashboard(page, DEVICE_DISMISS, deviceToken);
+
+    // Wait for at least one alert card to appear
+    await expect(page.locator('[data-testid="decision-assist-alerts"]')).toBeVisible({ timeout: 15_000 });
+    const firstCard = page.locator('[data-testid^="decision-alert-"]').first();
+    await expect(firstCard).toBeVisible({ timeout: 5_000 });
+
+    // Record which alert key is being dismissed
+    const cardTestId = await firstCard.getAttribute('data-testid');
+    const alertKey = cardTestId?.replace('decision-alert-', '') ?? '';
+
+    // Click the dismiss button for that specific alert
+    const dismissBtn = page.locator(`[data-testid="button-dismiss-alert-${alertKey}"]`);
+    await expect(dismissBtn).toBeVisible();
+    await dismissBtn.click();
+
+    // The card must be removed from the DOM entirely (not just hidden)
+    await expect(page.locator(`[data-testid="decision-alert-${alertKey}"]`)).toHaveCount(0, { timeout: 2_000 });
+
+    // Verify the dismissal was persisted to localStorage
+    const stored = await page.evaluate(() => localStorage.getItem('breedlog_dismissed_alerts'));
+    const dismissals: Array<{ key: string; dismissedAt: string }> = stored ? JSON.parse(stored) : [];
+    const entry = dismissals.find((d) => d.key === alertKey);
+    expect(entry).toBeTruthy();
+    expect(entry?.dismissedAt).toBeTruthy();
+  });
+
+  test('dismissed alert reappears after 7-day window expires', async ({ page, baseURL }) => {
+    if (!baseURL) throw new Error('Missing baseURL');
+
+    const deviceToken = await registerDevice(baseURL, DEVICE_REAPPEAR);
+    await validateInviteCode(baseURL, DEVICE_REAPPEAR);
+
+    // Freeze browser time to 15 July 2026 — deterministically inside lambing season
+    // regardless of when this test runs in the real calendar.
+    const frozenMs = new Date('2026-07-15T10:00:00Z').getTime();
+    const lambingAlertKey = 'lambing-season-2026';
+
+    // Stale dismissal: 8 days before the frozen "now" (past the 7-day suppression window)
+    const eightDaysBeforeFrozen = new Date(frozenMs - 8 * 24 * 60 * 60 * 1000).toISOString();
+    const staleDismissals = JSON.stringify([{ key: lambingAlertKey, dismissedAt: eightDaysBeforeFrozen }]);
+
+    await page.addInitScript(
+      ({ id, token, dismissals, frozen }: { id: string; token: string; dismissals: string; frozen: number }) => {
+        localStorage.setItem('breedlog_device_id', id);
+        localStorage.setItem('breedlog_device_token', token);
+        localStorage.setItem(
+          'breedlog_beta_access',
+          JSON.stringify({ hasAccess: true, lastCheck: new Date(frozen).toISOString() }),
+        );
+        // Pre-populate with a stale dismissal (8 days old relative to frozen "now")
+        localStorage.setItem('breedlog_dismissed_alerts', dismissals);
+        localStorage.setItem('breedlog_install_skipped', String(frozen));
+
+        // Freeze Date so generateAllAlerts sees July 2026 and produces the lambing alert
+        const OrigDate = Date;
+        function PatchedDate(this: Date, ...args: ConstructorParameters<typeof Date>) {
+          if (args.length === 0) return new OrigDate(frozen) as Date;
+          return new (OrigDate as typeof Date)(...args) as Date;
+        }
+        (PatchedDate as unknown as typeof Date).now = () => frozen;
+        (PatchedDate as unknown as typeof Date).parse = OrigDate.parse.bind(OrigDate);
+        (PatchedDate as unknown as typeof Date).UTC = OrigDate.UTC.bind(OrigDate);
+        Object.setPrototypeOf(PatchedDate, OrigDate);
+        PatchedDate.prototype = OrigDate.prototype;
+        (window as unknown as Record<string, unknown>)['Date'] = PatchedDate;
+      },
+      { id: DEVICE_REAPPEAR, token: deviceToken, dismissals: staleDismissals, frozen: frozenMs },
+    );
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2_000);
+
+    // The lambing-season alert must be visible because the 8-day-old dismissal is expired
+    await expect(page.locator(`[data-testid="decision-alert-${lambingAlertKey}"]`)).toBeVisible({ timeout: 10_000 });
   });
 });
