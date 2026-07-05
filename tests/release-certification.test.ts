@@ -96,3 +96,12 @@ test('background-refresh: create-animal mutation schedules delayed invalidation 
   assert.match(animalsHookSource, /setTimeout/);
   assert.match(animalsHookSource, /invalidateQueries/);
 });
+
+// ── Task #21: Offline breeding events merged into useBreedingEvents ─────────
+const breedingHookSource = fs.readFileSync('client/src/hooks/use-breeding.ts', 'utf8');
+
+test('offline-breeding-events: useBreedingEvents merges pending syncQueue creates before returning', () => {
+  assert.match(breedingHookSource, /getPendingSyncItems/);
+  assert.match(breedingHookSource, /entity.*breedingEvents.*action.*create|filter.*breedingEvents/s);
+  assert.match(breedingHookSource, /\[\.\.\.(data|server),\s*\.\.\.pending/);
+});

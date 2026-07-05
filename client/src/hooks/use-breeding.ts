@@ -36,8 +36,24 @@ export function useBreedingEvents() {
       if (data.length > 0) {
         await putManyInStore('breedingEvents', data);
       }
-      
-      return data;
+
+      // Merge any pending offline creates not yet synced to the server.
+      // This ensures breeding-event counts and analytics are accurate for
+      // events the farmer recorded while offline that haven't reached the
+      // server yet.
+      const pendingItems = await getPendingSyncItems();
+      const pendingBreedingEvents = pendingItems
+        .filter(item => item.entity === 'breedingEvents' && item.action === 'create')
+        .map(item => ({
+          ...(item.data as object),
+          id: item.tempId ?? -(item.timestamp),
+        } as unknown as BreedingEvent));
+
+      if (pendingBreedingEvents.length > 0) {
+        console.log(`[useBreedingEvents] Merging ${pendingBreedingEvents.length} pending offline breeding event(s) into results`);
+      }
+
+      return [...data, ...pendingBreedingEvents];
     },
   });
 }
