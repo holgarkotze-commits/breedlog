@@ -103,7 +103,7 @@ const breedingHookSource = fs.readFileSync('client/src/hooks/use-breeding.ts', '
 test('offline-breeding-events: useBreedingEvents merges pending syncQueue creates before returning', () => {
   assert.match(breedingHookSource, /getPendingSyncItems/);
   assert.match(breedingHookSource, /entity.*breedingEvents.*action.*create|filter.*breedingEvents/s);
-  assert.match(breedingHookSource, /\[\.\.\.(data|server|patchedBreedingData),\s*\.\.\.pending/);
+  assert.match(breedingHookSource, /\[\.\.\.(data|server|patchedBreedingData|visibleData),\s*\.\.\.(pending|visiblePending)/);
 });
 
 // ── Task #20: Offline mating-group updates patched into useMatingGroups ──────
@@ -170,4 +170,17 @@ test('offline-breeding-update: useBreedingEvents applies pending syncQueue updat
 
 test('offline-breeding-update: update patch is spread on top of existing event (latest-write-wins)', () => {
   assert.match(breedingHookSource, /\{\s*\.\.\.evt,\s*\.\.\.pendingBreedingUpdates/);
+});
+
+// ── Task #25: Offline-deleted breeding events suppressed from useBreedingEvents
+test('offline-breeding-delete: useBreedingEvents builds deletedIds set from pending delete entries', () => {
+  assert.match(breedingHookSource, /entity.*'breedingEvents'.*action.*'delete'|action.*===.*'delete'.*breedingEvents/s);
+  assert.match(breedingHookSource, /deletedIds/);
+  assert.match(breedingHookSource, /new Set\(/);
+});
+
+test('offline-breeding-delete: server events and pending creates with a deleted id are both filtered out', () => {
+  assert.match(breedingHookSource, /visibleData/);
+  assert.match(breedingHookSource, /visiblePending/);
+  assert.match(breedingHookSource, /deletedIds\.has\(evt\.id\)/);
 });

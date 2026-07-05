@@ -20,7 +20,16 @@ export function useBreedingEvents() {
       if (!isOnline) {
         console.log('[useBreedingEvents] Offline - fetching from IndexedDB');
         const cached = await getAllFromStore<BreedingEvent>('breedingEvents');
-        return cached;
+        const offlinePending = await getPendingSyncItems();
+        const offlineDeletedIds = new Set(
+          offlinePending
+            .filter(item => item.entity === 'breedingEvents' && item.action === 'delete')
+            .map(item => (item.data as { id?: number })?.id)
+            .filter((id): id is number => id != null),
+        );
+        return offlineDeletedIds.size > 0
+          ? cached.filter(evt => !offlineDeletedIds.has(evt.id))
+          : cached;
       }
 
       // Include auth token for device-based authentication
@@ -74,7 +83,29 @@ export function useBreedingEvents() {
         ? data.map(evt => pendingBreedingUpdates[evt.id] ? { ...evt, ...pendingBreedingUpdates[evt.id] } : evt)
         : data;
 
-      return [...patchedBreedingData, ...pendingBreedingEvents];
+      // Filter out breeding events that have a pending offline delete so they
+      // don't continue to appear on the Breeding page before the sync drains.
+      const deletedIds = new Set(
+        pendingItems
+          .filter(item => item.entity === 'breedingEvents' && item.action === 'delete')
+          .map(item => {
+            const d = item.data as { id?: number };
+            return d?.id ?? null;
+          })
+          .filter((id): id is number => id !== null),
+      );
+
+      if (deletedIds.size > 0) {
+        console.log(`[useBreedingEvents] Suppressing ${deletedIds.size} offline-deleted breeding event(s) from results`);
+      }
+
+      const visibleData = deletedIds.size > 0
+        ? patchedBreedingData.filter(evt => !deletedIds.has(evt.id))
+        : patchedBreedingData;
+
+      const visiblePending = pendingBreedingEvents.filter(evt => !deletedIds.has(evt.id));
+
+      return [...visibleData, ...visiblePending];
     },
   });
 }
