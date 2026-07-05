@@ -130,6 +130,22 @@ test('offline-mating-delete: server groups and pending creates with a deleted id
   assert.match(breedingHookSource, /deletedIds\.has\(g\.id\)/);
 });
 
+// ── Task #27: Offline health-record updates patched into useHealthRecords ─────
+const healthRecordsHookSource = fs.readFileSync('client/src/hooks/use-records.ts', 'utf8');
+
+test('offline-health-update: useHealthRecords imports getPendingSyncItems', () => {
+  assert.match(healthRecordsHookSource, /getPendingSyncItems/);
+});
+
+test('offline-health-update: useHealthRecords builds patch map from pending healthRecords updates', () => {
+  assert.match(healthRecordsHookSource, /entity.*healthRecords.*action.*update|filter.*healthRecords/s);
+  assert.match(healthRecordsHookSource, /patch\.id\s*!=\s*null|patch\.id != null/);
+});
+
+test('offline-health-update: patch is spread on top of server record (latest-write-wins)', () => {
+  assert.match(healthRecordsHookSource, /\{\s*\.\.\.r,\s*\.\.\.pendingUpdates/);
+});
+
 // ── Task #23: Offline breeding-event updates patched into useBreedingEvents ──
 test('offline-breeding-update: useBreedingEvents applies pending syncQueue updates on top of server data', () => {
   assert.match(breedingHookSource, /entity.*'breedingEvents'.*action.*'update'/s);
