@@ -146,6 +146,21 @@ test('offline-health-update: patch is spread on top of server record (latest-wri
   assert.match(healthRecordsHookSource, /\{\s*\.\.\.r,\s*\.\.\.pendingUpdates/);
 });
 
+// ── Task #26: Offline-deleted flock health events suppressed ─────────────────
+const flockHealthSource = fs.readFileSync('client/src/hooks/use-flock-health.ts', 'utf8');
+
+test('offline-health-delete: useFlockHealthEvents builds deletedIds Set from pending delete entries', () => {
+  assert.match(flockHealthSource, /entity.*flockHealthEvents.*action.*delete|filter.*flockHealthEvents.*delete/s);
+  assert.match(flockHealthSource, /deletedIds/);
+  assert.match(flockHealthSource, /new Set\(/);
+});
+
+test('offline-health-delete: both server events and pending creates with a deleted id are excluded', () => {
+  assert.match(flockHealthSource, /visibleServer/);
+  assert.match(flockHealthSource, /visiblePending/);
+  assert.match(flockHealthSource, /deletedIds\.has\(e\.id\)/);
+});
+
 // ── Task #23: Offline breeding-event updates patched into useBreedingEvents ──
 test('offline-breeding-update: useBreedingEvents applies pending syncQueue updates on top of server data', () => {
   assert.match(breedingHookSource, /entity.*'breedingEvents'.*action.*'update'/s);

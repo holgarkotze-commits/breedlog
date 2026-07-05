@@ -63,7 +63,28 @@ export function useFlockHealthEvents() {
         console.log(`[useFlockHealthEvents] Deduplicated ${pendingHealthEvents.length - uniquePendingHealthEvents.length} pending item(s) already present in server response`);
       }
 
-      return [...serverData, ...uniquePendingHealthEvents];
+      // Suppress offline-deleted events so generateHealthFollowUpAlerts does
+      // not fire overdue alerts for events the farmer removed while offline.
+      const deletedIds = new Set(
+        pendingItems
+          .filter(item => item.entity === 'flockHealthEvents' && item.action === 'delete')
+          .map(item => {
+            const d = item.data as { id?: number };
+            return d?.id ?? null;
+          })
+          .filter((id): id is number => id !== null),
+      );
+
+      if (deletedIds.size > 0) {
+        console.log(`[useFlockHealthEvents] Suppressing ${deletedIds.size} offline-deleted health event(s) from results`);
+      }
+
+      const visibleServer = deletedIds.size > 0
+        ? serverData.filter(e => !deletedIds.has(e.id))
+        : serverData;
+      const visiblePending = uniquePendingHealthEvents.filter(e => !deletedIds.has(e.id));
+
+      return [...visibleServer, ...visiblePending];
     },
   });
 }
