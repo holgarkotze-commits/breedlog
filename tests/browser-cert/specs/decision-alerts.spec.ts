@@ -7,6 +7,7 @@ const DEVICE_REAPPEAR = 'da04aabb-cc11-2233-4455-667788990044';
 const DEVICE_OFFLINE_HEALTH = 'da05aabb-cc11-2233-4455-667788990055';
 const DEVICE_OFFLINE_MATING = 'da06aabb-cc11-2233-4455-667788990066';
 const DEVICE_OFFLINE_MATING_UPDATE = 'da07aabb-cc11-2233-4455-667788990077';
+const DEVICE_SYNC_DEDUP = 'da08aabb-cc11-2233-4455-667788990088';
 const INVITE_CODE = 'U2A2ZAVQ';
 
 async function registerDevice(baseURL: string, deviceId: string): Promise<string> {
@@ -304,6 +305,114 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
     await expect(page.locator('[data-testid="decision-alert-health-followup-overdue"]')).toBeVisible({
       timeout: 5_000,
     });
+  });
+
+  test('synced health record with matching stale syncQueue item shows alert exactly once (no duplicate)', async ({
+    page,
+    baseURL,
+  }) => {
+    if (!baseURL) throw new Error('Missing baseURL');
+
+    const deviceToken = await registerDevice(baseURL, DEVICE_SYNC_DEDUP);
+    await validateInviteCode(baseURL, DEVICE_SYNC_DEDUP);
+
+    // Yesterday's date — guarantees the follow-up is overdue and triggers an alert
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const overdueDate = yesterday.toISOString().slice(0, 10);
+
+    // Step 1: Create the real server record (simulating a successful sync to server)
+    const createRes = await fetch(`${baseURL}/api/flock-health-events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
+      body: JSON.stringify({
+        eventName: 'Dedup Vaccination',
+        eventDate: overdueDate,
+        productName: 'Dedup Vaccine',
+        route: 'subcutaneous',
+        nextFollowUpDate: overdueDate,
+        treatAllAnimals: true,
+        treatments: [],
+      }),
+    });
+    if (!createRes.ok) throw new Error(`Failed to create server health event: ${createRes.status}`);
+
+    // Step 2: Set localStorage auth so the app initialises on first load
+    await page.addInitScript(
+      ({ id, token }: { id: string; token: string }) => {
+        localStorage.setItem('breedlog_device_id', id);
+        localStorage.setItem('breedlog_device_token', token);
+        localStorage.setItem(
+          'breedlog_beta_access',
+          JSON.stringify({ hasAccess: true, lastCheck: new Date().toISOString() }),
+        );
+        localStorage.setItem('breedlog_dismissed_alerts', '[]');
+        localStorage.setItem('breedlog_install_skipped', String(Date.now()));
+      },
+      { id: DEVICE_SYNC_DEDUP, token: deviceToken },
+    );
+
+    // Step 3: Load the page so the app opens and upgrades 'breedlog-offline' to v4
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Step 4: Seed a stale syncQueue item for the SAME event (same eventName+eventDate)
+    // with synced=0, simulating the race window where the item hasn't been cleared yet.
+    const seeded = await page.evaluate(async (overdue: string) => {
+      return new Promise<boolean>((resolve, reject) => {
+        const openReq = indexedDB.open('breedlog-offline', 4);
+        openReq.onerror = () => reject(openReq.error);
+        openReq.onsuccess = () => {
+          const db = openReq.result;
+          if (!db.objectStoreNames.contains('syncQueue')) {
+            db.close();
+            resolve(false);
+            return;
+          }
+          const tempId = -Date.now();
+          const queueItem = {
+            id: crypto.randomUUID(),
+            action: 'create',
+            entity: 'flockHealthEvents',
+            data: {
+              eventName: 'Dedup Vaccination',
+              eventDate: overdue,
+              productName: 'Dedup Vaccine',
+              route: 'subcutaneous',
+              nextFollowUpDate: overdue,
+              treatAllAnimals: true,
+              treatments: [],
+            },
+            tempId,
+            timestamp: Date.now(),
+            synced: 0,
+            syncStatus: 'pending',
+            failedAttempts: 0,
+          };
+          const tx = db.transaction('syncQueue', 'readwrite');
+          tx.objectStore('syncQueue').put(queueItem);
+          tx.oncomplete = () => { db.close(); resolve(true); };
+          tx.onerror = () => { db.close(); reject(tx.error); };
+        };
+      });
+    }, overdueDate);
+
+    if (!seeded) throw new Error('Failed to seed syncQueue — store not found in breedlog-offline');
+
+    // Step 5: Reload so React Query re-runs useFlockHealthEvents
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(3_000);
+
+    // The overdue health follow-up alert must be visible
+    await expect(page.locator('[data-testid="decision-assist-alerts"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="decision-alert-health-followup-overdue"]')).toBeVisible({
+      timeout: 5_000,
+    });
+
+    // Count the number of health-followup-overdue alert cards — must be exactly 1, not 2
+    const dedupAlertCards = page.locator('[data-testid="decision-alert-health-followup-overdue"]');
+    await expect(dedupAlertCards).toHaveCount(1, { timeout: 5_000 });
   });
 
   test('offline mating-group create with dateOut = tomorrow shows mating-end alert when device comes back online', async ({

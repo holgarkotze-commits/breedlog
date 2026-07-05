@@ -45,11 +45,25 @@ export function useFlockHealthEvents() {
           createdAt: new Date(item.timestamp).toISOString(),
         } as unknown as FlockHealthEvent));
 
-      if (pendingHealthEvents.length > 0) {
-        console.log(`[useFlockHealthEvents] Merging ${pendingHealthEvents.length} pending offline health event(s) into results`);
+      // Deduplicate: filter out pending items whose eventName+eventDate already appear
+      // in the server response. This prevents duplicates during the race window between
+      // the sync manager writing the record to the server and marking the queue item
+      // as synced (synced=1) / removing it from the queue.
+      const serverEventKeys = new Set(
+        serverData.map(e => `${e.eventName}::${e.eventDate}`)
+      );
+      const uniquePendingHealthEvents = pendingHealthEvents.filter(
+        e => !serverEventKeys.has(`${e.eventName}::${e.eventDate}`)
+      );
+
+      if (uniquePendingHealthEvents.length > 0) {
+        console.log(`[useFlockHealthEvents] Merging ${uniquePendingHealthEvents.length} pending offline health event(s) into results`);
+      }
+      if (pendingHealthEvents.length > uniquePendingHealthEvents.length) {
+        console.log(`[useFlockHealthEvents] Deduplicated ${pendingHealthEvents.length - uniquePendingHealthEvents.length} pending item(s) already present in server response`);
       }
 
-      return [...serverData, ...pendingHealthEvents];
+      return [...serverData, ...uniquePendingHealthEvents];
     },
   });
 }
