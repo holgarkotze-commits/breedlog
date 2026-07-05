@@ -66,6 +66,7 @@ export function useBreedingEvents() {
       // Build a patch map from pending updates keyed by record id.
       const pendingBreedingUpdates = pendingItems
         .filter(item => item.entity === 'breedingEvents' && item.action === 'update')
+        .sort((a, b) => a.timestamp - b.timestamp)
         .reduce<Record<number, Partial<BreedingEvent>>>((acc, item) => {
           const patch = item.data as { id?: number } & Partial<BreedingEvent>;
           if (patch.id != null) {
@@ -218,6 +219,7 @@ export function useMatingGroups() {
       // Build a patch map from pending updates keyed by record id.
       const pendingUpdates = pendingItems
         .filter(item => item.entity === 'matingGroups' && item.action === 'update')
+        .sort((a, b) => a.timestamp - b.timestamp)
         .reduce<Record<number, Partial<MatingGroup>>>((acc, item) => {
           const patch = item.data as { id?: number } & Partial<MatingGroup>;
           if (patch.id != null) {

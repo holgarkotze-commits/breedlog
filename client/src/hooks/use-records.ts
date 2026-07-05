@@ -127,6 +127,7 @@ export function useHealthRecords(animalId: number) {
       const pendingItems = await getPendingSyncItems();
       const pendingUpdates = pendingItems
         .filter(item => item.entity === 'healthRecords' && item.action === 'update')
+        .sort((a, b) => a.timestamp - b.timestamp)
         .reduce<Record<number, Partial<HealthRecord>>>((acc, item) => {
           const patch = item.data as { id?: number } & Partial<HealthRecord>;
           if (patch.id != null) {

@@ -161,6 +161,19 @@ test('offline-health-delete: both server events and pending creates with a delet
   assert.match(flockHealthSource, /deletedIds\.has\(e\.id\)/);
 });
 
+// ── Task #28: Deterministic timestamp ordering for all update patch-maps ──────
+test('deterministic-updates: breedingEvents update patch-map sorts by timestamp before reducing', () => {
+  assert.match(breedingHookSource, /\.filter\(item => item\.entity === 'breedingEvents' && item\.action === 'update'\)\s*\n\s*\.sort\(\(a, b\) => a\.timestamp - b\.timestamp\)/);
+});
+
+test('deterministic-updates: matingGroups update patch-map sorts by timestamp before reducing', () => {
+  assert.match(breedingHookSource, /\.filter\(item => item\.entity === 'matingGroups' && item\.action === 'update'\)\s*\n\s*\.sort\(\(a, b\) => a\.timestamp - b\.timestamp\)/);
+});
+
+test('deterministic-updates: healthRecords update patch-map sorts by timestamp before reducing', () => {
+  assert.match(healthRecordsHookSource, /\.filter\(item => item\.entity === 'healthRecords' && item\.action === 'update'\)\s*\n\s*\.sort\(\(a, b\) => a\.timestamp - b\.timestamp\)/);
+});
+
 // ── Task #23: Offline breeding-event updates patched into useBreedingEvents ──
 test('offline-breeding-update: useBreedingEvents applies pending syncQueue updates on top of server data', () => {
   assert.match(breedingHookSource, /entity.*'breedingEvents'.*action.*'update'/s);
