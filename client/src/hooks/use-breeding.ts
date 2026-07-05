@@ -146,10 +146,12 @@ export function useMatingGroups() {
         await putManyInStore('matingGroups', data);
       }
 
-      // Merge any pending offline creates not yet synced to the server.
-      // This ensures mating-end alerts are generated for groups the farmer
-      // created while offline that haven't reached the server yet.
+      // Merge any pending offline creates/updates not yet synced to the server.
+      // Creates: append new groups so mating-end alerts fire immediately.
+      // Updates: patch existing groups so edits (e.g. extended dateOut) are
+      //          reflected in alerts before the sync queue drains.
       const pendingItems = await getPendingSyncItems();
+
       const pendingMatingGroups = pendingItems
         .filter(item => item.entity === 'matingGroups' && item.action === 'create')
         .map(item => ({
@@ -161,7 +163,27 @@ export function useMatingGroups() {
         console.log(`[useMatingGroups] Merging ${pendingMatingGroups.length} pending offline mating group(s) into results`);
       }
 
-      return [...data, ...pendingMatingGroups];
+      // Build a patch map from pending updates keyed by record id.
+      const pendingUpdates = pendingItems
+        .filter(item => item.entity === 'matingGroups' && item.action === 'update')
+        .reduce<Record<number, Partial<MatingGroup>>>((acc, item) => {
+          const patch = item.data as { id?: number } & Partial<MatingGroup>;
+          if (patch.id != null) {
+            acc[patch.id] = { ...(acc[patch.id] ?? {}), ...patch };
+          }
+          return acc;
+        }, {});
+
+      const updateCount = Object.keys(pendingUpdates).length;
+      if (updateCount > 0) {
+        console.log(`[useMatingGroups] Applying ${updateCount} pending offline update(s) to mating group(s)`);
+      }
+
+      const patchedData = updateCount > 0
+        ? data.map(g => pendingUpdates[g.id] ? { ...g, ...pendingUpdates[g.id] } : g)
+        : data;
+
+      return [...patchedData, ...pendingMatingGroups];
     }
   });
 }

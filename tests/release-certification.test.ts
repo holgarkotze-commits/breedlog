@@ -105,3 +105,14 @@ test('offline-breeding-events: useBreedingEvents merges pending syncQueue create
   assert.match(breedingHookSource, /entity.*breedingEvents.*action.*create|filter.*breedingEvents/s);
   assert.match(breedingHookSource, /\[\.\.\.(data|server),\s*\.\.\.pending/);
 });
+
+// ── Task #20: Offline mating-group updates patched into useMatingGroups ──────
+test('offline-mating-update: useMatingGroups applies pending syncQueue updates on top of server data', () => {
+  assert.match(breedingHookSource, /action.*===.*'update'|action.*update.*matingGroups/);
+  assert.match(breedingHookSource, /patch\.id\s*!=\s*null|patch\.id != null/);
+  assert.match(breedingHookSource, /pendingUpdates\[g\.id\]/);
+});
+
+test('offline-mating-update: update patch is spread on top of existing group (latest-write-wins)', () => {
+  assert.match(breedingHookSource, /\{\s*\.\.\.g,\s*\.\.\.pendingUpdates/);
+});

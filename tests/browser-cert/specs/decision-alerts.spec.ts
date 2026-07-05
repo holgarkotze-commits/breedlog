@@ -6,6 +6,7 @@ const DEVICE_DISMISS = 'da03aabb-cc11-2233-4455-667788990033';
 const DEVICE_REAPPEAR = 'da04aabb-cc11-2233-4455-667788990044';
 const DEVICE_OFFLINE_HEALTH = 'da05aabb-cc11-2233-4455-667788990055';
 const DEVICE_OFFLINE_MATING = 'da06aabb-cc11-2233-4455-667788990066';
+const DEVICE_OFFLINE_MATING_UPDATE = 'da07aabb-cc11-2233-4455-667788990077';
 const INVITE_CODE = 'U2A2ZAVQ';
 
 async function registerDevice(baseURL: string, deviceId: string): Promise<string> {
@@ -384,5 +385,102 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
     await expect(page.locator('[data-testid="decision-assist-alerts"]')).toBeVisible({ timeout: 15_000 });
     // The alert key is `mating-ending-${tempId}` — match by prefix
     await expect(page.locator('[data-testid^="decision-alert-mating-ending-"]')).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('offline mating-group UPDATE moves dateOut to tomorrow — alert appears before sync drains', async ({
+    page,
+    baseURL,
+  }) => {
+    if (!baseURL) throw new Error('Missing baseURL');
+
+    const deviceToken = await registerDevice(baseURL, DEVICE_OFFLINE_MATING_UPDATE);
+    await validateInviteCode(baseURL, DEVICE_OFFLINE_MATING_UPDATE);
+
+    // Create a real mating group via API with dateOut far in the future (no alert yet).
+    const farFuture = new Date();
+    farFuture.setDate(farFuture.getDate() + 60);
+    const farDateStr = farFuture.toISOString().slice(0, 10);
+
+    const groupRes = await fetch(`${baseURL}/api/mating-groups`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${deviceToken}`,
+      },
+      credentials: 'include',
+      body: JSON.stringify({ name: 'Group To Be Updated Offline', dateOut: farDateStr }),
+    });
+    if (!groupRes.ok) throw new Error(`Failed to create mating group: ${groupRes.status}`);
+    const { id: groupId } = await groupRes.json();
+
+    // Tomorrow — within the 14-day alert window.
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+    // Step 1: Set localStorage auth.
+    await page.addInitScript(
+      ({ id, token }: { id: string; token: string }) => {
+        localStorage.setItem('breedlog_device_id', id);
+        localStorage.setItem('breedlog_device_token', token);
+        localStorage.setItem(
+          'breedlog_beta_access',
+          JSON.stringify({ hasAccess: true, lastCheck: new Date().toISOString() }),
+        );
+        localStorage.setItem('breedlog_dismissed_alerts', '[]');
+        localStorage.setItem('breedlog_install_skipped', String(Date.now()));
+      },
+      { id: DEVICE_OFFLINE_MATING_UPDATE, token: deviceToken },
+    );
+
+    // Step 2: Load to open and upgrade IndexedDB.
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Step 3: Seed a pending 'update' in syncQueue that moves dateOut to tomorrow.
+    const seeded = await page.evaluate(
+      async ({ gId, dateOut }: { gId: number; dateOut: string }) => {
+        return new Promise<boolean>((resolve, reject) => {
+          const openReq = indexedDB.open('breedlog-offline', 4);
+          openReq.onerror = () => reject(openReq.error);
+          openReq.onsuccess = () => {
+            const db = openReq.result;
+            if (!db.objectStoreNames.contains('syncQueue')) {
+              db.close();
+              resolve(false);
+              return;
+            }
+            const queueItem = {
+              id: crypto.randomUUID(),
+              action: 'update',
+              entity: 'matingGroups',
+              data: { id: gId, dateOut },
+              timestamp: Date.now(),
+              synced: 0,
+              syncStatus: 'pending',
+              failedAttempts: 0,
+            };
+            const tx = db.transaction('syncQueue', 'readwrite');
+            tx.objectStore('syncQueue').put(queueItem);
+            tx.oncomplete = () => { db.close(); resolve(true); };
+            tx.onerror = () => { db.close(); reject(tx.error); };
+          };
+        });
+      },
+      { gId: groupId, dateOut: tomorrowStr },
+    );
+
+    if (!seeded) throw new Error('Failed to seed syncQueue update — store not found in breedlog-offline');
+
+    // Step 4: Reload so React Query re-runs useMatingGroups and applies the pending update.
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(3_000);
+
+    // The mating-end alert must appear — driven by the patched dateOut = tomorrow.
+    await expect(page.locator('[data-testid="decision-assist-alerts"]')).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.locator(`[data-testid="decision-alert-mating-ending-${groupId}"]`),
+    ).toBeVisible({ timeout: 5_000 });
   });
 });
