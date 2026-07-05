@@ -103,7 +103,7 @@ const breedingHookSource = fs.readFileSync('client/src/hooks/use-breeding.ts', '
 test('offline-breeding-events: useBreedingEvents merges pending syncQueue creates before returning', () => {
   assert.match(breedingHookSource, /getPendingSyncItems/);
   assert.match(breedingHookSource, /entity.*breedingEvents.*action.*create|filter.*breedingEvents/s);
-  assert.match(breedingHookSource, /\[\.\.\.(data|server),\s*\.\.\.pending/);
+  assert.match(breedingHookSource, /\[\.\.\.(data|server|patchedBreedingData),\s*\.\.\.pending/);
 });
 
 // ── Task #20: Offline mating-group updates patched into useMatingGroups ──────
@@ -128,4 +128,15 @@ test('offline-mating-delete: server groups and pending creates with a deleted id
   assert.match(breedingHookSource, /visibleData/);
   assert.match(breedingHookSource, /visiblePending/);
   assert.match(breedingHookSource, /deletedIds\.has\(g\.id\)/);
+});
+
+// ── Task #23: Offline breeding-event updates patched into useBreedingEvents ──
+test('offline-breeding-update: useBreedingEvents applies pending syncQueue updates on top of server data', () => {
+  assert.match(breedingHookSource, /entity.*'breedingEvents'.*action.*'update'/s);
+  assert.match(breedingHookSource, /patch\.id != null/);
+  assert.match(breedingHookSource, /pendingBreedingUpdates\[evt\.id\]/);
+});
+
+test('offline-breeding-update: update patch is spread on top of existing event (latest-write-wins)', () => {
+  assert.match(breedingHookSource, /\{\s*\.\.\.evt,\s*\.\.\.pendingBreedingUpdates/);
 });

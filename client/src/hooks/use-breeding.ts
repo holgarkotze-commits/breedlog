@@ -37,11 +37,12 @@ export function useBreedingEvents() {
         await putManyInStore('breedingEvents', data);
       }
 
-      // Merge any pending offline creates not yet synced to the server.
-      // This ensures breeding-event counts and analytics are accurate for
-      // events the farmer recorded while offline that haven't reached the
-      // server yet.
+      // Merge any pending offline creates/updates not yet synced to the server.
+      // Creates: append new events so analytics are accurate immediately.
+      // Updates: patch existing events so edits (e.g. corrected ram/ewe) are
+      //          reflected on the Breeding page before the sync queue drains.
       const pendingItems = await getPendingSyncItems();
+
       const pendingBreedingEvents = pendingItems
         .filter(item => item.entity === 'breedingEvents' && item.action === 'create')
         .map(item => ({
@@ -53,7 +54,27 @@ export function useBreedingEvents() {
         console.log(`[useBreedingEvents] Merging ${pendingBreedingEvents.length} pending offline breeding event(s) into results`);
       }
 
-      return [...data, ...pendingBreedingEvents];
+      // Build a patch map from pending updates keyed by record id.
+      const pendingBreedingUpdates = pendingItems
+        .filter(item => item.entity === 'breedingEvents' && item.action === 'update')
+        .reduce<Record<number, Partial<BreedingEvent>>>((acc, item) => {
+          const patch = item.data as { id?: number } & Partial<BreedingEvent>;
+          if (patch.id != null) {
+            acc[patch.id] = { ...(acc[patch.id] ?? {}), ...patch };
+          }
+          return acc;
+        }, {});
+
+      const breedingUpdateCount = Object.keys(pendingBreedingUpdates).length;
+      if (breedingUpdateCount > 0) {
+        console.log(`[useBreedingEvents] Applying ${breedingUpdateCount} pending offline update(s) to breeding event(s)`);
+      }
+
+      const patchedBreedingData = breedingUpdateCount > 0
+        ? data.map(evt => pendingBreedingUpdates[evt.id] ? { ...evt, ...pendingBreedingUpdates[evt.id] } : evt)
+        : data;
+
+      return [...patchedBreedingData, ...pendingBreedingEvents];
     },
   });
 }
