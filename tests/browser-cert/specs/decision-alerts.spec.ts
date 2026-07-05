@@ -5,6 +5,7 @@ const DEVICE_EMPTY = 'da02aabb-cc11-2233-4455-667788990022';
 const DEVICE_DISMISS = 'da03aabb-cc11-2233-4455-667788990033';
 const DEVICE_REAPPEAR = 'da04aabb-cc11-2233-4455-667788990044';
 const DEVICE_OFFLINE_HEALTH = 'da05aabb-cc11-2233-4455-667788990055';
+const DEVICE_OFFLINE_MATING = 'da06aabb-cc11-2233-4455-667788990066';
 const INVITE_CODE = 'U2A2ZAVQ';
 
 async function registerDevice(baseURL: string, deviceId: string): Promise<string> {
@@ -302,5 +303,86 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
     await expect(page.locator('[data-testid="decision-alert-health-followup-overdue"]')).toBeVisible({
       timeout: 5_000,
     });
+  });
+
+  test('offline mating-group create with dateOut = tomorrow shows mating-end alert when device comes back online', async ({
+    page,
+    baseURL,
+  }) => {
+    if (!baseURL) throw new Error('Missing baseURL');
+
+    const deviceToken = await registerDevice(baseURL, DEVICE_OFFLINE_MATING);
+    await validateInviteCode(baseURL, DEVICE_OFFLINE_MATING);
+
+    // Tomorrow's date — within the 14-day alert window
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dateOutStr = tomorrow.toISOString().slice(0, 10);
+
+    // Step 1: Set localStorage auth so the app initialises (and opens IndexedDB) on first load.
+    await page.addInitScript(
+      ({ id, token }: { id: string; token: string }) => {
+        localStorage.setItem('breedlog_device_id', id);
+        localStorage.setItem('breedlog_device_token', token);
+        localStorage.setItem(
+          'breedlog_beta_access',
+          JSON.stringify({ hasAccess: true, lastCheck: new Date().toISOString() }),
+        );
+        localStorage.setItem('breedlog_dismissed_alerts', '[]');
+        localStorage.setItem('breedlog_install_skipped', String(Date.now()));
+      },
+      { id: DEVICE_OFFLINE_MATING, token: deviceToken },
+    );
+
+    // Step 2: Load the page so the app opens and upgrades 'breedlog-offline', creating syncQueue.
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Step 3: Seed the syncQueue with a pending offline mating-group create.
+    const seeded = await page.evaluate(async (dateOut: string) => {
+      return new Promise<boolean>((resolve, reject) => {
+        const openReq = indexedDB.open('breedlog-offline', 4);
+        openReq.onerror = () => reject(openReq.error);
+        openReq.onsuccess = () => {
+          const db = openReq.result;
+          if (!db.objectStoreNames.contains('syncQueue')) {
+            db.close();
+            resolve(false);
+            return;
+          }
+          const tempId = -Date.now();
+          const queueItem = {
+            id: crypto.randomUUID(),
+            action: 'create',
+            entity: 'matingGroups',
+            data: {
+              name: 'Offline Ram Group Alpha',
+              dateOut,
+            },
+            tempId,
+            timestamp: Date.now(),
+            synced: 0,
+            syncStatus: 'pending',
+            failedAttempts: 0,
+          };
+          const tx = db.transaction('syncQueue', 'readwrite');
+          tx.objectStore('syncQueue').put(queueItem);
+          tx.oncomplete = () => { db.close(); resolve(true); };
+          tx.onerror = () => { db.close(); reject(tx.error); };
+        };
+      });
+    }, dateOutStr);
+
+    if (!seeded) throw new Error('Failed to seed syncQueue — store not found in breedlog-offline');
+
+    // Step 4: Reload so React Query re-runs useMatingGroups and merges the pending item.
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(3_000);
+
+    // The mating-end alert must be visible — driven by the pending offline mating group.
+    await expect(page.locator('[data-testid="decision-assist-alerts"]')).toBeVisible({ timeout: 15_000 });
+    // The alert key is `mating-ending-${tempId}` — match by prefix
+    await expect(page.locator('[data-testid^="decision-alert-mating-ending-"]')).toBeVisible({ timeout: 5_000 });
   });
 });

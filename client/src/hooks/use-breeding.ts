@@ -7,7 +7,8 @@ import {
   getAllFromStore, 
   putManyInStore, 
   putInStore, 
-  addToSyncQueue 
+  addToSyncQueue,
+  getPendingSyncItems
 } from "@/lib/indexeddb";
 
 export function useBreedingEvents() {
@@ -128,8 +129,23 @@ export function useMatingGroups() {
       if (data.length > 0) {
         await putManyInStore('matingGroups', data);
       }
-      
-      return data;
+
+      // Merge any pending offline creates not yet synced to the server.
+      // This ensures mating-end alerts are generated for groups the farmer
+      // created while offline that haven't reached the server yet.
+      const pendingItems = await getPendingSyncItems();
+      const pendingMatingGroups = pendingItems
+        .filter(item => item.entity === 'matingGroups' && item.action === 'create')
+        .map(item => ({
+          ...(item.data as object),
+          id: item.tempId ?? -(item.timestamp),
+        } as unknown as MatingGroup));
+
+      if (pendingMatingGroups.length > 0) {
+        console.log(`[useMatingGroups] Merging ${pendingMatingGroups.length} pending offline mating group(s) into results`);
+      }
+
+      return [...data, ...pendingMatingGroups];
     }
   });
 }
