@@ -183,7 +183,29 @@ export function useMatingGroups() {
         ? data.map(g => pendingUpdates[g.id] ? { ...g, ...pendingUpdates[g.id] } : g)
         : data;
 
-      return [...patchedData, ...pendingMatingGroups];
+      // Filter out groups that have a pending offline delete so they don't
+      // continue to trigger "mating period ending" alerts for deleted groups.
+      const deletedIds = new Set(
+        pendingItems
+          .filter(item => item.entity === 'matingGroups' && item.action === 'delete')
+          .map(item => {
+            const d = item.data as { id?: number };
+            return d?.id ?? null;
+          })
+          .filter((id): id is number => id !== null),
+      );
+
+      if (deletedIds.size > 0) {
+        console.log(`[useMatingGroups] Suppressing ${deletedIds.size} offline-deleted mating group(s) from results`);
+      }
+
+      const visibleData = deletedIds.size > 0
+        ? patchedData.filter(g => !deletedIds.has(g.id))
+        : patchedData;
+
+      const visiblePending = pendingMatingGroups.filter(g => !deletedIds.has(g.id));
+
+      return [...visibleData, ...visiblePending];
     }
   });
 }

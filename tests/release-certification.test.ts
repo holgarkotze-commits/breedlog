@@ -116,3 +116,16 @@ test('offline-mating-update: useMatingGroups applies pending syncQueue updates o
 test('offline-mating-update: update patch is spread on top of existing group (latest-write-wins)', () => {
   assert.match(breedingHookSource, /\{\s*\.\.\.g,\s*\.\.\.pendingUpdates/);
 });
+
+// ── Task #24: Offline-deleted mating groups suppressed from useMatingGroups ──
+test('offline-mating-delete: useMatingGroups builds deletedIds set from pending delete entries', () => {
+  assert.match(breedingHookSource, /action.*===.*'delete'.*matingGroups|entity.*matingGroups.*action.*delete/s);
+  assert.match(breedingHookSource, /deletedIds/);
+  assert.match(breedingHookSource, /new Set\(/);
+});
+
+test('offline-mating-delete: server groups and pending creates with a deleted id are both filtered out', () => {
+  assert.match(breedingHookSource, /visibleData/);
+  assert.match(breedingHookSource, /visiblePending/);
+  assert.match(breedingHookSource, /deletedIds\.has\(g\.id\)/);
+});
