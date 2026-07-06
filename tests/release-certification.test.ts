@@ -10,6 +10,11 @@ const browserCertRunnerSource = fs.readFileSync('scripts/run-browser-cert.sh', '
 const settingsSource = fs.readFileSync('client/src/pages/Settings.tsx', 'utf8');
 const networkStatusSource = fs.readFileSync('client/src/hooks/use-network-status.ts', 'utf8');
 const animalCardSource = fs.readFileSync('client/src/components/AnimalCard.tsx', 'utf8');
+const syncUtilsSource = fs.readFileSync('client/src/lib/sync-utils.ts', 'utf8');
+const schemaSource = fs.readFileSync('shared/schema.ts', 'utf8');
+const animalsPageSource = fs.readFileSync('client/src/pages/Animals.tsx', 'utf8');
+const animalDetailSource = fs.readFileSync('client/src/pages/AnimalDetail.tsx', 'utf8');
+const lambsPageSource = fs.readFileSync('client/src/pages/Lambs.tsx', 'utf8');
 
 // These are release-certification guard tests.
 // They verify critical sync/offline architecture invariants directly from source.
@@ -162,8 +167,10 @@ test('offline-health-delete: both server events and pending creates with a delet
 });
 
 // ── Task #28: Deterministic timestamp ordering for all update patch-maps ──────
-test('deterministic-updates: breedingEvents update patch-map sorts by timestamp before reducing', () => {
-  assert.match(breedingHookSource, /\.filter\(item => item\.entity === 'breedingEvents' && item\.action === 'update'\)\s*\n\s*\.sort\(\(a, b\) => a\.timestamp - b\.timestamp\)/);
+test('deterministic-updates: breedingEvents update patch-map sorts by timestamp (via buildPatchMap helper)', () => {
+  // Task #34 extracted the inline filter→sort→reduce into buildPatchMap() in sync-utils.ts
+  assert.match(breedingHookSource, /buildPatchMap/);
+  assert.match(syncUtilsSource, /\.sort\(\(a, b\) => a\.timestamp - b\.timestamp\)/);
 });
 
 test('deterministic-updates: matingGroups update patch-map sorts by timestamp before reducing', () => {
@@ -172,6 +179,51 @@ test('deterministic-updates: matingGroups update patch-map sorts by timestamp be
 
 test('deterministic-updates: healthRecords update patch-map sorts by timestamp before reducing', () => {
   assert.match(healthRecordsHookSource, /\.filter\(item => item\.entity === 'healthRecords' && item\.action === 'update'\)\s*\n\s*\.sort\(\(a, b\) => a\.timestamp - b\.timestamp\)/);
+});
+
+// ── Ram Breeding Status (separate from classification/ramType) ──────────────
+test('ram-breeding-status: schema has ramBreedingStatus column separate from ramType and classification', () => {
+  assert.match(schemaSource, /ram_breeding_status/);
+  assert.match(schemaSource, /ram_type/);
+  assert.match(schemaSource, /classification/);
+});
+
+test('ram-breeding-status: schema accepts breeding_ram, marketable_ram, not_selected, unknown values', () => {
+  assert.match(schemaSource, /breeding_ram.*marketable_ram.*not_selected.*unknown|ramBreedingStatus.*text/s);
+});
+
+test('ram-breeding-status: add animal form shows breeding status field with all four options', () => {
+  assert.match(animalsPageSource, /select-ram-breeding-status/);
+  assert.match(animalsPageSource, /marketable_ram/);
+  assert.match(animalsPageSource, /not_selected/);
+  assert.match(animalsPageSource, /watchedSex.*===.*'ram'/);
+});
+
+test('ram-breeding-status: edit animal form shows breeding status field for rams', () => {
+  assert.match(animalDetailSource, /select-edit-ram-breeding-status/);
+  assert.match(animalDetailSource, /ramBreedingStatus/);
+  assert.match(animalDetailSource, /formData\.sex.*===.*'ram'/);
+});
+
+test('ram-breeding-status: promote-to-rams dialog includes breeding status select (separate from ram type)', () => {
+  assert.match(animalsPageSource, /select-promote-ram-breeding-status/);
+  assert.match(lambsPageSource, /select-ram-breeding-status/);
+});
+
+test('ram-breeding-status: promote mutation passes ramBreedingStatus to move-to-rams endpoint', () => {
+  assert.match(animalsHookSource, /ramBreedingStatus/);
+  assert.match(animalsHookSource, /JSON\.stringify\(\{.*ramType.*ramBreedingStatus|JSON\.stringify\(\{.*ramBreedingStatus/s);
+});
+
+test('ram-breeding-status: server move-to-rams validates ramBreedingStatus values', () => {
+  assert.match(routesSource, /validBreedingStatuses/);
+  assert.match(routesSource, /marketable_ram/);
+  assert.match(routesSource, /not_selected/);
+});
+
+test('ram-breeding-status: classification field still present alongside ramBreedingStatus (not replaced)', () => {
+  assert.match(animalsPageSource, /select-classification/);
+  assert.match(animalDetailSource, /select-edit-classification/);
 });
 
 // ── Task #23: Offline breeding-event updates patched into useBreedingEvents ──

@@ -2193,11 +2193,20 @@ function RamsSection({
                   </td>
                   <td className="p-2.5 font-semibold">{ram.tagId}</td>
                   <td className="p-2.5 hidden sm:table-cell">
-                    <Badge variant="outline" className="text-xs">
-                      {ram.ramType === 'breeding_ram' ? 'Breeding' : 
-                       ram.ramType === 'stud_ram' ? 'Stud' : 
-                       ram.ramType === 'commercial_ram' ? 'Commercial' : '—'}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline" className="text-xs">
+                        {ram.ramType === 'breeding_ram' ? 'Breeding' : 
+                         ram.ramType === 'stud_ram' ? 'Stud' : 
+                         ram.ramType === 'commercial_ram' ? 'Commercial' : '—'}
+                      </Badge>
+                      {(ram as any).ramBreedingStatus && (ram as any).ramBreedingStatus !== 'unknown' && (
+                        <Badge variant="secondary" className="text-xs">
+                          {(ram as any).ramBreedingStatus === 'breeding_ram' ? 'Breeding' :
+                           (ram as any).ramBreedingStatus === 'marketable_ram' ? 'Marketable' :
+                           (ram as any).ramBreedingStatus === 'not_selected' ? 'Not Selected' : ''}
+                        </Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="p-2.5 hidden md:table-cell">
                     {ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : "—"}
@@ -2703,6 +2712,7 @@ function LambsSection({
   const [weightValue, setWeightValue] = useState("");
   const [weightType, setWeightType] = useState<"100" | "270" | "current">("100");
   const [selectedRamType, setSelectedRamType] = useState<"breeding_ram" | "stud_ram" | "commercial_ram">("breeding_ram");
+  const [selectedRamBreedingStatus, setSelectedRamBreedingStatus] = useState("unknown");
   
   // Lambs are active animals under 240 days old (8 months) - consistent with Dashboard counting
   // Once an animal reaches 240+ days, they automatically appear in Rams/Ewes section
@@ -2785,12 +2795,13 @@ function LambsSection({
 
   const handlePromoteToRam = () => {
     if (!selectedAnimal) return;
-    moveToRamsMutation.mutate({ id: selectedAnimal.id, ramType: selectedRamType }, {
+    moveToRamsMutation.mutate({ id: selectedAnimal.id, ramType: selectedRamType, ramBreedingStatus: selectedRamBreedingStatus }, {
       onSuccess: () => {
         toast({ title: "Ram Promoted", description: `${selectedAnimal.tagId} moved to Rams section as ${selectedRamType.replace('_', ' ')}` });
         setShowPromoteDialog(false);
         setSelectedAnimal(null);
         setSelectedRamType("breeding_ram");
+        setSelectedRamBreedingStatus("unknown");
       }
     });
   };
@@ -3191,7 +3202,7 @@ function LambsSection({
             <div className="space-y-2">
               <Label>Ram Type</Label>
               <Select value={selectedRamType} onValueChange={(v) => setSelectedRamType(v as typeof selectedRamType)}>
-                <SelectTrigger>
+                <SelectTrigger data-testid="select-promote-ram-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -3200,6 +3211,21 @@ function LambsSection({
                   <SelectItem value="commercial_ram">Commercial Ram</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Breeding Status</Label>
+              <Select value={selectedRamBreedingStatus} onValueChange={setSelectedRamBreedingStatus}>
+                <SelectTrigger data-testid="select-promote-ram-breeding-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
+                  <SelectItem value="marketable_ram">Marketable Ram</SelectItem>
+                  <SelectItem value="not_selected">Not Selected</SelectItem>
+                  <SelectItem value="unknown">Unknown</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Current usage status, separate from type/classification.</p>
             </div>
           </div>
           <DialogFooter>
@@ -3549,6 +3575,7 @@ function CreateAnimalDialog({
       breed: "Meatmaster",
       status: "active",
       classification: "unclassified" as string,
+      ramBreedingStatus: "unknown" as string,
       animalSource: "unknown_not_recorded" as string,
       birthDate: new Date().toISOString().split('T')[0],
       birthStatus: "single" as string,
@@ -3568,6 +3595,7 @@ function CreateAnimalDialog({
 
   const birthStatus = form.watch("birthStatus");
   const watchedTagId = form.watch("tagId");
+  const watchedSex = form.watch("sex");
   const studPrefix = (farmSettings?.studPrefix || "").trim();
   const normalizedTagPreview = splitTagInput(watchedTagId, studPrefix).canonicalTag;
 
@@ -3805,6 +3833,32 @@ function CreateAnimalDialog({
                 )}
               />
             </div>
+
+            {watchedSex === 'ram' && (
+              <FormField
+                control={form.control}
+                name="ramBreedingStatus"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeding Status</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || "unknown"}>
+                      <FormControl>
+                        <SelectTrigger className="rugged-input" data-testid="select-ram-breeding-status">
+                          <SelectValue placeholder="Select breeding status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
+                        <SelectItem value="marketable_ram">Marketable Ram</SelectItem>
+                        <SelectItem value="not_selected">Not Selected</SelectItem>
+                        <SelectItem value="unknown">Unknown</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField

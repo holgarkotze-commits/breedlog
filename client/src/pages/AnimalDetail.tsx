@@ -1640,6 +1640,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
         sex: animal.sex || "ewe",
         breed: animal.breed || "Meatmaster",
         classification: animal.classification || "unclassified",
+        ramBreedingStatus: (animal as any).ramBreedingStatus || "unknown",
         animalSource: (animal as any).animalSource || "unknown_not_recorded",
         status: animal.status || "active",
         birthDate: animal.birthDate || "",
@@ -1875,6 +1876,20 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                                 </SelectContent>
                             </Select>
                         </div>
+                        {formData.sex === 'ram' && (
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Breeding Status</Label>
+                            <Select value={(formData as any).ramBreedingStatus || "unknown"} onValueChange={(val) => setFormData(prev => ({...prev, ramBreedingStatus: val}))}>
+                                <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-ram-breeding-status"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
+                                    <SelectItem value="marketable_ram">Marketable Ram</SelectItem>
+                                    <SelectItem value="not_selected">Not Selected</SelectItem>
+                                    <SelectItem value="unknown">Unknown</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        )}
                         <div>
                             <Label className="text-[11px] md:text-xs">Source</Label>
                             <Select value={formData.animalSource || "unknown_not_recorded"} onValueChange={(val) => setFormData(prev => ({...prev, animalSource: val}))}>

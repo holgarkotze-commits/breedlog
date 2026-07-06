@@ -344,10 +344,15 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
-      const { ramType } = req.body;
+      const { ramType, ramBreedingStatus } = req.body;
       
       if (!['breeding_ram', 'stud_ram', 'commercial_ram'].includes(ramType)) {
         return res.status(400).json({ message: "Invalid ramType. Must be: breeding_ram, stud_ram, or commercial_ram" });
+      }
+
+      const validBreedingStatuses = ['breeding_ram', 'marketable_ram', 'not_selected', 'unknown'];
+      if (ramBreedingStatus && !validBreedingStatuses.includes(ramBreedingStatus)) {
+        return res.status(400).json({ message: "Invalid ramBreedingStatus" });
       }
       
       const animal = await storage.getAnimal(userId, animalId);
@@ -360,7 +365,8 @@ export async function registerRoutes(
       
       const updated = await storage.updateAnimal(userId, animalId, { 
         lambStatus: 'moved_to_rams',
-        ramType
+        ramType,
+        ...(ramBreedingStatus ? { ramBreedingStatus } : {})
       });
       res.json(updated);
     } catch (err) {
