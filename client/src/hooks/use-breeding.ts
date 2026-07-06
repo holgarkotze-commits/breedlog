@@ -10,6 +10,7 @@ import {
   addToSyncQueue,
   getPendingSyncItems
 } from "@/lib/indexeddb";
+import { buildPatchMap } from "@/lib/sync-utils";
 
 export function useBreedingEvents() {
   const { isOnline } = useNetworkStatus();
@@ -64,16 +65,9 @@ export function useBreedingEvents() {
       }
 
       // Build a patch map from pending updates keyed by record id.
-      const pendingBreedingUpdates = pendingItems
-        .filter(item => item.entity === 'breedingEvents' && item.action === 'update')
-        .sort((a, b) => a.timestamp - b.timestamp)
-        .reduce<Record<number, Partial<BreedingEvent>>>((acc, item) => {
-          const patch = item.data as { id?: number } & Partial<BreedingEvent>;
-          if (patch.id != null) {
-            acc[patch.id] = { ...(acc[patch.id] ?? {}), ...patch };
-          }
-          return acc;
-        }, {});
+      // Uses buildPatchMap (from sync-utils) which sorts by timestamp ascending
+      // so the highest-timestamp patch always wins (latest offline edit prevails).
+      const pendingBreedingUpdates = buildPatchMap<BreedingEvent>(pendingItems, 'breedingEvents');
 
       const breedingUpdateCount = Object.keys(pendingBreedingUpdates).length;
       if (breedingUpdateCount > 0) {
