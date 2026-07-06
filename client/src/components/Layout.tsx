@@ -32,6 +32,7 @@ import {
 import { performLogout } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "@/components/ui/sheet";
+import { useNavigationHistory } from "@/lib/navigation-history-context";
 
 function ScrambleText({ text, className }: { text: string; className?: string }) {
   const [displayText, setDisplayText] = useState("");
@@ -74,6 +75,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const { addVisit } = useRecentVisits();
+  const { goBack, goForward, canGoBack, canGoForward } = useNavigationHistory();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -151,6 +153,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Link href="/" className="sidebar-logo-area border-b border-white/10 px-4 py-5 transition-colors hover:bg-white/5">
           <Logo size="lg" showTagline />
         </Link>
+
+        {/* Back / Forward navigation */}
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-white/10">
+          <button
+            onClick={() => goBack()}
+            disabled={!canGoBack}
+            data-testid="button-nav-back"
+            title="Go back"
+            className="flex items-center justify-center h-8 w-8 rounded-lg border border-white/10 text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => goForward()}
+            disabled={!canGoForward}
+            data-testid="button-nav-forward"
+            title="Go forward"
+            className="flex items-center justify-center h-8 w-8 rounded-lg border border-white/10 text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <span className="ml-1 text-[11px] text-slate-400/70 select-none">Navigate</span>
+        </div>
 
         <nav className="flex-1 space-y-1.5 px-4 py-5 overflow-y-auto">
           {navItems.map((item) => (
