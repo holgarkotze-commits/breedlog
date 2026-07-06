@@ -45,6 +45,11 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Fix registry URLs for CI
+        run: |
+          sed -i 's|http://package-firewall.replit.local/npm|https://registry.npmjs.org|g' package-lock.json
+          echo "Registry URLs patched for public CI"
+
       - name: Install dependencies
         run: npm ci
 
