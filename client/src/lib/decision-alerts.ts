@@ -146,10 +146,99 @@ export function generateBreedingWindowAlerts(
   return alerts;
 }
 
+type LambAlertAnimal = {
+  id: number | string;
+  status?: string | null;
+  sex?: string | null;
+  birthDate?: string | null;
+  damId?: number | null;
+  sireId?: number | null;
+  birthWeight?: string | null;
+  weight100Day?: string | null;
+};
+
+export function generateLambingFollowUpAlerts(animals: LambAlertAnimal[]): DecisionAlert[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const alerts: DecisionAlert[] = [];
+
+  const lambs = animals.filter((a) => {
+    if (a.status !== "active") return false;
+    if (!a.birthDate) return false;
+    const ageDays = (today.getTime() - new Date(a.birthDate).getTime()) / (1000 * 60 * 60 * 24);
+    return ageDays >= 0 && ageDays <= 240;
+  });
+
+  if (lambs.length === 0) return [];
+
+  const missingDam = lambs.filter((l) => !l.damId);
+  if (missingDam.length > 0) {
+    const plural = missingDam.length > 1;
+    alerts.push({
+      key: "lambing-followup-no-dam",
+      severity: "info",
+      title: `${missingDam.length} Lamb${plural ? "s" : ""} Missing Dam Record`,
+      message: `${missingDam.length} active lamb${plural ? "s have" : " has"} no dam linked. Recording dam relationships helps track ewe performance and pedigree accuracy.`,
+      action: "View Lambs",
+      actionHref: "/animals",
+    });
+  }
+
+  const missingBirthWeight = lambs.filter((l) => !l.birthWeight);
+  if (missingBirthWeight.length > 0) {
+    const plural = missingBirthWeight.length > 1;
+    alerts.push({
+      key: "lambing-followup-no-birthweight",
+      severity: "info",
+      title: `${missingBirthWeight.length} Lamb${plural ? "s" : ""} Missing Birth Weight`,
+      message: `${missingBirthWeight.length} active lamb${plural ? "s have" : " has"} no birth weight recorded. Birth weight is key for growth performance tracking.`,
+      action: "View Lambs",
+      actionHref: "/animals",
+    });
+  }
+
+  const over90NeedsWeanWeight = lambs.filter((l) => {
+    if (l.weight100Day) return false;
+    if (!l.birthDate) return false;
+    const ageDays = (today.getTime() - new Date(l.birthDate).getTime()) / (1000 * 60 * 60 * 24);
+    return ageDays >= 90;
+  });
+  if (over90NeedsWeanWeight.length > 0) {
+    const plural = over90NeedsWeanWeight.length > 1;
+    alerts.push({
+      key: "lambing-followup-weaning-check",
+      severity: "due-soon",
+      title: `${over90NeedsWeanWeight.length} Lamb${plural ? "s" : ""} Due for Weaning Weight`,
+      message: `${over90NeedsWeanWeight.length} lamb${plural ? "s are" : " is"} over 90 days old with no 100-day weight recorded. Record weaning weights to track flock growth performance.`,
+      action: "View Lambs",
+      actionHref: "/animals",
+    });
+  }
+
+  return alerts;
+}
+
+export function generatePedigreeIncompletenessAlert(animals: LambAlertAnimal[]): DecisionAlert | null {
+  const active = animals.filter((a) => a.status === "active");
+  if (active.length < 5) return null;
+  const noSire = active.filter((a) => !a.sireId).length;
+  const pct = Math.round((noSire / active.length) * 100);
+  if (pct < 50) return null;
+  return {
+    key: "pedigree-incomplete",
+    severity: "info",
+    title: "Pedigree Records Incomplete",
+    message: `${pct}% of active animals have no sire recorded. Incomplete pedigree data means mating risk calculations may underestimate inbreeding. Link sires in animal profiles to improve accuracy.`,
+    action: "View Herd",
+    actionHref: "/animals",
+  };
+}
+
 export function generateAllAlerts(opts: {
   today?: Date;
   flockHealthEvents: Array<{ id: number | string; nextFollowUpDate?: string | null; eventName?: string | null }>;
   matingGroups: Array<{ id: number | string; name?: string | null; dateOut?: string | null }>;
+  animals?: LambAlertAnimal[];
 }): DecisionAlert[] {
   const today = opts.today ?? new Date();
   const all: DecisionAlert[] = [];
@@ -159,6 +248,12 @@ export function generateAllAlerts(opts: {
 
   all.push(...generateHealthFollowUpAlerts(opts.flockHealthEvents));
   all.push(...generateBreedingWindowAlerts(opts.matingGroups));
+
+  if (opts.animals && opts.animals.length > 0) {
+    all.push(...generateLambingFollowUpAlerts(opts.animals));
+    const pedigreeAlert = generatePedigreeIncompletenessAlert(opts.animals);
+    if (pedigreeAlert) all.push(pedigreeAlert);
+  }
 
   return all.filter((a) => !isAlertDismissed(a.key));
 }

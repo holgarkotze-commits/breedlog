@@ -195,8 +195,9 @@ export default function Dashboard() {
     generateAllAlerts({
       flockHealthEvents: flockHealthEvents || [],
       matingGroups: matingGroups || [],
+      animals: animals || [],
     }),
-  [flockHealthEvents, matingGroups, dismissedKeys]);
+  [flockHealthEvents, matingGroups, animals, dismissedKeys]);
 
   return (
     <Layout>

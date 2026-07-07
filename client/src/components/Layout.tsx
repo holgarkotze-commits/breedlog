@@ -15,6 +15,8 @@ import {
   X,
   Bot,
   HelpCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useAIStatus } from "@/hooks/use-ai-status";
 import { cn } from "@/lib/utils";
@@ -30,6 +32,7 @@ import {
 import { performLogout } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "@/components/ui/sheet";
+import { useNavigationHistory } from "@/lib/navigation-history-context";
 
 function ScrambleText({ text, className }: { text: string; className?: string }) {
   const [displayText, setDisplayText] = useState("");
@@ -72,6 +75,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const { addVisit } = useRecentVisits();
+  const { goBack, goForward, canGoBack, canGoForward } = useNavigationHistory();
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -141,7 +145,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { quotaExhausted } = useAIStatus();
 
   return (
-    <div className="min-h-screen bg-background abstract-bg flex flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:flex-row lg:pb-0">
+    <div className="h-dvh bg-background abstract-bg flex flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:flex-row lg:pb-0 overflow-hidden">
       <StorageWarningBanner />
 
       {/* Desktop sidebar — visible only on large screens (laptop+) */}
@@ -149,6 +153,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Link href="/" className="sidebar-logo-area border-b border-white/10 px-4 py-5 transition-colors hover:bg-white/5">
           <Logo size="lg" showTagline />
         </Link>
+
+        {/* Back / Forward navigation */}
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-white/10">
+          <button
+            onClick={() => goBack()}
+            disabled={!canGoBack}
+            data-testid="button-nav-back"
+            title="Go back"
+            className="flex items-center justify-center h-8 w-8 rounded-lg border border-white/10 text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => goForward()}
+            disabled={!canGoForward}
+            data-testid="button-nav-forward"
+            title="Go forward"
+            className="flex items-center justify-center h-8 w-8 rounded-lg border border-white/10 text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <span className="ml-1 text-[11px] text-slate-400/70 select-none">Navigate</span>
+        </div>
 
         <nav className="flex-1 space-y-1.5 px-4 py-5 overflow-y-auto">
           {navItems.map((item) => (
@@ -221,7 +248,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main content */}
-      <main className="min-h-[calc(100vh-4rem)] flex-1 overflow-y-auto px-4 py-4 tablet:px-5 tablet:py-5 lg:ml-72 lg:min-h-screen lg:px-8 lg:py-8">
+      <main className="flex-1 overflow-y-auto px-4 py-4 tablet:px-5 tablet:py-5 lg:ml-72 lg:px-8 lg:py-8">
         <div className="mx-auto max-w-7xl">{children}</div>
       </main>
 

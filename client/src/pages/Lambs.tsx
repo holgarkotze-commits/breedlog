@@ -59,6 +59,7 @@ export default function Lambs() {
   const [weightValue, setWeightValue] = useState("");
   const [weightType, setWeightType] = useState<"100" | "270">("100");
   const [selectedRamType, setSelectedRamType] = useState<"breeding_ram" | "stud_ram" | "commercial_ram">("breeding_ram");
+  const [selectedRamBreedingStatus, setSelectedRamBreedingStatus] = useState("unknown");
   
   // PDF Export Dialog
   const pdfExport = usePDFExportDialog();
@@ -267,11 +268,12 @@ export default function Lambs() {
 
   const handlePromoteToRam = () => {
     if (!selectedAnimal) return;
-    moveToRamsMutation.mutate({ id: selectedAnimal.id, ramType: selectedRamType }, {
+    moveToRamsMutation.mutate({ id: selectedAnimal.id, ramType: selectedRamType, ramBreedingStatus: selectedRamBreedingStatus }, {
       onSuccess: () => {
         setShowPromoteDialog(false);
         setSelectedAnimal(null);
         setSelectedRamType("breeding_ram");
+        setSelectedRamBreedingStatus("unknown");
       }
     });
   };
@@ -673,18 +675,35 @@ export default function Lambs() {
                 {selectedAnimal?.tagId} has completed 270-day weigh-in as a stud candidate. Select the ram type for the Rams section.
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
-              <Label>Ram Type</Label>
-              <Select value={selectedRamType} onValueChange={(v: any) => setSelectedRamType(v)}>
-                <SelectTrigger className="mt-1.5" data-testid="select-ram-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
-                  <SelectItem value="stud_ram">Stud Ram</SelectItem>
-                  <SelectItem value="commercial_ram">Commercial Ram</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="py-4 space-y-4">
+              <div>
+                <Label>Ram Type</Label>
+                <Select value={selectedRamType} onValueChange={(v: any) => setSelectedRamType(v)}>
+                  <SelectTrigger className="mt-1.5" data-testid="select-ram-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
+                    <SelectItem value="stud_ram">Stud Ram</SelectItem>
+                    <SelectItem value="commercial_ram">Commercial Ram</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Breeding Status</Label>
+                <Select value={selectedRamBreedingStatus} onValueChange={setSelectedRamBreedingStatus}>
+                  <SelectTrigger className="mt-1.5" data-testid="select-ram-breeding-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
+                    <SelectItem value="marketable_ram">Marketable Ram</SelectItem>
+                    <SelectItem value="not_selected">Not Selected</SelectItem>
+                    <SelectItem value="unknown">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">Current usage status, separate from ram type/classification.</p>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowPromoteDialog(false)} data-testid="btn-cancel-promote">

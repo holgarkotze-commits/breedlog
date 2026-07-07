@@ -37,7 +37,10 @@ cat > "$RESULT_FILE" <<JSON
 {
   "status": "passed",
   "passed": true,
-  "suite": "tests/browser-cert/specs/offline-sync.spec.ts",
+  "suites": [
+    "tests/browser-cert/specs/offline-sync.spec.ts",
+    "tests/browser-cert/specs/decision-alerts.spec.ts"
+  ],
   "executedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "runbook": "docs/release/offline-sync-certification.md"
 }

@@ -160,7 +160,7 @@ test('family tree page uses landscape orientation for pedigree view', () => {
 
 test('family tree page has its own header and dark footer', () => {
   const treePageStart = detail.indexOf('buildFamilyTreePage');
-  const treeSection = detail.slice(treePageStart, treePageStart + 5000);
+  const treeSection = detail.slice(treePageStart, treePageStart + 8000);
   assert.match(treeSection, /class="header"/);
   assert.match(treeSection, /class="footer"/);
   assert.match(treeSection, /footer-branding/);

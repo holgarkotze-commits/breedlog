@@ -5,6 +5,8 @@ import {
   generateHealthFollowUpAlerts,
   generateBreedingWindowAlerts,
   generateAllAlerts,
+  generateLambingFollowUpAlerts,
+  generatePedigreeIncompletenessAlert,
 } from "../client/src/lib/decision-alerts.js";
 
 describe("generateLambingSeasonAlert", () => {
@@ -107,6 +109,117 @@ describe("generateBreedingWindowAlerts", () => {
   });
 });
 
+describe("generateLambingFollowUpAlerts", () => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  function daysAgo(n: number) {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  it("returns no alerts when there are no active lambs", () => {
+    const alerts = generateLambingFollowUpAlerts([
+      { id: 1, status: "culled", birthDate: todayStr },
+    ]);
+    assert.equal(alerts.length, 0);
+  });
+
+  it("returns no alerts when all lambs have full records", () => {
+    const alerts = generateLambingFollowUpAlerts([
+      { id: 1, status: "active", birthDate: daysAgo(30), damId: 10, sireId: 5, birthWeight: "4.2", weight100Day: null },
+    ]);
+    const keys = alerts.map((a) => a.key);
+    assert.ok(!keys.includes("lambing-followup-no-dam"));
+    assert.ok(!keys.includes("lambing-followup-no-birthweight"));
+  });
+
+  it("alerts when active lamb has no dam", () => {
+    const alerts = generateLambingFollowUpAlerts([
+      { id: 1, status: "active", birthDate: daysAgo(10), damId: null, birthWeight: "4.0" },
+    ]);
+    assert.ok(alerts.some((a) => a.key === "lambing-followup-no-dam"));
+  });
+
+  it("alerts when active lamb has no birth weight", () => {
+    const alerts = generateLambingFollowUpAlerts([
+      { id: 1, status: "active", birthDate: daysAgo(5), damId: 2, birthWeight: null },
+    ]);
+    assert.ok(alerts.some((a) => a.key === "lambing-followup-no-birthweight"));
+  });
+
+  it("alerts when lamb over 90 days has no 100-day weight", () => {
+    const alerts = generateLambingFollowUpAlerts([
+      { id: 1, status: "active", birthDate: daysAgo(100), damId: 2, birthWeight: "3.8", weight100Day: null },
+    ]);
+    assert.ok(alerts.some((a) => a.key === "lambing-followup-weaning-check"));
+  });
+
+  it("does not alert for weaning when lamb is under 90 days", () => {
+    const alerts = generateLambingFollowUpAlerts([
+      { id: 1, status: "active", birthDate: daysAgo(50), damId: 2, birthWeight: "4.0", weight100Day: null },
+    ]);
+    assert.ok(!alerts.some((a) => a.key === "lambing-followup-weaning-check"));
+  });
+
+  it("ignores animals over 240 days old (no longer lambs)", () => {
+    const alerts = generateLambingFollowUpAlerts([
+      { id: 1, status: "active", birthDate: daysAgo(250), damId: null, birthWeight: null },
+    ]);
+    assert.equal(alerts.length, 0);
+  });
+});
+
+describe("generatePedigreeIncompletenessAlert", () => {
+  it("returns null when fewer than 5 active animals", () => {
+    const alert = generatePedigreeIncompletenessAlert([
+      { id: 1, status: "active", sireId: null },
+      { id: 2, status: "active", sireId: null },
+    ]);
+    assert.equal(alert, null);
+  });
+
+  it("returns null when fewer than 50% missing sire", () => {
+    const animals = [
+      { id: 1, status: "active", sireId: 10 },
+      { id: 2, status: "active", sireId: 10 },
+      { id: 3, status: "active", sireId: 10 },
+      { id: 4, status: "active", sireId: null },
+      { id: 5, status: "active", sireId: null },
+    ];
+    const alert = generatePedigreeIncompletenessAlert(animals);
+    assert.equal(alert, null);
+  });
+
+  it("returns alert when 50%+ of active animals have no sire", () => {
+    const animals = Array.from({ length: 10 }, (_, i) => ({
+      id: i + 1,
+      status: "active" as const,
+      sireId: i < 3 ? 5 : null,
+    }));
+    const alert = generatePedigreeIncompletenessAlert(animals);
+    assert.ok(alert !== null);
+    assert.equal(alert!.key, "pedigree-incomplete");
+  });
+
+  it("ignores culled animals in percentage calculation", () => {
+    const animals = [
+      { id: 1, status: "culled", sireId: null },
+      { id: 2, status: "culled", sireId: null },
+      { id: 3, status: "culled", sireId: null },
+      { id: 4, status: "culled", sireId: null },
+      { id: 5, status: "culled", sireId: null },
+      { id: 6, status: "active", sireId: 3 },
+      { id: 7, status: "active", sireId: 3 },
+      { id: 8, status: "active", sireId: 3 },
+      { id: 9, status: "active", sireId: 3 },
+      { id: 10, status: "active", sireId: 3 },
+    ];
+    const alert = generatePedigreeIncompletenessAlert(animals);
+    assert.equal(alert, null);
+  });
+});
+
 describe("generateAllAlerts", () => {
   it("combines lambing + health + breeding alerts", () => {
     const today = new Date(2026, 6, 5);
@@ -123,7 +236,7 @@ describe("generateAllAlerts", () => {
 
   it("includes no alert outside lambing window with no health/breeding events", () => {
     const today = new Date(2026, 2, 10);
-    const alerts = generateAllAlerts({ today, flockHealthEvents: [], matingGroups: [] });
+    const alerts = generateAllAlerts({ today, flockHealthEvents: [], matingGroups: [], animals: [] });
     assert.equal(alerts.length, 0);
   });
 });

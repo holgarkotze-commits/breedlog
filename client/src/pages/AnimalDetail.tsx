@@ -945,6 +945,7 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
     const { data: breedingEvents } = useAnimalBreedingEvents(animal.id, animal.sex);
     const { data: allAnimals } = useAnimals({});
     const { data: healthRecords } = useHealthRecords(animal.id);
+    const { data: familyTreeData } = useFamilyTree(animal.id);
     const { toast } = useToast();
     const createExportedDoc = useCreateExportedDocument();
     
@@ -1337,21 +1338,111 @@ ${data.notes || "No notes recorded."}
         // ── Pedigree ──────────────────────────────────────────────────────────
         const sireAnimal = animal.sire;
         const damAnimal = animal.dam;
+
+        // Parse family tree nodes/links to extract grandparents
+        const treeNodeMap: Record<number, any> = {};
+        const treeLinks: { source: number; target: number; type: string }[] = [];
+        if (familyTreeData) {
+            for (const n of (familyTreeData as any).nodes || []) treeNodeMap[n.id] = n;
+            for (const l of (familyTreeData as any).links || []) treeLinks.push(l);
+        }
+        const sireId = sireAnimal?.id ?? null;
+        const damId  = damAnimal?.id  ?? null;
+        const sireSireLink = sireId ? treeLinks.find(l => l.target === sireId && l.type === "sire") : null;
+        const sireDamLink  = sireId ? treeLinks.find(l => l.target === sireId && l.type === "dam")  : null;
+        const damSireLink  = damId  ? treeLinks.find(l => l.target === damId  && l.type === "sire") : null;
+        const damDamLink   = damId  ? treeLinks.find(l => l.target === damId  && l.type === "dam")  : null;
+        const sireSire = sireSireLink ? treeNodeMap[sireSireLink.source] : null;
+        const sireDam  = sireDamLink  ? treeNodeMap[sireDamLink.source]  : null;
+        const damSire  = damSireLink  ? treeNodeMap[damSireLink.source]  : null;
+        const damDam   = damDamLink   ? treeNodeMap[damDamLink.source]   : null;
+
+        // Helper: GP card HTML
+        const gpCard = (label: string, sublabel: string, node: any | null) => {
+            const known = !!node?.tagId;
+            return `<div style="background:white;border:1.5px ${known ? 'solid' : 'dashed'} ${known ? '#9ca3af' : '#bbb'};border-radius:3px;padding:1.5mm 2mm;text-align:center;box-sizing:border-box;">
+              <div style="font-size:5.5pt;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.3px;">${label}</div>
+              <div style="font-size:5pt;color:#999;margin-bottom:0.5mm;">${sublabel}</div>
+              <div style="font-size:7.5pt;font-weight:800;color:#1a1a1a;">${node?.tagId || "Unknown"}</div>
+              ${node?.name ? `<div style="font-size:5.5pt;color:#666;">${node.name}</div>` : ''}
+            </div>`;
+        };
+
+        // Full visual family tree (SVG connectors + absolutely-positioned cards)
+        // Container: 185mm wide × 48mm tall. All coordinates in mm.
         const pedigreeSection = `
-          <div class="ped-row">
-            <div class="ped-box sire-box">
-              <div class="ped-lbl">SIRE</div>
-              <div class="ped-id">${sireAnimal?.tagId || animal.externalSireInfo || "Unknown"}</div>
-              ${sireAnimal?.name ? `<div class="ped-det">${sireAnimal.name}</div>` : ''}
-              ${sireAnimal?.birthDate ? `<div class="ped-det">DOB: ${formatDate(sireAnimal.birthDate)}</div>` : ''}
-            </div>
-            <div class="ped-box dam-box">
-              <div class="ped-lbl">DAM</div>
-              <div class="ped-id">${damAnimal?.tagId || animal.externalDamInfo || "Unknown"}</div>
-              ${damAnimal?.name ? `<div class="ped-det">${damAnimal.name}</div>` : ''}
-              ${damAnimal?.birthDate ? `<div class="ped-det">DOB: ${formatDate(damAnimal.birthDate)}</div>` : ''}
-            </div>
-          </div>`;
+<div style="position:relative;width:100%;height:48mm;background:#f4f7fa;border-radius:3px;overflow:visible;">
+  <!-- SVG connector lines -->
+  <svg style="position:absolute;top:0;left:0;width:185mm;height:48mm;overflow:visible;" viewBox="0 0 185 48">
+    <!-- Main stem: subject → fork point -->
+    <line x1="31" y1="24" x2="38" y2="24" stroke="#d97706" stroke-width="0.55"/>
+    <!-- Vertical fork: sire level ↔ dam level -->
+    <line x1="38" y1="11" x2="38" y2="37" stroke="#d97706" stroke-width="0.55"/>
+    <!-- Fork → SIRE -->
+    <line x1="38" y1="11" x2="43" y2="11" stroke="#d97706" stroke-width="0.55"/>
+    <!-- Fork → DAM -->
+    <line x1="38" y1="37" x2="43" y2="37" stroke="#d97706" stroke-width="0.55"/>
+    <!-- SIRE right → GP sire fork -->
+    <line x1="73" y1="11" x2="80" y2="11" stroke="#d97706" stroke-width="0.45" opacity="0.75"/>
+    <!-- GP sire vertical fork -->
+    <line x1="80" y1="5.5" x2="80" y2="18" stroke="#d97706" stroke-width="0.45" opacity="0.75"/>
+    <!-- GP sire → GP Sire Sire -->
+    <line x1="80" y1="5.5" x2="86" y2="5.5" stroke="#d97706" stroke-width="0.45" opacity="0.75"/>
+    <!-- GP sire → GP Sire Dam -->
+    <line x1="80" y1="18" x2="86" y2="18" stroke="#d97706" stroke-width="0.45" opacity="0.75"/>
+    <!-- DAM right → GP dam fork -->
+    <line x1="73" y1="37" x2="80" y2="37" stroke="#d97706" stroke-width="0.45" opacity="0.75"/>
+    <!-- GP dam vertical fork -->
+    <line x1="80" y1="30.5" x2="80" y2="43" stroke="#d97706" stroke-width="0.45" opacity="0.75"/>
+    <!-- GP dam → GP Dam Sire -->
+    <line x1="80" y1="30.5" x2="86" y2="30.5" stroke="#d97706" stroke-width="0.45" opacity="0.75"/>
+    <!-- GP dam → GP Dam Dam -->
+    <line x1="80" y1="43" x2="86" y2="43" stroke="#d97706" stroke-width="0.45" opacity="0.75"/>
+  </svg>
+
+  <!-- Subject card: left=0, top=4mm, w=31mm, h=40mm -->
+  <div style="position:absolute;left:0;top:4mm;width:31mm;height:40mm;background:white;border:2px solid #d97706;border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1mm;padding:1.5mm;text-align:center;box-sizing:border-box;overflow:hidden;">
+    ${photoBase64
+      ? `<img src="${photoBase64}" style="width:15mm;height:15mm;object-fit:cover;border-radius:3px;border:1.5px solid #d97706;" />`
+      : `<div style="width:15mm;height:15mm;background:#f5f5f5;border:1.5px dashed #ccc;border-radius:3px;display:flex;align-items:center;justify-content:center;"><span style="font-size:5pt;color:#aaa;">No Photo</span></div>`}
+    <div style="font-size:9pt;font-weight:800;color:#1a1a1a;line-height:1.1;">${animal.tagId || "—"}</div>
+    <div style="font-size:6pt;font-weight:600;color:#555;">${animal.sex ? animal.sex.charAt(0).toUpperCase()+animal.sex.slice(1) : ""} | ${animal.breed || "Meatmaster"}</div>
+    <div style="font-size:5.5pt;color:#777;">${formatDate(animal.birthDate)}</div>
+  </div>
+
+  <!-- SIRE card: left=43mm, top=2.5mm, w=30mm, h=17mm -->
+  <div style="position:absolute;left:43mm;top:2.5mm;width:30mm;height:17mm;background:white;border:2px solid ${sireAnimal ? '#3b82f6' : '#bbb'};border-style:${sireAnimal ? 'solid' : 'dashed'};border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.5mm;padding:1.5mm;text-align:center;box-sizing:border-box;">
+    <div style="font-size:6pt;font-weight:700;text-transform:uppercase;color:#3b82f6;letter-spacing:0.4px;">SIRE</div>
+    <div style="font-size:9pt;font-weight:800;color:#1a1a1a;line-height:1.1;">${sireAnimal?.tagId || animal.externalSireInfo || "Unknown"}</div>
+    ${sireAnimal?.name ? `<div style="font-size:6pt;color:#555;">${sireAnimal.name}</div>` : ""}
+    ${sireAnimal?.birthDate ? `<div style="font-size:5.5pt;color:#777;">${formatDate(sireAnimal.birthDate)}</div>` : ""}
+  </div>
+
+  <!-- DAM card: left=43mm, top=28.5mm, w=30mm, h=17mm -->
+  <div style="position:absolute;left:43mm;top:28.5mm;width:30mm;height:17mm;background:white;border:2px solid ${damAnimal ? '#ec4899' : '#bbb'};border-style:${damAnimal ? 'solid' : 'dashed'};border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.5mm;padding:1.5mm;text-align:center;box-sizing:border-box;">
+    <div style="font-size:6pt;font-weight:700;text-transform:uppercase;color:#ec4899;letter-spacing:0.4px;">DAM</div>
+    <div style="font-size:9pt;font-weight:800;color:#1a1a1a;line-height:1.1;">${damAnimal?.tagId || animal.externalDamInfo || "Unknown"}</div>
+    ${damAnimal?.name ? `<div style="font-size:6pt;color:#555;">${damAnimal.name}</div>` : ""}
+    ${damAnimal?.birthDate ? `<div style="font-size:5.5pt;color:#777;">${formatDate(damAnimal.birthDate)}</div>` : ""}
+  </div>
+
+  <!-- GP Sire Sire: left=86mm, top=0.5mm, w=24mm, h=11mm -->
+  <div style="position:absolute;left:86mm;top:0.5mm;width:24mm;height:11mm;box-sizing:border-box;">
+    ${gpCard("GP Sire", "Sire's Father", sireSire)}
+  </div>
+  <!-- GP Sire Dam: left=86mm, top=13mm, w=24mm, h=11mm -->
+  <div style="position:absolute;left:86mm;top:13mm;width:24mm;height:11mm;box-sizing:border-box;">
+    ${gpCard("GP Dam", "Sire's Mother", sireDam)}
+  </div>
+  <!-- GP Dam Sire: left=86mm, top=25mm, w=24mm, h=11mm -->
+  <div style="position:absolute;left:86mm;top:25mm;width:24mm;height:11mm;box-sizing:border-box;">
+    ${gpCard("GP Sire", "Dam's Father", damSire)}
+  </div>
+  <!-- GP Dam Dam: left=86mm, top=37mm, w=24mm, h=11mm -->
+  <div style="position:absolute;left:86mm;top:37mm;width:24mm;height:11mm;box-sizing:border-box;">
+    ${gpCard("GP Dam", "Dam's Mother", damDam)}
+  </div>
+</div>`;
 
         // ── Health notes ──────────────────────────────────────────────────────
         const healthSection = profile.recentHealthNotes.length > 0 ? `
@@ -1376,8 +1467,20 @@ ${data.notes || "No notes recorded."}
             : profile.role === "meat-production" ? "Production Metrics" : "Development";
 
         // ── Family tree page (landscape) — included when requested ────────────
+        // Large-format version: 257mm × 170mm content area in landscape A4.
+        // Uses same SVG connector pattern, scaled up for readability.
+        const gpCardLg = (label: string, sublabel: string, node: any | null) => {
+            const known = !!node?.tagId;
+            return `<div style="background:white;border:2px ${known ? 'solid #9ca3af' : 'dashed #bbb'};border-radius:5px;padding:3mm 4mm;text-align:center;min-width:44mm;box-sizing:border-box;">
+              <div style="font-size:7pt;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.4px;">${label}</div>
+              <div style="font-size:6.5pt;color:#999;margin-bottom:1mm;">${sublabel}</div>
+              <div style="font-size:11pt;font-weight:800;color:#1a1a1a;">${node?.tagId || "Unknown"}</div>
+              ${node?.name ? `<div style="font-size:7pt;color:#666;">${node.name}</div>` : ''}
+              ${node?.birthDate ? `<div style="font-size:6.5pt;color:#888;">${formatDate(node.birthDate)}</div>` : ''}
+            </div>`;
+        };
         const buildFamilyTreePage = includeTree ? `
-<div class="page landscape" style="page-break-before:always; padding: 6mm 6mm 24mm 6mm; position:relative;">
+<div class="page landscape" style="page-break-before:always;padding:6mm 6mm 24mm 6mm;position:relative;box-sizing:border-box;">
   <div class="header">
     <div class="header-left">${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" alt="Logo" />` : '<div class="logo-placeholder"></div>'}</div>
     <div class="header-center">
@@ -1386,30 +1489,70 @@ ${data.notes || "No notes recorded."}
     </div>
     <div class="header-right"><div style="font-weight:700">${animal.tagId || "—"}</div><div>${exportDate}</div></div>
   </div>
-  <h2 style="text-align:center;font-size:12pt;margin:4mm 0 6mm;">Pedigree for: ${animal.tagId} ${animal.name ? `(${animal.name})` : ''}</h2>
-  <div style="display:flex;align-items:center;justify-content:center;gap:30mm;padding:10mm;">
-    <div style="border:2px solid #FFC300;border-radius:6px;padding:8px 16px;min-width:80mm;background:linear-gradient(135deg,#FFC300,#ffdb4d);text-align:center;">
-      ${photoBase64 ? `<img src="${photoBase64}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,.2);margin-bottom:6px;display:block;margin:0 auto 6px;" />` : ''}
-      <div style="font-size:8pt;font-weight:700;color:#555;text-transform:uppercase;">SUBJECT</div>
-      <div style="font-size:14pt;font-weight:800;">${animal.tagId}</div>
-      <div style="font-size:9pt;color:#555;">${animal.sex?.toUpperCase() || ""} | ${animal.breed || "Meatmaster"}</div>
-      <div style="font-size:9pt;color:#555;">${formatDate(animal.birthDate)}</div>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8mm;">
-      <div style="border:2px solid #3b82f6;border-radius:6px;padding:8px 16px;min-width:80mm;text-align:center;background:white;">
-        <div style="font-size:8pt;font-weight:700;color:#555;text-transform:uppercase;">SIRE</div>
-        <div style="font-size:13pt;font-weight:800;">${sireAnimal?.tagId || animal.externalSireInfo || "Unknown"}</div>
-        ${sireAnimal?.name ? `<div style="font-size:9pt;color:#555;">${sireAnimal.name}</div>` : ''}
-      </div>
-      <div style="border:2px solid #ec4899;border-radius:6px;padding:8px 16px;min-width:80mm;text-align:center;background:white;">
-        <div style="font-size:8pt;font-weight:700;color:#555;text-transform:uppercase;">DAM</div>
-        <div style="font-size:13pt;font-weight:800;">${damAnimal?.tagId || animal.externalDamInfo || "Unknown"}</div>
-        ${damAnimal?.name ? `<div style="font-size:9pt;color:#555;">${damAnimal.name}</div>` : ''}
-      </div>
-    </div>
+  <div style="text-align:center;font-size:10pt;font-weight:700;color:#555;margin:3mm 0 4mm;text-transform:uppercase;letter-spacing:1px;">
+    Pedigree: ${animal.tagId}${animal.name ? ` — ${animal.name}` : ''}
   </div>
+
+  <!-- Full-width landscape tree: 257mm total width, ~130mm content height -->
+  <div style="position:relative;width:255mm;height:108mm;background:#f4f7fa;border-radius:5px;border:1px solid #dde3ea;box-sizing:border-box;">
+    <svg style="position:absolute;top:0;left:0;width:255mm;height:108mm;overflow:visible;" viewBox="0 0 255 108">
+      <!-- Subject → main fork -->
+      <line x1="54" y1="54" x2="64" y2="54" stroke="#d97706" stroke-width="1"/>
+      <!-- Vertical main fork -->
+      <line x1="64" y1="27" x2="64" y2="81" stroke="#d97706" stroke-width="1"/>
+      <!-- Fork → SIRE -->
+      <line x1="64" y1="27" x2="72" y2="27" stroke="#d97706" stroke-width="1"/>
+      <!-- Fork → DAM -->
+      <line x1="64" y1="81" x2="72" y2="81" stroke="#d97706" stroke-width="1"/>
+      <!-- SIRE → GP sire fork -->
+      <line x1="132" y1="27" x2="143" y2="27" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
+      <!-- GP sire vertical -->
+      <line x1="143" y1="13.5" x2="143" y2="40.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
+      <line x1="143" y1="13.5" x2="152" y2="13.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
+      <line x1="143" y1="40.5" x2="152" y2="40.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
+      <!-- DAM → GP dam fork -->
+      <line x1="132" y1="81" x2="143" y2="81" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
+      <!-- GP dam vertical -->
+      <line x1="143" y1="67.5" x2="143" y2="94.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
+      <line x1="143" y1="67.5" x2="152" y2="67.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
+      <line x1="143" y1="94.5" x2="152" y2="94.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
+    </svg>
+
+    <!-- Subject card: left=2mm, top=12mm, w=52mm, h=84mm -->
+    <div style="position:absolute;left:2mm;top:12mm;width:52mm;height:84mm;background:white;border:2.5px solid #d97706;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2mm;padding:3mm;text-align:center;box-sizing:border-box;overflow:hidden;">
+      ${photoBase64
+        ? `<img src="${photoBase64}" style="width:28mm;height:28mm;object-fit:cover;border-radius:5px;border:2px solid #d97706;" />`
+        : `<div style="width:28mm;height:28mm;background:#f5f5f5;border:2px dashed #ccc;border-radius:5px;display:flex;align-items:center;justify-content:center;"><span style="font-size:7pt;color:#aaa;">No Photo</span></div>`}
+      <div style="font-size:14pt;font-weight:800;color:#1a1a1a;line-height:1.1;">${animal.tagId || "—"}</div>
+      <div style="font-size:8pt;font-weight:600;color:#555;">${animal.sex ? animal.sex.charAt(0).toUpperCase()+animal.sex.slice(1) : ""} | ${animal.breed || "Meatmaster"}</div>
+      <div style="font-size:7.5pt;color:#777;">${formatDate(animal.birthDate)}</div>
+    </div>
+
+    <!-- SIRE card: left=72mm, top=8mm, w=60mm, h=38mm -->
+    <div style="position:absolute;left:72mm;top:8mm;width:60mm;height:38mm;background:white;border:2.5px solid ${sireAnimal ? '#3b82f6' : '#bbb'};border-style:${sireAnimal ? 'solid' : 'dashed'};border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1mm;padding:3mm;text-align:center;box-sizing:border-box;">
+      <div style="font-size:7.5pt;font-weight:700;text-transform:uppercase;color:#3b82f6;letter-spacing:0.5px;">SIRE</div>
+      <div style="font-size:14pt;font-weight:800;color:#1a1a1a;line-height:1.1;">${sireAnimal?.tagId || animal.externalSireInfo || "Unknown"}</div>
+      ${sireAnimal?.name ? `<div style="font-size:8pt;color:#555;">${sireAnimal.name}</div>` : ''}
+      ${sireAnimal?.birthDate ? `<div style="font-size:7.5pt;color:#777;">${formatDate(sireAnimal.birthDate)}</div>` : ''}
+    </div>
+
+    <!-- DAM card: left=72mm, top=62mm, w=60mm, h=38mm -->
+    <div style="position:absolute;left:72mm;top:62mm;width:60mm;height:38mm;background:white;border:2.5px solid ${damAnimal ? '#ec4899' : '#bbb'};border-style:${damAnimal ? 'solid' : 'dashed'};border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1mm;padding:3mm;text-align:center;box-sizing:border-box;">
+      <div style="font-size:7.5pt;font-weight:700;text-transform:uppercase;color:#ec4899;letter-spacing:0.5px;">DAM</div>
+      <div style="font-size:14pt;font-weight:800;color:#1a1a1a;line-height:1.1;">${damAnimal?.tagId || animal.externalDamInfo || "Unknown"}</div>
+      ${damAnimal?.name ? `<div style="font-size:8pt;color:#555;">${damAnimal.name}</div>` : ''}
+      ${damAnimal?.birthDate ? `<div style="font-size:7.5pt;color:#777;">${formatDate(damAnimal.birthDate)}</div>` : ''}
+    </div>
+
+    <!-- GP cards: left=152mm, positioned at ~6.5, 33.5, 60.5, 87.5 mm -->
+    <div style="position:absolute;left:152mm;top:6.5mm;width:99mm;box-sizing:border-box;">${gpCardLg("GP Sire", "Sire's Father", sireSire)}</div>
+    <div style="position:absolute;left:152mm;top:33.5mm;width:99mm;box-sizing:border-box;">${gpCardLg("GP Dam", "Sire's Mother", sireDam)}</div>
+    <div style="position:absolute;left:152mm;top:60.5mm;width:99mm;box-sizing:border-box;">${gpCardLg("GP Sire", "Dam's Father", damSire)}</div>
+    <div style="position:absolute;left:152mm;top:87.5mm;width:99mm;box-sizing:border-box;">${gpCardLg("GP Dam", "Dam's Mother", damDam)}</div>
+  </div>
+
   <div class="footer">
-    <div class="footer-info"><p class="footer-farm">${fb?.studName || fb?.farmName || "BreedLog"}</p><p>${fb?.ownerName || ""}</p></div>
+    <div class="footer-info"><p class="footer-farm">${fb?.studName || fb?.farmName || "BreedLog"}</p><p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "· " + fb.ownerPhone : ""}</p></div>
     <div class="footer-branding"><div class="bl">BREEDLOG</div><div class="tag">Professional Livestock Management</div></div>
   </div>
 </div>` : '';
@@ -1526,9 +1669,11 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
       <div class="sec-body">${buildTypeSpecificSection()}</div>
     </div>
   </div>
-  <div class="full-col">
-    <div class="sec-title">Pedigree</div>
-    ${pedigreeSection}
+  <div class="full-col" style="overflow:visible;">
+    <div class="sec-title">&#9680; PEDIGREE &nbsp;<span style="font-weight:400;text-transform:none;font-size:6.5pt;color:#444;">Family Tree / Pedigree</span></div>
+    <div style="padding:2mm;">
+      ${pedigreeSection}
+    </div>
   </div>
   ${healthSection}
   <div class="summary-box">
@@ -1640,6 +1785,7 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
         sex: animal.sex || "ewe",
         breed: animal.breed || "Meatmaster",
         classification: animal.classification || "unclassified",
+        ramBreedingStatus: (animal as any).ramBreedingStatus || "unknown",
         animalSource: (animal as any).animalSource || "unknown_not_recorded",
         status: animal.status || "active",
         birthDate: animal.birthDate || "",
@@ -1875,6 +2021,20 @@ function EditAnimalDialog({ animal, open, onOpenChange }: { animal: Animal, open
                                 </SelectContent>
                             </Select>
                         </div>
+                        {formData.sex === 'ram' && (
+                        <div>
+                            <Label className="text-[11px] md:text-xs">Breeding Status</Label>
+                            <Select value={(formData as any).ramBreedingStatus || "unknown"} onValueChange={(val) => setFormData(prev => ({...prev, ramBreedingStatus: val}))}>
+                                <SelectTrigger className="rugged-input h-8 text-xs" data-testid="select-edit-ram-breeding-status"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
+                                    <SelectItem value="marketable_ram">Marketable Ram</SelectItem>
+                                    <SelectItem value="not_selected">Not Selected</SelectItem>
+                                    <SelectItem value="unknown">Unknown</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        )}
                         <div>
                             <Label className="text-[11px] md:text-xs">Source</Label>
                             <Select value={formData.animalSource || "unknown_not_recorded"} onValueChange={(val) => setFormData(prev => ({...prev, animalSource: val}))}>

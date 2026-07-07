@@ -833,7 +833,7 @@ export function useMoveToRams() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, ramType }: { id: number; ramType: string }) => {
+    mutationFn: async ({ id, ramType, ramBreedingStatus }: { id: number; ramType: string; ramBreedingStatus?: string }) => {
       // Include auth token for device-based authentication
       const { getDeviceToken } = await import("@/lib/queryClient");
       const token = getDeviceToken();
@@ -843,7 +843,7 @@ export function useMoveToRams() {
       const res = await fetch(`/api/animals/${id}/move-to-rams`, {
         method: "PATCH",
         headers,
-        body: JSON.stringify({ ramType }),
+        body: JSON.stringify({ ramType, ramBreedingStatus }),
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to move ram lamb to rams");

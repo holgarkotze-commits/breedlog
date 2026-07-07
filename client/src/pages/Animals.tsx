@@ -1952,6 +1952,8 @@ function RamsSection({
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [ramTypeFilter, setRamTypeFilter] = useState<"all" | "breeding_ram" | "stud_ram" | "commercial_ram">("all");
+  const [ramSearch, setRamSearch] = useState("");
+  const [ramViewMode, setRamViewMode] = useState<"detailed" | "list" | "thumbnail">("list");
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [showWeightDialog, setShowWeightDialog] = useState(false);
   const [weightValue, setWeightValue] = useState("");
@@ -1998,9 +2000,10 @@ function RamsSection({
     !isLamb(a)
   );
   
-  const rams = ramTypeFilter === "all" 
-    ? allRams 
-    : allRams.filter(r => r.ramType === ramTypeFilter);
+  const rams = (ramTypeFilter === "all"
+    ? allRams
+    : allRams.filter(r => r.ramType === ramTypeFilter)
+  ).filter(r => ramSearch === "" || r.tagId.toLowerCase().includes(ramSearch.toLowerCase()));
   
   if (isLoading) {
     return (
@@ -2069,6 +2072,25 @@ function RamsSection({
         actions={exportButton}
         testId="ribbon-rams"
       >
+        {/* Search & Filter Bar */}
+        <div className="flex flex-col md:flex-row gap-2 bg-card p-2.5 md:p-4 rounded-md border border-border shadow-sm mb-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search Tag ID..."
+              value={ramSearch}
+              onChange={(e) => setRamSearch(e.target.value)}
+              className="pl-9 text-sm rugged-input"
+              data-testid="input-search-rams"
+            />
+          </div>
+          <div className="flex gap-1 border border-border rounded-md p-0.5 self-start">
+            <Button size="icon" variant={ramViewMode === "detailed" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setRamViewMode("detailed")} title="Card View" data-testid="rams-view-detailed"><LayoutGrid className="w-4 h-4" /></Button>
+            <Button size="icon" variant={ramViewMode === "list" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setRamViewMode("list")} title="Table View" data-testid="rams-view-list"><List className="w-4 h-4" /></Button>
+            <Button size="icon" variant={ramViewMode === "thumbnail" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setRamViewMode("thumbnail")} title="Thumbnail Grid" data-testid="rams-view-thumbnail"><Grid3X3 className="w-4 h-4" /></Button>
+          </div>
+        </div>
+
         {/* Filter buttons inside expanded section */}
         <div className="flex items-center gap-1 mb-3 flex-wrap">
           <Button 
@@ -2111,7 +2133,22 @@ function RamsSection({
 
         {rams.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
-          <p>No rams in your herd yet.</p>
+          <p>{allRams.length === 0 ? "No rams in your herd yet." : "No rams match your search."}</p>
+        </div>
+      ) : ramViewMode === "thumbnail" ? (
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+          {rams.map(animal => (
+            <Link key={animal.id} href={`/animals/${animal.id}`}>
+              <div className="aspect-square rounded-md bg-secondary overflow-hidden border-2 border-transparent hover:border-primary transition-all cursor-pointer">
+                {animal.photo ? <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-secondary"><img src={logo} className="w-8 h-8 grayscale opacity-30" /></div>}
+              </div>
+              <p className="text-xs text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
+            </Link>
+          ))}
+        </div>
+      ) : ramViewMode === "detailed" ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {rams.map(animal => <AnimalCard key={animal.id} animal={animal} />)}
         </div>
       ) : (
         <div className="border border-border rounded-md overflow-x-auto">
@@ -2156,11 +2193,20 @@ function RamsSection({
                   </td>
                   <td className="p-2.5 font-semibold">{ram.tagId}</td>
                   <td className="p-2.5 hidden sm:table-cell">
-                    <Badge variant="outline" className="text-xs">
-                      {ram.ramType === 'breeding_ram' ? 'Breeding' : 
-                       ram.ramType === 'stud_ram' ? 'Stud' : 
-                       ram.ramType === 'commercial_ram' ? 'Commercial' : '—'}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline" className="text-xs">
+                        {ram.ramType === 'breeding_ram' ? 'Breeding' : 
+                         ram.ramType === 'stud_ram' ? 'Stud' : 
+                         ram.ramType === 'commercial_ram' ? 'Commercial' : '—'}
+                      </Badge>
+                      {(ram as any).ramBreedingStatus && (ram as any).ramBreedingStatus !== 'unknown' && (
+                        <Badge variant="secondary" className="text-xs">
+                          {(ram as any).ramBreedingStatus === 'breeding_ram' ? 'Breeding' :
+                           (ram as any).ramBreedingStatus === 'marketable_ram' ? 'Marketable' :
+                           (ram as any).ramBreedingStatus === 'not_selected' ? 'Not Selected' : ''}
+                        </Badge>
+                      )}
+                    </div>
                   </td>
                   <td className="p-2.5 hidden md:table-cell">
                     {ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : "—"}
@@ -2292,6 +2338,8 @@ function EwesSection({
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [eweTypeFilter, setEweTypeFilter] = useState<"all" | "stud" | "commercial">("all");
+  const [eweSearch, setEweSearch] = useState("");
+  const [eweViewMode, setEweViewMode] = useState<"detailed" | "list" | "thumbnail">("list");
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [showWeightDialog, setShowWeightDialog] = useState(false);
   const [weightValue, setWeightValue] = useState("");
@@ -2341,10 +2389,11 @@ function EwesSection({
     !isLamb(a)
   );
   
-  // Filter ewes by type (stud, commercial)
-  const ewes = eweTypeFilter === "all" 
-    ? allEwes 
-    : allEwes.filter(e => e.classification === eweTypeFilter);
+  // Filter ewes by type (stud, commercial) and search
+  const ewes = (eweTypeFilter === "all"
+    ? allEwes
+    : allEwes.filter(e => e.classification === eweTypeFilter)
+  ).filter(e => eweSearch === "" || e.tagId.toLowerCase().includes(eweSearch.toLowerCase()));
   
   // Count ewes by type
   const studCount = allEwes.filter(e => e.classification === 'stud').length;
@@ -2411,6 +2460,25 @@ function EwesSection({
         actions={exportButton}
         testId="ribbon-ewes"
       >
+        {/* Search & Filter Bar */}
+        <div className="flex flex-col md:flex-row gap-2 bg-card p-2.5 md:p-4 rounded-md border border-border shadow-sm mb-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search Tag ID..."
+              value={eweSearch}
+              onChange={(e) => setEweSearch(e.target.value)}
+              className="pl-9 text-sm rugged-input"
+              data-testid="input-search-ewes"
+            />
+          </div>
+          <div className="flex gap-1 border border-border rounded-md p-0.5 self-start">
+            <Button size="icon" variant={eweViewMode === "detailed" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setEweViewMode("detailed")} title="Card View" data-testid="ewes-view-detailed"><LayoutGrid className="w-4 h-4" /></Button>
+            <Button size="icon" variant={eweViewMode === "list" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setEweViewMode("list")} title="Table View" data-testid="ewes-view-list"><List className="w-4 h-4" /></Button>
+            <Button size="icon" variant={eweViewMode === "thumbnail" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setEweViewMode("thumbnail")} title="Thumbnail Grid" data-testid="ewes-view-thumbnail"><Grid3X3 className="w-4 h-4" /></Button>
+          </div>
+        </div>
+
         {/* Filter buttons inside expanded section */}
         <div className="flex items-center gap-1 mb-3 flex-wrap">
           <Button 
@@ -2441,7 +2509,22 @@ function EwesSection({
 
         {ewes.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
-          <p>No ewes in your herd yet.</p>
+          <p>{allEwes.length === 0 ? "No ewes in your herd yet." : "No ewes match your search."}</p>
+        </div>
+      ) : eweViewMode === "thumbnail" ? (
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+          {ewes.map(animal => (
+            <Link key={animal.id} href={`/animals/${animal.id}`}>
+              <div className="aspect-square rounded-md bg-secondary overflow-hidden border-2 border-transparent hover:border-primary transition-all cursor-pointer">
+                {animal.photo ? <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-secondary"><img src={logo} className="w-8 h-8 grayscale opacity-30" /></div>}
+              </div>
+              <p className="text-xs text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
+            </Link>
+          ))}
+        </div>
+      ) : eweViewMode === "detailed" ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {ewes.map(animal => <AnimalCard key={animal.id} animal={animal} />)}
         </div>
       ) : (
         <div className="border border-border rounded-md overflow-x-auto">
@@ -2618,6 +2701,8 @@ function LambsSection({
   const { toast } = useToast();
   const [sexFilter, setSexFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
+  const [lambSearch, setLambSearch] = useState("");
+  const [lambViewMode, setLambViewMode] = useState<"detailed" | "list" | "thumbnail">("list");
   
   const [selectedAnimal, setSelectedAnimal] = useState<Animal | null>(null);
   const [showCullConfirm, setShowCullConfirm] = useState(false);
@@ -2627,6 +2712,7 @@ function LambsSection({
   const [weightValue, setWeightValue] = useState("");
   const [weightType, setWeightType] = useState<"100" | "270" | "current">("100");
   const [selectedRamType, setSelectedRamType] = useState<"breeding_ram" | "stud_ram" | "commercial_ram">("breeding_ram");
+  const [selectedRamBreedingStatus, setSelectedRamBreedingStatus] = useState("unknown");
   
   // Lambs are active animals under 240 days old (8 months) - consistent with Dashboard counting
   // Once an animal reaches 240+ days, they automatically appear in Rams/Ewes section
@@ -2641,6 +2727,8 @@ function LambsSection({
     if (classFilter === "stud" && animal.ramLambClass !== "stud") return false;
     if (classFilter === "commercial" && animal.ramLambClass !== "commercial") return false;
     if (classFilter === "cull" && animal.ramLambClass !== "cull") return false;
+    
+    if (lambSearch !== "" && !animal.tagId.toLowerCase().includes(lambSearch.toLowerCase())) return false;
     
     return true;
   });
@@ -2707,12 +2795,13 @@ function LambsSection({
 
   const handlePromoteToRam = () => {
     if (!selectedAnimal) return;
-    moveToRamsMutation.mutate({ id: selectedAnimal.id, ramType: selectedRamType }, {
+    moveToRamsMutation.mutate({ id: selectedAnimal.id, ramType: selectedRamType, ramBreedingStatus: selectedRamBreedingStatus }, {
       onSuccess: () => {
         toast({ title: "Ram Promoted", description: `${selectedAnimal.tagId} moved to Rams section as ${selectedRamType.replace('_', ' ')}` });
         setShowPromoteDialog(false);
         setSelectedAnimal(null);
         setSelectedRamType("breeding_ram");
+        setSelectedRamBreedingStatus("unknown");
       }
     });
   };
@@ -2764,6 +2853,25 @@ function LambsSection({
         actions={exportButton}
         testId="ribbon-lambs"
       >
+        {/* Search & Filter Bar */}
+        <div className="flex flex-col md:flex-row gap-2 bg-card p-2.5 md:p-4 rounded-md border border-border shadow-sm mb-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search Tag ID..."
+              value={lambSearch}
+              onChange={(e) => setLambSearch(e.target.value)}
+              className="pl-9 text-sm rugged-input"
+              data-testid="input-search-lambs"
+            />
+          </div>
+          <div className="flex gap-1 border border-border rounded-md p-0.5 self-start">
+            <Button size="icon" variant={lambViewMode === "detailed" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setLambViewMode("detailed")} title="Card View" data-testid="lambs-view-detailed"><LayoutGrid className="w-4 h-4" /></Button>
+            <Button size="icon" variant={lambViewMode === "list" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setLambViewMode("list")} title="Table View" data-testid="lambs-view-list"><List className="w-4 h-4" /></Button>
+            <Button size="icon" variant={lambViewMode === "thumbnail" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setLambViewMode("thumbnail")} title="Thumbnail Grid" data-testid="lambs-view-thumbnail"><Grid3X3 className="w-4 h-4" /></Button>
+          </div>
+        </div>
+
         {/* Filter buttons */}
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <div className="flex items-center gap-1">
@@ -2810,7 +2918,22 @@ function LambsSection({
 
         {lambs.length === 0 ? (
         <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
-          <p>No lambs in your herd yet.</p>
+          <p>No lambs match your search.</p>
+        </div>
+      ) : lambViewMode === "thumbnail" ? (
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+          {lambs.map(animal => (
+            <Link key={animal.id} href={`/animals/${animal.id}`}>
+              <div className="aspect-square rounded-md bg-secondary overflow-hidden border-2 border-transparent hover:border-primary transition-all cursor-pointer">
+                {animal.photo ? <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-secondary"><img src={logo} className="w-8 h-8 grayscale opacity-30" /></div>}
+              </div>
+              <p className="text-xs text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
+            </Link>
+          ))}
+        </div>
+      ) : lambViewMode === "detailed" ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {lambs.map(animal => <AnimalCard key={animal.id} animal={animal} />)}
         </div>
       ) : (
         <div className="border border-border rounded-md overflow-x-auto">
@@ -3079,7 +3202,7 @@ function LambsSection({
             <div className="space-y-2">
               <Label>Ram Type</Label>
               <Select value={selectedRamType} onValueChange={(v) => setSelectedRamType(v as typeof selectedRamType)}>
-                <SelectTrigger>
+                <SelectTrigger data-testid="select-promote-ram-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -3088,6 +3211,21 @@ function LambsSection({
                   <SelectItem value="commercial_ram">Commercial Ram</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Breeding Status</Label>
+              <Select value={selectedRamBreedingStatus} onValueChange={setSelectedRamBreedingStatus}>
+                <SelectTrigger data-testid="select-promote-ram-breeding-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
+                  <SelectItem value="marketable_ram">Marketable Ram</SelectItem>
+                  <SelectItem value="not_selected">Not Selected</SelectItem>
+                  <SelectItem value="unknown">Unknown</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Current usage status, separate from type/classification.</p>
             </div>
           </div>
           <DialogFooter>
@@ -3118,6 +3256,7 @@ function CulledSection({
 }) {
   const [, setLocation] = useLocation();
   const [culledSearch, setCulledSearch] = useState("");
+  const [culledViewMode, setCulledViewMode] = useState<"detailed" | "list" | "thumbnail">("list");
 
   const culledAnimals = allAnimals.filter(a => 
     a.status === 'culled' || a.cullConfirmed === true
@@ -3182,21 +3321,43 @@ function CulledSection({
         actions={exportButton}
         testId="ribbon-culled"
       >
-        {/* Search inside section */}
-        <div className="relative mb-3">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search culled animals..."
-            value={culledSearch}
-            onChange={(e) => setCulledSearch(e.target.value)}
-            className="pl-9 text-sm rugged-input"
-            data-testid="input-search-culled-section"
-          />
+        {/* Search & Filter Bar */}
+        <div className="flex flex-col md:flex-row gap-2 bg-card p-2.5 md:p-4 rounded-md border border-border shadow-sm mb-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search Tag ID..."
+              value={culledSearch}
+              onChange={(e) => setCulledSearch(e.target.value)}
+              className="pl-9 text-sm rugged-input"
+              data-testid="input-search-culled-section"
+            />
+          </div>
+          <div className="flex gap-1 border border-border rounded-md p-0.5 self-start">
+            <Button size="icon" variant={culledViewMode === "detailed" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setCulledViewMode("detailed")} title="Card View" data-testid="culled-view-detailed"><LayoutGrid className="w-4 h-4" /></Button>
+            <Button size="icon" variant={culledViewMode === "list" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setCulledViewMode("list")} title="Table View" data-testid="culled-view-list"><List className="w-4 h-4" /></Button>
+            <Button size="icon" variant={culledViewMode === "thumbnail" ? "default" : "ghost"} className="h-8 w-8" onClick={() => setCulledViewMode("thumbnail")} title="Thumbnail Grid" data-testid="culled-view-thumbnail"><Grid3X3 className="w-4 h-4" /></Button>
+          </div>
         </div>
 
         {culledAnimals.length === 0 ? (
           <div className="py-8 text-center text-muted-foreground border border-border rounded-md">
             <p>{allCulled.length === 0 ? "No culled animals in archive." : "No results match your search."}</p>
+          </div>
+        ) : culledViewMode === "thumbnail" ? (
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+            {culledAnimals.map(animal => (
+              <Link key={animal.id} href={`/animals/${animal.id}`}>
+                <div className="aspect-square rounded-md bg-secondary overflow-hidden border-2 border-transparent hover:border-primary transition-all cursor-pointer">
+                  {animal.photo ? <img src={animal.photo} alt={animal.tagId} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-secondary"><img src={logo} className="w-8 h-8 grayscale opacity-30" /></div>}
+                </div>
+                <p className="text-xs text-center mt-1 truncate text-muted-foreground">{animal.tagId}</p>
+              </Link>
+            ))}
+          </div>
+        ) : culledViewMode === "detailed" ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {culledAnimals.map(animal => <AnimalCard key={animal.id} animal={animal} />)}
           </div>
         ) : (
           <div className="border border-border rounded-md overflow-x-auto">
@@ -3414,6 +3575,7 @@ function CreateAnimalDialog({
       breed: "Meatmaster",
       status: "active",
       classification: "unclassified" as string,
+      ramBreedingStatus: "unknown" as string,
       animalSource: "unknown_not_recorded" as string,
       birthDate: new Date().toISOString().split('T')[0],
       birthStatus: "single" as string,
@@ -3433,6 +3595,7 @@ function CreateAnimalDialog({
 
   const birthStatus = form.watch("birthStatus");
   const watchedTagId = form.watch("tagId");
+  const watchedSex = form.watch("sex");
   const studPrefix = (farmSettings?.studPrefix || "").trim();
   const normalizedTagPreview = splitTagInput(watchedTagId, studPrefix).canonicalTag;
 
@@ -3670,6 +3833,32 @@ function CreateAnimalDialog({
                 )}
               />
             </div>
+
+            {watchedSex === 'ram' && (
+              <FormField
+                control={form.control}
+                name="ramBreedingStatus"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breeding Status</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || "unknown"}>
+                      <FormControl>
+                        <SelectTrigger className="rugged-input" data-testid="select-ram-breeding-status">
+                          <SelectValue placeholder="Select breeding status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="breeding_ram">Breeding Ram</SelectItem>
+                        <SelectItem value="marketable_ram">Marketable Ram</SelectItem>
+                        <SelectItem value="not_selected">Not Selected</SelectItem>
+                        <SelectItem value="unknown">Unknown</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
               <FormField

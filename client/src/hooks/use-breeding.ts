@@ -7,8 +7,10 @@ import {
   getAllFromStore, 
   putManyInStore, 
   putInStore, 
-  addToSyncQueue 
+  addToSyncQueue,
+  getPendingSyncItems
 } from "@/lib/indexeddb";
+import { buildPatchMap } from "@/lib/sync-utils";
 
 export function useBreedingEvents() {
   const { isOnline } = useNetworkStatus();
@@ -19,7 +21,16 @@ export function useBreedingEvents() {
       if (!isOnline) {
         console.log('[useBreedingEvents] Offline - fetching from IndexedDB');
         const cached = await getAllFromStore<BreedingEvent>('breedingEvents');
-        return cached;
+        const offlinePending = await getPendingSyncItems();
+        const offlineDeletedIds = new Set(
+          offlinePending
+            .filter(item => item.entity === 'breedingEvents' && item.action === 'delete')
+            .map(item => (item.data as { id?: number })?.id)
+            .filter((id): id is number => id != null),
+        );
+        return offlineDeletedIds.size > 0
+          ? cached.filter(evt => !offlineDeletedIds.has(evt.id))
+          : cached;
       }
 
       // Include auth token for device-based authentication
@@ -35,8 +46,61 @@ export function useBreedingEvents() {
       if (data.length > 0) {
         await putManyInStore('breedingEvents', data);
       }
-      
-      return data;
+
+      // Merge any pending offline creates/updates not yet synced to the server.
+      // Creates: append new events so analytics are accurate immediately.
+      // Updates: patch existing events so edits (e.g. corrected ram/ewe) are
+      //          reflected on the Breeding page before the sync queue drains.
+      const pendingItems = await getPendingSyncItems();
+
+      const pendingBreedingEvents = pendingItems
+        .filter(item => item.entity === 'breedingEvents' && item.action === 'create')
+        .map(item => ({
+          ...(item.data as object),
+          id: item.tempId ?? -(item.timestamp),
+        } as unknown as BreedingEvent));
+
+      if (pendingBreedingEvents.length > 0) {
+        console.log(`[useBreedingEvents] Merging ${pendingBreedingEvents.length} pending offline breeding event(s) into results`);
+      }
+
+      // Build a patch map from pending updates keyed by record id.
+      // Uses buildPatchMap (from sync-utils) which sorts by timestamp ascending
+      // so the highest-timestamp patch always wins (latest offline edit prevails).
+      const pendingBreedingUpdates = buildPatchMap<BreedingEvent>(pendingItems, 'breedingEvents');
+
+      const breedingUpdateCount = Object.keys(pendingBreedingUpdates).length;
+      if (breedingUpdateCount > 0) {
+        console.log(`[useBreedingEvents] Applying ${breedingUpdateCount} pending offline update(s) to breeding event(s)`);
+      }
+
+      const patchedBreedingData = breedingUpdateCount > 0
+        ? data.map(evt => pendingBreedingUpdates[evt.id] ? { ...evt, ...pendingBreedingUpdates[evt.id] } : evt)
+        : data;
+
+      // Filter out breeding events that have a pending offline delete so they
+      // don't continue to appear on the Breeding page before the sync drains.
+      const deletedIds = new Set(
+        pendingItems
+          .filter(item => item.entity === 'breedingEvents' && item.action === 'delete')
+          .map(item => {
+            const d = item.data as { id?: number };
+            return d?.id ?? null;
+          })
+          .filter((id): id is number => id !== null),
+      );
+
+      if (deletedIds.size > 0) {
+        console.log(`[useBreedingEvents] Suppressing ${deletedIds.size} offline-deleted breeding event(s) from results`);
+      }
+
+      const visibleData = deletedIds.size > 0
+        ? patchedBreedingData.filter(evt => !deletedIds.has(evt.id))
+        : patchedBreedingData;
+
+      const visiblePending = pendingBreedingEvents.filter(evt => !deletedIds.has(evt.id));
+
+      return [...visibleData, ...visiblePending];
     },
   });
 }
@@ -128,8 +192,68 @@ export function useMatingGroups() {
       if (data.length > 0) {
         await putManyInStore('matingGroups', data);
       }
-      
-      return data;
+
+      // Merge any pending offline creates/updates not yet synced to the server.
+      // Creates: append new groups so mating-end alerts fire immediately.
+      // Updates: patch existing groups so edits (e.g. extended dateOut) are
+      //          reflected in alerts before the sync queue drains.
+      const pendingItems = await getPendingSyncItems();
+
+      const pendingMatingGroups = pendingItems
+        .filter(item => item.entity === 'matingGroups' && item.action === 'create')
+        .map(item => ({
+          ...(item.data as object),
+          id: item.tempId ?? -(item.timestamp),
+        } as unknown as MatingGroup));
+
+      if (pendingMatingGroups.length > 0) {
+        console.log(`[useMatingGroups] Merging ${pendingMatingGroups.length} pending offline mating group(s) into results`);
+      }
+
+      // Build a patch map from pending updates keyed by record id.
+      const pendingUpdates = pendingItems
+        .filter(item => item.entity === 'matingGroups' && item.action === 'update')
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .reduce<Record<number, Partial<MatingGroup>>>((acc, item) => {
+          const patch = item.data as { id?: number } & Partial<MatingGroup>;
+          if (patch.id != null) {
+            acc[patch.id] = { ...(acc[patch.id] ?? {}), ...patch };
+          }
+          return acc;
+        }, {});
+
+      const updateCount = Object.keys(pendingUpdates).length;
+      if (updateCount > 0) {
+        console.log(`[useMatingGroups] Applying ${updateCount} pending offline update(s) to mating group(s)`);
+      }
+
+      const patchedData = updateCount > 0
+        ? data.map(g => pendingUpdates[g.id] ? { ...g, ...pendingUpdates[g.id] } : g)
+        : data;
+
+      // Filter out groups that have a pending offline delete so they don't
+      // continue to trigger "mating period ending" alerts for deleted groups.
+      const deletedIds = new Set(
+        pendingItems
+          .filter(item => item.entity === 'matingGroups' && item.action === 'delete')
+          .map(item => {
+            const d = item.data as { id?: number };
+            return d?.id ?? null;
+          })
+          .filter((id): id is number => id !== null),
+      );
+
+      if (deletedIds.size > 0) {
+        console.log(`[useMatingGroups] Suppressing ${deletedIds.size} offline-deleted mating group(s) from results`);
+      }
+
+      const visibleData = deletedIds.size > 0
+        ? patchedData.filter(g => !deletedIds.has(g.id))
+        : patchedData;
+
+      const visiblePending = pendingMatingGroups.filter(g => !deletedIds.has(g.id));
+
+      return [...visibleData, ...visiblePending];
     }
   });
 }

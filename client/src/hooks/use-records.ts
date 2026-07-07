@@ -7,7 +7,8 @@ import {
   getAllFromStore, 
   putManyInStore, 
   putInStore, 
-  addToSyncQueue 
+  addToSyncQueue,
+  getPendingSyncItems
 } from "@/lib/indexeddb";
 
 const STORE_NAME = 'performanceRecords';
@@ -120,8 +121,31 @@ export function useHealthRecords(animalId: number) {
       if (data.length > 0) {
         await putManyInStore('healthRecords', data);
       }
-      
-      return data;
+
+      // Apply any pending offline updates on top of server data so the
+      // Health page shows edited values before the sync queue drains.
+      const pendingItems = await getPendingSyncItems();
+      const pendingUpdates = pendingItems
+        .filter(item => item.entity === 'healthRecords' && item.action === 'update')
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .reduce<Record<number, Partial<HealthRecord>>>((acc, item) => {
+          const patch = item.data as { id?: number } & Partial<HealthRecord>;
+          if (patch.id != null) {
+            acc[patch.id] = { ...(acc[patch.id] ?? {}), ...patch };
+          }
+          return acc;
+        }, {});
+
+      const updateCount = Object.keys(pendingUpdates).length;
+      if (updateCount > 0) {
+        console.log(`[useHealthRecords] Applying ${updateCount} pending offline update(s) to health records`);
+      }
+
+      const patchedData = updateCount > 0
+        ? data.map(r => pendingUpdates[r.id] ? { ...r, ...pendingUpdates[r.id] } : r)
+        : data;
+
+      return patchedData;
     },
     enabled: !!animalId,
   });
