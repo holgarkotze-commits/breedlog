@@ -1,0 +1,76 @@
+BREEDLOG REPLIT TASK — FIX PR #14 CI FAILURE ONLY
+
+This instruction is for REPLIT only.
+
+STRICT SCOPE:
+Do not add app features.
+Do not change UI.
+Do not change genetics functionality.
+Do not change exports.
+Do not change animal logic.
+Do not change unrelated files.
+Do not merge.
+Only fix the failing GitHub Actions certification-test failure on PR #14.
+
+Context:
+PR #14 is open:
+Base: main
+Head: codex/genetics-verification-workflow
+Title: Add genetics clean verification workflow
+
+Latest PR head:
+8be0cea89be2815c53bb6cdd1cb5cf17ce816a63
+
+GitHub Actions run failed:
+Run ID: 28893694131
+Job: Type-check, Build & Test
+Job ID: 85712746722
+
+Known status:
+- TypeScript check passed.
+- Run certification tests failed.
+- Production build was skipped because certification tests failed.
+- Previous fix added startup schema compatibility columns in server/index.ts and aligned CI workflow.
+- Codex stopped due usage limit before completing the second CI failure.
+
+Required actions:
+
+1. Checkout the exact PR branch:
+git fetch origin
+git checkout codex/genetics-verification-workflow
+git pull --ff-only origin codex/genetics-verification-workflow
+
+2. Fetch the GitHub Actions logs for run 28893694131 / job 85712746722.
+
+3. Identify the exact failing certification test or tests.
+
+4. Fix only the failing cause.
+
+Important:
+If the failure is another test database bootstrap/schema drift issue, align only the CI/test startup schema with the declared production schema. Do not redesign schema or app logic.
+
+5. Run locally where possible:
+npm run check
+npm run test:cert
+npm run build
+
+6. Commit only the exact fix:
+fix(ci): complete certification test compatibility
+
+7. Push to:
+codex/genetics-verification-workflow
+
+8. Watch GitHub Actions again until the required check passes.
+
+Final report required:
+- exact failing test names
+- exact root cause
+- files changed
+- latest commit hash
+- npm run check result
+- npm run test:cert result
+- npm run build result
+- GitHub Actions result
+- confirmation no unrelated app changes were made
+
+Do not merge PR #14.
