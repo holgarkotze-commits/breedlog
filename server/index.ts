@@ -178,7 +178,7 @@ async function runStartupMigrations() {
         device_id varchar NOT NULL UNIQUE,
         invite_code_id integer NOT NULL REFERENCES invite_codes(id),
         activated_at timestamp DEFAULT now(),
-        expires_at timestamp NOT NULL,
+        expires_at timestamp,
         last_seen_at timestamp DEFAULT now(),
         status varchar DEFAULT 'active',
         device_type varchar DEFAULT 'unknown'
@@ -294,6 +294,40 @@ async function runStartupMigrations() {
     `);
     await client.query(`
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS device_type varchar DEFAULT 'unknown';
+      ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS last_online_check timestamp DEFAULT now();
+      ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS offline_grace_start timestamp;
+      ALTER TABLE user_activations ALTER COLUMN expires_at DROP NOT NULL;
+    `);
+    await client.query(`
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS raw_tag text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS stud_prefix text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS classification text DEFAULT 'unclassified';
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS animal_source text DEFAULT 'unknown_not_recorded';
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS photo text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS ram_breeding_status text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS birth_status text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS external_dam_info text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS external_sire_info text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS evaluation_document text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS lambing_season text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS environment_group text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS management_group text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS birth_weight decimal;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS birth_weight_estimated boolean DEFAULT false;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS current_weight decimal;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS weight_100_day decimal;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS weight_100_day_date date;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS weight_100_day_estimated boolean DEFAULT false;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS weight_270_day decimal;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS weight_270_day_date date;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS weaning_status text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS breeder_name text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS owner_name text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS farm_name text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS location text;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS client_id varchar(64);
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS vector_clock jsonb;
+      ALTER TABLE animals ADD COLUMN IF NOT EXISTS last_synced_at timestamp;
     `);
 
     // Performance indexes — dramatically speed up per-user queries at scale

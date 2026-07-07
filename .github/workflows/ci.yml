@@ -57,11 +57,11 @@ jobs:
       - name: TypeScript check
         run: npm run check
 
+      - name: Run certification tests
+        run: npm run test:cert
+
       - name: Production build
         run: npm run build
 
       - name: Push DB schema
         run: npm run db:push
-
-      - name: Run unit & integration tests
-        run: npm test
