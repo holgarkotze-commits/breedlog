@@ -178,7 +178,7 @@ async function runStartupMigrations() {
         device_id varchar NOT NULL UNIQUE,
         invite_code_id integer NOT NULL REFERENCES invite_codes(id),
         activated_at timestamp DEFAULT now(),
-        expires_at timestamp NOT NULL,
+        expires_at timestamp,
         last_seen_at timestamp DEFAULT now(),
         status varchar DEFAULT 'active',
         device_type varchar DEFAULT 'unknown'
