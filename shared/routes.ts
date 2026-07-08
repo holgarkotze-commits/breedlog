@@ -197,7 +197,12 @@ export const api = {
         csvData: z.string(),
       }),
       responses: {
-        200: z.object({ count: z.number() }),
+        200: z.object({
+          count: z.number(),
+          duplicates: z.number().optional(),
+          failed: z.number().optional(),
+          errors: z.array(z.string()).optional(),
+        }),
         400: errorSchemas.validation,
       },
     },
