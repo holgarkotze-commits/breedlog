@@ -305,7 +305,17 @@ async function runStartupMigrations() {
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS device_type varchar DEFAULT 'unknown';
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS last_online_check timestamp DEFAULT now();
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS offline_grace_start timestamp;
-      ALTER TABLE user_activations ALTER COLUMN expires_at DROP NOT NULL;
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_activations' AND column_name = 'expires_at'
+        ) THEN
+          ALTER TABLE user_activations ALTER COLUMN expires_at DROP NOT NULL;
+        END IF;
+      END $$;
     `);
     await client.query(`
       ALTER TABLE animals ADD COLUMN IF NOT EXISTS raw_tag text;
