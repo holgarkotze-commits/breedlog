@@ -4,10 +4,7 @@ import { storage } from "./storage";
 import { DuplicateElectronicIdError, DuplicateTagIdError, DuplicateAnimalNameError } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAdminPin, getUserId as getDeviceUserId, getDeviceId } from "./device-auth";
-import { registerChatRoutes } from "./replit_integrations/chat";
-import { registerImageRoutes } from "./replit_integrations/image";
-import { registerAudioRoutes } from "./replit_integrations/audio/routes";
+import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAdminPin, isAdminPinHeaderValid, getUserId as getDeviceUserId, getDeviceId } from "./device-auth";
 import { registerAIRoutes } from "./ai/breedlog-ai-routes";
 import { parse } from "csv-parse/sync";
 import { buildBreedLogCsvContent, buildBreedLogCsvRows, parseBreedLogCsvRecords, buildBreedLogImportTemplateCsv } from "@shared/import-export";
@@ -85,10 +82,12 @@ export async function registerRoutes(
   setupDeviceAuth(app);
   registerDeviceAuthRoutes(app);
   
-  // Register AI Integrations (chat, image, audio)
-  registerChatRoutes(app);
-  registerImageRoutes(app);
-  registerAudioRoutes(app);
+  // NOTE: The Replit-template AI integration routes (chat /api/conversations*,
+  // image /api/generate-image, audio voice-stream) are intentionally NOT
+  // registered. They had no authentication and no per-user scoping, which
+  // exposed every conversation globally and allowed anonymous use of the
+  // OpenAI key. The BreedLog assistant (/api/ai/*) is the supported,
+  // authenticated AI surface.
 
   // Register BreedLog AI Assistant routes
   registerAIRoutes(app);
@@ -634,20 +633,41 @@ export async function registerRoutes(
         skip_empty_lines: true
       }) as Record<string, string>[];
 
+      // Per-row error handling: one bad row (e.g. duplicate tag) must not
+      // 500 the whole request after earlier rows were already committed.
       let count = 0;
+      let duplicates = 0;
+      const errors: string[] = [];
       if (table === 'animals') {
         for (const record of records) {
-          await storage.createAnimal(userId, {
-            tagId: record.tagId || record.tag_id,
-            sex: record.sex || 'ewe',
-            breed: record.breed || "Meatmaster",
-            status: record.status || "active",
-          });
-          count++;
+          const tagId = record.tagId || record.tag_id;
+          if (!tagId) {
+            errors.push('Row skipped: missing tagId');
+            continue;
+          }
+          try {
+            await storage.createAnimal(userId, {
+              tagId,
+              sex: record.sex || 'ewe',
+              breed: record.breed || "Meatmaster",
+              status: record.status || "active",
+            });
+            count++;
+          } catch (rowErr) {
+            if (
+              rowErr instanceof DuplicateElectronicIdError ||
+              rowErr instanceof DuplicateTagIdError ||
+              rowErr instanceof DuplicateAnimalNameError
+            ) {
+              duplicates++;
+            } else {
+              errors.push(`Create failed for ${tagId}: ${rowErr instanceof Error ? rowErr.message : 'unknown error'}`);
+            }
+          }
         }
       }
-      
-      res.json({ count });
+
+      res.json({ count, duplicates, failed: errors.length, errors });
     } catch (err) {
       console.error("Import Error:", err);
       res.status(500).json({ message: "Failed to import data" });
@@ -859,9 +879,6 @@ export async function registerRoutes(
       try {
         const activation = await storage.getUserActivation(userId);
         if (activation) {
-          const code = await storage.getInviteCodeByCode
-            ? undefined
-            : undefined;
           inviteCodeRef = `code:${activation.inviteCodeId}`;
         }
       } catch {}
@@ -899,9 +916,7 @@ export async function registerRoutes(
   // Admin: list all issues (admin auth required)
   app.get("/api/admin/field-issues", async (req, res) => {
     try {
-      const adminPin = process.env.ADMIN_PIN;
-      const authHeader = req.headers.authorization || "";
-      if (!adminPin || authHeader !== `AdminPin ${adminPin}`) {
+      if (!isAdminPinHeaderValid(req.headers.authorization)) {
         return res.status(401).json({ message: "Admin authentication required" });
       }
       const { status, severity, area, search } = req.query as Record<string, string>;
@@ -916,9 +931,7 @@ export async function registerRoutes(
   // Admin: update issue status/notes
   app.patch("/api/admin/field-issues/:id", async (req, res) => {
     try {
-      const adminPin = process.env.ADMIN_PIN;
-      const authHeader = req.headers.authorization || "";
-      if (!adminPin || authHeader !== `AdminPin ${adminPin}`) {
+      if (!isAdminPinHeaderValid(req.headers.authorization)) {
         return res.status(401).json({ message: "Admin authentication required" });
       }
       const id = Number(req.params.id);
@@ -1076,14 +1089,12 @@ export async function registerRoutes(
     return 'desktop';
   }
   
-  // Helper to generate device ID from user agent + some user data
-  function getDeviceId(req: Request): string {
-    const userAgent = req.headers['user-agent'] || 'unknown';
-    const acceptLang = req.headers['accept-language'] || 'unknown';
-    const hash = Buffer.from(userAgent + acceptLang).toString('base64').substring(0, 32);
-    return hash;
-  }
-  
+  // NOTE: a local getDeviceId() helper used to live here, hashing
+  // User-Agent + Accept-Language. It shadowed the real getDeviceId import
+  // from ./device-auth, so telemetry recorded a browser fingerprint instead
+  // of the actual device ID. It has been removed — the imported helper is
+  // the single source of device identity.
+
   // Returns the code's own usability — independent of how many slots are taken.
   // A code is usable if it exists, is not revoked, and is not expired.
   // Slot availability (desktop/mobile) is computed separately at the call site.

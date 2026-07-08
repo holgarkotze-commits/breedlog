@@ -46,11 +46,9 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Fix registry URLs for CI
-        run: |
-          sed -i 's|http://package-firewall.replit.local/npm|https://registry.npmjs.org|g' package-lock.json
-          echo "Registry URLs patched for public CI"
-
+      # package-lock.json now resolves everything from the public npm
+      # registry (the Replit-only package-firewall URLs were removed), so no
+      # lockfile patching is needed before install.
       - name: Install dependencies
         run: npm ci
 
