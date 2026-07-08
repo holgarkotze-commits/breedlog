@@ -1483,8 +1483,8 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
 .page { width: 190mm; min-height: 277mm; padding-bottom: 17mm; position: relative; }
 .header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 2.5mm; border-bottom: 2.5px solid #FFC300; margin-bottom: 2.5mm; }
 .header-left { display: flex; align-items: center; }
-.logo { width: 50px; height: 50px; object-fit: contain; }
-.logo-placeholder { width: 50px; }
+.logo { width: 60px; height: 60px; object-fit: contain; }
+.logo-placeholder { width: 60px; }
 .header-center { flex: 1; text-align: center; }
 .header-center h1 { font-size: 12pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
 .header-center p { font-size: 7pt; color: #666; margin-top: 1px; }
