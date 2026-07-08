@@ -1190,7 +1190,7 @@ ${data.notes || "No notes recorded."}
         toast({ title: "Word Document Exported", description: `${animal.tagId} profile downloaded as Word document` });
     };
     
-    const handleExportPDF = async (includeTree: boolean = false) => {
+    const handleExportPDF = async () => {
         toast({ title: "Preparing PDF…", description: "Building performance datasheet, please wait." });
 
         // Convert photo to base64 so it loads correctly in the print window
@@ -1466,138 +1466,50 @@ ${data.notes || "No notes recorded."}
             ? "Productivity &amp; Lambing"
             : profile.role === "meat-production" ? "Production Metrics" : "Development";
 
-        // ── Family tree page (landscape) — included when requested ────────────
-        // Large-format version: 257mm × 170mm content area in landscape A4.
-        // Uses same SVG connector pattern, scaled up for readability.
-        const gpCardLg = (label: string, sublabel: string, node: any | null) => {
-            const known = !!node?.tagId;
-            return `<div style="background:white;border:2px ${known ? 'solid #9ca3af' : 'dashed #bbb'};border-radius:5px;padding:3mm 4mm;text-align:center;min-width:44mm;box-sizing:border-box;">
-              <div style="font-size:7pt;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.4px;">${label}</div>
-              <div style="font-size:6.5pt;color:#999;margin-bottom:1mm;">${sublabel}</div>
-              <div style="font-size:11pt;font-weight:800;color:#1a1a1a;">${node?.tagId || "Unknown"}</div>
-              ${node?.name ? `<div style="font-size:7pt;color:#666;">${node.name}</div>` : ''}
-              ${node?.birthDate ? `<div style="font-size:6.5pt;color:#888;">${formatDate(node.birthDate)}</div>` : ''}
-            </div>`;
-        };
-        const buildFamilyTreePage = includeTree ? `
-<div class="page landscape" style="page-break-before:always;padding:6mm 6mm 24mm 6mm;position:relative;box-sizing:border-box;">
-  <div class="header">
-    <div class="header-left">${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" alt="Logo" />` : '<div class="logo-placeholder"></div>'}</div>
-    <div class="header-center">
-      <h1>${fb?.studName || fb?.farmName || "BreedLog"}</h1>
-      <p>Family Tree / Pedigree Certificate</p>
-    </div>
-    <div class="header-right"><div style="font-weight:700">${animal.tagId || "—"}</div><div>${exportDate}</div></div>
-  </div>
-  <div style="text-align:center;font-size:10pt;font-weight:700;color:#555;margin:3mm 0 4mm;text-transform:uppercase;letter-spacing:1px;">
-    Pedigree: ${animal.tagId}${animal.name ? ` — ${animal.name}` : ''}
-  </div>
-
-  <!-- Full-width landscape tree: 257mm total width, ~130mm content height -->
-  <div style="position:relative;width:255mm;height:108mm;background:#f4f7fa;border-radius:5px;border:1px solid #dde3ea;box-sizing:border-box;">
-    <svg style="position:absolute;top:0;left:0;width:255mm;height:108mm;overflow:visible;" viewBox="0 0 255 108">
-      <!-- Subject → main fork -->
-      <line x1="54" y1="54" x2="64" y2="54" stroke="#d97706" stroke-width="1"/>
-      <!-- Vertical main fork -->
-      <line x1="64" y1="27" x2="64" y2="81" stroke="#d97706" stroke-width="1"/>
-      <!-- Fork → SIRE -->
-      <line x1="64" y1="27" x2="72" y2="27" stroke="#d97706" stroke-width="1"/>
-      <!-- Fork → DAM -->
-      <line x1="64" y1="81" x2="72" y2="81" stroke="#d97706" stroke-width="1"/>
-      <!-- SIRE → GP sire fork -->
-      <line x1="132" y1="27" x2="143" y2="27" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
-      <!-- GP sire vertical -->
-      <line x1="143" y1="13.5" x2="143" y2="40.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
-      <line x1="143" y1="13.5" x2="152" y2="13.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
-      <line x1="143" y1="40.5" x2="152" y2="40.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
-      <!-- DAM → GP dam fork -->
-      <line x1="132" y1="81" x2="143" y2="81" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
-      <!-- GP dam vertical -->
-      <line x1="143" y1="67.5" x2="143" y2="94.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
-      <line x1="143" y1="67.5" x2="152" y2="67.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
-      <line x1="143" y1="94.5" x2="152" y2="94.5" stroke="#d97706" stroke-width="0.8" opacity="0.75"/>
-    </svg>
-
-    <!-- Subject card: left=2mm, top=12mm, w=52mm, h=84mm -->
-    <div style="position:absolute;left:2mm;top:12mm;width:52mm;height:84mm;background:white;border:2.5px solid #d97706;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2mm;padding:3mm;text-align:center;box-sizing:border-box;overflow:hidden;">
-      ${photoBase64
-        ? `<img src="${photoBase64}" style="width:28mm;height:28mm;object-fit:cover;border-radius:5px;border:2px solid #d97706;" />`
-        : `<div style="width:28mm;height:28mm;background:#f5f5f5;border:2px dashed #ccc;border-radius:5px;display:flex;align-items:center;justify-content:center;"><span style="font-size:7pt;color:#aaa;">No Photo</span></div>`}
-      <div style="font-size:14pt;font-weight:800;color:#1a1a1a;line-height:1.1;">${animal.tagId || "—"}</div>
-      <div style="font-size:8pt;font-weight:600;color:#555;">${animal.sex ? animal.sex.charAt(0).toUpperCase()+animal.sex.slice(1) : ""} | ${animal.breed || "Meatmaster"}</div>
-      <div style="font-size:7.5pt;color:#777;">${formatDate(animal.birthDate)}</div>
-    </div>
-
-    <!-- SIRE card: left=72mm, top=8mm, w=60mm, h=38mm -->
-    <div style="position:absolute;left:72mm;top:8mm;width:60mm;height:38mm;background:white;border:2.5px solid ${sireAnimal ? '#3b82f6' : '#bbb'};border-style:${sireAnimal ? 'solid' : 'dashed'};border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1mm;padding:3mm;text-align:center;box-sizing:border-box;">
-      <div style="font-size:7.5pt;font-weight:700;text-transform:uppercase;color:#3b82f6;letter-spacing:0.5px;">SIRE</div>
-      <div style="font-size:14pt;font-weight:800;color:#1a1a1a;line-height:1.1;">${sireAnimal?.tagId || animal.externalSireInfo || "Unknown"}</div>
-      ${sireAnimal?.name ? `<div style="font-size:8pt;color:#555;">${sireAnimal.name}</div>` : ''}
-      ${sireAnimal?.birthDate ? `<div style="font-size:7.5pt;color:#777;">${formatDate(sireAnimal.birthDate)}</div>` : ''}
-    </div>
-
-    <!-- DAM card: left=72mm, top=62mm, w=60mm, h=38mm -->
-    <div style="position:absolute;left:72mm;top:62mm;width:60mm;height:38mm;background:white;border:2.5px solid ${damAnimal ? '#ec4899' : '#bbb'};border-style:${damAnimal ? 'solid' : 'dashed'};border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1mm;padding:3mm;text-align:center;box-sizing:border-box;">
-      <div style="font-size:7.5pt;font-weight:700;text-transform:uppercase;color:#ec4899;letter-spacing:0.5px;">DAM</div>
-      <div style="font-size:14pt;font-weight:800;color:#1a1a1a;line-height:1.1;">${damAnimal?.tagId || animal.externalDamInfo || "Unknown"}</div>
-      ${damAnimal?.name ? `<div style="font-size:8pt;color:#555;">${damAnimal.name}</div>` : ''}
-      ${damAnimal?.birthDate ? `<div style="font-size:7.5pt;color:#777;">${formatDate(damAnimal.birthDate)}</div>` : ''}
-    </div>
-
-    <!-- GP cards: left=152mm, positioned at ~6.5, 33.5, 60.5, 87.5 mm -->
-    <div style="position:absolute;left:152mm;top:6.5mm;width:99mm;box-sizing:border-box;">${gpCardLg("GP Sire", "Sire's Father", sireSire)}</div>
-    <div style="position:absolute;left:152mm;top:33.5mm;width:99mm;box-sizing:border-box;">${gpCardLg("GP Dam", "Sire's Mother", sireDam)}</div>
-    <div style="position:absolute;left:152mm;top:60.5mm;width:99mm;box-sizing:border-box;">${gpCardLg("GP Sire", "Dam's Father", damSire)}</div>
-    <div style="position:absolute;left:152mm;top:87.5mm;width:99mm;box-sizing:border-box;">${gpCardLg("GP Dam", "Dam's Mother", damDam)}</div>
-  </div>
-
-  <div class="footer">
-    <div class="footer-info"><p class="footer-farm">${fb?.studName || fb?.farmName || "BreedLog"}</p><p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "· " + fb.ownerPhone : ""}</p></div>
-    <div class="footer-branding"><div class="bl">BREEDLOG</div><div class="tag">Professional Livestock Management</div></div>
-  </div>
-</div>` : '';
-
         // ── Full HTML document ────────────────────────────────────────────────
+        // NOTE: The visual family tree is rendered once, inline, inside the
+        // Pedigree section below (see `pedigreeSection`). There is no separate
+        // duplicate certificate page — the export is always a single A4 portrait page.
         const content = `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <title>${animal.tagId || 'Animal'} — Performance Datasheet</title>
 <style>
-${includeTree ? '@page { margin: 8mm 10mm; } @page landscape-page { size: A4 landscape; }' : '@page { size: A4 portrait; margin: 8mm 10mm; }'}
+@page { size: A4 portrait; margin: 10mm; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
 body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1a1a; background: white; }
-.page { width: 190mm; min-height: 257mm; padding-bottom: 22mm; position: relative; }
-.page.landscape { width: 277mm; min-height: 190mm; }
-.header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 3mm; border-bottom: 2.5px solid #FFC300; margin-bottom: 3mm; }
+.page { width: 190mm; min-height: 277mm; padding-bottom: 17mm; position: relative; }
+.header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 2.5mm; border-bottom: 2.5px solid #FFC300; margin-bottom: 2.5mm; }
 .header-left { display: flex; align-items: center; }
-.logo { width: 60px; height: 60px; object-fit: contain; }
-.logo-placeholder { width: 60px; }
+.logo { width: 50px; height: 50px; object-fit: contain; }
+.logo-placeholder { width: 50px; }
 .header-center { flex: 1; text-align: center; }
-.header-center h1 { font-size: 13pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
-.header-center p { font-size: 7.5pt; color: #666; margin-top: 2px; }
-.header-right { text-align: right; font-size: 7.5pt; color: #666; white-space: nowrap; }
-.id-block { display: flex; gap: 5mm; margin-bottom: 3mm; align-items: flex-start; }
-.id-photo { width: 52mm; height: 42mm; object-fit: cover; border: 1.5px solid #ddd; border-radius: 4px; display: block; }
-.no-photo { width: 52mm; height: 42mm; background: #f5f5f5; border: 1.5px dashed #bbb; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 8pt; text-align: center; }
-.id-tag { font-size: 16pt; font-weight: 800; letter-spacing: .5px; line-height: 1; }
-.id-name { font-size: 10pt; color: #444; margin-bottom: 2mm; margin-top: 1px; }
+.header-center h1 { font-size: 12pt; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+.header-center p { font-size: 7pt; color: #666; margin-top: 1px; }
+.header-right { text-align: right; font-size: 7pt; color: #666; white-space: nowrap; }
+.id-block { display: flex; gap: 5mm; margin-bottom: 2.5mm; align-items: flex-start; }
+.id-photo { width: 46mm; height: 34mm; object-fit: cover; border: 1.5px solid #ddd; border-radius: 4px; display: block; }
+.no-photo { width: 46mm; height: 34mm; background: #f5f5f5; border: 1.5px dashed #bbb; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 8pt; text-align: center; }
+.id-tag { font-size: 14pt; font-weight: 800; letter-spacing: .5px; line-height: 1; }
+.id-name { font-size: 9pt; color: #444; margin-bottom: 1.5mm; margin-top: 1px; }
 .ft { width: 100%; border-collapse: collapse; }
-.ft td { padding: 2.5px 5px; font-size: 8pt; border-bottom: 1px solid #efefef; vertical-align: top; }
+.ft td { padding: 1.5px 5px; font-size: 7.5pt; border-bottom: 1px solid #efefef; vertical-align: top; }
 .fl { width: 44%; font-weight: 600; color: #555; }
 .fv { color: #1a1a1a; }
-.sh { background: #FFC300; color: #000; font-weight: 700; font-size: 7.5pt; text-transform: uppercase; padding: 3px 5px; }
-.rating-strip { display: flex; align-items: center; gap: 3mm; background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 3px; padding: 2mm 3mm; margin-bottom: 3mm; flex-wrap: wrap; }
-.rating-badge { background: ${ratingColor}; color: white; font-weight: 700; font-size: 8.5pt; padding: 2px 7px; border-radius: 3px; text-transform: uppercase; white-space: nowrap; }
-.rating-role { font-weight: 700; font-size: 8pt; color: #333; text-transform: uppercase; letter-spacing: .5px; }
-.rating-conf { font-size: 7.5pt; color: #666; }
-.rating-reason { font-size: 7.5pt; color: #444; flex: 1; font-style: italic; }
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; margin-bottom: 3mm; }
+.sh { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; text-transform: uppercase; padding: 2px 5px; }
+.rating-strip { display: flex; align-items: center; gap: 3mm; background: #f8f8f8; border: 1px solid #e0e0e0; border-radius: 3px; padding: 1.5mm 3mm; margin-bottom: 2.5mm; flex-wrap: wrap; }
+.rating-badge { background: ${ratingColor}; color: white; font-weight: 700; font-size: 8pt; padding: 2px 7px; border-radius: 3px; text-transform: uppercase; white-space: nowrap; }
+.rating-role { font-weight: 700; font-size: 7.5pt; color: #333; text-transform: uppercase; letter-spacing: .5px; }
+.rating-conf { font-size: 7pt; color: #666; }
+.rating-reason { font-size: 7pt; color: #444; flex: 1; font-style: italic; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-bottom: 2.5mm; }
 .section { border: 1px solid #e0e0e0; border-radius: 3px; overflow: hidden; }
-.full-col { border: 1px solid #e0e0e0; border-radius: 3px; overflow: hidden; margin-bottom: 3mm; }
-.sec-title { background: #FFC300; color: #000; font-weight: 700; font-size: 7.5pt; text-transform: uppercase; padding: 3px 6px; }
-.sec-body { padding: 2mm; }
-.no-data { padding: 4mm; color: #888; font-style: italic; font-size: 8pt; text-align: center; }
+.full-col { border: 1px solid #e0e0e0; border-radius: 3px; overflow: hidden; margin-bottom: 2.5mm; }
+.sec-title { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; text-transform: uppercase; padding: 2px 6px; }
+.sec-body { padding: 1.5mm; }
+.no-data { padding: 3mm; color: #888; font-style: italic; font-size: 8pt; text-align: center; }
 .ped-row { display: flex; gap: 3mm; padding: 2mm; }
 .ped-box { flex: 1; border-radius: 3px; padding: 2mm 3mm; }
 .sire-box { background: #eff6ff; border: 1px solid #bfdbfe; }
@@ -1605,12 +1517,13 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
 .ped-lbl { font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #666; }
 .ped-id { font-size: 11pt; font-weight: 800; color: #1a1a1a; }
 .ped-det { font-size: 7.5pt; color: #555; margin-top: 1px; }
-.health-row { font-size: 7.5pt; color: #333; padding: 1.5px 0; border-bottom: 1px solid #f5f5f5; }
-.health-more { font-size: 7pt; color: #888; margin-top: 2px; font-style: italic; }
-.summary-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 3px; padding: 3mm; margin-bottom: 3mm; }
-.summary-lbl { font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #92400e; margin-bottom: 2px; letter-spacing: .5px; }
-.summary-text { font-size: 8.5pt; color: #1a1a1a; line-height: 1.5; }
-.footer { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 3mm 5mm; border-top: 2.5px solid #FFC300; border-radius: 2mm; position: absolute; bottom: 6mm; left: 0; right: 0; }
+.pedigree-wrap { max-height: 50mm; overflow: hidden; position: relative; }
+.health-row { font-size: 7pt; color: #333; padding: 1px 0; border-bottom: 1px solid #f5f5f5; }
+.health-more { font-size: 6.5pt; color: #888; margin-top: 1px; font-style: italic; }
+.summary-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 3px; padding: 2.5mm; margin-bottom: 2.5mm; }
+.summary-lbl { font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #92400e; margin-bottom: 1px; letter-spacing: .5px; }
+.summary-text { font-size: 8pt; color: #1a1a1a; line-height: 1.35; }
+.footer { display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 2mm 5mm; border-top: 2.5px solid #FFC300; border-radius: 2mm; position: absolute; bottom: 0; left: 0; right: 0; }
 .footer-info { flex: 1; }
 .footer-farm { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
 .footer-info p { font-size: 7pt; margin-top: 1px; color: #ccc; }
@@ -1669,9 +1582,9 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
       <div class="sec-body">${buildTypeSpecificSection()}</div>
     </div>
   </div>
-  <div class="full-col" style="overflow:visible;">
+  <div class="full-col" style="overflow:hidden;">
     <div class="sec-title">&#9680; PEDIGREE &nbsp;<span style="font-weight:400;text-transform:none;font-size:6.5pt;color:#444;">Family Tree / Pedigree</span></div>
-    <div style="padding:2mm;">
+    <div class="pedigree-wrap" style="padding:1mm;">
       ${pedigreeSection}
     </div>
   </div>
@@ -1688,7 +1601,6 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
     <div class="footer-branding"><div class="bl">BREEDLOG</div><div class="tag">Professional Livestock Management</div></div>
   </div>
 </div>
-${buildFamilyTreePage}
 </body>
 </html>`;
 
@@ -1720,10 +1632,10 @@ ${buildFamilyTreePage}
             animalId: animal.id,
             metadata: {
               exportType: "pdf",
-              category: includeTree ? "individual-with-family-tree" : "individual-performance",
+              category: "individual-performance",
               sourceSection: "individual",
               animalCount: 1,
-              pageCount: includeTree ? 2 : 1,
+              pageCount: 1,
               status: "success",
               rowsSummary: [{ tagId: animal.tagId, sex: animal.sex, breed: animal.breed, status: animal.status }],
             }
@@ -1739,11 +1651,8 @@ ${buildFamilyTreePage}
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleExportPDF(false)} data-testid="export-pdf">
+                <DropdownMenuItem onClick={() => handleExportPDF()} data-testid="export-pdf">
                     <FileText className="w-4 h-4 mr-2" /> Export Individual (PDF)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExportPDF(true)} data-testid="export-pdf-tree">
-                    <Dna className="w-4 h-4 mr-2" /> Export + Family Tree (PDF)
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleExportWord} data-testid="export-word">
                     <FileText className="w-4 h-4 mr-2" /> Word Document
