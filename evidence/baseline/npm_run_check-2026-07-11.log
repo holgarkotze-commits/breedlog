@@ -1,0 +1,13 @@
+COMMAND: npm run check
+PWD: /workspace/breedlog
+NODE: v24.15.0
+NPM: 11.4.2
+UNAME: Linux 910354fe1370 6.12.47 #1 SMP Mon Oct 27 10:01:15 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+START: 2026-07-11T22:50:18Z
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> rest-express@1.0.0 check
+> tsc
+
+END: 2026-07-11T22:50:41Z
+EXIT_CODE: 0

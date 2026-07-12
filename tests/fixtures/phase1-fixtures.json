@@ -1,0 +1,14 @@
+{
+  "metadata": { "fixtureSet": "phase1-governance", "nonProduction": true, "deterministic": true },
+  "fixtures": [
+    { "key": "clean-commercial", "workspace": "phase1-clean-commercial", "accessCode": "PH1CLEAN", "expectsKwantamSimulation": false },
+    { "key": "legacy-access-code", "workspace": "phase1-legacy-access", "accessCode": "PH1LEGACY", "expectsKwantamSimulation": false },
+    { "key": "master-simulation", "workspace": "phase1-master-simulation", "accessCode": "U2A2ZAVQ", "expectsKwantamSimulation": true },
+    { "key": "free-plan-boundary", "workspace": "phase1-free-boundary", "plan": "free", "animalCount": 30 },
+    { "key": "premium-plan", "workspace": "phase1-premium", "plan": "premium" },
+    { "key": "downgrade-over-limit", "workspace": "phase1-downgrade-over-limit", "animalCount": 31 },
+    { "key": "backup-restore", "workspace": "phase1-backup-restore", "representativeRelationships": true },
+    { "key": "isolation-a", "workspace": "phase1-isolation-a", "pair": "phase1-isolation" },
+    { "key": "isolation-b", "workspace": "phase1-isolation-b", "pair": "phase1-isolation" }
+  ]
+}

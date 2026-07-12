@@ -1,0 +1,15 @@
+COMMAND: npm ci
+PWD: /workspace/breedlog
+NODE: v24.15.0
+NPM: 11.4.2
+UNAME: Linux 910354fe1370 6.12.47 #1 SMP Mon Oct 27 10:01:15 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+START: 2026-07-11T22:54:40Z
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+npm error code E403
+npm error 403 403 Forbidden - GET https://registry.npmjs.org/debug
+npm error 403 In most cases, you or one of your dependencies are requesting
+npm error 403 a package version that is forbidden by your security policy, or
+npm error 403 on a server you do not have access to.
+npm error A complete log of this run can be found in: /root/.npm/_logs/2026-07-11T22_54_42_448Z-debug-0.log
+END: 2026-07-11T22:54:43Z
+EXIT_CODE: 1
