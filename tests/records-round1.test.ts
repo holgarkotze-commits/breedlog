@@ -314,22 +314,23 @@ const TEST_USER = "records-round1-user";
 let server: ChildProcessWithoutNullStreams;
 
 before(async () => {
-  server = spawn("tsx", ["server/index.ts"], {
+  server = spawn(process.execPath, ["--import", "tsx/esm", "server/index.ts"], {
     env: { ...process.env, NODE_ENV: "test", USE_IN_MEMORY_STORAGE: "1", PORT: "5038" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("Server start timeout")), 15000);
+    const isReady = (text: string) => text.includes("serving on port") || text.includes("serving on 127.0.0.1:");
     server.stdout.on("data", (chunk: Buffer) => {
-      if (chunk.toString().includes("serving on port")) { clearTimeout(timeout); resolve(); }
+      if (isReady(chunk.toString())) { clearTimeout(timeout); resolve(); }
     });
     server.stderr.on("data", (chunk: Buffer) => {
-      if (chunk.toString().includes("serving on port")) { clearTimeout(timeout); resolve(); }
+      if (isReady(chunk.toString())) { clearTimeout(timeout); resolve(); }
     });
   });
 });
 
-after(() => { server?.kill(); });
+after(() => { try { server?.kill(); } catch { /* process already exited */ } });
 
 const authedFetch = (path: string, opts: RequestInit = {}) =>
   fetch(`${BASE_URL}${path}`, {

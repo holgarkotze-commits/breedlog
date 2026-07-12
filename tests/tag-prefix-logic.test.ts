@@ -22,7 +22,7 @@ async function waitForServer(timeoutMs = 20000) {
 }
 
 before(async () => {
-  server = spawn('./node_modules/.bin/tsx', ['server/index.ts'], {
+  server = spawn(process.execPath, ['--import', 'tsx/esm', 'server/index.ts'], {
     env: {
       ...process.env,
       NODE_ENV: 'test',
@@ -47,7 +47,12 @@ before(async () => {
 
 after(async () => {
   if (server && !server.killed) {
-    process.kill(-server.pid!, 'SIGTERM');
+    try {
+      if (process.platform === 'win32') server.kill('SIGTERM');
+      else process.kill(-server.pid!, 'SIGTERM');
+    } catch {
+      try { server.kill('SIGTERM'); } catch { /* process already exited */ }
+    }
   }
 });
 

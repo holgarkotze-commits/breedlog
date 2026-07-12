@@ -677,6 +677,9 @@ export class DatabaseStorage implements IStorage {
   
   // Production Reset - clears data for specific user only
   async clearAllData(userId: string): Promise<void> {
+    await db.delete(animalBloodlines).where(eq(animalBloodlines.userId, userId));
+    await db.delete(geneticLines).where(eq(geneticLines.userId, userId));
+    await db.delete(bloodlines).where(eq(bloodlines.userId, userId));
     await db.delete(flockHealthTreatments).where(eq(flockHealthTreatments.userId, userId));
     await db.delete(flockHealthEvents).where(eq(flockHealthEvents.userId, userId));
     await db.delete(exportedDocuments).where(eq(exportedDocuments.userId, userId));
@@ -1290,7 +1293,24 @@ export class InMemoryStorage implements IStorage {
     return v;
   }
   async deleteExportedDocument(userId: string, id: number): Promise<void> { const d = this.exportedDocuments.get(id); if (d?.userId === userId) this.exportedDocuments.delete(id); }
-  async clearAllData(userId: string): Promise<void> { for (const [id, a] of this.animals.entries()) if (a.userId === userId) this.animals.delete(id); }
+  async clearAllData(userId: string): Promise<void> {
+    for (const [id, a] of this.animals.entries()) if (a.userId === userId) this.animals.delete(id);
+    for (const [id, e] of this.breedingEvents.entries()) if (e.userId === userId) this.breedingEvents.delete(id);
+    for (const [id, g] of this.matingGroups.entries()) if (g.userId === userId) this.matingGroups.delete(id);
+    for (const [id, r] of this.performanceRecords.entries()) if (r.userId === userId) this.performanceRecords.delete(id);
+    for (const [id, r] of this.healthRecords.entries()) if (r.userId === userId) this.healthRecords.delete(id);
+    for (const [id, e] of this.evaluations.entries()) if (e.userId === userId) this.evaluations.delete(id);
+    for (const [id, d] of this.documents.entries()) if (d.userId === userId) this.documents.delete(id);
+    for (const [id, i] of this.animalImages.entries()) if (i.userId === userId) this.animalImages.delete(id);
+    for (const [id, e] of this.eidEvents.entries()) if (e.userId === userId) this.eidEvents.delete(id);
+    for (const [id, d] of this.exportedDocuments.entries()) if (d.userId === userId) this.exportedDocuments.delete(id);
+    for (const [id, e] of this.flockEvents.entries()) if (e.userId === userId) this.flockEvents.delete(id);
+    for (const [id, t] of this.flockTreatments.entries()) if (t.userId === userId) this.flockTreatments.delete(id);
+    for (const [id, b] of this.bloodlinesMap.entries()) if (b.userId === userId) this.bloodlinesMap.delete(id);
+    for (const [id, l] of this.geneticLinesMap.entries()) if (l.userId === userId) this.geneticLinesMap.delete(id);
+    for (const [id, ab] of this.animalBloodlinesMap.entries()) if (ab.userId === userId) this.animalBloodlinesMap.delete(id);
+    this.farmSettings.delete(userId);
+  }
   async getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]> { return [...this.flockEvents.values()].filter(e => e.userId === userId); }
   async getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined> { const e = this.flockEvents.get(id); return e?.userId === userId ? e : undefined; }
   async createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, "userId">): Promise<FlockHealthEvent> { const id = this.nextId("genericSeq"); const v = { id, ...event, userId, createdAt: this.now() } as FlockHealthEvent; this.flockEvents.set(id, v); return v; }

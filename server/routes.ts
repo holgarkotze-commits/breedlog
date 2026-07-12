@@ -10,6 +10,23 @@ import { parse } from "csv-parse/sync";
 import { buildBreedLogCsvContent, buildBreedLogCsvRows, parseBreedLogCsvRecords, buildBreedLogImportTemplateCsv } from "@shared/import-export";
 import { buildBreedLogSimulationDataset } from "@shared/breedlog-simulation";
 import { MASTER_SIMULATION_ACCESS_CODE, MASTER_SIMULATION_BATCH_MARKER, MASTER_SIMULATION_MAX_DEVICES, isMasterSimulationCode } from "@shared/master-simulation";
+import {
+  EntitlementDeniedError,
+  applyBillingEvent,
+  assertCanCreateAnimal,
+  billingEventSchema,
+  getEntitlementState,
+  projectDowngradedAnimalVisibility,
+  reserveUsage,
+  verifyBillingSignature,
+} from "./commercial";
+import {
+  BackupRejectedError,
+  createWorkspaceBackup,
+  previewWorkspaceBackup,
+  restoreWorkspaceBackup,
+  type EncryptedBreedLogBackup,
+} from "./backup";
 
 // Helper to extract userId from device session
 function getUserId(req: Request): string {
@@ -92,6 +109,42 @@ export async function registerRoutes(
   // Register BreedLog AI Assistant routes
   registerAIRoutes(app);
 
+  // === COMMERCIAL ENTITLEMENTS AND BILLING ===
+  app.get("/api/entitlements/me", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    const entitlement = await getEntitlementState(storage, userId);
+    const animals = await storage.getAnimals(userId, {});
+    const downgradeProjection = projectDowngradedAnimalVisibility(animals);
+    res.json({
+      entitlement,
+      downgradeProjection: {
+        visibleAnimalIds: downgradeProjection.visible.map((animal) => animal.id),
+        hiddenAnimalIds: downgradeProjection.hidden.map((animal) => animal.id),
+        rule: downgradeProjection.rule,
+      },
+    });
+  });
+
+  app.post("/api/billing/webhook/:provider", async (req, res) => {
+    try {
+      const rawBody = JSON.stringify(req.body ?? {});
+      const provider = String(req.params.provider || "");
+      const signature = req.header("X-BreedLog-Signature");
+      const secret = process.env.BILLING_WEBHOOK_SECRET;
+      if (!verifyBillingSignature(rawBody, signature, secret)) {
+        return res.status(401).json({ message: "Invalid billing webhook signature" });
+      }
+      const event = billingEventSchema.parse({ ...req.body, provider });
+      const result = await applyBillingEvent(storage, event);
+      res.status(result.idempotent ? 200 : 202).json(result);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      throw err;
+    }
+  });
+
   // === ANIMALS ===
   // All animal routes now require authentication and filter by userId
   app.get(api.animals.list.path, requireAuth, async (req, res) => {
@@ -166,6 +219,7 @@ export async function registerRoutes(
       }
       const input = api.animals.create.input.parse(req.body);
       const createInput = idempotencyKey ? { ...input, clientId: idempotencyKey } : input;
+      await assertCanCreateAnimal(storage, userId);
       const animal = await storage.createAnimal(userId, createInput);
       res.status(201).json(animal);
     } catch (err) {
@@ -191,6 +245,12 @@ export async function registerRoutes(
         return res.status(400).json({
           message: err.message,
           field: "name",
+        });
+      }
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({
+          message: err.message,
+          code: err.code,
         });
       }
       if (req.header("X-Idempotency-Key")) {
@@ -841,6 +901,12 @@ export async function registerRoutes(
       if (!name || !documentType || !subfolder) {
         return res.status(400).json({ message: "Missing required fields" });
       }
+      const quotaClass = metadata?.quotaClass;
+      if (quotaClass === "individual_pdf") {
+        await reserveUsage(storage, userId, "individualPdfExports");
+      } else if (quotaClass === "batch_pdf") {
+        await reserveUsage(storage, userId, "batchPdfExports");
+      }
       const doc = await storage.createExportedDocument(userId, {
         name,
         documentType,
@@ -850,6 +916,9 @@ export async function registerRoutes(
       });
       res.status(201).json(doc);
     } catch (err: any) {
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
       console.error("Create exported doc error:", err);
       res.status(500).json({ message: err.message });
     }
@@ -863,6 +932,58 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Delete exported doc error:", err);
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  // === ENCRYPTED BREEDLOG BACKUPS ===
+  app.post("/api/backups/manual", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const backup = await createWorkspaceBackup(storage, userId, {
+        manual: true,
+        passphrase: req.body?.passphrase,
+      });
+      res.status(201).json({
+        fileName: `breedlog-${userId.slice(0, 8)}-${backup.exportedAt.slice(0, 10)}.breedlogbackup`,
+        backup,
+      });
+    } catch (err: any) {
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      if (err instanceof BackupRejectedError) {
+        return res.status(400).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/backups/preview-restore", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const preview = previewWorkspaceBackup(req.body?.backup as EncryptedBreedLogBackup, userId, req.body?.passphrase);
+      res.json(preview);
+    } catch (err: any) {
+      if (err instanceof BackupRejectedError) {
+        return res.status(400).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/backups/restore", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const result = await restoreWorkspaceBackup(storage, userId, req.body?.backup as EncryptedBreedLogBackup, {
+        passphrase: req.body?.passphrase,
+        confirmOverwrite: req.body?.confirmOverwrite === true,
+      });
+      res.json(result);
+    } catch (err: any) {
+      if (err instanceof BackupRejectedError) {
+        return res.status(400).json({ message: err.message, code: err.code });
+      }
+      throw err;
     }
   });
 
@@ -1026,14 +1147,16 @@ export async function registerRoutes(
   app.post("/api/reset-all-data", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { confirmPhrase } = req.body;
+      const { confirmPhrase, backupBeforeReset, passphrase } = req.body;
       
       if (confirmPhrase !== "RESET BREEDLOG") {
         return res.status(400).json({ message: "Invalid confirmation phrase" });
       }
-      
+      const backup = backupBeforeReset
+        ? await createWorkspaceBackup(storage, userId, { manual: false, passphrase })
+        : null;
       await storage.clearAllData(userId);
-      res.json({ message: "All data cleared successfully" });
+      res.json({ message: "All data cleared successfully", backup });
     } catch (err: any) {
       console.error("Reset data error:", err);
       res.status(500).json({ message: err.message || "Failed to reset data" });

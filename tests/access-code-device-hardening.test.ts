@@ -4,7 +4,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 
-const BASE_URL = "http://127.0.0.1:5001";
+const BASE_URL = "http://127.0.0.1:5011";
 let server: ChildProcessWithoutNullStreams | null = null;
 let logs = "";
 
@@ -51,14 +51,14 @@ async function validateCode(code: string, deviceId: string, userAgent: string) {
 }
 
 before(async () => {
-  server = spawn("./node_modules/.bin/tsx", ["server/index.ts"], {
+  server = spawn(process.execPath, ["--import", "tsx/esm", "server/index.ts"], {
     env: {
       ...process.env,
       NODE_ENV: "test",
       USE_IN_MEMORY_STORAGE: "1",
       SESSION_SECRET: "test-secret",
       ADMIN_PIN: "1234",
-      PORT: "5001",
+      PORT: "5011",
     },
     stdio: "pipe",
     detached: true,
@@ -76,7 +76,12 @@ before(async () => {
 
 after(async () => {
   if (server && !server.killed) {
-    process.kill(-server.pid!, "SIGTERM");
+    try {
+      if (process.platform === "win32") server.kill("SIGTERM");
+      else process.kill(-server.pid!, "SIGTERM");
+    } catch {
+      try { server.kill("SIGTERM"); } catch { /* process already exited */ }
+    }
   }
 });
 
