@@ -27,6 +27,12 @@ import {
   restoreWorkspaceBackup,
   type EncryptedBreedLogBackup,
 } from "./backup";
+import {
+  AccountDeletionError,
+  cancelAccountDeletion,
+  getAccountDeletionState,
+  requestAccountDeletion,
+} from "./account-deletion";
 
 // Helper to extract userId from device session
 function getUserId(req: Request): string {
@@ -982,6 +988,41 @@ export async function registerRoutes(
     } catch (err: any) {
       if (err instanceof BackupRejectedError) {
         return res.status(400).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  // === ACCOUNT DELETION AND RECOVERY WINDOW ===
+  app.get("/api/account/deletion", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    res.json(await getAccountDeletionState(storage, userId));
+  });
+
+  app.post("/api/account/deletion", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const result = await requestAccountDeletion(storage, userId, {
+        typedConfirmation: req.body?.typedConfirmation,
+        exportBeforeDeletion: req.body?.exportBeforeDeletion === true,
+        passphrase: req.body?.passphrase,
+      });
+      res.status(202).json(result);
+    } catch (err) {
+      if (err instanceof AccountDeletionError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/account/deletion/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      res.json(await cancelAccountDeletion(storage, userId));
+    } catch (err) {
+      if (err instanceof AccountDeletionError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
       }
       throw err;
     }
