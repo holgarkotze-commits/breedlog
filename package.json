@@ -10,7 +10,7 @@
     "check": "tsc",
     "test": "npm run test:cert",
     "db:push": "drizzle-kit push",
-    "test:cert": "NODE_ENV=test USE_IN_MEMORY_STORAGE=1 tsx --test tests/*.test.ts",
+    "test:cert": "NODE_ENV=test USE_IN_MEMORY_STORAGE=1 tsx --test tests/**/*.test.ts",
     "test:browser-cert": "bash scripts/run-browser-cert.sh",
     "release:gate": "bash scripts/release-gate.sh",
     "seed:field-test:dry-run": "tsx scripts/seed-field-test-simulation.ts",

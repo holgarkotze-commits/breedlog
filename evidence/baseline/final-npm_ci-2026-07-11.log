@@ -13,3 +13,4 @@ npm error 403 on a server you do not have access to.
 npm error A complete log of this run can be found in: /root/.npm/_logs/2026-07-11T22_54_42_448Z-debug-0.log
 END: 2026-07-11T22:54:43Z
 EXIT_CODE: 1
+RESULT: BLOCKED

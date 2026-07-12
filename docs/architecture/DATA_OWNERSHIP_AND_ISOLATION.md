@@ -18,7 +18,7 @@ Current BreedLog identity is access-code and device based. `server/device-auth.t
 | Animal/status/parentage | `animals.id` | `userId` | `getAnimals`, `getAnimal`, `createAnimal`, `updateAnimal`, `deleteAnimal` filter/write by userId | Parent IDs are numeric; route/storage owner checks are mandatory. |
 | Mating/breeding/progeny | table IDs | `userId` | storage methods require userId; route calls pass effective userId | Relationship IDs require same-workspace validation discipline. |
 | Health/treatment/weight/performance | table IDs | `userId` | storage methods require userId | Low for reads; route validation gaps should be monitored. |
-| Images/documents/evaluations | table IDs | `userId` | storage methods require userId and animalId for images/evaluations | Base64 storage may increase privacy/logging risk. |
+| Images/documents/evaluations | table IDs | `userId` | reads are scoped by `userId`, but current image/evaluation create routes stamp caller `userId` onto the submitted `animalId` without first proving the animal belongs to that workspace | Cross-workspace foreign-key misuse must be closed in a future hardening phase. |
 | Export records | `exported_documents.id` | `userId` | `getExportedDocuments(userId, subfolder)` filters by userId | Export generation must keep using scoped inputs. |
 | Backup/import | CSV import routes and future backup surfaces | effective userId | CSV import creates records under current userId | Future `.breedlogbackup` not implemented in Phase 1. |
 

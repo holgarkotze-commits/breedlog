@@ -10,7 +10,7 @@
     "breedlogProductVersion": { "type": ["string", "null"] },
     "releaseChannel": { "enum": ["pending", "development", "staging", "production"] },
     "gitTag": { "type": ["string", "null"] },
-    "sourceCommit": { "type": ["string", "null"], "pattern": "^([a-f0-9]{40})?$" },
+    "sourceCommit": { "type": ["string", "null"], "pattern": "^[a-f0-9]{40}$" },
     "sourceBranch": { "type": ["string", "null"] },
     "buildTimestamp": { "type": ["string", "null"], "format": "date-time" },
     "artifacts": {
