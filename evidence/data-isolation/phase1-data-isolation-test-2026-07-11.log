@@ -1,0 +1,21 @@
+COMMAND: NODE_ENV=test USE_IN_MEMORY_STORAGE=1 ./node_modules/.bin/tsx --test tests/isolation/phase1-data-isolation.test.ts
+PWD: /workspace/breedlog
+NODE: v24.15.0
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+NPM: 11.4.2
+START: 2026-07-11T22:54:22Z
+✔ ordinary new workspace remains clean and cannot read master simulation records (2.979536ms)
+✔ normal workspaces cannot read each other's animals by ID and exports are scoped (0.940092ms)
+✔ U2A2ZAVQ is the only master simulation code and dataset is deterministic (73.43455ms)
+✔ Phase 1 fixture specification is deterministic and explicitly non-production (0.470069ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2515.036255
+END: 2026-07-11T22:54:25Z
+EXIT_CODE: 0
+RESULT: PASS

@@ -1,0 +1,14 @@
+COMMAND: git status --short
+PWD: /workspace/breedlog
+START: 2026-07-11T22:56:50Z
+?? docs/architecture/
+?? docs/governance/
+?? docs/release/RELEASE_MANIFEST.md
+?? docs/release/RELEASE_MANIFEST.schema.json
+?? docs/risks/
+?? evidence/
+?? tests/fixtures/
+?? tests/isolation/
+END: 2026-07-11T22:56:50Z
+EXIT_CODE: 0
+RESULT: PASS

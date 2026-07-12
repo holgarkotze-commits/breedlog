@@ -1,0 +1,77 @@
+COMMAND: npm run build
+PWD: /workspace/breedlog
+NODE: v24.15.0
+NPM: 11.4.2
+UNAME: Linux 910354fe1370 6.12.47 #1 SMP Mon Oct 27 10:01:15 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+START: 2026-07-11T22:52:21Z
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> rest-express@1.0.0 build
+> tsx script/build.ts
+
+building client...
+vite v7.3.3 building client environment for production...
+transforming...
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 2842 modules transformed.
+rendering chunks...
+[plugin vite:reporter]
+(!) /workspace/breedlog/client/src/lib/queryClient.ts is dynamically imported by /workspace/breedlog/client/src/hooks/use-analysis.ts, /workspace/breedlog/client/src/hooks/use-analysis.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-breeding.ts, /workspace/breedlog/client/src/hooks/use-breeding.ts, /workspace/breedlog/client/src/hooks/use-breeding.ts, /workspace/breedlog/client/src/hooks/use-breeding.ts, /workspace/breedlog/client/src/hooks/use-breeding.ts, /workspace/breedlog/client/src/hooks/use-farm-settings.ts, /workspace/breedlog/client/src/hooks/use-flock-health.ts, /workspace/breedlog/client/src/hooks/use-flock-health.ts, /workspace/breedlog/client/src/hooks/use-mating-groups.ts, /workspace/breedlog/client/src/hooks/use-records.ts, /workspace/breedlog/client/src/hooks/use-records.ts, /workspace/breedlog/client/src/hooks/use-records.ts, /workspace/breedlog/client/src/hooks/use-records.ts, /workspace/breedlog/client/src/pages/Animals.tsx, /workspace/breedlog/client/src/pages/Animals.tsx but also statically imported by /workspace/breedlog/client/src/App.tsx, /workspace/breedlog/client/src/components/BetaAccessGate.tsx, /workspace/breedlog/client/src/components/BreedLogAssistantPanel.tsx, /workspace/breedlog/client/src/components/Layout.tsx, /workspace/breedlog/client/src/hooks/use-auth.ts, /workspace/breedlog/client/src/hooks/use-exported-documents.ts, /workspace/breedlog/client/src/hooks/use-farm-settings.ts, /workspace/breedlog/client/src/hooks/use-flock-health.ts, /workspace/breedlog/client/src/hooks/use-mating-groups.ts, /workspace/breedlog/client/src/lib/sync-manager.ts, /workspace/breedlog/client/src/pages/Admin.tsx, /workspace/breedlog/client/src/pages/AnimalDetail.tsx, /workspace/breedlog/client/src/pages/Genetics.tsx, /workspace/breedlog/client/src/pages/ReportIssue.tsx, /workspace/breedlog/client/src/pages/Settings.tsx, dynamic import will not move module into another chunk.
+
+[plugin vite:reporter]
+(!) /workspace/breedlog/client/src/lib/indexeddb.ts is dynamically imported by /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-animals.ts but also statically imported by /workspace/breedlog/client/src/components/AnimalCard.tsx, /workspace/breedlog/client/src/components/NetworkStatusIndicator.tsx, /workspace/breedlog/client/src/hooks/use-analysis.ts, /workspace/breedlog/client/src/hooks/use-animals.ts, /workspace/breedlog/client/src/hooks/use-auth.ts, /workspace/breedlog/client/src/hooks/use-breeding.ts, /workspace/breedlog/client/src/hooks/use-farm-settings.ts, /workspace/breedlog/client/src/hooks/use-flock-health.ts, /workspace/breedlog/client/src/hooks/use-mating-groups.ts, /workspace/breedlog/client/src/hooks/use-records.ts, /workspace/breedlog/client/src/lib/sync-manager.ts, /workspace/breedlog/client/src/main.tsx, /workspace/breedlog/client/src/pages/Settings.tsx, dynamic import will not move module into another chunk.
+
+computing gzip size...
+../dist/public/index.html                                    4.09 kB │ gzip:   1.25 kB
+../dist/public/assets/breedlog-logo-mark-DetGHixo.png      149.08 kB
+../dist/public/assets/breedlog-logo-official-CqtNLydV.png  261.78 kB
+../dist/public/assets/index-DAymBJ2D.css                   115.32 kB │ gzip:  19.41 kB
+../dist/public/assets/version-DdxXkfzH.js                    0.08 kB │ gzip:   0.10 kB
+../dist/public/assets/collapsible-132N3tuX.js                0.11 kB │ gzip:   0.11 kB
+../dist/public/assets/progress-CIwYMxRK.js                   0.48 kB │ gzip:   0.33 kB
+../dist/public/assets/use-exported-documents-BOqEOZz8.js     0.88 kB │ gzip:   0.41 kB
+../dist/public/assets/tabs-D1o4Vzc3.js                       1.15 kB │ gzip:   0.48 kB
+../dist/public/assets/import-export-7xPM9qYx.js              1.65 kB │ gzip:   0.75 kB
+../dist/public/assets/form-BRmxAn4F.js                       1.72 kB │ gzip:   0.75 kB
+../dist/public/assets/image-compression-CrIAxEHU.js          1.76 kB │ gzip:   0.91 kB
+../dist/public/assets/alert-dialog-DSaRh2GX.js               2.07 kB │ gzip:   0.76 kB
+../dist/public/assets/use-mating-groups-B1SOXyRQ.js          2.55 kB │ gzip:   0.99 kB
+../dist/public/assets/PDFExportDialog-V91Yc0QQ.js            3.20 kB │ gzip:   1.27 kB
+../dist/public/assets/dropdown-menu-DZmLSvNP.js              3.85 kB │ gzip:   1.06 kB
+../dist/public/assets/stamboek-export-fields-CH97JIHe.js     3.87 kB │ gzip:   1.34 kB
+../dist/public/assets/lamb-stage-CaPRYuhh.js                 4.28 kB │ gzip:   1.53 kB
+../dist/public/assets/ReportIssue-BgCYEi4A.js                7.91 kB │ gzip:   2.72 kB
+../dist/public/assets/ImageCropDialog-BlVC4465.js            9.78 kB │ gzip:   3.32 kB
+../dist/public/assets/HealthEventDetail-B6sWPjV_.js         10.01 kB │ gzip:   3.27 kB
+../dist/public/assets/BreedingEventDetail-B1yq0cPB.js       11.62 kB │ gzip:   3.36 kB
+../dist/public/assets/Health-D4jdY4Fj.js                    17.21 kB │ gzip:   4.82 kB
+../dist/public/assets/Lambs-akM-GhT4.js                     21.01 kB │ gzip:   6.44 kB
+../dist/public/assets/MatingGroupDetail-CzTFW2vr.js         21.04 kB │ gzip:   6.33 kB
+../dist/public/assets/health-plan-guide-ez62M439.js         22.94 kB │ gzip:   6.51 kB
+../dist/public/assets/vendor-icons-BvBK0Xrm.js              24.76 kB │ gzip:   7.94 kB
+../dist/public/assets/Genetics-Bxqq93KB.js                  25.01 kB │ gzip:   6.31 kB
+../dist/public/assets/vendor-datefns-Dq0i6__N.js            25.15 kB │ gzip:   7.43 kB
+../dist/public/assets/Breeding-ojG2OcDY.js                  28.94 kB │ gzip:   7.73 kB
+../dist/public/assets/vendor-query-DwfDgsfM.js              33.26 kB │ gzip:   9.87 kB
+../dist/public/assets/Records-BW8z3Lm8.js                   37.86 kB │ gzip:   8.07 kB
+../dist/public/assets/Settings-Cxr2oJ3y.js                  43.39 kB │ gzip:  11.80 kB
+../dist/public/assets/Admin-stfMlO6y.js                     43.88 kB │ gzip:  10.39 kB
+../dist/public/assets/Help-CfwwHvqp.js                      57.27 kB │ gzip:  18.03 kB
+../dist/public/assets/Analysis-al6yPLV8.js                  59.31 kB │ gzip:  16.35 kB
+../dist/public/assets/AnimalDetail-CT7MIXXe.js              91.24 kB │ gzip:  23.05 kB
+../dist/public/assets/Animals-Cwqi3cfZ.js                  131.11 kB │ gzip:  23.81 kB
+../dist/public/assets/vendor-radix-CMPuhxEO.js             143.93 kB │ gzip:  45.40 kB
+../dist/public/assets/vendor-react-B6BYtiCC.js             234.78 kB │ gzip:  72.33 kB
+../dist/public/assets/index-B4sw1Avw.js                    237.10 kB │ gzip:  63.06 kB
+../dist/public/assets/vendor-charts-PtOlfStj.js            430.70 kB │ gzip: 114.59 kB
+✓ built in 12.18s
+building server...
+
+  dist/index.cjs  1.6mb ⚠️
+
+⚡ Done in 765ms
+END: 2026-07-11T22:52:40Z
+EXIT_CODE: 0
+RESULT: PASS

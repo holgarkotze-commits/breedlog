@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://breedlog.local/schemas/release-manifest.schema.json",
+  "title": "BreedLog Release Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifestSchemaVersion", "breedlogProductVersion", "releaseChannel", "gitTag", "sourceCommit", "sourceBranch", "buildTimestamp", "artifacts", "database", "mobile", "windows", "pwa", "legal", "cataloguePricingVersion", "environmentConfigurationVersion", "ciWorkflowRunReferences", "verification", "rollbackArtifactReferences", "approvalRecords", "knownLimitations", "generatedEvidenceIndex"],
+  "properties": {
+    "manifestSchemaVersion": { "const": "1.0.0" },
+    "breedlogProductVersion": { "type": ["string", "null"] },
+    "releaseChannel": { "enum": ["pending", "development", "staging", "production"] },
+    "gitTag": { "type": ["string", "null"] },
+    "sourceCommit": { "type": ["string", "null"], "pattern": "^[a-f0-9]{40}$" },
+    "sourceBranch": { "type": ["string", "null"] },
+    "buildTimestamp": { "type": ["string", "null"], "format": "date-time" },
+    "artifacts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["frontendArtifactHash", "backendImageDigest"],
+      "properties": { "frontendArtifactHash": { "type": ["string", "null"] }, "backendImageDigest": { "type": ["string", "null"] } }
+    },
+    "database": { "type": "object", "additionalProperties": false, "required": ["migrationIdentifiers", "migrationChecksums"], "properties": { "migrationIdentifiers": { "type": "array", "items": { "type": "string" } }, "migrationChecksums": { "type": "array", "items": { "type": "string" } } } },
+    "mobile": { "type": "object", "additionalProperties": false, "required": ["androidAabHash", "androidApkHash", "androidPackageName", "androidVersionCode", "androidVersionName", "androidSigningFingerprint"], "properties": { "androidAabHash": { "type": ["string", "null"] }, "androidApkHash": { "type": ["string", "null"] }, "androidPackageName": { "type": ["string", "null"] }, "androidVersionCode": { "type": ["integer", "null"] }, "androidVersionName": { "type": ["string", "null"] }, "androidSigningFingerprint": { "type": ["string", "null"] } } },
+    "windows": { "type": "object", "additionalProperties": false, "required": ["exeHash", "msiHash", "updaterHash", "publisher", "signingCertificateThumbprint", "updaterPublicKeyIdentifier"], "properties": { "exeHash": { "type": ["string", "null"] }, "msiHash": { "type": ["string", "null"] }, "updaterHash": { "type": ["string", "null"] }, "publisher": { "type": ["string", "null"] }, "signingCertificateThumbprint": { "type": ["string", "null"] }, "updaterPublicKeyIdentifier": { "type": ["string", "null"] } } },
+    "pwa": { "type": "object", "additionalProperties": false, "required": ["artifactIdentity"], "properties": { "artifactIdentity": { "type": ["string", "null"] } } },
+    "legal": { "type": "object", "additionalProperties": false, "required": ["documentVersions"], "properties": { "documentVersions": { "type": "array", "items": { "type": "string" } } } },
+    "cataloguePricingVersion": { "type": ["string", "null"] },
+    "environmentConfigurationVersion": { "type": ["string", "null"] },
+    "ciWorkflowRunReferences": { "type": "array", "items": { "type": "string" } },
+    "verification": { "type": "object", "additionalProperties": false, "required": ["stagingStatus", "productionStatus"], "properties": { "stagingStatus": { "enum": ["pending", "pass", "fail", "blocked", "not_applicable"] }, "productionStatus": { "enum": ["pending", "pass", "fail", "blocked", "not_applicable"] } } },
+    "rollbackArtifactReferences": { "type": "array", "items": { "type": "string" } },
+    "approvalRecords": { "type": "array", "items": { "type": "object" } },
+    "knownLimitations": { "type": "array", "items": { "type": "string" } },
+    "generatedEvidenceIndex": { "type": "array", "items": { "type": "string" } }
+  }
+}

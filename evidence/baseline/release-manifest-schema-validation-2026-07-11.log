@@ -1,0 +1,8 @@
+COMMAND: node -e JSON.parse schema
+PWD: /workspace/breedlog
+NODE: v24.15.0
+START: 2026-07-11T22:56:29Z
+schema json ok
+END: 2026-07-11T22:56:29Z
+EXIT_CODE: 0
+RESULT: PASS
