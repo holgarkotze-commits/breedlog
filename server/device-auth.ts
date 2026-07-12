@@ -27,9 +27,42 @@ declare global {
   }
 }
 
+// Resolve the HMAC/session secret. Production MUST provide SESSION_SECRET —
+// a predictable fallback there would let anyone forge 365-day device tokens.
+// Dev/test keep a fixed fallback so local boots and the test suite work
+// without extra configuration.
+export function getSessionSecret(env: NodeJS.ProcessEnv = process.env): string {
+  const secret = env.SESSION_SECRET;
+  if (secret && secret.length > 0) return secret;
+  if (env.NODE_ENV === "production") {
+    throw new Error(
+      "SESSION_SECRET must be set in production. Refusing to start with a predictable fallback secret.",
+    );
+  }
+  return "breedlog-dev-session-secret";
+}
+
+// Constant-time string comparison. Hashes both sides first so inputs of
+// different lengths are still compared in constant time.
+export function safeCompare(a: string, b: string): boolean {
+  const ha = crypto.createHash("sha256").update(a).digest();
+  const hb = crypto.createHash("sha256").update(b).digest();
+  return crypto.timingSafeEqual(ha, hb) && a.length === b.length;
+}
+
+// Validate an "AdminPin <pin>" Authorization header against ADMIN_PIN.
+// Returns false when ADMIN_PIN is not configured — never treats an
+// unconfigured PIN as a match.
+export function isAdminPinHeaderValid(authHeader: string | undefined): boolean {
+  const adminPin = process.env.ADMIN_PIN;
+  if (!adminPin) return false;
+  if (!authHeader || !authHeader.startsWith("AdminPin ")) return false;
+  return safeCompare(authHeader.substring(9), adminPin);
+}
+
 // Generate a secure device token
 export function generateDeviceToken(deviceId: string): string {
-  const secret = process.env.SESSION_SECRET || "fallback-secret";
+  const secret = getSessionSecret();
   const timestamp = Date.now().toString(36);
   const payload = `${deviceId}:${timestamp}`;
   const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex").substring(0, 16);
@@ -39,21 +72,21 @@ export function generateDeviceToken(deviceId: string): string {
 // Validate device token
 export function validateDeviceToken(token: string): { valid: boolean; deviceId?: string } {
   try {
-    const secret = process.env.SESSION_SECRET || "fallback-secret";
+    const secret = getSessionSecret();
     const parts = token.split(":");
     if (parts.length !== 3) return { valid: false };
-    
+
     const [deviceId, timestamp, signature] = parts;
     const payload = `${deviceId}:${timestamp}`;
     const expectedSig = crypto.createHmac("sha256", secret).update(payload).digest("hex").substring(0, 16);
-    
-    if (signature !== expectedSig) return { valid: false };
-    
+
+    if (!safeCompare(signature, expectedSig)) return { valid: false };
+
     // Token valid for 365 days
     const tokenTime = parseInt(timestamp, 36);
     const maxAge = 365 * 24 * 60 * 60 * 1000;
     if (Date.now() - tokenTime > maxAge) return { valid: false };
-    
+
     return { valid: true, deviceId };
   } catch {
     return { valid: false };
@@ -75,7 +108,7 @@ export function setupDeviceAuth(app: Express) {
       });
   
   app.use(session({
-    secret: process.env.SESSION_SECRET || "breedlog-dev-session-secret",
+    secret: getSessionSecret(),
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
@@ -159,24 +192,16 @@ export const requireDeviceAuth = (req: Request, res: Response, next: NextFunctio
 
 // Middleware to require admin access (via ADMIN_PIN)
 export const requireAdminPin = (req: Request, res: Response, next: NextFunction) => {
-  const authHeader = req.headers.authorization;
-  const adminPin = process.env.ADMIN_PIN;
-  
   // Check Authorization header first (more reliable than session cookies)
-  if (authHeader && authHeader.startsWith("AdminPin ")) {
-    const pin = authHeader.substring(9);
-    if (pin === adminPin) {
-      console.log("[Admin Middleware] Authorized via header");
-      return next();
-    }
+  if (isAdminPinHeaderValid(req.headers.authorization)) {
+    return next();
   }
-  
+
   // Fall back to session check
-  console.log("[Admin Middleware] Session ID:", req.sessionID, "isAdmin:", req.session?.isAdmin);
   if (req.session?.isAdmin) {
     return next();
   }
-  
+
   return res.status(403).json({ message: "Admin access required" });
 };
 
@@ -320,7 +345,7 @@ export function registerDeviceAuthRoutes(app: Express) {
       return res.status(500).json({ message: "Admin PIN not configured" });
     }
     
-    if (pin === adminPin) {
+    if (typeof pin === "string" && safeCompare(pin, adminPin)) {
       req.session.isAdmin = true;
       req.session.save((err) => {
         if (err) {

@@ -139,8 +139,17 @@ async function runStartupMigrations() {
     return;
   }
 
+  // Serialize concurrent startups. The CI test suite boots several server
+  // processes against the same database in parallel; concurrent
+  // CREATE TABLE IF NOT EXISTS statements race inside Postgres and one of
+  // them fails with 23505 on pg_type_typname_nsp_index. A session-level
+  // advisory lock makes whichever process gets there first run the
+  // migrations while the others wait, then run the same (now no-op) DDL.
+  const MIGRATION_LOCK_KEY = 812739041; // arbitrary app-wide constant
+
   const client = await pool.connect();
   try {
+    await client.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
     // Ensure baseline schema exists (supports clean dev/test boot with in-memory DB)
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -296,7 +305,17 @@ async function runStartupMigrations() {
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS device_type varchar DEFAULT 'unknown';
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS last_online_check timestamp DEFAULT now();
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS offline_grace_start timestamp;
-      ALTER TABLE user_activations ALTER COLUMN expires_at DROP NOT NULL;
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'user_activations' AND column_name = 'expires_at'
+        ) THEN
+          ALTER TABLE user_activations ALTER COLUMN expires_at DROP NOT NULL;
+        END IF;
+      END $$;
     `);
     await client.query(`
       ALTER TABLE animals ADD COLUMN IF NOT EXISTS raw_tag text;
@@ -351,6 +370,10 @@ async function runStartupMigrations() {
     console.error("[Startup] Migration error:", err);
     throw err;
   } finally {
+    // Release the advisory lock before returning the connection to the pool.
+    // If the connection is already broken the unlock is a no-op (session
+    // locks die with the session), so a failure here is safe to swallow.
+    await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]).catch(() => {});
     client.release();
   }
 }

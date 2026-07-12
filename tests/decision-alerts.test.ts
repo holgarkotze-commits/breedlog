@@ -55,7 +55,7 @@ describe("generateHealthFollowUpAlerts", () => {
       { id: 1, nextFollowUpDate: "2026-06-25", eventName: "Dosing" },
       { id: 2, nextFollowUpDate: "2026-07-01", eventName: "Vaccination" },
     ];
-    const alerts = generateHealthFollowUpAlerts(events);
+    const alerts = generateHealthFollowUpAlerts(events, today);
     const critical = alerts.find((a) => a.severity === "critical");
     assert.ok(critical);
     assert.ok(critical!.title.includes("Overdue"));
@@ -63,7 +63,7 @@ describe("generateHealthFollowUpAlerts", () => {
 
   it("returns due-soon alert for follow-ups within 7 days", () => {
     const events = [{ id: 3, nextFollowUpDate: "2026-07-07", eventName: "Checkup" }];
-    const alerts = generateHealthFollowUpAlerts(events);
+    const alerts = generateHealthFollowUpAlerts(events, today);
     const soon = alerts.find((a) => a.severity === "due-soon");
     assert.ok(soon);
     assert.ok(soon!.title.includes("Due This Week") || soon!.title.includes("Due Soon"));
@@ -71,13 +71,13 @@ describe("generateHealthFollowUpAlerts", () => {
 
   it("returns no alerts when no follow-up dates", () => {
     const events = [{ id: 4, eventName: "Treatment" }];
-    const alerts = generateHealthFollowUpAlerts(events);
+    const alerts = generateHealthFollowUpAlerts(events, today);
     assert.equal(alerts.length, 0);
   });
 
   it("returns no alerts for far-future follow-ups (30 days out)", () => {
     const events = [{ id: 5, nextFollowUpDate: "2026-08-15", eventName: "Annual Vax" }];
-    const alerts = generateHealthFollowUpAlerts(events);
+    const alerts = generateHealthFollowUpAlerts(events, today);
     assert.equal(alerts.length, 0);
   });
 });

@@ -74,9 +74,10 @@ export function generateLambingSeasonAlert(today: Date): DecisionAlert | null {
 }
 
 export function generateHealthFollowUpAlerts(
-  flockEvents: Array<{ id: number | string; nextFollowUpDate?: string | null; eventName?: string | null }>
+  flockEvents: Array<{ id: number | string; nextFollowUpDate?: string | null; eventName?: string | null }>,
+  referenceDate: Date = new Date()
 ): DecisionAlert[] {
-  const today = new Date();
+  const today = new Date(referenceDate);
   today.setHours(0, 0, 0, 0);
   const alerts: DecisionAlert[] = [];
 
@@ -120,9 +121,10 @@ export function generateHealthFollowUpAlerts(
 }
 
 export function generateBreedingWindowAlerts(
-  matingGroups: Array<{ id: number | string; name?: string | null; dateOut?: string | null }>
+  matingGroups: Array<{ id: number | string; name?: string | null; dateOut?: string | null }>,
+  referenceDate: Date = new Date()
 ): DecisionAlert[] {
-  const today = new Date();
+  const today = new Date(referenceDate);
   today.setHours(0, 0, 0, 0);
   const alerts: DecisionAlert[] = [];
 
@@ -157,8 +159,8 @@ type LambAlertAnimal = {
   weight100Day?: string | null;
 };
 
-export function generateLambingFollowUpAlerts(animals: LambAlertAnimal[]): DecisionAlert[] {
-  const today = new Date();
+export function generateLambingFollowUpAlerts(animals: LambAlertAnimal[], referenceDate: Date = new Date()): DecisionAlert[] {
+  const today = new Date(referenceDate);
   today.setHours(0, 0, 0, 0);
   const alerts: DecisionAlert[] = [];
 
@@ -246,11 +248,11 @@ export function generateAllAlerts(opts: {
   const lambing = generateLambingSeasonAlert(today);
   if (lambing) all.push(lambing);
 
-  all.push(...generateHealthFollowUpAlerts(opts.flockHealthEvents));
-  all.push(...generateBreedingWindowAlerts(opts.matingGroups));
+  all.push(...generateHealthFollowUpAlerts(opts.flockHealthEvents, today));
+  all.push(...generateBreedingWindowAlerts(opts.matingGroups, today));
 
   if (opts.animals && opts.animals.length > 0) {
-    all.push(...generateLambingFollowUpAlerts(opts.animals));
+    all.push(...generateLambingFollowUpAlerts(opts.animals, today));
     const pedigreeAlert = generatePedigreeIncompletenessAlert(opts.animals);
     if (pedigreeAlert) all.push(pedigreeAlert);
   }

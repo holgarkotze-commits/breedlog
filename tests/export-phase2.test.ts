@@ -109,6 +109,15 @@ test('individual export remains portrait orientation', () => {
   assert.match(detail, /@page\s*\{\s*size:\s*A4 portrait/);
 });
 
+test('individual export uses true A4 portrait page size with 10mm margin', () => {
+  assert.match(detail, /@page\s*\{\s*size:\s*A4 portrait;\s*margin:\s*10mm;\s*\}/);
+});
+
+test('individual export page fills the printable A4 area (190mm x 277mm content box)', () => {
+  assert.match(detail, /\.page\s*\{[^}]*width:\s*190mm/);
+  assert.match(detail, /\.page\s*\{[^}]*min-height:\s*277mm/);
+});
+
 test('individual export has canonical dark gradient footer ribbon', () => {
   assert.match(detail, /linear-gradient\(135deg, #1a1a1a 0%, #2d2d2d 100%\)/);
   assert.match(detail, /color:\s*#FFC300/);
@@ -116,8 +125,8 @@ test('individual export has canonical dark gradient footer ribbon', () => {
 });
 
 test('individual export footer is absolutely positioned to page bottom', () => {
-  assert.match(detail, /position:\s*absolute/);
-  assert.match(detail, /bottom:\s*6mm/);
+  assert.match(detail, /\.footer\s*\{[^}]*position:\s*absolute/);
+  assert.match(detail, /\.footer\s*\{[^}]*bottom:\s*0/);
 });
 
 test('individual export logo matches canonical 60px size', () => {
@@ -132,38 +141,58 @@ test('individual export has canonical header structure (logo-left, farm-centre, 
 });
 
 // ---------------------------------------------------------------------------
-// 4. Family tree / pedigree export — real lineage data
+// 4. Family tree / pedigree export — real lineage data, single page only
 // ---------------------------------------------------------------------------
 
-test('individual family tree export uses real sire and dam from animal data', () => {
+test('individual export uses real sire and dam from animal data', () => {
   assert.match(detail, /animal\.sire/);
   assert.match(detail, /animal\.dam/);
-  assert.match(detail, /buildFamilyTreePage/);
 });
 
-test('family tree export shows tag IDs from real lineage (sire.tagId / dam.tagId)', () => {
-  assert.match(detail, /sire\?\.tagId/);
-  assert.match(detail, /dam\?\.tagId/);
+test('pedigree section shows tag IDs from real lineage (sireAnimal/damAnimal tagId)', () => {
+  assert.match(detail, /sireAnimal\?\.tagId/);
+  assert.match(detail, /damAnimal\?\.tagId/);
 });
 
-test('family tree export gracefully handles missing ancestors (no fake hardcoded names)', () => {
+test('pedigree section gracefully handles missing ancestors (no fake hardcoded names)', () => {
   assert.match(detail, /externalSireInfo.*Unknown|Unknown.*externalSireInfo/s);
   assert.match(detail, /externalDamInfo.*Unknown|Unknown.*externalDamInfo/s);
   assert.ok(!detail.includes('"John Smith"'), 'No fake hardcoded farmer name');
   assert.ok(!detail.includes('"Ram001"'), 'No fake hardcoded animal tag');
 });
 
-test('family tree page uses landscape orientation for pedigree view', () => {
-  assert.match(detail, /class="page landscape"/);
-  assert.match(detail, /\.page\.landscape.*width:\s*277mm/s);
+test('normal individual export does not create a duplicate Family Tree / Pedigree Certificate page', () => {
+  assert.ok(!detail.includes('buildFamilyTreePage'), 'Duplicate landscape family-tree page builder must be removed');
+  assert.ok(!detail.includes('Family Tree / Pedigree Certificate'), 'Duplicate certificate page title must be removed');
+  assert.ok(!detail.includes('class="page landscape"'), 'No landscape second page should be generated');
+  assert.ok(!detail.includes('page-break-before:always'), 'No forced page break for a second page');
 });
 
-test('family tree page has its own header and dark footer', () => {
-  const treePageStart = detail.indexOf('buildFamilyTreePage');
-  const treeSection = detail.slice(treePageStart, treePageStart + 8000);
-  assert.match(treeSection, /class="header"/);
-  assert.match(treeSection, /class="footer"/);
-  assert.match(treeSection, /footer-branding/);
+test('export UI no longer exposes a separate duplicate "Export + Family Tree" option', () => {
+  assert.ok(!detail.includes('export-pdf-tree'), 'Duplicate family-tree export dropdown item must be removed');
+  assert.ok(!detail.includes('Export + Family Tree'), 'Duplicate family-tree export label must be removed');
+  assert.ok(!/handleExportPDF\(true\)/.test(detail), 'No code path should call handleExportPDF with includeTree=true');
+});
+
+test('main export HTML includes the visual family tree exactly once', () => {
+  const pedigreeSectionMatches = [...detail.matchAll(/const pedigreeSection = `/g)];
+  assert.equal(pedigreeSectionMatches.length, 1, 'pedigreeSection should be defined exactly once');
+  const gpCardMatches = [...detail.matchAll(/GP Sire's Father|Sire's Father/g)];
+  assert.ok(gpCardMatches.length >= 1, 'Grandparent labels should appear for the single embedded tree');
+});
+
+test('pedigree block shows subject, sire, dam, and all four grandparents', () => {
+  assert.match(detail, />SIRE</);
+  assert.match(detail, />DAM</);
+  assert.match(detail, /Sire's Father/);
+  assert.match(detail, /Sire's Mother/);
+  assert.match(detail, /Dam's Father/);
+  assert.match(detail, /Dam's Mother/);
+});
+
+test('pedigree block has a bounded max-height and cannot overflow the page/footer', () => {
+  assert.match(detail, /\.pedigree-wrap\s*\{[^}]*max-height:\s*\d+mm/);
+  assert.match(detail, /\.pedigree-wrap\s*\{[^}]*overflow:\s*hidden/);
 });
 
 // ---------------------------------------------------------------------------
