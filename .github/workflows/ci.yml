@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - work
+      - breedlog-production-completion
   pull_request:
     branches:
       - main
@@ -60,6 +61,9 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Generate release pack
+        run: npm run release:pack
 
       - name: Push DB schema
         run: npm run db:push

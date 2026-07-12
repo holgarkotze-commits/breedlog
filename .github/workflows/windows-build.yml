@@ -1,0 +1,30 @@
+name: Windows Build Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  windows-blocker-gate:
+    name: Windows installer credential and source gate
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Report Windows blocker status
+        shell: pwsh
+        run: |
+          if (!(Test-Path src-tauri)) {
+            Write-Host "Windows/Tauri source is not present yet."
+            Write-Host "BLOCKED: create Windows app source and provide Authenticode/updater signing credentials before installer generation."
+            exit 78
+          }
+          if (-not $env:WINDOWS_SIGNING_CERT_BASE64) {
+            Write-Host "BLOCKED: WINDOWS_SIGNING_CERT_BASE64 is required as a repository secret for signed installer builds."
+            exit 78
+          }
+          npm ci
+          npm run build

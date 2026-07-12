@@ -1,0 +1,39 @@
+name: Android Build Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  android-blocker-gate:
+    name: Android credential and source gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Report Android blocker status
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -d android ]; then
+            echo "Android project source is not present yet."
+            echo "BLOCKED: create Capacitor/Android source and provide Play/signing credentials before release AAB generation."
+            exit 78
+          fi
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "BLOCKED: ANDROID_KEYSTORE_BASE64 is required as a repository secret for signed release builds."
+            exit 78
+          fi
+          ./gradlew --no-daemon :app:bundleRelease

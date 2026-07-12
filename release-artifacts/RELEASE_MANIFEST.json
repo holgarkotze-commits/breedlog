@@ -1,0 +1,73 @@
+{
+  "manifestSchemaVersion": "1.0.0",
+  "breedlogProductVersion": "1.0.0-production-completion-candidate",
+  "releaseChannel": "staging",
+  "gitTag": null,
+  "sourceCommit": "7af2ed0883576385849e39bb212ae126e7196357",
+  "sourceBranch": "breedlog-production-completion",
+  "buildTimestamp": "2026-07-12T22:38:23.754Z",
+  "artifacts": {
+    "frontendArtifactHash": "efaaf1d9de7c604a337c7161c120230074106d9d470a17b44550ac9602a822a5",
+    "backendImageDigest": "850470cb3332d6f12d1d08c38b4ab83d501a7ac5a0f731d34da70fa187605711"
+  },
+  "database": {
+    "migrationIdentifiers": [
+      "startup-idempotent-schema-migrations",
+      "drizzle-schema"
+    ],
+    "migrationChecksums": [
+      "d4af42addc17033078489682fbeca6cfb04ee51d46d4ad30d046af0ac24ae9f6",
+      "247832a0c44a6d4c40f9482207973863761aae78c46026fad22226cb934b70c8"
+    ]
+  },
+  "mobile": {
+    "androidAabHash": null,
+    "androidApkHash": null,
+    "androidPackageName": null,
+    "androidVersionCode": null,
+    "androidVersionName": null,
+    "androidSigningFingerprint": null
+  },
+  "windows": {
+    "exeHash": null,
+    "msiHash": null,
+    "updaterHash": null,
+    "publisher": "STITCH WORX",
+    "signingCertificateThumbprint": null,
+    "updaterPublicKeyIdentifier": null
+  },
+  "pwa": {
+    "artifactIdentity": "dist/public/index.html"
+  },
+  "legal": {
+    "documentVersions": [
+      "privacy-policy-draft-2026-07-13",
+      "terms-of-service-draft-2026-07-13",
+      "subscription-terms-draft-2026-07-13",
+      "account-deletion-policy-draft-2026-07-13"
+    ]
+  },
+  "cataloguePricingVersion": "2026-07-locked-commercial-model",
+  "environmentConfigurationVersion": "production-completion-env-contract-2026-07-13",
+  "ciWorkflowRunReferences": [],
+  "verification": {
+    "stagingStatus": "pending",
+    "productionStatus": "blocked"
+  },
+  "rollbackArtifactReferences": [
+    "docs/operations/RUNBOOKS.md#rollback"
+  ],
+  "approvalRecords": [],
+  "knownLimitations": [
+    "Live payment-provider activation is blocked pending merchant/provider decision and credentials.",
+    "Android signed release is blocked pending Google Play publisher and signing credentials.",
+    "Windows signed installer/update activation is blocked pending code-signing certificate and updater keys.",
+    "Production domain/TLS deployment is blocked pending breedlog.com DNS/hosting access.",
+    "Legal documents are implementation drafts and require professional legal review before production launch."
+  ],
+  "generatedEvidenceIndex": [
+    "evidence/access-code-device-hardening-focused.log",
+    "evidence/data-isolation/phase1-data-isolation-test-2026-07-11.log",
+    "evidence/production-completion-test-cert.log"
+  ]
+}
