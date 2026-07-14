@@ -28,6 +28,12 @@ import {
   type EncryptedBreedLogBackup,
 } from "./backup";
 import {
+  getAutomaticBackupStatus,
+  runAutomaticBackupForWorkspace,
+  runAutomaticBackupSweep,
+} from "./backup-jobs";
+import { resolveBackupStorageAdapter } from "./backup-storage";
+import {
   AccountDeletionError,
   cancelAccountDeletion,
   getAccountDeletionState,
@@ -57,6 +63,7 @@ function getUserId(req: Request): string {
 // Middleware to require device authentication
 const requireAuth = requireDeviceAuth;
 const managedAuthProvider = createManagedAuthProvider(storage);
+const backupStorageAdapter = resolveBackupStorageAdapter();
 
 async function getCurrentDeviceUser(req: Request) {
   const deviceId = getDeviceId(req);
@@ -1215,6 +1222,42 @@ export async function registerRoutes(
       }
       throw err;
     }
+  });
+
+  app.get("/api/backups/automatic/status", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    res.json(await getAutomaticBackupStatus(storage, userId));
+  });
+
+  app.post("/api/backups/automatic/run", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const result = await runAutomaticBackupForWorkspace(storage, backupStorageAdapter, userId, {
+        now: req.body?.now ? new Date(req.body.now) : undefined,
+        force: req.body?.force === true,
+        passphrase: req.body?.passphrase,
+      });
+      res.status(result.status === "skipped" ? 200 : 201).json(result);
+    } catch (err: any) {
+      if (err instanceof BackupRejectedError) {
+        return res.status(400).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/admin/backups/automatic/run", requireAdminPin, async (req, res) => {
+    const requestedWorkspace = typeof req.body?.workspaceUserId === "string" ? req.body.workspaceUserId : undefined;
+    const results = requestedWorkspace
+      ? [await runAutomaticBackupForWorkspace(storage, backupStorageAdapter, requestedWorkspace, {
+          now: req.body?.now ? new Date(req.body.now) : undefined,
+          force: req.body?.force === true,
+          passphrase: req.body?.passphrase,
+        })]
+      : await runAutomaticBackupSweep(storage, backupStorageAdapter, {
+          now: req.body?.now ? new Date(req.body.now) : undefined,
+        });
+    res.json({ results });
   });
 
   // === ACCOUNT DELETION AND RECOVERY WINDOW ===

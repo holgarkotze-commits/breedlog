@@ -220,6 +220,9 @@ export interface IStorage {
   // System Settings (global app config)
   getSystemSetting(key: string): Promise<string | undefined>;
   setSystemSetting(key: string, value: string, description?: string): Promise<void>;
+  deleteSystemSetting(key: string): Promise<void>;
+  listSystemSettings(prefix: string): Promise<Array<{ key: string; value: string }>>;
+  listWorkspaceUserIds(): Promise<string[]>;
 
   // Field Test Issue Reports
   createFieldIssue(data: { userId?: string; inviteCodeRef?: string; title: string; description: string; area: string; severity: string; deviceType?: string; appMode?: string; contactName?: string; currentRoute?: string; appVersion?: string }): Promise<import("@shared/schema").FieldIssue>;
@@ -1002,6 +1005,24 @@ export class DatabaseStorage implements IStorage {
       });
   }
 
+  async deleteSystemSetting(key: string): Promise<void> {
+    await db.delete(systemSettings).where(eq(systemSettings.key, key));
+  }
+
+  async listSystemSettings(prefix: string): Promise<Array<{ key: string; value: string }>> {
+    const pattern = `${prefix}%`;
+    const rows = await db.select({ key: systemSettings.key, value: systemSettings.value })
+      .from(systemSettings)
+      .where(sql`${systemSettings.key} LIKE ${pattern}`);
+    return rows;
+  }
+
+  async listWorkspaceUserIds(): Promise<string[]> {
+    const { users } = await import("@shared/models/auth");
+    const rows = await db.select({ id: users.id, sharedUserId: users.sharedUserId }).from(users);
+    return [...new Set(rows.map((row) => row.sharedUserId || row.id))];
+  }
+
   // === FIELD TEST ISSUES ===
   async createFieldIssue(data: { userId?: string; inviteCodeRef?: string; title: string; description: string; area: string; severity: string; deviceType?: string; appMode?: string; contactName?: string; currentRoute?: string; appVersion?: string }): Promise<FieldIssue> {
     const [issue] = await db.insert(fieldIssues).values({
@@ -1687,6 +1708,13 @@ export class InMemoryStorage implements IStorage {
   }
   async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
   async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }
+  async deleteSystemSetting(key: string): Promise<void> { this.settings.delete(key); }
+  async listSystemSettings(prefix: string): Promise<Array<{ key: string; value: string }>> {
+    return [...this.settings.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, value]) => ({ key, value }));
+  }
+  async listWorkspaceUserIds(): Promise<string[]> { return [...new Set([...this.users.values()].map((user) => user.sharedUserId || user.id))]; }
 
   private fieldIssueSeq = 1;
   private fieldIssuesMap = new Map<number, FieldIssue>();
