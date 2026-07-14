@@ -45,6 +45,8 @@ import {
   AccountDeletionError,
   cancelAccountDeletion,
   getAccountDeletionState,
+  isAccountSuspendedForDeletion,
+  processExpiredAccountDeletionQueue,
   requestAccountDeletion,
 } from "./account-deletion";
 import {
@@ -83,6 +85,14 @@ async function getCurrentDeviceUser(req: Request) {
     throw new ManagedAuthError("DEVICE_NOT_REGISTERED", "Device must be registered before account authentication.", 401);
   }
   return { deviceId, deviceUser };
+}
+
+function accountDeletionBypass(path: string): boolean {
+  return path.startsWith("/api/account/deletion")
+    || path.startsWith("/api/billing/webhook/")
+    || path === "/api/auth/logout"
+    || path === "/api/device/logout"
+    || path === "/api/beta/logout";
 }
 
 async function seedMasterSimulationIfNeeded(targetUserId: string, code: string) {
@@ -153,6 +163,20 @@ export async function registerRoutes(
 
   // Register BreedLog AI Assistant routes
   registerAIRoutes(app);
+
+  app.use(async (req, res, next) => {
+    const userId = getDeviceUserId(req);
+    if (!userId || accountDeletionBypass(req.path)) {
+      return next();
+    }
+    if (await isAccountSuspendedForDeletion(storage, userId)) {
+      return res.status(423).json({
+        message: "This account is suspended during the deletion recovery window. Cancel deletion to resume normal access.",
+        code: "ACCOUNT_DELETION_SUSPENDED",
+      });
+    }
+    return next();
+  });
 
   // === MANAGED ACCOUNT AUTHENTICATION ===
   app.get("/api/auth/me", requireAuth, async (req, res) => {
@@ -1399,6 +1423,15 @@ export async function registerRoutes(
       }
       throw err;
     }
+  });
+
+  app.post("/api/admin/account-deletion/process", requireAdminPin, async (req, res) => {
+    res.json({
+      results: await processExpiredAccountDeletionQueue(
+        storage,
+        req.body?.now ? new Date(req.body.now) : new Date(),
+      ),
+    });
   });
 
   // === FIELD TEST ISSUE REPORTS ===

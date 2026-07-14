@@ -5,6 +5,8 @@ import {
   cancelAccountDeletion,
   completeExpiredAccountDeletion,
   getAccountDeletionState,
+  isAccountSuspendedForDeletion,
+  processExpiredAccountDeletionQueue,
   requestAccountDeletion,
 } from "../server/account-deletion";
 import { previewWorkspaceBackup } from "../server/backup";
@@ -25,7 +27,9 @@ test("account deletion requires exact confirmation and creates 30-day recovery s
   assert.equal(result.backup, null);
   assert.equal(result.state.status, "pending");
   assert.equal(result.state.recoveryUntil, "2026-08-12T00:00:00.000Z");
+  assert.equal(result.state.suspendedAt, "2026-07-13T00:00:00.000Z");
   assert.equal((await getAccountDeletionState(storage, userId)).status, "pending");
+  assert.equal(await isAccountSuspendedForDeletion(storage, userId), true);
 });
 
 test("account deletion can export encrypted backup before deletion and be cancelled", async () => {
@@ -49,6 +53,7 @@ test("account deletion can export encrypted backup before deletion and be cancel
 
   const cancelled = await cancelAccountDeletion(storage, userId, new Date("2026-07-14T00:00:00Z"));
   assert.equal(cancelled.status, "cancelled");
+  assert.equal(await isAccountSuspendedForDeletion(storage, userId), false);
   assert.equal((await storage.getAnimals(userId, {})).length, 1);
 });
 
@@ -71,5 +76,38 @@ test("expired deletion completion clears workspace data after recovery window", 
   );
   const completed = await completeExpiredAccountDeletion(storage, userId, new Date("2026-08-13T00:00:00Z"));
   assert.equal(completed.status, "completed");
+  assert.ok(completed.legalTombstoneKey);
   assert.equal((await storage.getAnimals(userId, {})).length, 0);
+});
+
+test("deletion purge failure is retryable and queue worker completes it later", async () => {
+  const userId = "account-delete-retry";
+  await storage.clearAllData(userId);
+  await storage.createAnimal(userId, {
+    tagId: "DEL-003",
+    name: "Deletion Retry Ewe",
+    sex: "ewe",
+    status: "active",
+  });
+  await requestAccountDeletion(storage, userId, {
+    typedConfirmation: "DELETE MY BREEDLOG ACCOUNT",
+    now: new Date("2026-07-13T00:00:00Z"),
+  });
+
+  await assert.rejects(
+    () => completeExpiredAccountDeletion(storage, userId, new Date("2026-08-13T00:00:00Z"), {
+      purgeHandler: async () => {
+        throw new Error("simulated purge failure");
+      },
+    }),
+    (error) => error instanceof AccountDeletionError && error.code === "PURGE_FAILED",
+  );
+
+  const failedState = await getAccountDeletionState(storage, userId);
+  assert.equal(failedState.status, "purge_failed");
+  assert.equal(failedState.purgeRetryCount, 1);
+
+  const queueResults = await processExpiredAccountDeletionQueue(storage, new Date("2026-08-14T00:00:00Z"));
+  assert.equal(queueResults.find((row) => row.accountId === userId)?.status, "completed");
+  assert.equal((await getAccountDeletionState(storage, userId)).status, "completed");
 });

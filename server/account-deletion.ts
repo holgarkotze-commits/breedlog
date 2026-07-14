@@ -2,17 +2,23 @@ import type { IStorage } from "./storage";
 import { createWorkspaceBackup, type EncryptedBreedLogBackup } from "./backup";
 
 const DELETION_PREFIX = "account-deletion:";
+const DELETION_TOMBSTONE_PREFIX = "account-deletion-tombstone:";
 const RECOVERY_DAYS = 30;
 
 export type AccountDeletionState = {
   accountId: string;
-  status: "none" | "pending" | "cancelled" | "completed";
+  status: "none" | "pending" | "cancelled" | "purge_failed" | "completed";
   requestedAt?: string;
   recoveryUntil?: string;
   cancelledAt?: string;
   completedAt?: string;
+  suspendedAt?: string;
   exportBeforeDeletion: boolean;
   auditId?: string;
+  purgeRetryCount?: number;
+  lastPurgeError?: string;
+  lastPurgeAttemptAt?: string;
+  legalTombstoneKey?: string;
 };
 
 export class AccountDeletionError extends Error {
@@ -30,6 +36,10 @@ function key(accountId: string): string {
   return `${DELETION_PREFIX}${accountId}`;
 }
 
+function tombstoneKey(accountId: string): string {
+  return `${DELETION_TOMBSTONE_PREFIX}${accountId}`;
+}
+
 function addRecoveryWindow(now: Date): Date {
   return new Date(now.getTime() + RECOVERY_DAYS * 24 * 60 * 60 * 1000);
 }
@@ -41,6 +51,11 @@ export async function getAccountDeletionState(storage: IStorage, accountId: stri
     status: "none",
     exportBeforeDeletion: false,
   };
+}
+
+export async function isAccountSuspendedForDeletion(storage: IStorage, accountId: string): Promise<boolean> {
+  const state = await getAccountDeletionState(storage, accountId);
+  return state.status === "pending" || state.status === "purge_failed";
 }
 
 export async function requestAccountDeletion(
@@ -57,8 +72,10 @@ export async function requestAccountDeletion(
     status: "pending",
     requestedAt: now.toISOString(),
     recoveryUntil: addRecoveryWindow(now).toISOString(),
+    suspendedAt: now.toISOString(),
     exportBeforeDeletion: options.exportBeforeDeletion === true,
     auditId: `acctdel_${Buffer.from(`${accountId}:${now.toISOString()}`).toString("base64url").slice(0, 24)}`,
+    purgeRetryCount: 0,
   };
   const backup = state.exportBeforeDeletion
     ? await createWorkspaceBackup(storage, accountId, { passphrase: options.passphrase, manual: false, now })
@@ -76,22 +93,91 @@ export async function cancelAccountDeletion(storage: IStorage, accountId: string
     ...current,
     status: "cancelled",
     cancelledAt: now.toISOString(),
+    suspendedAt: undefined,
+    lastPurgeError: undefined,
   };
   await storage.setSystemSetting(key(accountId), JSON.stringify(state), "Account deletion cancellation state");
   return state;
 }
 
-export async function completeExpiredAccountDeletion(storage: IStorage, accountId: string, now = new Date()): Promise<AccountDeletionState> {
+async function finalizeDeletionPurge(
+  storage: IStorage,
+  accountId: string,
+  now: Date,
+  purgeHandler?: (accountId: string) => Promise<void>,
+) {
+  if (purgeHandler) {
+    await purgeHandler(accountId);
+  } else {
+    await storage.clearAllData(accountId);
+    await storage.deleteAccountDevices(accountId);
+  }
+}
+
+export async function completeExpiredAccountDeletion(
+  storage: IStorage,
+  accountId: string,
+  now = new Date(),
+  options: { purgeHandler?: (accountId: string) => Promise<void> } = {},
+): Promise<AccountDeletionState> {
   const current = await getAccountDeletionState(storage, accountId);
-  if (current.status !== "pending" || !current.recoveryUntil || new Date(current.recoveryUntil) > now) {
+  if (!["pending", "purge_failed"].includes(current.status) || !current.recoveryUntil || new Date(current.recoveryUntil) > now) {
     throw new AccountDeletionError("RECOVERY_WINDOW_ACTIVE", "The account deletion recovery window has not expired.");
   }
-  await storage.clearAllData(accountId);
-  const state: AccountDeletionState = {
-    ...current,
-    status: "completed",
-    completedAt: now.toISOString(),
-  };
-  await storage.setSystemSetting(key(accountId), JSON.stringify(state), "Completed account deletion audit state");
-  return state;
+  try {
+    await finalizeDeletionPurge(storage, accountId, now, options.purgeHandler);
+    const legalTombstoneKey = tombstoneKey(accountId);
+    await storage.setSystemSetting(legalTombstoneKey, JSON.stringify({
+      accountId,
+      completedAt: now.toISOString(),
+      auditId: current.auditId ?? null,
+      requestedAt: current.requestedAt ?? null,
+    }), "Minimal legal account deletion tombstone");
+    const state: AccountDeletionState = {
+      ...current,
+      status: "completed",
+      completedAt: now.toISOString(),
+      lastPurgeAttemptAt: now.toISOString(),
+      lastPurgeError: undefined,
+      legalTombstoneKey,
+    };
+    await storage.setSystemSetting(key(accountId), JSON.stringify(state), "Completed account deletion audit state");
+    return state;
+  } catch (error: any) {
+    const failedState: AccountDeletionState = {
+      ...current,
+      status: "purge_failed",
+      lastPurgeAttemptAt: now.toISOString(),
+      lastPurgeError: error?.message ?? "Unknown purge failure",
+      purgeRetryCount: (current.purgeRetryCount ?? 0) + 1,
+    };
+    await storage.setSystemSetting(key(accountId), JSON.stringify(failedState), "Failed account deletion purge state");
+    throw new AccountDeletionError("PURGE_FAILED", failedState.lastPurgeError ?? "Account deletion purge failed.", 500);
+  }
+}
+
+export async function processExpiredAccountDeletionQueue(
+  storage: IStorage,
+  now = new Date(),
+  options: { purgeHandler?: (accountId: string) => Promise<void> } = {},
+) {
+  const rows = await storage.listSystemSettings(DELETION_PREFIX);
+  const results: Array<{ accountId: string; status: "completed" | "skipped" | "failed"; reason?: string }> = [];
+  for (const row of rows) {
+    const state = JSON.parse(row.value) as AccountDeletionState;
+    if (!state.accountId || !state.recoveryUntil) {
+      continue;
+    }
+    if (new Date(state.recoveryUntil).getTime() > now.getTime()) {
+      results.push({ accountId: state.accountId, status: "skipped", reason: "recovery_window_active" });
+      continue;
+    }
+    try {
+      await completeExpiredAccountDeletion(storage, state.accountId, now, options);
+      results.push({ accountId: state.accountId, status: "completed" });
+    } catch (error: any) {
+      results.push({ accountId: state.accountId, status: "failed", reason: error?.message ?? "Unknown failure" });
+    }
+  }
+  return results;
 }
