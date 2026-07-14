@@ -33,6 +33,17 @@ import {
   getAccountDeletionState,
   requestAccountDeletion,
 } from "./account-deletion";
+import {
+  ManagedAuthError,
+  buildManagedAuthProfile,
+  createManagedAuthProvider,
+  loginManagedAccount,
+  registerManagedAccount,
+  requestPasswordRecovery,
+  resetPasswordWithToken,
+  revokeManagedDevice,
+  verifyAccountEmail,
+} from "./managed-auth";
 
 // Helper to extract userId from device session
 function getUserId(req: Request): string {
@@ -45,6 +56,19 @@ function getUserId(req: Request): string {
 
 // Middleware to require device authentication
 const requireAuth = requireDeviceAuth;
+const managedAuthProvider = createManagedAuthProvider(storage);
+
+async function getCurrentDeviceUser(req: Request) {
+  const deviceId = getDeviceId(req);
+  if (!deviceId) {
+    throw new ManagedAuthError("DEVICE_NOT_REGISTERED", "Device must be registered before account authentication.", 401);
+  }
+  const deviceUser = await storage.getUserByDeviceId(deviceId);
+  if (!deviceUser) {
+    throw new ManagedAuthError("DEVICE_NOT_REGISTERED", "Device must be registered before account authentication.", 401);
+  }
+  return { deviceId, deviceUser };
+}
 
 async function seedMasterSimulationIfNeeded(targetUserId: string, code: string) {
   if (!isMasterSimulationCode(code)) return;
@@ -114,6 +138,206 @@ export async function registerRoutes(
 
   // Register BreedLog AI Assistant routes
   registerAIRoutes(app);
+
+  // === MANAGED ACCOUNT AUTHENTICATION ===
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    try {
+      const sessionAccountId = req.session.accountId;
+      const deviceId = getDeviceId(req);
+      const accountDevice = !sessionAccountId && deviceId ? await storage.getAccountDeviceByDeviceId(deviceId) : null;
+      const accountId = sessionAccountId || accountDevice?.accountId;
+      if (!accountId) {
+        return res.json({
+          authenticated: false,
+          provider: managedAuthProvider.providerName,
+          googleEnabled: managedAuthProvider.googleEnabled,
+        });
+      }
+      if (!req.session.accountId) {
+        req.session.accountId = accountId;
+      }
+      res.json({
+        authenticated: true,
+        provider: managedAuthProvider.providerName,
+        googleEnabled: managedAuthProvider.googleEnabled,
+        profile: await buildManagedAuthProfile(storage, accountId),
+      });
+    } catch (err) {
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/register", requireAuth, async (req, res) => {
+    try {
+      const body = z.object({
+        email: z.string().email(),
+        password: z.string().min(10),
+        deviceName: z.string().max(120).optional(),
+        platform: z.string().max(32).optional(),
+      }).parse(req.body);
+      const { deviceId, deviceUser } = await getCurrentDeviceUser(req);
+      const result = await registerManagedAccount(storage, managedAuthProvider, {
+        email: body.email,
+        password: body.password,
+        deviceId,
+        deviceUserId: deviceUser.id,
+        deviceName: body.deviceName ?? deviceUser.deviceName ?? null,
+        platform: body.platform ?? null,
+      });
+      req.session.accountId = result.account.id;
+      req.session.userId = result.profile.workspaceUserId;
+      req.session.deviceId = deviceId;
+      res.status(201).json({
+        authenticated: true,
+        profile: result.profile,
+        verification: process.env.NODE_ENV === "production" ? { expiresAt: result.verification.expiresAt.toISOString() } : {
+          token: result.verification.token,
+          expiresAt: result.verification.expiresAt.toISOString(),
+        },
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/login", requireAuth, async (req, res) => {
+    try {
+      const body = z.object({
+        email: z.string().email(),
+        password: z.string().min(1),
+        deviceName: z.string().max(120).optional(),
+        platform: z.string().max(32).optional(),
+      }).parse(req.body);
+      const { deviceId, deviceUser } = await getCurrentDeviceUser(req);
+      const result = await loginManagedAccount(storage, managedAuthProvider, {
+        email: body.email,
+        password: body.password,
+        deviceId,
+        deviceUserId: deviceUser.id,
+        deviceName: body.deviceName ?? deviceUser.deviceName ?? null,
+        platform: body.platform ?? null,
+      });
+      req.session.accountId = result.account.id;
+      req.session.userId = result.workspaceUserId;
+      req.session.deviceId = deviceId;
+      res.json({ authenticated: true, profile: result.profile });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/logout", requireAuth, async (req, res) => {
+    req.session.accountId = undefined;
+    res.json({ success: true });
+  });
+
+  app.post("/api/auth/recovery/request", async (req, res) => {
+    try {
+      const body = z.object({ email: z.string().email() }).parse(req.body);
+      const result = await requestPasswordRecovery(storage, managedAuthProvider, body.email);
+      res.json(process.env.NODE_ENV === "production" ? { requested: true } : {
+        requested: true,
+        token: result.token,
+        expiresAt: result.expiresAt?.toISOString() ?? null,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/recovery/confirm", async (req, res) => {
+    try {
+      const body = z.object({
+        token: z.string().min(10),
+        newPassword: z.string().min(10),
+      }).parse(req.body);
+      const profile = await resetPasswordWithToken(storage, managedAuthProvider, body.token, body.newPassword);
+      res.json({ success: true, profile });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/verify-email", async (req, res) => {
+    try {
+      const body = z.object({ token: z.string().min(10) }).parse(req.body);
+      const profile = await verifyAccountEmail(storage, managedAuthProvider, body.token);
+      res.json({ success: true, profile });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.get("/api/auth/devices", requireAuth, async (req, res) => {
+    try {
+      const accountId = req.session.accountId;
+      if (!accountId) {
+        return res.status(401).json({ message: "Managed account session required", code: "ACCOUNT_SESSION_REQUIRED" });
+      }
+      res.json(await buildManagedAuthProfile(storage, accountId));
+    } catch (err) {
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/devices/revoke", requireAuth, async (req, res) => {
+    try {
+      const accountId = req.session.accountId;
+      if (!accountId) {
+        return res.status(401).json({ message: "Managed account session required", code: "ACCOUNT_SESSION_REQUIRED" });
+      }
+      const body = z.object({ deviceId: z.string().min(8) }).parse(req.body);
+      const currentDeviceId = getDeviceId(req);
+      if (currentDeviceId === body.deviceId) {
+        return res.status(400).json({ message: "Use logout on this device instead of self-revocation.", code: "CANNOT_REVOKE_CURRENT_DEVICE" });
+      }
+      res.json(await revokeManagedDevice(storage, accountId, body.deviceId));
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
 
   // === COMMERCIAL ENTITLEMENTS AND BILLING ===
   app.get("/api/entitlements/me", requireAuth, async (req, res) => {

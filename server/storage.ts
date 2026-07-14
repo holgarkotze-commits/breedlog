@@ -1,5 +1,12 @@
 import { db } from "./db";
 import crypto from "crypto";
+import type {
+  Account,
+  AccountAuditEvent,
+  AccountDevice,
+  AccountToken,
+  AccountWorkspace,
+} from "@shared/models/auth";
 import {
   animals,
   breedingEvents,
@@ -182,8 +189,8 @@ export interface IStorage {
   deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void>;
   
   // Device-based Users
-  getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null } | undefined>;
-  upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null }>;
+  getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null } | undefined>;
+  upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null }>;
   setSharedUserId(userId: string, sharedUserId: string | null): Promise<void>;
   // Creates a stub user with no deviceId, used as a standalone workspace identity
   // (e.g., when a device switches to an invite code that has no other primary device,
@@ -191,6 +198,24 @@ export interface IStorage {
   //  for two unrelated codes).
   createWorkspaceUser(label: string): Promise<{ id: string }>;
   updateUserLastSeen(userId: string): Promise<void>;
+
+  // Managed accounts
+  getAccountByEmail(email: string): Promise<Account | undefined>;
+  getAccountById(accountId: string): Promise<Account | undefined>;
+  createAccount(data: { email: string; passwordHash?: string | null; authProvider?: string; emailVerified?: boolean; googleSubject?: string | null }): Promise<Account>;
+  updateAccount(accountId: string, updates: Partial<Pick<Account, "passwordHash" | "emailVerified" | "emailVerifiedAt" | "recoveryRequired" | "lastLoginAt" | "status" | "googleSubject" | "updatedAt">>): Promise<Account | undefined>;
+  getAccountWorkspace(accountId: string): Promise<AccountWorkspace | undefined>;
+  linkAccountWorkspace(data: { accountId: string; workspaceUserId: string; legacyDeviceUserId?: string | null; migrationSource: string; migrationState?: string }): Promise<AccountWorkspace>;
+  getAccountDevices(accountId: string): Promise<AccountDevice[]>;
+  getAccountDeviceByDeviceId(deviceId: string): Promise<AccountDevice | undefined>;
+  upsertAccountDevice(data: { accountId: string; workspaceUserId: string; deviceUserId: string; deviceId: string; deviceName?: string | null; platform?: string | null; authProvider?: string; status?: string }): Promise<AccountDevice>;
+  revokeAccountDevice(accountId: string, deviceId: string, now?: Date): Promise<AccountDevice | undefined>;
+  deleteAccountDevices(accountId: string): Promise<void>;
+  createAccountToken(data: { accountId: string; tokenType: string; tokenHash: string; expiresAt: Date; metadata?: Record<string, unknown> | null }): Promise<AccountToken>;
+  getAccountToken(tokenType: string, tokenHash: string): Promise<AccountToken | undefined>;
+  consumeAccountToken(tokenId: string, now?: Date): Promise<void>;
+  createAccountAuditEvent(data: { accountId?: string | null; workspaceUserId?: string | null; deviceId?: string | null; eventType: string; result?: string; detail?: string | null; metadata?: Record<string, unknown> | null; occurredAt?: Date }): Promise<AccountAuditEvent>;
+  getAccountAuditEvents(accountId: string): Promise<AccountAuditEvent[]>;
   
   // System Settings (global app config)
   getSystemSetting(key: string): Promise<string | undefined>;
@@ -767,20 +792,20 @@ export class DatabaseStorage implements IStorage {
   }
   
   // === DEVICE-BASED USERS ===
-  async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null } | undefined> {
+  async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null } | undefined> {
     const { users } = await import("@shared/models/auth");
     const results = await db.select().from(users).where(eq(users.deviceId, deviceId));
     if (!results[0]) return undefined;
-    return { id: results[0].id, deviceId: results[0].deviceId!, sharedUserId: results[0].sharedUserId ?? null };
+    return { id: results[0].id, deviceId: results[0].deviceId!, sharedUserId: results[0].sharedUserId ?? null, deviceName: results[0].deviceName ?? null };
   }
   
-  async upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null }> {
+  async upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null }> {
     const { users } = await import("@shared/models/auth");
     const results = await db.insert(users).values({
       deviceId: data.deviceId,
       deviceName: data.deviceName || null,
     }).returning();
-    return { id: results[0].id, deviceId: results[0].deviceId!, sharedUserId: results[0].sharedUserId ?? null };
+    return { id: results[0].id, deviceId: results[0].deviceId!, sharedUserId: results[0].sharedUserId ?? null, deviceName: results[0].deviceName ?? null };
   }
   
   async setSharedUserId(userId: string, sharedUserId: string | null): Promise<void> {
@@ -800,6 +825,164 @@ export class DatabaseStorage implements IStorage {
   async updateUserLastSeen(userId: string): Promise<void> {
     const { users } = await import("@shared/models/auth");
     await db.update(users).set({ lastSeenAt: new Date() }).where(eq(users.id, userId));
+  }
+
+  async getAccountByEmail(email: string): Promise<Account | undefined> {
+    const { accounts } = await import("@shared/models/auth");
+    const normalizedEmail = email.trim().toLowerCase();
+    const results = await db.select().from(accounts).where(eq(accounts.email, normalizedEmail));
+    return results[0];
+  }
+
+  async getAccountById(accountId: string): Promise<Account | undefined> {
+    const { accounts } = await import("@shared/models/auth");
+    const results = await db.select().from(accounts).where(eq(accounts.id, accountId));
+    return results[0];
+  }
+
+  async createAccount(data: { email: string; passwordHash?: string | null; authProvider?: string; emailVerified?: boolean; googleSubject?: string | null }): Promise<Account> {
+    const { accounts } = await import("@shared/models/auth");
+    const results = await db.insert(accounts).values({
+      email: data.email.trim().toLowerCase(),
+      passwordHash: data.passwordHash ?? null,
+      authProvider: data.authProvider ?? "local",
+      emailVerified: data.emailVerified ?? false,
+      emailVerifiedAt: data.emailVerified ? new Date() : null,
+      googleSubject: data.googleSubject ?? null,
+    }).returning();
+    return results[0];
+  }
+
+  async updateAccount(accountId: string, updates: Partial<Pick<Account, "passwordHash" | "emailVerified" | "emailVerifiedAt" | "recoveryRequired" | "lastLoginAt" | "status" | "googleSubject" | "updatedAt">>): Promise<Account | undefined> {
+    const { accounts } = await import("@shared/models/auth");
+    const results = await db.update(accounts).set({ ...updates, updatedAt: new Date() }).where(eq(accounts.id, accountId)).returning();
+    return results[0];
+  }
+
+  async getAccountWorkspace(accountId: string): Promise<AccountWorkspace | undefined> {
+    const { accountWorkspaces } = await import("@shared/models/auth");
+    const results = await db.select().from(accountWorkspaces).where(eq(accountWorkspaces.accountId, accountId));
+    return results[0];
+  }
+
+  async linkAccountWorkspace(data: { accountId: string; workspaceUserId: string; legacyDeviceUserId?: string | null; migrationSource: string; migrationState?: string }): Promise<AccountWorkspace> {
+    const { accountWorkspaces } = await import("@shared/models/auth");
+    const results = await db.insert(accountWorkspaces).values({
+      accountId: data.accountId,
+      workspaceUserId: data.workspaceUserId,
+      legacyDeviceUserId: data.legacyDeviceUserId ?? null,
+      migrationSource: data.migrationSource,
+      migrationState: data.migrationState ?? "completed",
+    }).onConflictDoUpdate({
+      target: accountWorkspaces.accountId,
+      set: {
+        workspaceUserId: data.workspaceUserId,
+        legacyDeviceUserId: data.legacyDeviceUserId ?? null,
+        migrationSource: data.migrationSource,
+        migrationState: data.migrationState ?? "completed",
+        updatedAt: new Date(),
+      },
+    }).returning();
+    return results[0];
+  }
+
+  async getAccountDevices(accountId: string): Promise<AccountDevice[]> {
+    const { accountDevices } = await import("@shared/models/auth");
+    return db.select().from(accountDevices).where(eq(accountDevices.accountId, accountId));
+  }
+
+  async getAccountDeviceByDeviceId(deviceId: string): Promise<AccountDevice | undefined> {
+    const { accountDevices } = await import("@shared/models/auth");
+    const results = await db.select().from(accountDevices).where(eq(accountDevices.deviceId, deviceId));
+    return results[0];
+  }
+
+  async upsertAccountDevice(data: { accountId: string; workspaceUserId: string; deviceUserId: string; deviceId: string; deviceName?: string | null; platform?: string | null; authProvider?: string; status?: string }): Promise<AccountDevice> {
+    const { accountDevices } = await import("@shared/models/auth");
+    const results = await db.insert(accountDevices).values({
+      accountId: data.accountId,
+      workspaceUserId: data.workspaceUserId,
+      deviceUserId: data.deviceUserId,
+      deviceId: data.deviceId,
+      deviceName: data.deviceName ?? null,
+      platform: data.platform ?? null,
+      authProvider: data.authProvider ?? "local",
+      status: data.status ?? "active",
+      lastSeenAt: new Date(),
+    }).onConflictDoUpdate({
+      target: accountDevices.deviceId,
+      set: {
+        accountId: data.accountId,
+        workspaceUserId: data.workspaceUserId,
+        deviceUserId: data.deviceUserId,
+        deviceName: data.deviceName ?? null,
+        platform: data.platform ?? null,
+        authProvider: data.authProvider ?? "local",
+        status: data.status ?? "active",
+        revokedAt: null,
+        lastSeenAt: new Date(),
+        updatedAt: new Date(),
+      },
+    }).returning();
+    return results[0];
+  }
+
+  async revokeAccountDevice(accountId: string, deviceId: string, now = new Date()): Promise<AccountDevice | undefined> {
+    const { accountDevices } = await import("@shared/models/auth");
+    const results = await db.update(accountDevices).set({
+      status: "revoked",
+      revokedAt: now,
+      updatedAt: now,
+    }).where(and(eq(accountDevices.accountId, accountId), eq(accountDevices.deviceId, deviceId))).returning();
+    return results[0];
+  }
+
+  async deleteAccountDevices(accountId: string): Promise<void> {
+    const { accountDevices } = await import("@shared/models/auth");
+    await db.delete(accountDevices).where(eq(accountDevices.accountId, accountId));
+  }
+
+  async createAccountToken(data: { accountId: string; tokenType: string; tokenHash: string; expiresAt: Date; metadata?: Record<string, unknown> | null }): Promise<AccountToken> {
+    const { accountTokens } = await import("@shared/models/auth");
+    const results = await db.insert(accountTokens).values({
+      accountId: data.accountId,
+      tokenType: data.tokenType,
+      tokenHash: data.tokenHash,
+      expiresAt: data.expiresAt,
+      metadata: data.metadata ?? null,
+    }).returning();
+    return results[0];
+  }
+
+  async getAccountToken(tokenType: string, tokenHash: string): Promise<AccountToken | undefined> {
+    const { accountTokens } = await import("@shared/models/auth");
+    const results = await db.select().from(accountTokens).where(and(eq(accountTokens.tokenType, tokenType), eq(accountTokens.tokenHash, tokenHash)));
+    return results[0];
+  }
+
+  async consumeAccountToken(tokenId: string, now = new Date()): Promise<void> {
+    const { accountTokens } = await import("@shared/models/auth");
+    await db.update(accountTokens).set({ consumedAt: now }).where(eq(accountTokens.id, tokenId));
+  }
+
+  async createAccountAuditEvent(data: { accountId?: string | null; workspaceUserId?: string | null; deviceId?: string | null; eventType: string; result?: string; detail?: string | null; metadata?: Record<string, unknown> | null; occurredAt?: Date }): Promise<AccountAuditEvent> {
+    const { accountAuditEvents } = await import("@shared/models/auth");
+    const results = await db.insert(accountAuditEvents).values({
+      accountId: data.accountId ?? null,
+      workspaceUserId: data.workspaceUserId ?? null,
+      deviceId: data.deviceId ?? null,
+      eventType: data.eventType,
+      result: data.result ?? "success",
+      detail: data.detail ?? null,
+      metadata: data.metadata ?? null,
+      occurredAt: data.occurredAt ?? new Date(),
+    }).returning();
+    return results[0];
+  }
+
+  async getAccountAuditEvents(accountId: string): Promise<AccountAuditEvent[]> {
+    const { accountAuditEvents } = await import("@shared/models/auth");
+    return db.select().from(accountAuditEvents).where(eq(accountAuditEvents.accountId, accountId)).orderBy(desc(accountAuditEvents.occurredAt));
   }
   
   // === SYSTEM SETTINGS ===
@@ -1154,6 +1337,11 @@ export class InMemoryStorage implements IStorage {
   private inviteCodes = new Map<number, InviteCode>();
   private activations = new Map<number, UserActivation>();
   private settings = new Map<string, string>();
+  private accounts = new Map<string, Account>();
+  private accountWorkspacesMap = new Map<string, AccountWorkspace>();
+  private accountDevicesMap = new Map<string, AccountDevice>();
+  private accountTokensMap = new Map<string, AccountToken>();
+  private accountAuditMap = new Map<string, AccountAuditEvent>();
 
   private now() { return new Date(); }
   private nextId(counter: "animalSeq" | "breedingSeq" | "matingSeq" | "recordSeq" | "genericSeq" | "inviteSeq" | "activationSeq") {
@@ -1351,8 +1539,8 @@ export class InMemoryStorage implements IStorage {
   async getAllActiveActivations(): Promise<UserActivation[]> { return [...this.activations.values()].filter(a => a.status === "active"); }
   async getActivationsByCodeId(inviteCodeId: number): Promise<UserActivation[]> { return [...this.activations.values()].filter(a => a.inviteCodeId === inviteCodeId); }
   async deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void> { for (const [id, a] of this.activations.entries()) if (a.inviteCodeId === inviteCodeId) this.activations.delete(id); }
-  async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null } | undefined> { return [...this.users.values()].find(u => u.deviceId === deviceId); }
-  async upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null }> {
+  async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null } | undefined> { return [...this.users.values()].find(u => u.deviceId === deviceId); }
+  async upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null }> {
     const existing = await this.getUserByDeviceId(data.deviceId);
     if (existing) return existing;
     const id = crypto.randomUUID();
@@ -1367,6 +1555,136 @@ export class InMemoryStorage implements IStorage {
     return { id };
   }
   async updateUserLastSeen(_userId: string): Promise<void> {}
+  async getAccountByEmail(email: string): Promise<Account | undefined> {
+    const normalizedEmail = email.trim().toLowerCase();
+    return [...this.accounts.values()].find((account) => account.email === normalizedEmail);
+  }
+  async getAccountById(accountId: string): Promise<Account | undefined> { return this.accounts.get(accountId); }
+  async createAccount(data: { email: string; passwordHash?: string | null; authProvider?: string; emailVerified?: boolean; googleSubject?: string | null }): Promise<Account> {
+    const id = crypto.randomUUID();
+    const now = this.now();
+    const account: Account = {
+      id,
+      email: data.email.trim().toLowerCase(),
+      passwordHash: data.passwordHash ?? null,
+      authProvider: data.authProvider ?? "local",
+      emailVerified: data.emailVerified ?? false,
+      emailVerifiedAt: data.emailVerified ? now : null,
+      recoveryRequired: false,
+      googleSubject: data.googleSubject ?? null,
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+      lastLoginAt: null,
+    };
+    this.accounts.set(id, account);
+    return account;
+  }
+  async updateAccount(accountId: string, updates: Partial<Pick<Account, "passwordHash" | "emailVerified" | "emailVerifiedAt" | "recoveryRequired" | "lastLoginAt" | "status" | "googleSubject" | "updatedAt">>): Promise<Account | undefined> {
+    const existing = this.accounts.get(accountId);
+    if (!existing) return undefined;
+    const updated: Account = { ...existing, ...updates, updatedAt: this.now() };
+    this.accounts.set(accountId, updated);
+    return updated;
+  }
+  async getAccountWorkspace(accountId: string): Promise<AccountWorkspace | undefined> {
+    return [...this.accountWorkspacesMap.values()].find((workspace) => workspace.accountId === accountId);
+  }
+  async linkAccountWorkspace(data: { accountId: string; workspaceUserId: string; legacyDeviceUserId?: string | null; migrationSource: string; migrationState?: string }): Promise<AccountWorkspace> {
+    const existing = await this.getAccountWorkspace(data.accountId);
+    const now = this.now();
+    const row: AccountWorkspace = {
+      id: existing?.id ?? crypto.randomUUID(),
+      accountId: data.accountId,
+      workspaceUserId: data.workspaceUserId,
+      legacyDeviceUserId: data.legacyDeviceUserId ?? null,
+      migrationSource: data.migrationSource,
+      migrationState: data.migrationState ?? "completed",
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.accountWorkspacesMap.set(row.id, row);
+    return row;
+  }
+  async getAccountDevices(accountId: string): Promise<AccountDevice[]> {
+    return [...this.accountDevicesMap.values()].filter((device) => device.accountId === accountId);
+  }
+  async getAccountDeviceByDeviceId(deviceId: string): Promise<AccountDevice | undefined> {
+    return [...this.accountDevicesMap.values()].find((device) => device.deviceId === deviceId);
+  }
+  async upsertAccountDevice(data: { accountId: string; workspaceUserId: string; deviceUserId: string; deviceId: string; deviceName?: string | null; platform?: string | null; authProvider?: string; status?: string }): Promise<AccountDevice> {
+    const existing = [...this.accountDevicesMap.values()].find((device) => device.deviceId === data.deviceId);
+    const now = this.now();
+    const row: AccountDevice = {
+      id: existing?.id ?? crypto.randomUUID(),
+      accountId: data.accountId,
+      workspaceUserId: data.workspaceUserId,
+      deviceUserId: data.deviceUserId,
+      deviceId: data.deviceId,
+      deviceName: data.deviceName ?? null,
+      platform: data.platform ?? null,
+      authProvider: data.authProvider ?? "local",
+      status: data.status ?? "active",
+      lastSeenAt: now,
+      revokedAt: null,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    this.accountDevicesMap.set(row.id, row);
+    return row;
+  }
+  async revokeAccountDevice(accountId: string, deviceId: string, now = new Date()): Promise<AccountDevice | undefined> {
+    const existing = [...this.accountDevicesMap.values()].find((device) => device.accountId === accountId && device.deviceId === deviceId);
+    if (!existing) return undefined;
+    const updated: AccountDevice = { ...existing, status: "revoked", revokedAt: now, updatedAt: now };
+    this.accountDevicesMap.set(updated.id, updated);
+    return updated;
+  }
+  async deleteAccountDevices(accountId: string): Promise<void> {
+    for (const [id, device] of this.accountDevicesMap.entries()) if (device.accountId === accountId) this.accountDevicesMap.delete(id);
+  }
+  async createAccountToken(data: { accountId: string; tokenType: string; tokenHash: string; expiresAt: Date; metadata?: Record<string, unknown> | null }): Promise<AccountToken> {
+    const row: AccountToken = {
+      id: crypto.randomUUID(),
+      accountId: data.accountId,
+      tokenType: data.tokenType,
+      tokenHash: data.tokenHash,
+      expiresAt: data.expiresAt,
+      consumedAt: null,
+      metadata: data.metadata ?? null,
+      createdAt: this.now(),
+    };
+    this.accountTokensMap.set(row.id, row);
+    return row;
+  }
+  async getAccountToken(tokenType: string, tokenHash: string): Promise<AccountToken | undefined> {
+    return [...this.accountTokensMap.values()].find((token) => token.tokenType === tokenType && token.tokenHash === tokenHash);
+  }
+  async consumeAccountToken(tokenId: string, now = new Date()): Promise<void> {
+    const existing = this.accountTokensMap.get(tokenId);
+    if (!existing) return;
+    this.accountTokensMap.set(tokenId, { ...existing, consumedAt: now });
+  }
+  async createAccountAuditEvent(data: { accountId?: string | null; workspaceUserId?: string | null; deviceId?: string | null; eventType: string; result?: string; detail?: string | null; metadata?: Record<string, unknown> | null; occurredAt?: Date }): Promise<AccountAuditEvent> {
+    const row: AccountAuditEvent = {
+      id: crypto.randomUUID(),
+      accountId: data.accountId ?? null,
+      workspaceUserId: data.workspaceUserId ?? null,
+      deviceId: data.deviceId ?? null,
+      eventType: data.eventType,
+      result: data.result ?? "success",
+      detail: data.detail ?? null,
+      metadata: data.metadata ?? null,
+      occurredAt: data.occurredAt ?? this.now(),
+    };
+    this.accountAuditMap.set(row.id, row);
+    return row;
+  }
+  async getAccountAuditEvents(accountId: string): Promise<AccountAuditEvent[]> {
+    return [...this.accountAuditMap.values()]
+      .filter((event) => event.accountId === accountId)
+      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+  }
   async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
   async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }
 

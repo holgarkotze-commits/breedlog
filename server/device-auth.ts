@@ -10,6 +10,7 @@ declare module "express-session" {
   interface SessionData {
     deviceId?: string;
     userId?: string;
+    accountId?: string;
     isAdmin?: boolean;
   }
 }
@@ -154,6 +155,7 @@ export function setupDeviceAuth(app: Express) {
           // If this device shares a workspace with another device (same invite code),
           // use that device's userId so both devices read/write the same data.
           const effectiveUserId = user.sharedUserId || user.id;
+          const accountDevice = await storage.getAccountDeviceByDeviceId(validation.deviceId);
           req.deviceAuth = {
             userId: effectiveUserId,
             deviceId: validation.deviceId,
@@ -162,6 +164,7 @@ export function setupDeviceAuth(app: Express) {
           // Also sync to session for backwards compatibility
           req.session.deviceId = validation.deviceId;
           req.session.userId = effectiveUserId;
+          req.session.accountId = accountDevice?.accountId;
         }
       }
     }
