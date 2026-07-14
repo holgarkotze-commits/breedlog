@@ -52,14 +52,15 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: Build release AAB when signing secrets exist
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      - name: Conditionally build signed release AAB
         shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
-          cd android
-          ./gradlew --no-daemon :app:bundleRelease
-
-      - name: Note unsigned certification build
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 == '' }}
-        run: echo "Signed Android release remains externally blocked by unavailable signing secrets; debug certification artifact was built successfully."
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            cd android
+            ./gradlew --no-daemon :app:bundleRelease
+          else
+            echo "Signed Android release remains externally blocked by unavailable signing secrets; debug certification artifact was built successfully."
+          fi

@@ -41,8 +41,13 @@ jobs:
             src-tauri/target/release/bundle/msi/**
           if-no-files-found: error
 
-      - name: Note unsigned certification build
-        if: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 == '' }}
+      - name: Note signing status
         shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
         run: |
-          Write-Host "Signed Windows release remains externally blocked by unavailable Authenticode/updater signing credentials; unsigned certification artifacts were built successfully."
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERT_BASE64)) {
+            Write-Host "Signed Windows release remains externally blocked by unavailable Authenticode/updater signing credentials; unsigned certification artifacts were built successfully."
+          } else {
+            Write-Host "Windows signing secret is present; signed release activation can proceed in the dedicated release flow."
+          }
