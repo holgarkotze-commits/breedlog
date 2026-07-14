@@ -3,11 +3,11 @@
   "breedlogProductVersion": "1.0.0-production-completion-candidate",
   "releaseChannel": "staging",
   "gitTag": null,
-  "sourceCommit": "9cf7683df6bc4df156cc10f9c8cbe707df019ee2",
+  "sourceCommit": "745a9cdbb656f712ae3cb0e267af249d586acc52",
   "sourceBranch": "breedlog-production-completion",
-  "buildTimestamp": "2026-07-14T13:56:32.852Z",
+  "buildTimestamp": "2026-07-14T14:21:42.692Z",
   "artifacts": {
-    "frontendArtifactHash": "7f6c07b963c1253a105f5e5a45e78a5a5ad02fd435998e9a4d369062b3446a8c",
+    "frontendArtifactHash": "2596f0da08a0255659bf1dd7acf0a327fd8abf505b44af07e2bf8b9df9aa9f52",
     "backendImageDigest": "a98b3acdb3a53f79eb04e89a959223edc53bc0c058e55e82ec8ec0087777d1a3"
   },
   "database": {
@@ -23,7 +23,7 @@
   "mobile": {
     "androidAabHash": null,
     "androidApkHash": null,
-    "androidPackageName": null,
+    "androidPackageName": "com.stitchworx.breedlog",
     "androidVersionCode": null,
     "androidVersionName": null,
     "androidSigningFingerprint": null
@@ -68,6 +68,12 @@
   "generatedEvidenceIndex": [
     "evidence/access-code-device-hardening-focused.log",
     "evidence/data-isolation/phase1-data-isolation-test-2026-07-11.log",
+    "evidence/production-completion-android-sync.log",
+    "evidence/production-completion-build.log",
+    "evidence/production-completion-cargo-check.log",
+    "evidence/production-completion-check.log",
+    "evidence/production-completion-git-diff-check.log",
+    "evidence/production-completion-tauri-info.log",
     "evidence/production-completion-test-cert.log"
   ]
 }
