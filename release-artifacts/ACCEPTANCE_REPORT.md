@@ -1,44 +1,66 @@
-# BreedLog Production Completion Candidate
+# BreedLog Production Completion Acceptance Report
 
-- Source branch: breedlog-production-completion
-- Source commit: 6b22116a90d3ca81f06f82f3f84fdcb2383ea329
-- Generated: 2026-07-14T15:40:00.000Z
-- Pricing version: 2026-07-locked-commercial-model
+- Source branch: `breedlog-production-completion`
+- Artifact source commit: `2cd56bb6571a4da06affb7248fe884bc5147dcaf`
+- Evidence refresh date: `2026-07-14`
+- Pricing version: `2026-07-locked-commercial-model`
+- Verification clone: `C:\Users\User\Documents\GitHub\breedlog-verify-final`
 
-## Verified in this release pack
+## Verified engineering scope
 
-- `npm ci`: PASS in clean Windows verification copy (`C:\Users\User\Documents\GitHub\breedlog-verify`)
-- `npm run check`: PASS, see `evidence/production-completion-check.log`
-- `npm run test:cert`: PASS, see `evidence/production-completion-test-cert.log`
-- `npm run build`: PASS, see `evidence/production-completion-build.log`
-- `npm run android:sync`: PASS, see `evidence/production-completion-android-sync.log`
-- `npm run android:build`: local wrapper now reaches Gradle correctly; clean GitHub Actions Android certification build PASS; local workstation still requires `JAVA_HOME`
-- `npx tauri info`: PASS, see `evidence/production-completion-tauri-info.log`
-- `cargo check --manifest-path src-tauri/Cargo.toml`: PASS, see `evidence/production-completion-cargo-check.log`
-- `npm run windows:build`: PASS in clean Windows verification copy, producing unsigned NSIS and MSI bundles
-- `git diff --check`: PASS, see `evidence/production-completion-git-diff-check.log`
-- GitHub Actions `CI`: PASS - [run 29345453592](https://github.com/holgarkotze-commits/breedlog/actions/runs/29345453592)
-- GitHub Actions `Android Build`: PASS - [run 29345453173](https://github.com/holgarkotze-commits/breedlog/actions/runs/29345453173)
-- GitHub Actions `Windows Build`: PASS - [run 29345453282](https://github.com/holgarkotze-commits/breedlog/actions/runs/29345453282)
-- Server-authoritative Free/Premium catalogue and entitlement ledger
-- Provider-neutral signed billing webhook contract with idempotent event handling
-- Free active-animal, PDF, AI, and manual-backup quota ledger tests
-- Deterministic downgrade visibility projection for the first 30 active animals
-- Encrypted `.breedlogbackup` creation, preview, wrong-account rejection, corruption rejection, and restore tests
-- Capacitor Android wrapper scaffold and CI-certified unsigned debug build pipeline
-- Tauri Windows desktop wrapper scaffold and CI-certified unsigned NSIS/MSI bundle pipeline
+- Managed account authentication, deterministic verification, recovery, and device-limit enforcement.
+- Deterministic Free/Premium entitlement ledger, downgrade projection, and Premium restoration.
+- Provider-neutral billing checkout, portal, webhook verification, idempotency, reconciliation, refunds/reversals, and add-on certification flows.
+- Encrypted `.breedlogbackup` export, preview, restore, wrong-account rejection, corruption rejection, weekly scheduler, retention worker, and retry/failure handling.
+- Account deletion lifecycle with suspension, recovery window, purge worker, retry path, session invalidation, and audit history.
+- PWA/runtime update state handling, native-shell backend origin bridging, trusted CORS contract, and version-state coverage for Windows and Android adapters.
+- Legal, privacy, deletion, and operations surfaces required for production review.
 
-## PR review notes
+## Local verification
 
-- Substantive runtime implementation in this PR is concentrated in server-authoritative commercial enforcement, encrypted backup and restore, account deletion recovery flow, privacy-safe observability primitives, legal document surfacing, and certification/build plumbing.
-- Android and Windows deliverables are wrapper-shell implementations with real build pipelines and artifacts, not fully activated signed store/distribution releases.
-- Live payments, merchant activation, signed Android release, signed Windows updater/release, production DNS/TLS rollout, and legal approval remain external activation blockers rather than completed production activations.
-- Automatic weekly backup retention is represented in the commercial model and UI/tests, but this PR does not introduce a production scheduler or hosted backup job runner.
+- `npm.cmd ci`: PASS in `C:\Users\User\Documents\GitHub\breedlog-verify-final`
+- `npm.cmd run check`: PASS
+- `npm.cmd run build`: PASS
+- `npm.cmd run test:cert`: PASS
+  - totals: `539` tests, `535` passed, `0` failed, `4` skipped
+- `npm.cmd run android:sync`: PASS
+- `npm.cmd run android:build`: not runnable on this workstation because `java` / `JAVA_HOME` are unavailable
+- `cargo check --manifest-path src-tauri\Cargo.toml`: PASS
+- `npm.cmd run windows:build`: PASS
+- `git diff --check`: PASS with CRLF warnings only, no whitespace failures
 
-## External blockers not fabricated
+## Focused certification results
 
-- Live merchant/payment activation
-- Google Play publisher/signing credentials
-- Windows Authenticode/updater signing credentials
-- Production DNS/TLS/hosting access for `breedlog.com` and `app.breedlog.com`
-- Professional legal approval
+- Managed auth, device limits, invite activation, master simulation, and isolation batch: `47` passed, `0` failed
+- Backup scheduler, billing, downgrade/restoration, deletion, update-runtime, and native-shell batch: `28` passed, `0` failed
+- Full certification suite confirms downgrade/restoration determinism, update-state handling, account deletion lifecycle, billing reconciliation, and U2A2ZAVQ isolation in the integrated app surface
+
+## GitHub Actions
+
+- `CI` PASS: [run 29366766097](https://github.com/holgarkotze-commits/breedlog/actions/runs/29366766097)
+- `CI` PASS: [run 29366768044](https://github.com/holgarkotze-commits/breedlog/actions/runs/29366768044)
+- `Android wrapper build` PASS: [run 29366768145](https://github.com/holgarkotze-commits/breedlog/actions/runs/29366768145)
+- `Windows desktop shell build` PASS: [run 29366768577](https://github.com/holgarkotze-commits/breedlog/actions/runs/29366768577)
+
+## Physical proof
+
+### Windows
+
+- Installer generation, clean install, launch, device registration, deterministic access-code activation, desktop runtime fetches, dashboard navigation, and add-animal dialog flow were physically exercised.
+- Evidence lives under `C:\Users\User\Documents\GitHub\breedlog\release-artifacts\windows-proof`.
+- The strongest successful installed-shell screenshot is `installed-app-after-activation-success.png`.
+- The desktop proof does not claim signed production installers or signed production updates.
+- This pass did not capture a confirmed installed-shell animal-save request, installed-shell backup/reset/restore completion, installed-shell PDF export completion, or uninstall completion. Those remain certification gaps, not fabricated successes.
+
+### Android
+
+- CI-produced unsigned debug APK downloaded into `C:\Users\User\Documents\GitHub\breedlog\release-artifacts\ci-artifacts\android\app-debug.apk`.
+- No local Android physical install proof was produced because this workstation has neither `java` nor `adb`, and no emulator or connected device was available in this pass.
+
+## Review guardrails
+
+- No fake production payment evidence is claimed.
+- No signed release or signed updater evidence is claimed.
+- No private farm data is included in the release pack.
+- No U2A2ZAVQ simulation data is attached to ordinary workspaces in certification.
+- No user-facing JSON export is exposed in the product surface.

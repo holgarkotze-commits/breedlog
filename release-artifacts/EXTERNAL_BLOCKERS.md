@@ -1,9 +1,11 @@
 # External Activation Blockers
 
-These are not engineering failures and must not be represented as completed until real credentials/access are supplied.
+These items are outside engineering completion and are not represented as done.
 
-- Payment provider: merchant account, webhook secret, portal credentials and legal/tax approval for Premium monthly/yearly billing.
-- Android: Google Play publisher account, package ownership, Play Billing configuration, signing key material stored as CI secrets.
-- Windows: Authenticode certificate, timestamp authority configuration and updater signing key material.
-- Production web: DNS ownership/access for breedlog.com and app.breedlog.com, TLS/deployment target credentials and production database/storage credentials.
-- Legal: professional review and approval of privacy, terms, subscription, refund/cancellation and deletion documents.
+- Live merchant/payment activation: production merchant account, webhook secret, billing portal credentials, and tax/legal approval for N$149 monthly and N$1,520 annual subscriptions.
+- Google OAuth / identity-provider activation: production client credentials for supported managed sign-in flows.
+- Google Play production release: Play publisher ownership, package control, Play Billing activation, and release-signing secrets.
+- Windows production signing and updater activation: Authenticode certificate, timestamp authority, updater signing secret, and signed distribution approval.
+- Production deployment access: DNS/TLS ownership for `breedlog.com` and `app.breedlog.com`, hosting/deployment credentials, and production database/storage secrets.
+- Professional legal approval: review and approval of privacy, terms, subscription, refund/cancellation, deletion, and AI-processing disclosures.
+- Android physical-install certification: no emulator or connected Android device was available on this workstation during this pass.
