@@ -1,8 +1,8 @@
 # BreedLog Production Completion Candidate
 
 - Source branch: breedlog-production-completion
-- Source commit: 30ed74d19c08d50783816e2a5d67f1eabbea02e8
-- Generated: 2026-07-12T22:44:45.565Z
+- Source commit: 9cf7683df6bc4df156cc10f9c8cbe707df019ee2
+- Generated: 2026-07-14T13:56:32.852Z
 - Pricing version: 2026-07-locked-commercial-model
 
 ## Verified in this release pack

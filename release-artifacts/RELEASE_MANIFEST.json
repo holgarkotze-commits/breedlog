@@ -3,11 +3,11 @@
   "breedlogProductVersion": "1.0.0-production-completion-candidate",
   "releaseChannel": "staging",
   "gitTag": null,
-  "sourceCommit": "30ed74d19c08d50783816e2a5d67f1eabbea02e8",
+  "sourceCommit": "9cf7683df6bc4df156cc10f9c8cbe707df019ee2",
   "sourceBranch": "breedlog-production-completion",
-  "buildTimestamp": "2026-07-12T22:44:45.565Z",
+  "buildTimestamp": "2026-07-14T13:56:32.852Z",
   "artifacts": {
-    "frontendArtifactHash": "efaaf1d9de7c604a337c7161c120230074106d9d470a17b44550ac9602a822a5",
+    "frontendArtifactHash": "7f6c07b963c1253a105f5e5a45e78a5a5ad02fd435998e9a4d369062b3446a8c",
     "backendImageDigest": "a98b3acdb3a53f79eb04e89a959223edc53bc0c058e55e82ec8ec0087777d1a3"
   },
   "database": {
@@ -17,7 +17,7 @@
     ],
     "migrationChecksums": [
       "d4af42addc17033078489682fbeca6cfb04ee51d46d4ad30d046af0ac24ae9f6",
-      "247832a0c44a6d4c40f9482207973863761aae78c46026fad22226cb934b70c8"
+      "e4be62b4642bac0e0ecd1df12284c843dae360b1e7568008edb55214e9ffec3e"
     ]
   },
   "mobile": {

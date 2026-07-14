@@ -266,6 +266,20 @@ export default function HelpPage() {
           <p className="text-xs text-muted-foreground mt-0.5">
             Developed by <span className="font-medium">STITCH WORX</span>
           </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/legal/privacy">Privacy</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/legal/terms">Terms</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/legal/subscription">Subscription Terms</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/legal/account-deletion">Deletion Policy</Link>
+            </Button>
+          </div>
           <Button variant="outline" size="sm" className="mt-3" asChild>
             <Link href="/report-issue" data-testid="button-help-report-issue">
               <Bug className="h-3.5 w-3.5 mr-1.5" />

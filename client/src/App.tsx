@@ -35,6 +35,7 @@ const Admin = lazy(() => import("@/pages/Admin"));
 const Help = lazy(() => import("@/pages/Help"));
 const ReportIssue = lazy(() => import("@/pages/ReportIssue"));
 const Genetics = lazy(() => import("@/pages/Genetics"));
+const LegalDocumentPage = lazy(() => import("@/pages/LegalDocumentPage"));
 
 // Loading fallback for lazy loaded pages
 
@@ -95,6 +96,7 @@ function Router() {
         <Route path="/help" component={Help} />
         <Route path="/report-issue" component={ReportIssue} />
         <Route path="/genetics" component={Genetics} />
+        <Route path="/legal/:document" component={LegalDocumentPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>
@@ -207,6 +209,16 @@ function AppContent() {
       <RouteErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <Admin />
+        </Suspense>
+      </RouteErrorBoundary>
+    );
+  }
+
+  if (location.startsWith("/legal/")) {
+    return (
+      <RouteErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <Router />
         </Suspense>
       </RouteErrorBoundary>
     );

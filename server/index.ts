@@ -403,7 +403,9 @@ async function runStartupMigrations() {
 
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
-  } else {
+  } else if (process.env.NODE_ENV !== "test") {
+    // Certification tests exercise API behavior only. Skipping Vite in test mode
+    // keeps server startup deterministic and avoids parallel dev-server pressure.
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
