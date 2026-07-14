@@ -4,6 +4,7 @@ import {
   isInstalledBreedLogRuntime,
   isNativeRuntimePlatform,
   resolveApiRequestUrl,
+  shouldRegisterPwaServiceWorker,
 } from "../client/src/lib/runtime-updates";
 import {
   BREEDLOG_ANDROID_VERSION_CODE,
@@ -167,4 +168,10 @@ test("tauri localhost origin is treated as a native windows shell", () => {
       delete (globalThis as typeof globalThis & { navigator?: unknown }).navigator;
     }
   }
+});
+
+test("service workers only register in the pwa runtime", () => {
+  assert.equal(shouldRegisterPwaServiceWorker("pwa"), true);
+  assert.equal(shouldRegisterPwaServiceWorker("windows"), false);
+  assert.equal(shouldRegisterPwaServiceWorker("android"), false);
 });

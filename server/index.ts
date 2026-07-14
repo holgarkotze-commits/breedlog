@@ -22,6 +22,26 @@ declare module "http" {
 // Remove fingerprinting header
 app.disable("x-powered-by");
 
+const TRUSTED_NATIVE_APP_ORIGINS = new Set([
+  "http://tauri.localhost",
+  "https://tauri.localhost",
+  "tauri://localhost",
+  "capacitor://localhost",
+  "http://localhost",
+]);
+
+function resolveCorsOrigin(originHeader: string | undefined) {
+  if (!originHeader) return null;
+  if (TRUSTED_NATIVE_APP_ORIGINS.has(originHeader)) {
+    return originHeader;
+  }
+  const configuredOrigins = (process.env.BREEDLOG_CORS_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return configuredOrigins.includes(originHeader) ? originHeader : null;
+}
+
 // Trust proxy in production (Replit uses a reverse proxy)
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
@@ -46,6 +66,21 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
   next();
+});
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = resolveCorsOrigin(req.headers.origin);
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Admin-Pin");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  }
+  if (req.method === "OPTIONS" && req.path.startsWith("/api/")) {
+    return res.sendStatus(204);
+  }
+  return next();
 });
 
 // Rate limiting — auth/activation endpoints (strict)

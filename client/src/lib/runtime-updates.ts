@@ -162,6 +162,10 @@ export function installNativeApiFetchBridge() {
   bridgeWindow.__breedlogFetchBridgeInstalled__ = true;
 }
 
+export function shouldRegisterPwaServiceWorker(platform = detectRuntimePlatform()) {
+  return platform === "pwa";
+}
+
 export function getRuntimeVersionQuery() {
   const platform = detectRuntimePlatform();
   return new URLSearchParams({
