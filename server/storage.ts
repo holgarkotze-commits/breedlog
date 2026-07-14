@@ -1683,7 +1683,7 @@ export class InMemoryStorage implements IStorage {
   async getAccountAuditEvents(accountId: string): Promise<AccountAuditEvent[]> {
     return [...this.accountAuditMap.values()]
       .filter((event) => event.accountId === accountId)
-      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+      .sort((a, b) => (b.occurredAt?.getTime() ?? 0) - (a.occurredAt?.getTime() ?? 0));
   }
   async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
   async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }
