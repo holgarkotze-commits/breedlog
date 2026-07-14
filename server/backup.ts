@@ -197,7 +197,7 @@ export async function restoreWorkspaceBackup(
 
   for (const original of workspace.animals) {
     const { id, userId: _userId, createdAt: _createdAt, vectorClock: _vectorClock, lastSyncedAt: _lastSyncedAt, ...insertable } = original as any;
-    const created = await storage.createAnimal(accountId, { ...insertable, sireId: null, damId: null });
+    const created = await storage.createAnimal(accountId, { ...insertable, sireId: null, damId: null, createdAt: _createdAt });
     idMap.set(id, created.id);
   }
   for (const original of workspace.animals) {

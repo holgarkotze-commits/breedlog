@@ -20,6 +20,7 @@ import {
   completeTestCheckoutSession,
   createBillingPortalSession,
   createCheckoutSession,
+  getDowngradeVisibleAnimalIdSet,
   getBillingSubscriptionState,
   getEntitlementState,
   listBillingAuditEntries,
@@ -60,6 +61,14 @@ import {
   revokeManagedDevice,
   verifyAccountEmail,
 } from "./managed-auth";
+import {
+  BREEDLOG_DATA_SCHEMA_VERSION,
+  BREEDLOG_RUNTIME_BUILD_DATE,
+  BREEDLOG_RUNTIME_VERSION,
+  BREEDLOG_ANDROID_VERSION_CODE,
+  evaluateRuntimeUpdateState,
+  type BreedLogRuntimePlatform,
+} from "@shared/update-runtime";
 
 // Helper to extract userId from device session
 function getUserId(req: Request): string {
@@ -93,6 +102,47 @@ function accountDeletionBypass(path: string): boolean {
     || path === "/api/auth/logout"
     || path === "/api/device/logout"
     || path === "/api/beta/logout";
+}
+
+type DowngradeVisibilityContext = {
+  visibleAnimalIds: Set<number>;
+  hiddenAnimalIds: Set<number>;
+};
+
+async function getDowngradeVisibilityContext(userId: string): Promise<DowngradeVisibilityContext | null> {
+  const entitlement = await getEntitlementState(storage, userId);
+  if (entitlement.planId !== "free") {
+    return null;
+  }
+  const allAnimals = await storage.getAnimals(userId, {});
+  const visibleAnimalIds = getDowngradeVisibleAnimalIdSet(allAnimals);
+  const hiddenAnimalIds = new Set(
+    allAnimals
+      .filter((animal) => (animal.status ?? "active") === "active" && !visibleAnimalIds.has(animal.id))
+      .map((animal) => animal.id),
+  );
+  return { visibleAnimalIds, hiddenAnimalIds };
+}
+
+function isAnimalVisible(context: DowngradeVisibilityContext | null, animalId: number | null | undefined) {
+  if (!context || animalId == null) return true;
+  return context.visibleAnimalIds.has(animalId);
+}
+
+function filterRowsForVisibleAnimals<T>(
+  context: DowngradeVisibilityContext | null,
+  rows: T[],
+  selectors: Array<(row: T) => number | null | undefined>,
+): T[] {
+  if (!context) return rows;
+  return rows.filter((row) => selectors.every((selector) => isAnimalVisible(context, selector(row))));
+}
+
+function hiddenAnimalNotFound(res: Response) {
+  return res.status(404).json({
+    message: "Animal is hidden on the Free plan. Reactivate Premium to restore the full workspace.",
+    code: "ANIMAL_HIDDEN_BY_DOWNGRADE",
+  });
 }
 
 async function seedMasterSimulationIfNeeded(targetUserId: string, code: string) {
@@ -517,21 +567,35 @@ export async function registerRoutes(
   app.get(api.animals.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const filters = req.query as { search?: string; status?: string; sex?: string };
-    const animals = await storage.getAnimals(userId, filters);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animals = filterRowsForVisibleAnimals(
+      visibility,
+      await storage.getAnimals(userId, filters),
+      [(animal) => animal.id],
+    );
     res.json(animals);
   });
 
   app.get(api.animals.get.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const animal = await storage.getAnimal(userId, Number(req.params.id));
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animalId = Number(req.params.id);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
+    const animal = await storage.getAnimal(userId, animalId);
     if (!animal) {
       return res.status(404).json({ message: "Animal not found" });
     }
-    
-    const dam = animal.damId ? await storage.getAnimal(userId, animal.damId) : null;
-    const sire = animal.sireId ? await storage.getAnimal(userId, animal.sireId) : null;
-    
-    const allAnimals = await storage.getAnimals(userId, {});
+
+    const dam = animal.damId && isAnimalVisible(visibility, animal.damId) ? await storage.getAnimal(userId, animal.damId) : null;
+    const sire = animal.sireId && isAnimalVisible(visibility, animal.sireId) ? await storage.getAnimal(userId, animal.sireId) : null;
+
+    const allAnimals = filterRowsForVisibleAnimals(
+      visibility,
+      await storage.getAnimals(userId, {}),
+      [(candidate) => candidate.id],
+    );
     const offspringAsDam = animal.sex === "ewe" ? allAnimals.filter(a => a.damId === animal.id) : [];
     const offspringAsSire = animal.sex === "ram" ? allAnimals.filter(a => a.sireId === animal.id) : [];
 
@@ -541,6 +605,10 @@ export async function registerRoutes(
   app.get(api.animals.familyTree.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const animalId = Number(req.params.id);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
     const animal = await storage.getAnimal(userId, animalId);
     if (!animal) {
       return res.status(404).json({ message: "Animal not found" });
@@ -555,15 +623,15 @@ export async function registerRoutes(
       visited.add(currentId);
 
       const current = await storage.getAnimal(userId, currentId);
-      if (!current) return;
+      if (!current || !isAnimalVisible(visibility, current.id)) return;
 
       nodes.push(current);
 
-      if (current.damId) {
+      if (current.damId && isAnimalVisible(visibility, current.damId)) {
         links.push({ source: current.damId, target: currentId, type: "dam" });
         await traverse(current.damId, depth + 1);
       }
-      if (current.sireId) {
+      if (current.sireId && isAnimalVisible(visibility, current.sireId)) {
         links.push({ source: current.sireId, target: currentId, type: "sire" });
         await traverse(current.sireId, depth + 1);
       }
@@ -633,8 +701,13 @@ export async function registerRoutes(
   app.put(api.animals.update.path, requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      const animalId = Number(req.params.id);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const input = api.animals.update.input.parse(req.body);
-      const animal = await storage.updateAnimal(userId, Number(req.params.id), input);
+      const animal = await storage.updateAnimal(userId, animalId, input);
       res.json(animal);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -667,7 +740,12 @@ export async function registerRoutes(
 
   app.delete(api.animals.delete.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    await storage.deleteAnimal(userId, Number(req.params.id));
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animalId = Number(req.params.id);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
+    await storage.deleteAnimal(userId, animalId);
     res.status(204).send();
   });
 
@@ -675,6 +753,10 @@ export async function registerRoutes(
   app.get("/api/animals/:id/images", requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const animalId = Number(req.params.id);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
     const images = await storage.getAnimalImages(userId, animalId);
     res.json(images);
   });
@@ -683,6 +765,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { imageData, fileName, caption } = req.body;
       
       if (!imageData || !fileName) {
@@ -721,6 +807,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { ramLambClass } = req.body;
       
       if (!['stud', 'commercial', 'cull', 'unclassified'].includes(ramLambClass)) {
@@ -747,6 +837,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const animal = await storage.getAnimal(userId, animalId);
       
       if (!animal) {
@@ -770,6 +864,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { ramType, ramBreedingStatus } = req.body;
       
       if (!['breeding_ram', 'stud_ram', 'commercial_ram'].includes(ramType)) {
@@ -805,6 +903,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { cullReason } = req.body;
       
       const animal = await storage.getAnimal(userId, animalId);
@@ -832,6 +934,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { reason, notes } = req.body;
       
       if (!['sold', 'deceased', 'transferred'].includes(reason)) {
@@ -870,14 +976,24 @@ export async function registerRoutes(
   // Get culled animals
   app.get("/api/animals/culled", requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const animals = await storage.getAnimals(userId, { status: 'culled' });
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animals = filterRowsForVisibleAnimals(
+      visibility,
+      await storage.getAnimals(userId, { status: 'culled' }),
+      [(animal) => animal.id],
+    );
     res.json(animals);
   });
 
   // === BREEDING ===
   app.get(api.breeding.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const events = await storage.getBreedingEvents(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const events = filterRowsForVisibleAnimals(
+      visibility,
+      await storage.getBreedingEvents(userId),
+      [(event) => event.eweId, (event) => event.ramId],
+    );
     res.json(events);
   });
 
@@ -885,6 +1001,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.breeding.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.eweId) || !isAnimalVisible(visibility, input.ramId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const event = await storage.createBreedingEvent(userId, input);
       res.status(201).json(event);
     } catch (err) {
@@ -915,7 +1035,12 @@ export async function registerRoutes(
   
   app.get(api.breeding.groups.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const groups = await storage.getMatingGroups(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const groups = (await storage.getMatingGroups(userId)).filter((group) => {
+      if (!visibility) return true;
+      return isAnimalVisible(visibility, group.ramId)
+        && (group.eweIds ?? []).every((animalId) => isAnimalVisible(visibility, animalId));
+    });
     res.json(groups);
   });
   
@@ -923,6 +1048,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.breeding.groups.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.ramId) || (input.eweIds ?? []).some((id) => !isAnimalVisible(visibility, id))) {
+        return hiddenAnimalNotFound(res);
+      }
       const group = await storage.createMatingGroup(userId, input);
       res.status(201).json(group);
     } catch (err) {
@@ -940,6 +1069,18 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const id = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      const existing = (await storage.getMatingGroups(userId)).find((group) => group.id === id);
+      if (!existing) {
+        return res.status(404).json({ message: "Mating group not found" });
+      }
+      if (!isAnimalVisible(visibility, existing.ramId) || (existing.eweIds ?? []).some((animalId) => !isAnimalVisible(visibility, animalId))) {
+        return hiddenAnimalNotFound(res);
+      }
+      if ((req.body?.ramId != null && !isAnimalVisible(visibility, req.body.ramId))
+        || (Array.isArray(req.body?.eweIds) && req.body.eweIds.some((animalId: number) => !isAnimalVisible(visibility, animalId)))) {
+        return hiddenAnimalNotFound(res);
+      }
       const updated = await storage.updateMatingGroup(userId, id, req.body);
       if (!updated) {
         return res.status(404).json({ message: "Mating group not found" });
@@ -954,6 +1095,14 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const id = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      const existing = (await storage.getMatingGroups(userId)).find((group) => group.id === id);
+      if (!existing) {
+        return res.status(404).json({ message: "Mating group not found" });
+      }
+      if (!isAnimalVisible(visibility, existing.ramId) || (existing.eweIds ?? []).some((animalId) => !isAnimalVisible(visibility, animalId))) {
+        return hiddenAnimalNotFound(res);
+      }
       await storage.deleteMatingGroup(userId, id);
       res.status(204).send();
     } catch (err) {
@@ -964,13 +1113,21 @@ export async function registerRoutes(
   // === RECORDS ===
   app.get(api.records.performance.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const records = await storage.getPerformanceRecords(userId, Number(req.params.id));
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animalId = Number(req.params.id);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
+    const records = await storage.getPerformanceRecords(userId, animalId);
     res.json(records);
   });
 
   app.get('/api/performance-records', requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const records = await storage.getAllPerformanceRecords(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const records = filterRowsForVisibleAnimals(visibility, await storage.getAllPerformanceRecords(userId), [
+      (record) => record.animalId,
+    ]);
     res.json(records);
   });
   
@@ -978,6 +1135,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.records.performance.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const record = await storage.createPerformanceRecord(userId, input);
       res.status(201).json(record);
     } catch (err) {
@@ -993,13 +1154,21 @@ export async function registerRoutes(
 
   app.get(api.records.health.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const records = await storage.getHealthRecords(userId, Number(req.params.id));
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animalId = Number(req.params.id);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
+    const records = await storage.getHealthRecords(userId, animalId);
     res.json(records);
   });
 
   app.get('/api/health-records', requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const records = await storage.getAllHealthRecords(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const records = filterRowsForVisibleAnimals(visibility, await storage.getAllHealthRecords(userId), [
+      (record) => record.animalId,
+    ]);
     res.json(records);
   });
 
@@ -1007,6 +1176,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.records.health.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const record = await storage.createHealthRecord(userId, input);
       res.status(201).json(record);
     } catch (err) {
@@ -1025,7 +1198,10 @@ export async function registerRoutes(
   app.get(api.settings.export.path, requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const animals = await storage.getAnimals(userId);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      const animals = filterRowsForVisibleAnimals(visibility, await storage.getAnimals(userId), [
+        (animal) => animal.id,
+      ]);
       const farmSettings = await storage.getFarmSettings(userId);
       const csvRows = buildBreedLogCsvRows(animals, farmSettings?.studPrefix || null);
       const csvData = buildBreedLogCsvContent(csvRows);
@@ -1126,7 +1302,10 @@ export async function registerRoutes(
   // === DOCUMENTS ===
   app.get(api.documents.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const docs = await storage.getDocuments(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const docs = filterRowsForVisibleAnimals(visibility, await storage.getDocuments(userId), [
+      (doc) => doc.animalId,
+    ]);
     res.json(docs);
   });
 
@@ -1134,6 +1313,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const data = api.documents.upload.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, data.animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const doc = await storage.createDocument(userId, data);
       res.status(201).json(doc);
     } catch (err) {
@@ -1213,6 +1396,7 @@ export async function registerRoutes(
       const userId = getUserId(req);
       const input = api.eid.scan.input.parse(req.body);
       const electronicIdRaw = input.electronicIdRaw.trim();
+      const visibility = await getDowngradeVisibilityContext(userId);
 
       if (!electronicIdRaw) {
         return res.status(400).json({ message: "electronicIdRaw is required", field: "electronicIdRaw" });
@@ -1229,12 +1413,13 @@ export async function registerRoutes(
         matchMethod: animal ? "electronicId" : null,
         payload: input.payload ?? null,
       });
+      const visibleMatch = animal && isAnimalVisible(visibility, animal.id) ? animal : null;
 
       return res.json({
-        matched: !!animal,
-        animal: animal ?? null,
+        matched: !!visibleMatch,
+        animal: visibleMatch,
         scanEvent,
-        status: animal ? "matched" : "unassigned",
+        status: visibleMatch ? "matched" : "unassigned",
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -1252,8 +1437,11 @@ export async function registerRoutes(
   app.get("/api/exported-documents", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const visibility = await getDowngradeVisibilityContext(userId);
       const subfolder = req.query.subfolder as string | undefined;
-      const docs = await storage.getExportedDocuments(userId, subfolder);
+      const docs = filterRowsForVisibleAnimals(visibility, await storage.getExportedDocuments(userId, subfolder), [
+        (doc) => doc.animalId,
+      ]);
       res.json(docs);
     } catch (err: any) {
       console.error("Get exported docs error:", err);
@@ -1264,9 +1452,13 @@ export async function registerRoutes(
   app.post("/api/exported-documents", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const visibility = await getDowngradeVisibilityContext(userId);
       const { name, documentType, subfolder, animalId, metadata } = req.body;
       if (!name || !documentType || !subfolder) {
         return res.status(400).json({ message: "Missing required fields" });
+      }
+      if (!isAnimalVisible(visibility, animalId ?? null)) {
+        return hiddenAnimalNotFound(res);
       }
       const quotaClass = metadata?.quotaClass;
       if (quotaClass === "individual_pdf") {
@@ -2131,16 +2323,43 @@ export async function registerRoutes(
   
   // === VERSION ENDPOINT (for cache-busting) ===
   // Returns current app version - client checks on startup and forces reload if mismatched
-  const APP_VERSION = "1.0.1"; // Increment on each deployment
+  const APP_VERSION = BREEDLOG_RUNTIME_VERSION;
   app.get("/api/version", (req, res) => {
     res.set({
       'Cache-Control': 'no-store, no-cache, must-revalidate',
       'Pragma': 'no-cache'
     });
     res.json({ 
-      version: APP_VERSION,
+      version: BREEDLOG_RUNTIME_VERSION,
+      buildDate: BREEDLOG_RUNTIME_BUILD_DATE,
+      dataSchemaVersion: BREEDLOG_DATA_SCHEMA_VERSION,
+      androidVersionCode: BREEDLOG_ANDROID_VERSION_CODE,
       serverTime: new Date().toISOString()
     });
+  });
+
+  app.get("/api/runtime/update-state", (req, res) => {
+    const platform = String(req.query.platform || "pwa") as BreedLogRuntimePlatform;
+    if (!["pwa", "windows", "android"].includes(platform)) {
+      return res.status(400).json({ message: "platform must be pwa, windows, or android" });
+    }
+    const currentVersion = typeof req.query.currentVersion === "string" && req.query.currentVersion.trim()
+      ? req.query.currentVersion.trim()
+      : BREEDLOG_RUNTIME_VERSION;
+    const currentDataSchemaVersion = typeof req.query.currentDataSchemaVersion === "string"
+      ? Number.parseInt(req.query.currentDataSchemaVersion, 10)
+      : BREEDLOG_DATA_SCHEMA_VERSION;
+    const currentBuildNumber = typeof req.query.currentBuildNumber === "string"
+      ? Number.parseInt(req.query.currentBuildNumber, 10)
+      : undefined;
+    const channel = req.query.channel === "stable" ? "stable" : "test";
+    return res.json(evaluateRuntimeUpdateState({
+      platform,
+      currentVersion,
+      currentDataSchemaVersion: Number.isFinite(currentDataSchemaVersion) ? currentDataSchemaVersion : BREEDLOG_DATA_SCHEMA_VERSION,
+      currentBuildNumber: Number.isFinite(currentBuildNumber ?? Number.NaN) ? currentBuildNumber : undefined,
+      channel,
+    }));
   });
   
   // === ADMIN ROUTES (require ADMIN_PIN for access) ===

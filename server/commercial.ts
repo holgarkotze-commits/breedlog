@@ -135,6 +135,10 @@ export type BillingAuditEntry = {
   payload: Record<string, unknown>;
 };
 
+type BillingAddOnUnits = {
+  individualPdfExports: number;
+};
+
 export const BILLING_CATALOG: Record<BillingProductCode, BillingCatalogEntry> = {
   premium_monthly: {
     productCode: "premium_monthly",
@@ -159,6 +163,18 @@ export const BILLING_CATALOG: Record<BillingProductCode, BillingCatalogEntry> = 
     addOnUnits: { individualPdfExports: 250 },
   },
 };
+
+function getBillingAddOnUnits(addOns: string[]): BillingAddOnUnits {
+  return addOns.reduce<BillingAddOnUnits>((totals, code) => {
+    const catalog = BILLING_CATALOG[code as BillingProductCode];
+    if (!catalog?.addOnUnits) return totals;
+    return {
+      individualPdfExports: totals.individualPdfExports + (catalog.addOnUnits.individualPdfExports ?? 0),
+    };
+  }, {
+    individualPdfExports: 0,
+  });
+}
 
 function settingKeyForEntitlement(accountId: string): string {
   return `${ENTITLEMENT_PREFIX}${accountId}`;
@@ -348,26 +364,27 @@ export async function completeTestCheckoutSession(
   }
   const catalog = BILLING_CATALOG[session.productCode];
   if (catalog.billingPeriod === "addon") {
+    const existingSubscription = await getBillingSubscriptionState(storage, session.accountId);
+    if (!existingSubscription || existingSubscription.planId !== "premium") {
+      throw new EntitlementDeniedError(
+        "ADDON_REQUIRES_PREMIUM",
+        "Quota add-ons require an active Premium subscription.",
+        403,
+      );
+    }
+    const completedAt = (options.now ?? new Date()).toISOString();
+    const updatedSubscription: BillingSubscriptionState = {
+      ...existingSubscription,
+      addOns: [...existingSubscription.addOns, session.productCode],
+      updatedAt: completedAt,
+    };
+    await saveBillingSubscriptionState(storage, updatedSubscription);
     await createBillingAuditEntry(storage, session.accountId, "checkout.addon_completed", { sessionId, productCode: session.productCode });
-    const completedSession = { ...session, status: "completed" as const, completedAt: (options.now ?? new Date()).toISOString() };
+    const completedSession = { ...session, status: "completed" as const, completedAt };
     await storage.setSystemSetting(settingKeyForCheckoutSession(sessionId), JSON.stringify(completedSession), "Completed deterministic checkout session");
     return {
       session: completedSession,
-      subscription: await getBillingSubscriptionState(storage, session.accountId) ?? {
-        accountId: session.accountId,
-        provider: session.provider,
-        subscriptionId: "",
-        customerId: "",
-        productCode: "premium_monthly",
-        planId: "free",
-        billingPeriod: "monthly",
-        status: "pending",
-        currentPeriodStart: completedSession.completedAt!,
-        currentPeriodEnd: completedSession.completedAt!,
-        cancelAtPeriodEnd: false,
-        addOns: [session.productCode],
-        updatedAt: completedSession.completedAt!,
-      },
+      subscription: updatedSubscription,
       entitlement: await getEntitlementState(storage, session.accountId),
     };
   }
@@ -516,6 +533,12 @@ export function projectDowngradedAnimalVisibility<T extends { id: number; create
   };
 }
 
+export function getDowngradeVisibleAnimalIdSet<T extends { id: number; createdAt?: Date | string | null; status?: string | null }>(
+  animals: T[],
+): Set<number> {
+  return new Set(projectDowngradedAnimalVisibility(animals).visible.map((animal) => animal.id));
+}
+
 export async function reserveUsage(
   storage: IStorage,
   accountId: string,
@@ -525,6 +548,8 @@ export async function reserveUsage(
   const entitlement = await getEntitlementState(storage, accountId);
   const plan = getBreedLogPlan(entitlement.planId);
   const usage = await getUsageState(storage, accountId, now);
+  const subscription = entitlement.planId === "premium" ? await getBillingSubscriptionState(storage, accountId) : null;
+  const addOnUnits = getBillingAddOnUnits(subscription?.addOns ?? []);
 
   if (kind === "manualBackups") {
     if (plan.limits.manualBackups === "rolling_7_day") {
@@ -546,7 +571,7 @@ export async function reserveUsage(
     kind === "aiActions"
       ? plan.limits.aiActionsPerMonth
       : kind === "individualPdfExports"
-        ? plan.limits.individualPdfExportsPerMonth
+        ? plan.limits.individualPdfExportsPerMonth + addOnUnits.individualPdfExports
         : plan.limits.batchPdfExportsPerMonth;
   if (limit !== "fair_use" && usage[kind] >= limit) {
     throw new EntitlementDeniedError(
@@ -563,6 +588,9 @@ export function verifyBillingSignature(rawBody: string, signature: string | unde
   if (!secret) return process.env.NODE_ENV !== "production" && signature === "test-signature";
   if (!signature) return false;
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+  if (signature.length !== expected.length) {
+    return false;
+  }
   return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 

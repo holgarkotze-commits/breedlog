@@ -8,6 +8,7 @@ import { OfflineBanner } from "@/components/NetworkStatusIndicator";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AppUpdateBanner } from "@/components/AppUpdateBanner";
 import { NavigationHistoryProvider } from "@/lib/navigation-history-context";
 import { AIAssistantProvider } from "@/lib/ai-assistant-context";
 import { AskBreedLogButton } from "@/components/AskBreedLogButton";
@@ -109,6 +110,7 @@ function AuthenticatedApp() {
     <AIAssistantProvider>
       <NavigationHistoryProvider>
         <OfflineBanner />
+        <AppUpdateBanner />
         <PWAInstallPrompt />
         <Router />
         <AskBreedLogButton />

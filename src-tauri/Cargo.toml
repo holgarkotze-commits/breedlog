@@ -1,6 +1,6 @@
 [package]
 name = "breedlog-desktop"
-version = "0.1.0"
+version = "1.0.2"
 description = "BreedLog Windows desktop shell"
 authors = ["STITCH WORX"]
 license = "Proprietary"

@@ -32,6 +32,8 @@ import { performLogout } from "@/lib/queryClient";
 import { buildBreedLogCsvContent, buildBreedLogCsvRows, BREEDLOG_CSV_HEADERS } from "@shared/import-export";
 import { BREEDLOG_PLANS } from "@shared/commercial";
 import { FIELD_TEST_BUILD_DATE, FIELD_TEST_VERSION_LABEL } from "@shared/version";
+import { BREEDLOG_RUNTIME_VERSION, type RuntimeUpdateState } from "@shared/update-runtime";
+import { detectRuntimePlatform, getRuntimeVersionQuery } from "@/lib/runtime-updates";
 
 type EntitlementResponse = {
   entitlement: {
@@ -275,6 +277,21 @@ export default function Settings() {
   const { data: accountDeletionState } = useQuery<AccountDeletionState>({
     queryKey: ["/api/account/deletion"],
     enabled: !!user,
+  });
+
+  const { data: runtimeUpdateState } = useQuery<RuntimeUpdateState>({
+    queryKey: ["/api/runtime/update-state", getRuntimeVersionQuery()],
+    enabled: !!user,
+    queryFn: async () => {
+      const response = await fetch(`/api/runtime/update-state?${getRuntimeVersionQuery()}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to load runtime update state");
+      }
+      return response.json() as Promise<RuntimeUpdateState>;
+    },
   });
 
   const uploadDocMutation = useMutation({
@@ -956,6 +973,7 @@ export default function Settings() {
   const currentPlan = entitlementData ? BREEDLOG_PLANS[entitlementData.entitlement.planId] : null;
   const hiddenAnimalCount = entitlementData?.downgradeProjection.hiddenAnimalIds.length ?? 0;
   const visibleAnimalCount = entitlementData?.downgradeProjection.visibleAnimalIds.length ?? 0;
+  const runtimePlatform = detectRuntimePlatform();
   const deletionStateLabel = accountDeletionState?.status ?? "none";
 
   return (
@@ -1916,6 +1934,30 @@ export default function Settings() {
           <CardContent className="space-y-2 text-sm">
             <p><strong>Version:</strong> {FIELD_TEST_VERSION_LABEL}</p>
             <p><strong>Build date:</strong> {FIELD_TEST_BUILD_DATE}</p>
+            <p><strong>Runtime version:</strong> {BREEDLOG_RUNTIME_VERSION}</p>
+            <p><strong>Platform:</strong> {runtimePlatform}</p>
+            {runtimeUpdateState && (
+              <div className="rounded border border-border bg-secondary/40 p-3 text-xs space-y-1" data-testid="runtime-update-state">
+                <p><strong>Available runtime:</strong> {runtimeUpdateState.availableVersion}</p>
+                <p><strong>Current data schema:</strong> {runtimeUpdateState.currentDataSchemaVersion}</p>
+                <p><strong>Minimum supported schema:</strong> {runtimeUpdateState.minimumSupportedDataSchemaVersion}</p>
+                <p><strong>Channel:</strong> {runtimeUpdateState.channel}</p>
+                {runtimeUpdateState.android && (
+                  <p><strong>Android version code:</strong> {runtimeUpdateState.android.availableVersionCode}</p>
+                )}
+                {runtimeUpdateState.windows && (
+                  <p><strong>Windows update manifest:</strong> v{runtimeUpdateState.windows.manifestVersion} ({runtimeUpdateState.windows.signedUpdates ? "signed" : "unsigned certification mode"})</p>
+                )}
+                <p>
+                  <strong>Status:</strong>{" "}
+                  {runtimeUpdateState.updateRequired
+                    ? "Update required before this device can keep syncing safely."
+                    : runtimeUpdateState.updateAvailable
+                      ? "Update available."
+                      : "Up to date."}
+                </p>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
               If the app shows older content, connect online once and refresh/reload to update cached PWA files.
             </p>

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { BREEDLOG_PLANS, BREEDLOG_PRICING_VERSION } from "../shared/commercial";
@@ -16,6 +17,7 @@ import {
   projectDowngradedAnimalVisibility,
   reserveUsage,
   simulateBillingProviderEvent,
+  verifyBillingSignature,
 } from "../server/commercial";
 import { storage } from "../server/storage";
 
@@ -177,4 +179,52 @@ test("deterministic billing checkout, portal, cancellation, and provider events 
   assert.ok(audit.some((entry) => entry.eventType === "checkout.session_created"));
   assert.ok(audit.some((entry) => entry.eventType === "checkout.completed"));
   assert.ok(audit.some((entry) => entry.eventType === "subscription.refunded"));
+});
+
+test("annual billing, webhook signatures, and quota add-ons remain deterministic", async () => {
+  const userId = "commercial-annual-addon";
+  await storage.clearAllData(userId);
+
+  const annualCheckout = await createCheckoutSession(storage, userId, "premium_annual", {
+    returnUrl: "https://app.breedlog.test/return",
+    cancelUrl: "https://app.breedlog.test/cancel",
+  });
+  const annualCompleted = await completeTestCheckoutSession(storage, annualCheckout.sessionId, {
+    now: new Date("2026-07-13T00:00:00Z"),
+  });
+  assert.equal(annualCompleted.subscription.billingPeriod, "annual");
+  assert.equal(annualCompleted.subscription.currentPeriodEnd, "2027-07-13T00:00:00.000Z");
+
+  const addonCheckout = await createCheckoutSession(storage, userId, "addon_pdf_250");
+  const addonCompleted = await completeTestCheckoutSession(storage, addonCheckout.sessionId, {
+    now: new Date("2026-07-13T01:00:00Z"),
+  });
+  assert.equal(addonCompleted.subscription.addOns.includes("addon_pdf_250"), true);
+
+  for (let i = 0; i < 1250; i += 1) {
+    await reserveUsage(storage, userId, "individualPdfExports", new Date("2026-07-13T00:00:00Z"));
+  }
+  await assert.rejects(
+    () => reserveUsage(storage, userId, "individualPdfExports", new Date("2026-07-13T00:00:00Z")),
+    /individualPdfExports monthly quota/,
+  );
+
+  const body = JSON.stringify({
+    provider: "test-provider",
+    providerEventId: "evt-reversal-1",
+    accountId: userId,
+    eventType: "subscription.reversed",
+    planId: "premium",
+  });
+  const secret = "webhook-secret";
+  const signature = crypto.createHmac("sha256", secret).update(body).digest("hex");
+  assert.equal(verifyBillingSignature(body, signature, secret), true);
+  assert.equal(verifyBillingSignature(body, "bad-signature", secret), false);
+
+  const reversed = await simulateBillingProviderEvent(storage, userId, {
+    eventType: "subscription.reversed",
+    now: new Date("2026-08-13T00:00:00Z"),
+  });
+  assert.equal(reversed.entitlement.planId, "free");
+  assert.equal(reversed.entitlement.status, "refunded");
 });

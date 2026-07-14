@@ -110,3 +110,56 @@ test("automatic backup sweep runs once per effective shared workspace and keeps 
     await cleanup();
   }
 });
+
+test("automatic backup worker records failure, retry state, and later recovery", async () => {
+  const workspaceUserId = (await storage.createWorkspaceUser("auto-backup-retry")).id;
+  await storage.createAnimal(workspaceUserId, { tagId: "RTR-001", sex: "ewe", name: "Retry Ewe", status: "active" } as any);
+
+  let putAttempts = 0;
+  const flakyAdapter = {
+    provider: "flaky-test-adapter",
+    async putObject() {
+      putAttempts += 1;
+      if (putAttempts === 1) {
+        throw new Error("simulated adapter failure");
+      }
+    },
+    async getObject() {
+      return "";
+    },
+    async listKeys() {
+      return [];
+    },
+    async deleteObject() {
+      // no-op
+    },
+  };
+
+  await assert.rejects(
+    () => runAutomaticBackupForWorkspace(storage, flakyAdapter, workspaceUserId, {
+      now: new Date("2026-07-27T02:00:00Z"),
+    }),
+    /simulated adapter failure/,
+  );
+
+  let status = await getAutomaticBackupStatus(storage, workspaceUserId);
+  assert.equal(status.state.lastStatus, "failed");
+  assert.equal(status.state.retryCount, 1);
+  assert.equal(typeof status.state.retryAfter, "string");
+
+  const { adapter, cleanup } = await createTempAdapter();
+  try {
+    const recovered = await runAutomaticBackupForWorkspace(storage, adapter, workspaceUserId, {
+      now: new Date("2026-07-27T03:00:00Z"),
+      force: true,
+    });
+    assert.equal(recovered.status, "success");
+
+    status = await getAutomaticBackupStatus(storage, workspaceUserId);
+    assert.equal(status.state.lastStatus, "success");
+    assert.equal(status.state.retryCount, 0);
+    assert.equal(status.records.length, 1);
+  } finally {
+    await cleanup();
+  }
+});

@@ -390,6 +390,7 @@ export class DatabaseStorage implements IStorage {
       studPrefix: normalizedTag.studPrefix || null,
       electronicId: normalizedElectronicId,
       userId,
+      createdAt: (animal as Partial<Animal>).createdAt ?? new Date(),
     }).returning();
     return newAnimal;
   }
@@ -1412,7 +1413,7 @@ export class InMemoryStorage implements IStorage {
       rawTag: normalizedTagParts.rawTag || null,
       studPrefix: normalizedTagParts.studPrefix || null,
       userId,
-      createdAt: this.now(),
+      createdAt: (animal as Partial<Animal>).createdAt ?? this.now(),
     } as Animal;
     this.animals.set(id, rec);
     return rec;
