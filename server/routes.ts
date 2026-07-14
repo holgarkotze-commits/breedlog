@@ -11,13 +11,21 @@ import { buildBreedLogCsvContent, buildBreedLogCsvRows, parseBreedLogCsvRecords,
 import { buildBreedLogSimulationDataset } from "@shared/breedlog-simulation";
 import { MASTER_SIMULATION_ACCESS_CODE, MASTER_SIMULATION_BATCH_MARKER, MASTER_SIMULATION_MAX_DEVICES, isMasterSimulationCode } from "@shared/master-simulation";
 import {
+  BILLING_CATALOG,
   EntitlementDeniedError,
   applyBillingEvent,
   assertCanCreateAnimal,
   billingEventSchema,
+  cancelBillingSubscription,
+  completeTestCheckoutSession,
+  createBillingPortalSession,
+  createCheckoutSession,
+  getBillingSubscriptionState,
   getEntitlementState,
+  listBillingAuditEntries,
   projectDowngradedAnimalVisibility,
   reserveUsage,
+  simulateBillingProviderEvent,
   verifyBillingSignature,
 } from "./commercial";
 import {
@@ -347,6 +355,104 @@ export async function registerRoutes(
   });
 
   // === COMMERCIAL ENTITLEMENTS AND BILLING ===
+  app.get("/api/billing/catalog", requireAuth, async (_req, res) => {
+    res.json({
+      provider: "test-provider",
+      pricingVersion: "2026-07-locked-commercial-model",
+      products: Object.values(BILLING_CATALOG),
+    });
+  });
+
+  app.get("/api/billing/subscription", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    res.json({
+      subscription: await getBillingSubscriptionState(storage, userId),
+      entitlement: await getEntitlementState(storage, userId),
+      audit: await listBillingAuditEntries(storage, userId),
+    });
+  });
+
+  app.post("/api/billing/checkout-session", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const body = z.object({
+        productCode: z.enum(["premium_monthly", "premium_annual", "addon_pdf_250"]),
+        returnUrl: z.string().url().optional(),
+        cancelUrl: z.string().url().optional(),
+      }).parse(req.body);
+      const session = await createCheckoutSession(storage, userId, body.productCode, {
+        returnUrl: body.returnUrl,
+        cancelUrl: body.cancelUrl,
+      });
+      res.status(201).json(session);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/billing/portal-session", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    res.status(201).json(await createBillingPortalSession(storage, userId));
+  });
+
+  app.post("/api/billing/subscription/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      res.json(await cancelBillingSubscription(storage, userId, {
+        atPeriodEnd: req.body?.atPeriodEnd !== false,
+      }));
+    } catch (err) {
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/billing/test/checkout/:sessionId/complete", requireAuth, async (req, res) => {
+    try {
+      res.json(await completeTestCheckoutSession(storage, String(req.params.sessionId)));
+    } catch (err) {
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/billing/test/simulate", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const body = z.object({
+        eventType: z.enum([
+          "subscription.created",
+          "subscription.renewed",
+          "subscription.cancelled",
+          "subscription.grace_period",
+          "subscription.payment_failed",
+          "subscription.refunded",
+          "subscription.reversed",
+          "subscription.expired",
+        ]),
+      }).parse(req.body);
+      res.json(await simulateBillingProviderEvent(storage, userId, { eventType: body.eventType }));
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
   app.get("/api/entitlements/me", requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const entitlement = await getEntitlementState(storage, userId);

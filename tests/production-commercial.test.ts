@@ -2,12 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { BREEDLOG_PLANS, BREEDLOG_PRICING_VERSION } from "../shared/commercial";
 import {
+  BILLING_CATALOG,
   EntitlementDeniedError,
   applyBillingEvent,
   assertCanCreateAnimal,
+  cancelBillingSubscription,
+  completeTestCheckoutSession,
+  createBillingPortalSession,
+  createCheckoutSession,
+  getBillingSubscriptionState,
   getEntitlementState,
+  listBillingAuditEntries,
   projectDowngradedAnimalVisibility,
   reserveUsage,
+  simulateBillingProviderEvent,
 } from "../server/commercial";
 import { storage } from "../server/storage";
 
@@ -109,4 +117,64 @@ test("Free monthly usage quotas are enforced by the backend usage ledger", async
     /rolling seven-day window/,
   );
   await reserveUsage(storage, userId, "manualBackups", new Date("2026-07-21T00:00:00Z"));
+});
+
+test("deterministic billing checkout, portal, cancellation, and provider events reconcile entitlement state", async () => {
+  const userId = "commercial-deterministic-billing";
+  await storage.clearAllData(userId);
+
+  assert.equal(BILLING_CATALOG.premium_monthly.amountNad, 149);
+  assert.equal(BILLING_CATALOG.premium_annual.amountNad, 1520);
+
+  const checkout = await createCheckoutSession(storage, userId, "premium_monthly", {
+    returnUrl: "https://app.breedlog.test/return",
+    cancelUrl: "https://app.breedlog.test/cancel",
+  });
+  assert.equal(checkout.status, "pending");
+  assert.match(checkout.checkoutUrl, /billing\.test\.breedlog\.local\/checkout\//);
+
+  const portal = await createBillingPortalSession(storage, userId);
+  assert.match(portal.url, /billing\.test\.breedlog\.local\/portal\//);
+
+  const completed = await completeTestCheckoutSession(storage, checkout.sessionId, {
+    now: new Date("2026-07-13T00:00:00Z"),
+  });
+  assert.equal(completed.session.status, "completed");
+  assert.equal(completed.subscription.planId, "premium");
+  assert.equal((await getEntitlementState(storage, userId)).planId, "premium");
+
+  const cancelAtPeriodEnd = await cancelBillingSubscription(storage, userId, { atPeriodEnd: true });
+  assert.equal(cancelAtPeriodEnd.cancelAtPeriodEnd, true);
+  assert.equal((await getEntitlementState(storage, userId)).status, "active");
+
+  let simulated = await simulateBillingProviderEvent(storage, userId, {
+    eventType: "subscription.grace_period",
+    now: new Date("2026-08-13T00:00:00Z"),
+  });
+  assert.equal(simulated.entitlement.status, "grace_period");
+
+  simulated = await simulateBillingProviderEvent(storage, userId, {
+    eventType: "subscription.payment_failed",
+    now: new Date("2026-08-14T00:00:00Z"),
+  });
+  assert.equal(simulated.entitlement.status, "payment_failed");
+
+  simulated = await simulateBillingProviderEvent(storage, userId, {
+    eventType: "subscription.renewed",
+    now: new Date("2026-08-15T00:00:00Z"),
+  });
+  assert.equal(simulated.entitlement.status, "active");
+  assert.equal((await getBillingSubscriptionState(storage, userId))?.status, "active");
+
+  simulated = await simulateBillingProviderEvent(storage, userId, {
+    eventType: "subscription.refunded",
+    now: new Date("2026-08-16T00:00:00Z"),
+  });
+  assert.equal(simulated.entitlement.planId, "free");
+  assert.equal(simulated.entitlement.status, "refunded");
+
+  const audit = await listBillingAuditEntries(storage, userId);
+  assert.ok(audit.some((entry) => entry.eventType === "checkout.session_created"));
+  assert.ok(audit.some((entry) => entry.eventType === "checkout.completed"));
+  assert.ok(audit.some((entry) => entry.eventType === "subscription.refunded"));
 });
