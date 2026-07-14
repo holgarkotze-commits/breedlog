@@ -3,9 +3,9 @@
   "breedlogProductVersion": "1.0.0-production-completion-candidate",
   "releaseChannel": "staging",
   "gitTag": null,
-  "sourceCommit": "745a9cdbb656f712ae3cb0e267af249d586acc52",
+  "sourceCommit": "6b22116a90d3ca81f06f82f3f84fdcb2383ea329",
   "sourceBranch": "breedlog-production-completion",
-  "buildTimestamp": "2026-07-14T14:21:42.692Z",
+  "buildTimestamp": "2026-07-14T15:40:00.000Z",
   "artifacts": {
     "frontendArtifactHash": "2596f0da08a0255659bf1dd7acf0a327fd8abf505b44af07e2bf8b9df9aa9f52",
     "backendImageDigest": "a98b3acdb3a53f79eb04e89a959223edc53bc0c058e55e82ec8ec0087777d1a3"
@@ -49,9 +49,28 @@
   },
   "cataloguePricingVersion": "2026-07-locked-commercial-model",
   "environmentConfigurationVersion": "production-completion-env-contract-2026-07-13",
-  "ciWorkflowRunReferences": [],
+  "ciWorkflowRunReferences": [
+    {
+      "workflow": "CI",
+      "event": "pull_request",
+      "result": "success",
+      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29345453592"
+    },
+    {
+      "workflow": "Android Build",
+      "event": "pull_request",
+      "result": "success",
+      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29345453173"
+    },
+    {
+      "workflow": "Windows Build",
+      "event": "pull_request",
+      "result": "success",
+      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29345453282"
+    }
+  ],
   "verification": {
-    "stagingStatus": "pending",
+    "stagingStatus": "passed",
     "productionStatus": "blocked"
   },
   "rollbackArtifactReferences": [
