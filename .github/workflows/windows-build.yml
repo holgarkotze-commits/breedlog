@@ -1,4 +1,4 @@
-name: Windows Build Gate
+name: Windows Build
 
 on:
   workflow_dispatch:
@@ -7,14 +7,29 @@ on:
       - main
 
 jobs:
-  windows-blocker-gate:
-    name: Windows installer credential and source gate
+  windows-build:
+    name: Windows desktop shell build
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Report Windows blocker status
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Compile Tauri desktop shell
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+
+      - name: Signed installer gate
         shell: pwsh
         run: |
           if (!(Test-Path src-tauri)) {
@@ -26,5 +41,4 @@ jobs:
             Write-Host "BLOCKED: WINDOWS_SIGNING_CERT_BASE64 is required as a repository secret for signed installer builds."
             exit 78
           }
-          npm ci
-          npm run build
+          npm run desktop:build

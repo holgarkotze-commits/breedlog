@@ -1,4 +1,4 @@
-name: Android Build Gate
+name: Android Build
 
 on:
   workflow_dispatch:
@@ -7,8 +7,8 @@ on:
       - main
 
 jobs:
-  android-blocker-gate:
-    name: Android credential and source gate
+  android-build:
+    name: Android wrapper build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,7 +23,26 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Report Android blocker status
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Sync Capacitor Android shell
+        run: npm run android:sync
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Signed release gate
         shell: bash
         run: |
           set -euo pipefail
@@ -36,4 +55,5 @@ jobs:
             echo "BLOCKED: ANDROID_KEYSTORE_BASE64 is required as a repository secret for signed release builds."
             exit 78
           fi
+          cd android
           ./gradlew --no-daemon :app:bundleRelease

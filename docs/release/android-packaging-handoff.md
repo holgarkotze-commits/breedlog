@@ -1,105 +1,98 @@
 # Android Packaging Handoff (Phase 12)
 
 ## Phase 12 Status
-**BLOCKED — missing Android wrapper/build system.**
+**PARTIALLY IMPLEMENTED - unsigned release activation still blocked.**
 
-BreedLog currently contains a web app codebase but no Android wrapper project (`android/` Gradle project, Capacitor Android platform, Cordova Android platform, or TWA/Bubblewrap project files). Therefore, this phase cannot produce a real APK/AAB in the current repository state.
+BreedLog now contains a real Capacitor Android wrapper in-repo:
 
-## Exact search commands run (repository root: `/workspace/breedlog`)
+- `capacitor.config.ts`
+- `capacitor.config.json`
+- `android/` Gradle project
+- `android/app/src/main/AndroidManifest.xml`
+- `android/gradlew` and `android/gradlew.bat`
+- GitHub Actions Android workflow in `.github/workflows/android-build.yml`
 
-### Command A
-```bash
-find . -maxdepth 4 -type d -name android -print
-```
-**Result:** no output (no `android/` directory found).
+This is no longer a "missing wrapper" phase. The remaining blockers are release credentials and final signed package generation.
 
-### Command B
-```bash
-find . -maxdepth 5 \( -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'settings.gradle' -o -name 'settings.gradle.kts' -o -name 'gradlew' -o -name 'gradlew.bat' -o -name 'AndroidManifest.xml' -o -name 'capacitor.config' -o -name 'capacitor.config.ts' -o -name 'capacitor.config.json' -o -name 'config.xml' \) -print
-```
-**Result:** no output (none of the Android wrapper build files found).
+## Local verification completed on Windows
 
-### Command C
-```bash
-rg -n --hidden -S "cordova|capacitor|bubblewrap|twa|targetSdkVersion|compileSdk|minSdk|applicationId|versionCode|versionName|keystore|\.aab|\.apk|bundleRelease|assembleRelease|AndroidManifest" .
-```
-**Result:** only documentation/test text matches (for example in `docs/release/android-wrapper-baseline.md`, `docs/release/android-packaging-handoff.md`, and non-build text files); no actual Android wrapper/build project files detected.
+Repository root:
 
-## Missing required project pieces
-At least the following are missing for Android packaging:
-
-- `android/` Gradle project root
-- `settings.gradle(.kts)` and app/module `build.gradle(.kts)`
-- `gradlew` / `gradlew.bat`
-- `app/src/main/AndroidManifest.xml`
-- signing config placeholders (keystore path/aliases via env vars)
-- release build wiring for `assembleRelease` / `bundleRelease`
-
-## Recommended packaging route
-Given current architecture (web-first app), use one of these wrapper strategies:
-
-1. **Capacitor Android (recommended)** for richer native control and future plugins.
-2. **TWA/Bubblewrap** if product stays primarily PWA and Play Store packaging is the main goal.
-3. **Cordova** only if existing team expertise/tooling requires it.
-
-## Required Android SDK policy targets (when wrapper exists)
-- `targetSdkVersion`: **35 or higher** (Android 15 / API 35 requirement).
-- `compileSdk`: **35 or higher** (match target policy; preferably latest stable).
-- `minSdk`: **24–26 recommended** for broad device coverage in Namibia while avoiding very old unsupported Android behavior. Suggested default: **24** unless field-device constraints or libraries require 26.
-
-## 16 KB page-size compatibility note (Android 15+ 64-bit)
-- If the wrapper contains **no bundled native `.so` libraries**, risk is lower and compatibility is mostly controlled by app bundle/toolchain.
-- If native libs are present (directly or transitively through dependencies), verify each ABI build supports Android 15+ 16 KB page-size expectations and update NDK/toolchain/dependencies accordingly.
-- Add this check to CI release validation before Play submission.
-
-## Permission rules for Play Protect/privacy posture
-- Start from minimum permissions only.
-- Remove any unused/sensitive permission by default.
-- Request sensitive permissions only when a user-visible feature requires them and document purpose in release notes.
-- Re-review merged manifest permissions (`uses-permission`) before each release.
-
-## Required build commands once wrapper exists
-From Android project root:
-
-```bash
-./gradlew clean
-./gradlew assembleRelease
-./gradlew bundleRelease
+```text
+C:\Users\User\Documents\GitHub\breedlog
 ```
 
-Expected outputs:
-- APK: `app/build/outputs/apk/release/*.apk`
-- AAB: `app/build/outputs/bundle/release/*.aab`
+Commands verified:
 
-## APK/AAB acceptance checklist
-- [ ] Build succeeds for `assembleRelease` and/or `bundleRelease`.
-- [ ] Artifact exists at expected output path.
-- [ ] `targetSdkVersion >= 35` and `compileSdk >= 35` confirmed in Gradle files.
-- [ ] `minSdk` is set intentionally and documented.
-- [ ] Release signing config is valid (no debug signing).
+```powershell
+npm.cmd run build
+npm.cmd run android:sync
+```
 
-## Play Protect warning acceptance checklist
-- [ ] App targets API 35+.
-- [ ] Privacy-sensitive permissions are justified/minimized.
-- [ ] Build uses current Android Gradle Plugin/toolchain compatible with API 35.
-- [ ] 16 KB page-size compatibility reviewed for all native dependencies.
-- [ ] Internal test track install/update passes without legacy-target warning.
+Result:
 
-## Signing and release notes
-- Keep keystore out of repository.
-- Use CI/environment secrets for keystore file, alias, and passwords.
-- Record `versionCode`/`versionName` and signing fingerprint in release evidence.
+- Web assets built successfully.
+- Capacitor sync copied production assets into `android/app/src/main/assets/public`.
+- Android shell metadata regenerated successfully.
 
-## Manual device test checklist (post-wrapper)
-- [ ] Fresh install on Android 14 and Android 15 device.
-- [ ] Update install from previous Play/internal build.
-- [ ] Offline launch + sync-critical flows sanity check.
-- [ ] Permission prompts appear only when required by feature usage.
-- [ ] App start/perf baseline remains acceptable.
+## Current wrapper baseline
 
-## CI / cloud build note
-Once wrapper is added, include Android release lane in GitHub Actions (or equivalent cloud CI):
-- set up JDK + Android SDK,
-- run Gradle release build,
-- publish APK/AAB artifact,
-- attach policy metadata checks (SDK levels, permissions, signing mode).
+- App name: `BreedLog`
+- Package identifier: `com.stitchworx.breedlog`
+- Web assets source: `dist/public`
+- `android:allowBackup="false"`
+- `android:usesCleartextTraffic="false"`
+- Capacitor Android platform is installed from npm dependencies.
+
+## CI workflow now present
+
+`.github/workflows/android-build.yml` performs:
+
+1. checkout
+2. `actions/setup-java`
+3. `android-actions/setup-android`
+4. `actions/setup-node`
+5. `npm ci`
+6. `npm run build`
+7. `npm run android:sync`
+8. `./gradlew :app:assembleDebug`
+9. gated signed release step for `:app:bundleRelease`
+
+## Remaining blockers
+
+1. **Java runtime not installed locally** for direct release Gradle execution from this workstation.
+2. **Android signing credentials unavailable**:
+   - `ANDROID_KEYSTORE_BASE64`
+   - alias/password secrets
+3. **Google Play publisher ownership/policy activation** not available in this session.
+4. **Play Billing live configuration** still depends on the external payment-provider decision and publisher setup.
+
+## What is now ready
+
+- Android source is versioned in the repository.
+- Debug-build lane is defined in CI.
+- Release-build lane is structurally defined in CI.
+- Package identity and manifest hardening are in place.
+- Capacitor sync is reproducible from the Windows workspace.
+
+## What is not claimed
+
+- No signed AAB has been produced.
+- No signed APK has been produced.
+- No Play Console upload has been performed.
+- No live Play Billing transaction has been performed.
+
+## Next activation steps when credentials exist
+
+1. Install Java 17+ locally or run the CI lane.
+2. Provide Android signing secrets in GitHub Actions.
+3. Run:
+
+```powershell
+npm.cmd run android:sync
+cd android
+.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:bundleRelease
+```
+
+4. Record hashes, package version, signing fingerprint, and install evidence into `release-artifacts`.

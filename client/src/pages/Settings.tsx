@@ -1,7 +1,9 @@
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
 import { useFarmSettings, useSaveFarmSettings } from "@/hooks/use-farm-settings";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +30,49 @@ import { useTheme, type ThemeMode } from "@/components/ThemeProvider";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { performLogout } from "@/lib/queryClient";
 import { buildBreedLogCsvContent, buildBreedLogCsvRows, BREEDLOG_CSV_HEADERS } from "@shared/import-export";
+import { BREEDLOG_PLANS } from "@shared/commercial";
 import { FIELD_TEST_BUILD_DATE, FIELD_TEST_VERSION_LABEL } from "@shared/version";
+
+type EntitlementResponse = {
+  entitlement: {
+    planId: "free" | "premium";
+    status: "active" | "grace_period" | "cancelled" | "payment_failed" | "refunded" | "expired";
+    pricingVersion: string;
+    effectiveAt: string;
+    updatedAt: string;
+  };
+  downgradeProjection: {
+    visibleAnimalIds: number[];
+    hiddenAnimalIds: number[];
+    rule: string;
+  };
+};
+
+type AccountDeletionState = {
+  accountId: string;
+  status: "none" | "pending" | "cancelled" | "completed";
+  requestedAt?: string;
+  recoveryUntil?: string;
+  cancelledAt?: string;
+  completedAt?: string;
+  exportBeforeDeletion: boolean;
+  auditId?: string;
+};
+
+type BackupPreview = {
+  exportedAt: string;
+  animalCount: number;
+  breedingEventCount: number;
+  healthRecordCount: number;
+  performanceRecordCount: number;
+  documentCount: number;
+  exportedDocumentCount: number;
+};
+
+type ManualBackupResponse = {
+  fileName: string;
+  backup: unknown;
+};
 
 export default function Settings() {
   const { user } = useAuth();
@@ -64,6 +108,16 @@ export default function Settings() {
   const [clearCacheConfirmText, setClearCacheConfirmText] = useState("");
   const [isClearingCache, setIsClearingCache] = useState(false);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
+  const [backupPassphrase, setBackupPassphrase] = useState("");
+  const [restorePassphrase, setRestorePassphrase] = useState("");
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restorePreview, setRestorePreview] = useState<BackupPreview | null>(null);
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [confirmRestoreOverwrite, setConfirmRestoreOverwrite] = useState(false);
+  const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false);
+  const [deleteConfirmPhrase, setDeleteConfirmPhrase] = useState("");
+  const [deleteExportBackup, setDeleteExportBackup] = useState(true);
+  const [deleteBackupPassphrase, setDeleteBackupPassphrase] = useState("");
   
   // Debug sync state
   const [showDebugInfo, setShowDebugInfo] = useState(false);
@@ -71,6 +125,7 @@ export default function Settings() {
   const [isLoadingDebug, setIsLoadingDebug] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [dataOpen, setDataOpen] = useState(false);
+  const backupRestoreInputRef = useRef<HTMLInputElement>(null);
   
   // Fetch pending sync items for debugging
   const handleShowDebug = async () => {
@@ -212,6 +267,16 @@ export default function Settings() {
     queryKey: ['/api/documents'],
   });
 
+  const { data: entitlementData, isLoading: entitlementLoading } = useQuery<EntitlementResponse>({
+    queryKey: ["/api/entitlements/me"],
+    enabled: !!user,
+  });
+
+  const { data: accountDeletionState } = useQuery<AccountDeletionState>({
+    queryKey: ["/api/account/deletion"],
+    enabled: !!user,
+  });
+
   const uploadDocMutation = useMutation({
     mutationFn: async (doc: { fileName: string; category: string; fileUrl: string; fileType: string; fileSize?: number }) => {
       return apiRequest('POST', '/api/documents', doc);
@@ -233,6 +298,141 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ['/api/documents'] });
       toast({ title: "Document Deleted" });
     }
+  });
+
+  const createManualBackupMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/backups/manual", {
+        passphrase: backupPassphrase.trim() || undefined,
+      });
+      return response.json() as Promise<ManualBackupResponse>;
+    },
+    onSuccess: async ({ fileName, backup }) => {
+      await shareOrDownloadFile(JSON.stringify(backup, null, 2), fileName, "application/json", "Encrypted BreedLog backup created.");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Backup failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const previewRestoreMutation = useMutation({
+    mutationFn: async () => {
+      if (!restoreFile) {
+        throw new Error("Select a .breedlogbackup file first.");
+      }
+      const backup = JSON.parse(await restoreFile.text());
+      const response = await apiRequest("POST", "/api/backups/preview-restore", {
+        backup,
+        passphrase: restorePassphrase.trim() || undefined,
+      });
+      return response.json() as Promise<BackupPreview>;
+    },
+    onSuccess: (preview) => {
+      setRestorePreview(preview);
+      setShowRestoreDialog(true);
+    },
+    onError: (error: Error) => {
+      setRestorePreview(null);
+      toast({
+        title: "Restore preview failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const restoreBackupMutation = useMutation({
+    mutationFn: async () => {
+      if (!restoreFile) {
+        throw new Error("Select a .breedlogbackup file first.");
+      }
+      const backup = JSON.parse(await restoreFile.text());
+      const response = await apiRequest("POST", "/api/backups/restore", {
+        backup,
+        passphrase: restorePassphrase.trim() || undefined,
+        confirmOverwrite: true,
+      });
+      return response.json() as Promise<BackupPreview>;
+    },
+    onSuccess: async () => {
+      setShowRestoreDialog(false);
+      setRestorePreview(null);
+      setConfirmRestoreOverwrite(false);
+      queryClient.invalidateQueries();
+      await reloadLocalData();
+      toast({
+        title: "Restore complete",
+        description: "Workspace data was restored from the encrypted backup.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Restore failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const requestAccountDeletionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/account/deletion", {
+        typedConfirmation: deleteConfirmPhrase,
+        exportBeforeDeletion: deleteExportBackup,
+        passphrase: deleteExportBackup ? deleteBackupPassphrase.trim() || undefined : undefined,
+      });
+      return response.json() as Promise<{ state: AccountDeletionState; backup: unknown | null }>;
+    },
+    onSuccess: async ({ state, backup }) => {
+      if (backup) {
+        await shareOrDownloadFile(
+          JSON.stringify(backup, null, 2),
+          `breedlog-account-deletion-${state.accountId.slice(0, 8)}.breedlogbackup`,
+          "application/json",
+          "Encrypted pre-deletion backup created.",
+        );
+      }
+      setShowDeleteAccountDialog(false);
+      setDeleteConfirmPhrase("");
+      setDeleteBackupPassphrase("");
+      queryClient.invalidateQueries({ queryKey: ["/api/account/deletion"] });
+      toast({
+        title: "Account deletion scheduled",
+        description: "The 30-day recovery window has started. You can still cancel before permanent deletion.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Deletion request failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const cancelAccountDeletionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/account/deletion/cancel", {});
+      return response.json() as Promise<AccountDeletionState>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/account/deletion"] });
+      toast({
+        title: "Deletion cancelled",
+        description: "Your account and workspace remain active.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Cancellation failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const importCsvMutation = useMutation({
@@ -396,6 +596,13 @@ export default function Settings() {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleRestoreFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setRestoreFile(file);
+    setRestorePreview(null);
+    setConfirmRestoreOverwrite(false);
   };
 
   const form = useForm<InsertFarmSettings>({
@@ -745,6 +952,12 @@ export default function Settings() {
       await shareOrDownloadFile(fallback, 'breedlog-import-template.csv', 'text/csv', 'Import template ready.');
     }
   };
+
+  const currentPlan = entitlementData ? BREEDLOG_PLANS[entitlementData.entitlement.planId] : null;
+  const hiddenAnimalCount = entitlementData?.downgradeProjection.hiddenAnimalIds.length ?? 0;
+  const visibleAnimalCount = entitlementData?.downgradeProjection.visibleAnimalIds.length ?? 0;
+  const deletionStateLabel = accountDeletionState?.status ?? "none";
+
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-8 pb-24 animate-in fade-in duration-500">
@@ -1210,6 +1423,167 @@ export default function Settings() {
                   )}
                 </div>
              </div>
+
+             <div className="p-4 bg-secondary rounded border border-border space-y-4" data-testid="card-plan-entitlements">
+                <div>
+                  <h4 className="font-bold text-sm uppercase mb-2">Plan & Entitlements</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Server-authoritative plan status, quota rules, and downgrade visibility are shown here. Backend enforcement remains the source of truth.
+                  </p>
+                </div>
+
+                {entitlementLoading || !currentPlan ? (
+                  <Skeleton className="h-24 w-full" />
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={currentPlan.id === "premium" ? "default" : "secondary"}>
+                        {currentPlan.displayName}
+                      </Badge>
+                      <Badge variant="outline">{entitlementData?.entitlement.status.replace("_", " ")}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        Pricing version: {entitlementData?.entitlement.pricingVersion}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="rounded border border-border bg-background/70 p-3">
+                        <p><strong>Active animals:</strong> {currentPlan.limits.activeAnimals === "unlimited" ? "Unlimited" : currentPlan.limits.activeAnimals}</p>
+                        <p><strong>Registered devices:</strong> {currentPlan.limits.activeDevices}</p>
+                        <p><strong>AI actions/month:</strong> {currentPlan.limits.aiActionsPerMonth === "fair_use" ? "Fair use" : currentPlan.limits.aiActionsPerMonth}</p>
+                      </div>
+                      <div className="rounded border border-border bg-background/70 p-3">
+                        <p><strong>Individual PDFs/month:</strong> {currentPlan.limits.individualPdfExportsPerMonth}</p>
+                        <p><strong>Batch PDFs/month:</strong> {currentPlan.limits.batchPdfExportsPerMonth}</p>
+                        <p><strong>Weekly auto backups retained:</strong> {currentPlan.limits.retainedWeeklyAutomaticBackups}</p>
+                      </div>
+                    </div>
+                    <div className="rounded border border-border bg-background/70 p-3 text-xs">
+                      <p><strong>Downgrade visibility rule:</strong> first 30 active animals originally added remain visible.</p>
+                      <p><strong>Visible under Free:</strong> {visibleAnimalCount}</p>
+                      <p><strong>Hidden on downgrade:</strong> {hiddenAnimalCount}</p>
+                    </div>
+                  </div>
+                )}
+             </div>
+
+             <div className="p-4 bg-secondary rounded border border-border space-y-4" data-testid="card-encrypted-backups">
+                <div>
+                  <h4 className="font-bold text-sm uppercase mb-2">Encrypted BreedLog Backups</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Create account-bound `.breedlogbackup` files, preview restores safely, and restore only into the authenticated workspace.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <Label htmlFor="backup-passphrase" className="text-xs">Optional backup passphrase</Label>
+                  <Input
+                    id="backup-passphrase"
+                    type="password"
+                    value={backupPassphrase}
+                    onChange={(e) => setBackupPassphrase(e.target.value)}
+                    placeholder="Extra passphrase for this backup"
+                    data-testid="input-backup-passphrase"
+                  />
+                  <Button
+                    className="w-full bg-primary text-primary-foreground font-bold hover:bg-primary/90"
+                    onClick={() => createManualBackupMutation.mutate()}
+                    disabled={createManualBackupMutation.isPending}
+                    data-testid="button-create-manual-backup"
+                  >
+                    {createManualBackupMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating Backup...</>
+                    ) : (
+                      <><Download className="w-4 h-4 mr-2" /> Create Manual .breedlogbackup</>
+                    )}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground">
+                    Free plan: one manual backup in a rolling 7-day window. Premium: unlimited manual backups.
+                  </p>
+                </div>
+
+                <div className="border-t border-border pt-4 space-y-3">
+                  <input
+                    ref={backupRestoreInputRef}
+                    type="file"
+                    accept=".breedlogbackup,application/json"
+                    className="hidden"
+                    onChange={handleRestoreFileSelected}
+                    data-testid="input-restore-backup-file"
+                  />
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => backupRestoreInputRef.current?.click()}
+                    data-testid="button-select-restore-backup"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    {restoreFile ? restoreFile.name : "Select .breedlogbackup File"}
+                  </Button>
+                  <Input
+                    type="password"
+                    value={restorePassphrase}
+                    onChange={(e) => setRestorePassphrase(e.target.value)}
+                    placeholder="Restore passphrase if one was used"
+                    data-testid="input-restore-passphrase"
+                  />
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => previewRestoreMutation.mutate()}
+                    disabled={!restoreFile || previewRestoreMutation.isPending}
+                    data-testid="button-preview-backup-restore"
+                  >
+                    {previewRestoreMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Checking Backup...</>
+                    ) : (
+                      <><RefreshCw className="w-4 h-4 mr-2" /> Preview Restore</>
+                    )}
+                  </Button>
+                </div>
+             </div>
+
+             <div className="p-4 bg-secondary rounded border border-border space-y-4" data-testid="card-account-deletion">
+                <div>
+                  <h4 className="font-bold text-sm uppercase mb-2">Account Deletion & Recovery</h4>
+                  <p className="text-xs text-muted-foreground">
+                    Deletion requests enter a 30-day recovery window before permanent removal. You can export an encrypted backup first and cancel during the recovery period.
+                  </p>
+                </div>
+                <div className="rounded border border-border bg-background/70 p-3 text-xs">
+                  <p><strong>Status:</strong> {deletionStateLabel}</p>
+                  {accountDeletionState?.requestedAt && <p><strong>Requested:</strong> {format(new Date(accountDeletionState.requestedAt), "dd MMM yyyy HH:mm")}</p>}
+                  {accountDeletionState?.recoveryUntil && <p><strong>Recovery until:</strong> {format(new Date(accountDeletionState.recoveryUntil), "dd MMM yyyy HH:mm")}</p>}
+                  {accountDeletionState?.cancelledAt && <p><strong>Cancelled:</strong> {format(new Date(accountDeletionState.cancelledAt), "dd MMM yyyy HH:mm")}</p>}
+                  {accountDeletionState?.completedAt && <p><strong>Completed:</strong> {format(new Date(accountDeletionState.completedAt), "dd MMM yyyy HH:mm")}</p>}
+                </div>
+                {accountDeletionState?.status === "pending" ? (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => cancelAccountDeletionMutation.mutate()}
+                    disabled={cancelAccountDeletionMutation.isPending}
+                    data-testid="button-cancel-account-deletion"
+                  >
+                    {cancelAccountDeletionMutation.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Cancelling...</>
+                    ) : (
+                      <><RotateCcw className="w-4 h-4 mr-2" /> Cancel Pending Deletion</>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowDeleteAccountDialog(true)}
+                    data-testid="button-open-account-deletion-dialog"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" /> Request Account Deletion
+                  </Button>
+                )}
+                <p className="text-[10px] text-muted-foreground">
+                  Legal documents are implementation drafts and still require professional legal review before production launch.
+                </p>
+             </div>
           </CardContent>}
         </Card>
 
@@ -1581,6 +1955,130 @@ export default function Settings() {
           </p>
         </div>
       </div>
+
+      <Dialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-primary" /> Restore Workspace Backup
+            </DialogTitle>
+            <DialogDescription>
+              Confirm this overwrite only after checking the backup preview. Restore is limited to the authenticated BreedLog account and rejects cross-workspace backups.
+            </DialogDescription>
+          </DialogHeader>
+          {restorePreview && (
+            <div className="space-y-3 py-2 text-sm">
+              <div className="rounded border border-border bg-secondary/40 p-3 space-y-1">
+                <p><strong>Exported:</strong> {format(new Date(restorePreview.exportedAt), "dd MMM yyyy HH:mm")}</p>
+                <p><strong>Animals:</strong> {restorePreview.animalCount}</p>
+                <p><strong>Breeding events:</strong> {restorePreview.breedingEventCount}</p>
+                <p><strong>Health records:</strong> {restorePreview.healthRecordCount}</p>
+                <p><strong>Performance records:</strong> {restorePreview.performanceRecordCount}</p>
+                <p><strong>Documents:</strong> {restorePreview.documentCount}</p>
+                <p><strong>Export history:</strong> {restorePreview.exportedDocumentCount}</p>
+              </div>
+              <label className="flex items-start gap-3 rounded border border-border p-3 text-xs">
+                <Checkbox
+                  checked={confirmRestoreOverwrite}
+                  onCheckedChange={(checked) => setConfirmRestoreOverwrite(checked === true)}
+                  data-testid="checkbox-confirm-backup-restore"
+                />
+                <span>
+                  I understand this will overwrite the current workspace on this account. The backup has been previewed and I want to continue.
+                </span>
+              </label>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRestoreDialog(false);
+                setConfirmRestoreOverwrite(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => restoreBackupMutation.mutate()}
+              disabled={!confirmRestoreOverwrite || restoreBackupMutation.isPending}
+              data-testid="button-confirm-backup-restore"
+            >
+              {restoreBackupMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Restoring...</>
+              ) : (
+                <><RefreshCw className="w-4 h-4 mr-2" /> Restore Backup</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeleteAccountDialog} onOpenChange={setShowDeleteAccountDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-primary" /> Request Account Deletion
+            </DialogTitle>
+            <DialogDescription>
+              This starts a 30-day recovery window. You can optionally export an encrypted `.breedlogbackup` before the deletion request is recorded.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <label className="flex items-start gap-3 rounded border border-border p-3 text-sm">
+              <Checkbox
+                checked={deleteExportBackup}
+                onCheckedChange={(checked) => setDeleteExportBackup(checked === true)}
+                data-testid="checkbox-export-before-delete"
+              />
+              <span>Create an encrypted backup before requesting deletion.</span>
+            </label>
+            {deleteExportBackup && (
+              <Input
+                type="password"
+                value={deleteBackupPassphrase}
+                onChange={(e) => setDeleteBackupPassphrase(e.target.value)}
+                placeholder="Optional passphrase for the pre-deletion backup"
+                data-testid="input-delete-backup-passphrase"
+              />
+            )}
+            <div className="rounded border border-border bg-secondary/40 p-3 text-xs">
+              <p><strong>Type exactly:</strong> DELETE MY BREEDLOG ACCOUNT</p>
+            </div>
+            <Input
+              value={deleteConfirmPhrase}
+              onChange={(e) => setDeleteConfirmPhrase(e.target.value)}
+              placeholder="Type the confirmation phrase"
+              data-testid="input-delete-account-confirm"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteAccountDialog(false);
+                setDeleteConfirmPhrase("");
+                setDeleteBackupPassphrase("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => requestAccountDeletionMutation.mutate()}
+              disabled={deleteConfirmPhrase !== "DELETE MY BREEDLOG ACCOUNT" || requestAccountDeletionMutation.isPending}
+              data-testid="button-confirm-account-deletion"
+            >
+              {requestAccountDeletionMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</>
+              ) : (
+                <><Trash2 className="w-4 h-4 mr-2" /> Start 30-Day Recovery Window</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showClearCacheDialog} onOpenChange={setShowClearCacheDialog}>
         <DialogContent>
