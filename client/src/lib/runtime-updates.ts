@@ -19,6 +19,10 @@ let state: ServiceWorkerUpdateState = {
 };
 let controllerRefreshTriggered = false;
 
+function normalizeApiOrigin(value: string | null | undefined) {
+  return (value ?? "").trim().replace(/\/+$/, "");
+}
+
 function publish(next: Partial<ServiceWorkerUpdateState>) {
   state = { ...state, ...next };
   listeners.forEach((listener) => listener(state));
@@ -81,13 +85,81 @@ export function applyPendingPwaUpdate() {
 
 export function detectRuntimePlatform(): BreedLogRuntimePlatform {
   const win = window as Window & { __TAURI__?: unknown; __TAURI_INTERNALS__?: unknown };
-  if (win.__TAURI__ || win.__TAURI_INTERNALS__) {
+  const { hostname, protocol } = window.location;
+  if (
+    win.__TAURI__ ||
+    win.__TAURI_INTERNALS__ ||
+    protocol === "tauri:" ||
+    hostname === "tauri.localhost"
+  ) {
     return "windows";
   }
-  if (navigator.userAgent.toLowerCase().includes("android")) {
+  if (
+    protocol === "capacitor:" ||
+    navigator.userAgent.toLowerCase().includes("android")
+  ) {
     return "android";
   }
   return "pwa";
+}
+
+export function isNativeRuntimePlatform(platform: BreedLogRuntimePlatform) {
+  return platform === "windows" || platform === "android";
+}
+
+export function isInstalledBreedLogRuntime() {
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as { standalone?: boolean }).standalone === true;
+  return isStandalone || isNativeRuntimePlatform(detectRuntimePlatform());
+}
+
+export function getConfiguredApiOrigin() {
+  return normalizeApiOrigin(import.meta.env.VITE_BREEDLOG_API_ORIGIN);
+}
+
+export function resolveApiRequestUrl(
+  requestUrl: string,
+  platform: BreedLogRuntimePlatform,
+  apiOrigin = getConfiguredApiOrigin(),
+  browserOrigin = window.location.origin,
+) {
+  if (!apiOrigin || platform === "pwa") {
+    return requestUrl;
+  }
+  if (requestUrl.startsWith("/api/")) {
+    return `${apiOrigin}${requestUrl}`;
+  }
+  if (requestUrl.startsWith(`${browserOrigin}/api/`)) {
+    return `${apiOrigin}${requestUrl.slice(browserOrigin.length)}`;
+  }
+  return requestUrl;
+}
+
+export function installNativeApiFetchBridge() {
+  const platform = detectRuntimePlatform();
+  const apiOrigin = getConfiguredApiOrigin();
+  const targetOrigin = window.location.origin;
+  const bridgeWindow = window as Window & { __breedlogFetchBridgeInstalled__?: boolean };
+  if (!apiOrigin || platform === "pwa" || bridgeWindow.__breedlogFetchBridgeInstalled__) {
+    return;
+  }
+
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (typeof input === "string") {
+      return originalFetch(resolveApiRequestUrl(input, platform, apiOrigin, targetOrigin), init);
+    }
+    if (input instanceof URL) {
+      return originalFetch(resolveApiRequestUrl(input.toString(), platform, apiOrigin, targetOrigin), init);
+    }
+    return originalFetch(
+      new Request(resolveApiRequestUrl(input.url, platform, apiOrigin, targetOrigin), input),
+      init,
+    );
+  }) as typeof window.fetch;
+
+  bridgeWindow.__breedlogFetchBridgeInstalled__ = true;
 }
 
 export function getRuntimeVersionQuery() {

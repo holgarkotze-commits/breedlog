@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import { isInstalledBreedLogRuntime } from "@/lib/runtime-updates";
 import { FIELD_TEST_VERSION_LABEL } from "@shared/version";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 
@@ -64,6 +65,7 @@ type IssueFormValues = z.infer<typeof issueSchema>;
 
 function detectAppMode(isInstalled: boolean): string {
   if (isInstalled) return "installed";
+  if (isInstalledBreedLogRuntime()) return "installed";
   if (window.location.protocol === "file:") return "unknown";
   return "browser";
 }

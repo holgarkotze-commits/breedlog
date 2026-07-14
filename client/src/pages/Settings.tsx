@@ -33,7 +33,7 @@ import { buildBreedLogCsvContent, buildBreedLogCsvRows, BREEDLOG_CSV_HEADERS } f
 import { BREEDLOG_PLANS } from "@shared/commercial";
 import { FIELD_TEST_BUILD_DATE, FIELD_TEST_VERSION_LABEL } from "@shared/version";
 import { BREEDLOG_RUNTIME_VERSION, type RuntimeUpdateState } from "@shared/update-runtime";
-import { detectRuntimePlatform, getRuntimeVersionQuery } from "@/lib/runtime-updates";
+import { detectRuntimePlatform, getConfiguredApiOrigin, getRuntimeVersionQuery } from "@/lib/runtime-updates";
 
 type EntitlementResponse = {
   entitlement: {
@@ -974,6 +974,7 @@ export default function Settings() {
   const hiddenAnimalCount = entitlementData?.downgradeProjection.hiddenAnimalIds.length ?? 0;
   const visibleAnimalCount = entitlementData?.downgradeProjection.visibleAnimalIds.length ?? 0;
   const runtimePlatform = detectRuntimePlatform();
+  const configuredApiOrigin = getConfiguredApiOrigin();
   const deletionStateLabel = accountDeletionState?.status ?? "none";
 
   return (
@@ -1947,6 +1948,9 @@ export default function Settings() {
                 )}
                 {runtimeUpdateState.windows && (
                   <p><strong>Windows update manifest:</strong> v{runtimeUpdateState.windows.manifestVersion} ({runtimeUpdateState.windows.signedUpdates ? "signed" : "unsigned certification mode"})</p>
+                )}
+                {configuredApiOrigin && (
+                  <p><strong>Native API origin:</strong> {configuredApiOrigin}</p>
                 )}
                 <p>
                   <strong>Status:</strong>{" "}

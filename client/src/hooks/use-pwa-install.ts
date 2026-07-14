@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { isInstalledBreedLogRuntime } from '@/lib/runtime-updates';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -13,9 +14,7 @@ export function usePWAInstall() {
 
   useEffect(() => {
     const checkIfInstalled = () => {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-      const isIOSStandalone = (window.navigator as { standalone?: boolean }).standalone === true;
-      setIsInstalled(isStandalone || isIOSStandalone);
+      setIsInstalled(isInstalledBreedLogRuntime());
     };
 
     const checkIfIOS = () => {

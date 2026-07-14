@@ -2,7 +2,9 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { openDatabase } from "./lib/indexeddb";
-import { registerBreedLogServiceWorker } from "./lib/runtime-updates";
+import { installNativeApiFetchBridge, registerBreedLogServiceWorker } from "./lib/runtime-updates";
+
+installNativeApiFetchBridge();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
