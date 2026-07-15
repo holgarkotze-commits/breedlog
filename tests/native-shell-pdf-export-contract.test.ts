@@ -4,14 +4,12 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync("client/src/pages/AnimalDetail.tsx", "utf8");
 
-test("native shell PDF export opens the print window before async work begins", () => {
-  const openIndex = source.indexOf('const printWindow = window.open("", "_blank");');
-  const photoFetchIndex = source.indexOf("const resp = await fetch(animal.photo);");
-  assert.notEqual(openIndex, -1);
-  assert.notEqual(photoFetchIndex, -1);
-  assert.ok(openIndex < photoFetchIndex);
+test("native shell PDF export generates a real PDF blob and saves it through the desktop bridge", () => {
+  assert.match(source, /const pdfBlob = await buildAnimalProfilePdfBlob\(/);
+  assert.match(source, /const nativePath = await saveFileInNativeDownloads\(pdfBlob, nativeFilename, "application\/pdf"\);/);
 });
 
-test("native shell PDF export reuses the pre-opened window for the rendered datasheet", () => {
-  assert.match(source, /printWindow\.location\.href = blobUrl;/);
+test("browser fallback still previews or downloads the generated PDF blob", () => {
+  assert.match(source, /const previewWindow = window\.open\(blobUrl, "_blank"\);/);
+  assert.match(source, /anchor\.download = nativeFilename;/);
 });

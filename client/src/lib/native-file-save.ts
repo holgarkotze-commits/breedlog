@@ -34,6 +34,10 @@ export async function saveFileInNativeDownloads(
   const blob = new Blob([content], { type });
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const bytesBase64 = bytesToBase64(bytes);
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("save_export_file", { filename, bytesBase64 });
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return await invoke<string>("save_export_file", { filename, bytesBase64 });
+  } catch {
+    return null;
+  }
 }
