@@ -1191,6 +1191,17 @@ ${data.notes || "No notes recorded."}
     };
     
     const handleExportPDF = async () => {
+        const printWindow = window.open("", "_blank");
+        if (!printWindow) {
+            toast({
+                title: "Pop-up blocked",
+                description: "Allow pop-ups for BreedLog in your browser settings, then try again.",
+                variant: "destructive",
+            });
+            return;
+        }
+        printWindow.document.write("<p style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px\">Preparing BreedLog PDF...</p>");
+        printWindow.document.close();
         toast({ title: "Preparing PDF…", description: "Building performance datasheet, please wait." });
 
         // Convert photo to base64 so it loads correctly in the print window
@@ -1609,16 +1620,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
         // reliably in PWA standalone mode where window.open('','_blank') + document.write fails.
         const blob = new Blob([content], { type: "text/html; charset=utf-8" });
         const blobUrl = URL.createObjectURL(blob);
-        const printWindow = window.open(blobUrl, "_blank");
-        if (!printWindow) {
-            URL.revokeObjectURL(blobUrl);
-            toast({
-                title: "Pop-up blocked",
-                description: "Allow pop-ups for BreedLog in your browser settings, then try again.",
-                variant: "destructive",
-            });
-            return;
-        }
+        printWindow.location.href = blobUrl;
         // onload fires once the blob page is fully rendered; fallback at 2.5s for browsers that don't fire it
         printWindow.onload = () => {
             setTimeout(() => { printWindow.print(); URL.revokeObjectURL(blobUrl); }, 400);
