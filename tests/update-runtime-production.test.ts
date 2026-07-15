@@ -222,3 +222,96 @@ test("plain Android browsers stay in the PWA runtime unless the native shell mar
     }
   }
 });
+
+test("Android Firefox remains in the PWA runtime", () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+
+  const mockNavigator = {
+    userAgent: "Mozilla/5.0 (Android 14; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0",
+    standalone: false,
+  };
+
+  const mockWindow = {
+    navigator: mockNavigator,
+    matchMedia: () => ({ matches: false }),
+    location: {
+      origin: "https://app.breedlog.com",
+      hostname: "app.breedlog.com",
+      protocol: "https:",
+    },
+  };
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    writable: true,
+    value: mockWindow,
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    writable: true,
+    value: mockNavigator,
+  });
+
+  try {
+    assert.equal(detectRuntimePlatform(), "pwa");
+  } finally {
+    if (originalWindow) {
+      Object.defineProperty(globalThis, "window", originalWindow);
+    } else {
+      delete (globalThis as typeof globalThis & { window?: unknown }).window;
+    }
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, "navigator", originalNavigator);
+    } else {
+      delete (globalThis as typeof globalThis & { navigator?: unknown }).navigator;
+    }
+  }
+});
+
+test("Capacitor Android runtime is still detected as native Android", () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+
+  const mockNavigator = {
+    userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126.0.0.0 Mobile Safari/537.36",
+    standalone: false,
+  };
+
+  const mockWindow = {
+    Capacitor: {},
+    navigator: mockNavigator,
+    matchMedia: () => ({ matches: false }),
+    location: {
+      origin: "capacitor://localhost",
+      hostname: "localhost",
+      protocol: "capacitor:",
+    },
+  };
+
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    writable: true,
+    value: mockWindow,
+  });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    writable: true,
+    value: mockNavigator,
+  });
+
+  try {
+    assert.equal(detectRuntimePlatform(), "android");
+  } finally {
+    if (originalWindow) {
+      Object.defineProperty(globalThis, "window", originalWindow);
+    } else {
+      delete (globalThis as typeof globalThis & { window?: unknown }).window;
+    }
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, "navigator", originalNavigator);
+    } else {
+      delete (globalThis as typeof globalThis & { navigator?: unknown }).navigator;
+    }
+  }
+});
