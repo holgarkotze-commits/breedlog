@@ -1,16 +1,14 @@
 {
-  "manifestSchemaVersion": "1.1.0",
-  "breedlogProductVersion": "1.0.2-production-completion-candidate",
-  "releaseChannel": "certification",
+  "manifestSchemaVersion": "1.0.0",
+  "breedlogProductVersion": "1.0.0-production-completion-candidate",
+  "releaseChannel": "staging",
   "gitTag": null,
-  "sourceCommit": "868117297ac63799da58f28a04c99ce2e511d778",
+  "sourceCommit": "be6ff654d5ac6f58fe6456de9006aca80d3d7557",
   "sourceBranch": "breedlog-production-completion",
-  "evidenceRefreshDate": "2026-07-15",
+  "buildTimestamp": "2026-07-15T21:57:17.799Z",
   "artifacts": {
-    "frontendArtifactPath": "dist/public/index.html",
-    "frontendArtifactHash": "2596f0da08a0255659bf1dd7acf0a327fd8abf505b44af07e2bf8b9df9aa9f52",
-    "backendArtifactPath": "dist/index.cjs",
-    "backendArtifactHash": "a98b3acdb3a53f79eb04e89a959223edc53bc0c058e55e82ec8ec0087777d1a3"
+    "frontendArtifactHash": "27dbc44fa97767a5355cc02b5ab7e0e5583b04cdf912d24332c7e051aacb6be2",
+    "backendImageDigest": "7439b5bbdc687a442db9c4a54f9b34baa52da898aaeb895ca15c2f4b65bf2384"
   },
   "database": {
     "migrationIdentifiers": [
@@ -19,36 +17,33 @@
     ],
     "migrationChecksums": [
       "d4af42addc17033078489682fbeca6cfb04ee51d46d4ad30d046af0ac24ae9f6",
-      "e4be62b4642bac0e0ecd1df12284c843dae360b1e7568008edb55214e9ffec3e"
+      "a4a53e775a1f8fd57ac682d648887ff61c912f119c8ad8c975e8f4b1cf6c9e22"
     ]
   },
   "mobile": {
+    "androidAabHash": null,
+    "androidApkHash": null,
     "androidPackageName": "com.stitchworx.breedlog",
-    "androidVersionCode": 2,
-    "androidVersionName": "1.0.2",
-    "androidApkPath": "release-artifacts/ci-artifacts/android/app-debug.apk",
-    "androidApkHash": "218e1b66aef0b9460b13fdb7e141d58d11492c0d2b8faea0bf8c8a699f442a01",
-    "androidWorkflowArtifactName": "breedlog-android-debug-apk",
-    "androidWorkflowArtifactDigest": "sha256:fb6b23e3c279a5eb7dd78477778f0d2a1a5f22b2f1f60bd75fd7fd731dd888e2",
+    "androidVersionCode": null,
+    "androidVersionName": null,
     "androidSigningFingerprint": null
   },
   "windows": {
+    "exeHash": "3890bc5fcfc68a5cbc6c7760ecfb85890473fa7e67fdf190476f858af2ea398d",
+    "nsisHash": "a949da47bb8b4e012f74c60a867e1645020e883e3a8a0cea8f15ee356b2cbf63",
+    "msiHash": "1a937f735b07c16c2cce2f9e5d8cb9380ac158a091c9084c7ea03db8bc8ace76",
+    "updaterHash": null,
     "publisher": "STITCH WORX",
-    "installerVersion": "1.0.2",
-    "nsisPath": "release-artifacts/ci-artifacts/windows/nsis/BreedLog_1.0.2_x64-setup.exe",
-    "nsisHash": "d8e2515504719c606245161746c13e131c346a3d69c6ae7bfadf1ca02ebda8c5",
-    "msiPath": "release-artifacts/ci-artifacts/windows/msi/BreedLog_1.0.2_x64_en-US.msi",
-    "msiHash": "e2058b6660bbc7707fc84c3285185b4018b1b9cdd9370d17bf9036b5485149c1",
-    "workflowArtifactName": "breedlog-windows-bundles",
-    "workflowArtifactDigest": "sha256:a8053e93032ae74cd7010da1e1104bdcd92753f7295f2dcd63b966abdf621cc3",
     "signingCertificateThumbprint": null,
     "updaterPublicKeyIdentifier": null,
-    "certificationApiOrigin": "http://127.0.0.1:5000"
+    "artifactPaths": [
+      "src-tauri/target/release/breedlog-desktop.exe",
+      "src-tauri/target/release/bundle/nsis/BreedLog_1.0.2_x64-setup.exe",
+      "src-tauri/target/release/bundle/msi/BreedLog_1.0.2_x64_en-US.msi"
+    ]
   },
   "pwa": {
-    "artifactIdentity": "dist/public/index.html",
-    "serviceWorkerPath": "dist/public/sw.js",
-    "versionDisplayRuntime": "client/src/components/Layout.tsx"
+    "artifactIdentity": "dist/public/index.html"
   },
   "legal": {
     "documentVersions": [
@@ -60,102 +55,40 @@
   },
   "cataloguePricingVersion": "2026-07-locked-commercial-model",
   "environmentConfigurationVersion": "production-completion-env-contract-2026-07-13",
-  "ciWorkflowRunReferences": [
-    {
-      "workflow": "CI",
-      "event": "push",
-      "result": "success",
-      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29397572720"
-    },
-    {
-      "workflow": "CI",
-      "event": "pull_request",
-      "result": "success",
-      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29397575540"
-    },
-    {
-      "workflow": "Android wrapper build",
-      "event": "pull_request",
-      "result": "success",
-      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29397575526"
-    },
-    {
-      "workflow": "Windows desktop shell build",
-      "event": "pull_request",
-      "result": "success",
-      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29397575558"
-    }
-  ],
+  "ciWorkflowRunReferences": [],
   "verification": {
-    "verificationClone": "C:\\Users\\User\\Documents\\GitHub\\breedlog-verify-pr44-final",
-    "localCertificationSuite": {
-      "status": "passed",
-      "tests": 551,
-      "passed": 547,
-      "failed": 0,
-      "skipped": 4
-    },
-    "localAndroidSync": {
-      "status": "passed"
-    },
-    "localCargoCheck": {
-      "status": "passed"
-    },
-    "localWindowsBuild": {
-      "status": "passed",
-      "apiOrigin": "http://127.0.0.1:5000"
-    },
-    "physicalAndroidInstall": {
-      "status": "blocked",
-      "reason": "Physical Android installation proof blocked because no Android device or emulator is available."
-    },
-    "productionActivationStatus": "blocked_external"
-  },
-  "proof": {
-    "windowsInstalledShell": {
-      "ordinaryWorkspaceActivation": true,
-      "animalCreation": true,
-      "restartPersistence": true,
-      "backupResetRestore": true,
-      "individualPdfExport": true,
-      "uninstall": true
-    }
+    "stagingStatus": "locally-verified",
+    "productionStatus": "blocked",
+    "localChecks": [
+      "npm.cmd run check",
+      "npm.cmd run build",
+      "npm.cmd run test:cert",
+      "npm.cmd run android:sync",
+      "cargo check --manifest-path src-tauri/Cargo.toml",
+      "npm.cmd run windows:build",
+      "git diff --check"
+    ]
   },
   "rollbackArtifactReferences": [
     "docs/operations/RUNBOOKS.md#rollback"
   ],
   "approvalRecords": [],
   "knownLimitations": [
-    "Live payment-provider activation is blocked pending merchant/provider credentials and approval.",
-    "Android signed production release is blocked pending Play publisher ownership and signing secrets.",
-    "Windows signed installer and updater activation are blocked pending Authenticode and updater signing material.",
-    "Production DNS, TLS, hosting, and data-plane activation are blocked pending access to breedlog.com and app.breedlog.com infrastructure.",
-    "Legal documents are implementation drafts and still require professional legal review before launch.",
-    "Re-exporting the same PDF filename can fail while the file is open in another application; closing the viewer and exporting again succeeds."
+    "Live payment-provider activation is blocked pending merchant/provider decision and credentials.",
+    "Android signed release is blocked pending Google Play publisher and signing credentials.",
+    "Windows signed installer/update activation is blocked pending code-signing certificate and updater keys.",
+    "Production domain/TLS deployment is blocked pending breedlog.com DNS/hosting access.",
+    "Legal documents are implementation drafts and require professional legal review before production launch."
   ],
   "generatedEvidenceIndex": [
-    "release-artifacts/ACCEPTANCE_REPORT.md",
-    "release-artifacts/EXTERNAL_BLOCKERS.md",
-    "release-artifacts/RELEASE_MANIFEST.json",
-    "release-artifacts/ci-artifacts/android/app-debug.apk",
-    "release-artifacts/ci-artifacts/windows/msi/BreedLog_1.0.2_x64_en-US.msi",
-    "release-artifacts/ci-artifacts/windows/nsis/BreedLog_1.0.2_x64-setup.exe",
-    "release-artifacts/windows-proof/pr44-post-activation-dashboard.png",
-    "release-artifacts/windows-proof/pr44-completed-add-animal-form-1.png",
-    "release-artifacts/windows-proof/pr44-after-first-animal-save.png",
-    "release-artifacts/windows-proof/pr44-animal-profile-first.png",
-    "release-artifacts/windows-proof/pr44-post-restart-persistence-success.png",
-    "release-artifacts/windows-proof/breedlog-094c5558-2026-07-15.breedlogbackup",
-    "release-artifacts/windows-proof/pr44-pre-reset-two-animals.png",
-    "release-artifacts/windows-proof/pr44-reset-confirmation-dialog.png",
-    "release-artifacts/windows-proof/pr44-post-reset-empty-state.png",
-    "release-artifacts/windows-proof/pr44-restore-preview.png",
-    "release-artifacts/windows-proof/pr44-restored-herd.png",
-    "release-artifacts/windows-proof/pr44-post-restart-restored-persistence.png",
-    "release-artifacts/windows-proof/pr44-pdf-export-saved-toast-final.png",
-    "release-artifacts/windows-proof/pr44-individual-animal-export.pdf",
-    "release-artifacts/windows-proof/pr44-individual-animal-export-page-1.png",
-    "release-artifacts/windows-proof/pr44-individual-animal-export-page-2.png",
-    "release-artifacts/windows-proof/pr44-uninstall-check.txt"
+    "evidence/access-code-device-hardening-focused.log",
+    "evidence/data-isolation/phase1-data-isolation-test-2026-07-11.log",
+    "evidence/production-completion-android-sync.log",
+    "evidence/production-completion-build.log",
+    "evidence/production-completion-cargo-check.log",
+    "evidence/production-completion-check.log",
+    "evidence/production-completion-git-diff-check.log",
+    "evidence/production-completion-tauri-info.log",
+    "evidence/production-completion-test-cert.log"
   ]
 }
