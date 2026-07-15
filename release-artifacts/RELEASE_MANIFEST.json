@@ -3,9 +3,9 @@
   "breedlogProductVersion": "1.0.2-production-completion-candidate",
   "releaseChannel": "certification",
   "gitTag": null,
-  "sourceCommit": "2cd56bb6571a4da06affb7248fe884bc5147dcaf",
+  "sourceCommit": "868117297ac63799da58f28a04c99ce2e511d778",
   "sourceBranch": "breedlog-production-completion",
-  "evidenceRefreshDate": "2026-07-14",
+  "evidenceRefreshDate": "2026-07-15",
   "artifacts": {
     "frontendArtifactPath": "dist/public/index.html",
     "frontendArtifactHash": "2596f0da08a0255659bf1dd7acf0a327fd8abf505b44af07e2bf8b9df9aa9f52",
@@ -42,7 +42,8 @@
     "workflowArtifactName": "breedlog-windows-bundles",
     "workflowArtifactDigest": "sha256:a8053e93032ae74cd7010da1e1104bdcd92753f7295f2dcd63b966abdf621cc3",
     "signingCertificateThumbprint": null,
-    "updaterPublicKeyIdentifier": null
+    "updaterPublicKeyIdentifier": null,
+    "certificationApiOrigin": "http://127.0.0.1:5000"
   },
   "pwa": {
     "artifactIdentity": "dist/public/index.html",
@@ -62,42 +63,63 @@
   "ciWorkflowRunReferences": [
     {
       "workflow": "CI",
-      "event": "pull_request",
+      "event": "push",
       "result": "success",
-      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29366766097"
+      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29397572720"
     },
     {
       "workflow": "CI",
       "event": "pull_request",
       "result": "success",
-      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29366768044"
+      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29397575540"
     },
     {
       "workflow": "Android wrapper build",
       "event": "pull_request",
       "result": "success",
-      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29366768145"
+      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29397575526"
     },
     {
       "workflow": "Windows desktop shell build",
       "event": "pull_request",
       "result": "success",
-      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29366768577"
+      "url": "https://github.com/holgarkotze-commits/breedlog/actions/runs/29397575558"
     }
   ],
   "verification": {
+    "verificationClone": "C:\\Users\\User\\Documents\\GitHub\\breedlog-verify-pr44-final",
     "localCertificationSuite": {
       "status": "passed",
-      "tests": 539,
-      "passed": 535,
+      "tests": 551,
+      "passed": 547,
       "failed": 0,
       "skipped": 4
     },
-    "localAndroidBuild": {
-      "status": "blocked_local_tooling",
-      "reason": "java and JAVA_HOME are unavailable on this workstation"
+    "localAndroidSync": {
+      "status": "passed"
+    },
+    "localCargoCheck": {
+      "status": "passed"
+    },
+    "localWindowsBuild": {
+      "status": "passed",
+      "apiOrigin": "http://127.0.0.1:5000"
+    },
+    "physicalAndroidInstall": {
+      "status": "blocked",
+      "reason": "Physical Android installation proof blocked because no Android device or emulator is available."
     },
     "productionActivationStatus": "blocked_external"
+  },
+  "proof": {
+    "windowsInstalledShell": {
+      "ordinaryWorkspaceActivation": true,
+      "animalCreation": true,
+      "restartPersistence": true,
+      "backupResetRestore": true,
+      "individualPdfExport": true,
+      "uninstall": true
+    }
   },
   "rollbackArtifactReferences": [
     "docs/operations/RUNBOOKS.md#rollback"
@@ -109,18 +131,31 @@
     "Windows signed installer and updater activation are blocked pending Authenticode and updater signing material.",
     "Production DNS, TLS, hosting, and data-plane activation are blocked pending access to breedlog.com and app.breedlog.com infrastructure.",
     "Legal documents are implementation drafts and still require professional legal review before launch.",
-    "This certification pass did not capture confirmed installed-shell animal save, installed-shell backup/reset/restore, installed-shell PDF export, or uninstall evidence."
+    "Re-exporting the same PDF filename can fail while the file is open in another application; closing the viewer and exporting again succeeds."
   ],
   "generatedEvidenceIndex": [
     "release-artifacts/ACCEPTANCE_REPORT.md",
     "release-artifacts/EXTERNAL_BLOCKERS.md",
+    "release-artifacts/RELEASE_MANIFEST.json",
     "release-artifacts/ci-artifacts/android/app-debug.apk",
     "release-artifacts/ci-artifacts/windows/msi/BreedLog_1.0.2_x64_en-US.msi",
     "release-artifacts/ci-artifacts/windows/nsis/BreedLog_1.0.2_x64-setup.exe",
-    "release-artifacts/windows-proof/installed-app-after-activation-success.png",
-    "release-artifacts/windows-proof/installed-app-add-animal-dialog.png",
-    "release-artifacts/windows-proof/installed-app-add-animal-scroll.png",
-    "release-artifacts/windows-proof/msi-install-latest.log",
-    "release-artifacts/windows-proof/msi-upgrade-version-fix.log"
+    "release-artifacts/windows-proof/pr44-post-activation-dashboard.png",
+    "release-artifacts/windows-proof/pr44-completed-add-animal-form-1.png",
+    "release-artifacts/windows-proof/pr44-after-first-animal-save.png",
+    "release-artifacts/windows-proof/pr44-animal-profile-first.png",
+    "release-artifacts/windows-proof/pr44-post-restart-persistence-success.png",
+    "release-artifacts/windows-proof/breedlog-094c5558-2026-07-15.breedlogbackup",
+    "release-artifacts/windows-proof/pr44-pre-reset-two-animals.png",
+    "release-artifacts/windows-proof/pr44-reset-confirmation-dialog.png",
+    "release-artifacts/windows-proof/pr44-post-reset-empty-state.png",
+    "release-artifacts/windows-proof/pr44-restore-preview.png",
+    "release-artifacts/windows-proof/pr44-restored-herd.png",
+    "release-artifacts/windows-proof/pr44-post-restart-restored-persistence.png",
+    "release-artifacts/windows-proof/pr44-pdf-export-saved-toast-final.png",
+    "release-artifacts/windows-proof/pr44-individual-animal-export.pdf",
+    "release-artifacts/windows-proof/pr44-individual-animal-export-page-1.png",
+    "release-artifacts/windows-proof/pr44-individual-animal-export-page-2.png",
+    "release-artifacts/windows-proof/pr44-uninstall-check.txt"
   ]
 }
