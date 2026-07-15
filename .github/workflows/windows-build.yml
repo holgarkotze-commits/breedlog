@@ -10,6 +10,8 @@ jobs:
   windows-build:
     name: Windows desktop shell build
     runs-on: windows-latest
+    env:
+      VITE_BREEDLOG_API_ORIGIN: http://127.0.0.1:5000
     steps:
       - name: Checkout
         uses: actions/checkout@v4

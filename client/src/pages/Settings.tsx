@@ -34,6 +34,7 @@ import { BREEDLOG_PLANS } from "@shared/commercial";
 import { FIELD_TEST_BUILD_DATE, FIELD_TEST_VERSION_LABEL } from "@shared/version";
 import { BREEDLOG_RUNTIME_VERSION, type RuntimeUpdateState } from "@shared/update-runtime";
 import { detectRuntimePlatform, getConfiguredApiOrigin, getRuntimeVersionQuery } from "@/lib/runtime-updates";
+import { saveFileInNativeDownloads } from "@/lib/native-file-save";
 
 type EntitlementResponse = {
   entitlement: {
@@ -506,7 +507,7 @@ export default function Settings() {
     
     setIsResetting(true);
     try {
-      const res = await fetch("/api/admin/reset", {
+      const res = await fetch("/api/reset-all-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmPhrase: resetConfirmPhrase }),
@@ -737,6 +738,12 @@ export default function Settings() {
       } catch {
         // fallback to download
       }
+    }
+
+    const nativePath = await saveFileInNativeDownloads(content, filename, type);
+    if (nativePath) {
+      toast({ title: "Export Complete", description: `${successMessage} Saved to ${nativePath}.` });
+      return;
     }
 
     downloadFile(content, filename, type);

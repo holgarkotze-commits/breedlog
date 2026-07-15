@@ -126,6 +126,53 @@ test("native shell preflight receives the trusted CORS contract", async () => {
   assert.match(response.headers.get("access-control-allow-headers") ?? "", /Content-Type/i);
 });
 
+test("native shell write preflight allows the idempotency header used by create flows", async () => {
+  const response = await fetch(`${BASE_URL}/api/animals`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: TAURI_ORIGIN,
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers": "authorization,content-type,x-idempotency-key",
+    },
+  });
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), TAURI_ORIGIN);
+  assert.match(response.headers.get("access-control-allow-headers") ?? "", /Authorization/i);
+  assert.match(response.headers.get("access-control-allow-headers") ?? "", /Content-Type/i);
+  assert.match(response.headers.get("access-control-allow-headers") ?? "", /X-Idempotency-Key/i);
+});
+
+test("native shell auth bootstrap preflight allows the device token header used on restart", async () => {
+  const response = await fetch(`${BASE_URL}/api/device/info`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: TAURI_ORIGIN,
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Headers": "x-device-token",
+    },
+  });
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), TAURI_ORIGIN);
+  assert.match(response.headers.get("access-control-allow-headers") ?? "", /X-Device-Token/i);
+});
+
+test("native shell version preflight allows cache-control for startup cache busting", async () => {
+  const response = await fetch(`${BASE_URL}/api/version`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: TAURI_ORIGIN,
+      "Access-Control-Request-Method": "GET",
+      "Access-Control-Request-Headers": "cache-control",
+    },
+  });
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), TAURI_ORIGIN);
+  assert.match(response.headers.get("access-control-allow-headers") ?? "", /Cache-Control/i);
+});
+
 test("native shell validate responses preserve the trusted CORS origin", async () => {
   const createCode = await fetch(`${BASE_URL}/api/admin/invite-codes`, {
     method: "POST",
