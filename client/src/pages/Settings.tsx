@@ -507,17 +507,9 @@ export default function Settings() {
     
     setIsResetting(true);
     try {
-      const res = await fetch("/api/reset-all-data", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ confirmPhrase: resetConfirmPhrase }),
-        credentials: "include"
+      await apiRequest("POST", "/api/reset-all-data", {
+        confirmPhrase: resetConfirmPhrase,
       });
-      
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Reset failed");
-      }
       
       await clearAllOfflineData();
       queryClient.clear();

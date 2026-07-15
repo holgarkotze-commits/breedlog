@@ -14,7 +14,8 @@ const ROUTES_SOURCE = readFileSync(
 );
 
 test("production reset UI targets the authenticated reset-all-data route", () => {
-  assert.match(SETTINGS_SOURCE, /fetch\("\/api\/reset-all-data"/);
+  assert.match(SETTINGS_SOURCE, /apiRequest\("POST", "\/api\/reset-all-data", \{/);
+  assert.doesNotMatch(SETTINGS_SOURCE, /fetch\("\/api\/reset-all-data"/);
   assert.doesNotMatch(SETTINGS_SOURCE, /fetch\("\/api\/admin\/reset"/);
 });
 
