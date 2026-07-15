@@ -3,9 +3,9 @@
   "breedlogProductVersion": "1.0.0-production-completion-candidate",
   "releaseChannel": "staging",
   "gitTag": null,
-  "sourceCommit": "be6ff654d5ac6f58fe6456de9006aca80d3d7557",
+  "sourceCommit": "b0c2908abb629e0ff9bcf1de1d3c960b37dbc591",
   "sourceBranch": "breedlog-production-completion",
-  "buildTimestamp": "2026-07-15T21:57:17.799Z",
+  "buildTimestamp": "2026-07-15T22:12:40.531Z",
   "artifacts": {
     "frontendArtifactHash": "27dbc44fa97767a5355cc02b5ab7e0e5583b04cdf912d24332c7e051aacb6be2",
     "backendImageDigest": "7439b5bbdc687a442db9c4a54f9b34baa52da898aaeb895ca15c2f4b65bf2384"
