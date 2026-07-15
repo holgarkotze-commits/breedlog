@@ -83,6 +83,19 @@ function getUserId(req: Request): string {
 const requireAuth = requireDeviceAuth;
 const managedAuthProvider = createManagedAuthProvider(storage);
 const backupStorageAdapter = resolveBackupStorageAdapter();
+const billingTestRoutesEnabled = process.env.NODE_ENV === "test" || process.env.BILLING_TEST_ROUTES === "1";
+
+function inferExportQuotaClass(documentType: string, subfolder: string, animalId: number | null | undefined, metadata: Record<string, any> | null | undefined) {
+  if (metadata?.quotaClass === "individual_pdf" || metadata?.quotaClass === "batch_pdf") {
+    return metadata.quotaClass;
+  }
+  if (metadata?.exportType !== "pdf") {
+    return null;
+  }
+  return documentType === "individual" && subfolder === "individual" && animalId
+    ? "individual_pdf"
+    : "batch_pdf";
+}
 
 async function getCurrentDeviceUser(req: Request) {
   const deviceId = getDeviceId(req);
@@ -489,43 +502,45 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/billing/test/checkout/:sessionId/complete", requireAuth, async (req, res) => {
-    try {
-      res.json(await completeTestCheckoutSession(storage, String(req.params.sessionId)));
-    } catch (err) {
-      if (err instanceof EntitlementDeniedError) {
-        return res.status(err.status).json({ message: err.message, code: err.code });
+  if (billingTestRoutesEnabled) {
+    app.post("/api/billing/test/checkout/:sessionId/complete", requireAuth, async (req, res) => {
+      try {
+        res.json(await completeTestCheckoutSession(storage, String(req.params.sessionId)));
+      } catch (err) {
+        if (err instanceof EntitlementDeniedError) {
+          return res.status(err.status).json({ message: err.message, code: err.code });
+        }
+        throw err;
       }
-      throw err;
-    }
-  });
+    });
 
-  app.post("/api/billing/test/simulate", requireAuth, async (req, res) => {
-    try {
-      const userId = getUserId(req);
-      const body = z.object({
-        eventType: z.enum([
-          "subscription.created",
-          "subscription.renewed",
-          "subscription.cancelled",
-          "subscription.grace_period",
-          "subscription.payment_failed",
-          "subscription.refunded",
-          "subscription.reversed",
-          "subscription.expired",
-        ]),
-      }).parse(req.body);
-      res.json(await simulateBillingProviderEvent(storage, userId, { eventType: body.eventType }));
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+    app.post("/api/billing/test/simulate", requireAuth, async (req, res) => {
+      try {
+        const userId = getUserId(req);
+        const body = z.object({
+          eventType: z.enum([
+            "subscription.created",
+            "subscription.renewed",
+            "subscription.cancelled",
+            "subscription.grace_period",
+            "subscription.payment_failed",
+            "subscription.refunded",
+            "subscription.reversed",
+            "subscription.expired",
+          ]),
+        }).parse(req.body);
+        res.json(await simulateBillingProviderEvent(storage, userId, { eventType: body.eventType }));
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+        }
+        if (err instanceof EntitlementDeniedError) {
+          return res.status(err.status).json({ message: err.message, code: err.code });
+        }
+        throw err;
       }
-      if (err instanceof EntitlementDeniedError) {
-        return res.status(err.status).json({ message: err.message, code: err.code });
-      }
-      throw err;
-    }
-  });
+    });
+  }
 
   app.get("/api/entitlements/me", requireAuth, async (req, res) => {
     const userId = getUserId(req);
@@ -544,10 +559,17 @@ export async function registerRoutes(
 
   app.post("/api/billing/webhook/:provider", async (req, res) => {
     try {
-      const rawBody = JSON.stringify(req.body ?? {});
+      const rawBody = Buffer.isBuffer(req.rawBody)
+        ? req.rawBody
+        : typeof req.rawBody === "string"
+          ? Buffer.from(req.rawBody, "utf8")
+          : null;
       const provider = String(req.params.provider || "");
       const signature = req.header("X-BreedLog-Signature");
       const secret = process.env.BILLING_WEBHOOK_SECRET;
+      if (!rawBody) {
+        return res.status(400).json({ message: "Missing raw billing webhook body" });
+      }
       if (!verifyBillingSignature(rawBody, signature, secret)) {
         return res.status(401).json({ message: "Invalid billing webhook signature" });
       }
@@ -1364,11 +1386,14 @@ export async function registerRoutes(
 
       for (const animal of parsed.rowsToCreate) {
         try {
+          await assertCanCreateAnimal(storage, userId);
           await storage.createAnimal(userId, animal);
           created += 1;
         } catch (err) {
           if (err instanceof DuplicateElectronicIdError || err instanceof DuplicateTagIdError || err instanceof DuplicateAnimalNameError) {
             duplicates += 1;
+          } else if (err instanceof EntitlementDeniedError) {
+            errors.push(`Create failed for ${animal.tagId}: ${err.message}`);
           } else {
             errors.push(`Create failed for ${animal.tagId}: ${err instanceof Error ? err.message : 'unknown error'}`);
           }
@@ -1460,7 +1485,7 @@ export async function registerRoutes(
       if (!isAnimalVisible(visibility, animalId ?? null)) {
         return hiddenAnimalNotFound(res);
       }
-      const quotaClass = metadata?.quotaClass;
+      const quotaClass = inferExportQuotaClass(documentType, subfolder, animalId, metadata ?? null);
       if (quotaClass === "individual_pdf") {
         await reserveUsage(storage, userId, "individualPdfExports");
       } else if (quotaClass === "batch_pdf") {

@@ -584,7 +584,40 @@ export async function reserveUsage(
   return usage;
 }
 
-export function verifyBillingSignature(rawBody: string, signature: string | undefined, secret: string | undefined): boolean {
+export async function purgeCommercialState(storage: IStorage, accountId: string): Promise<void> {
+  await storage.deleteSystemSetting(settingKeyForEntitlement(accountId));
+  await storage.deleteSystemSetting(settingKeyForSubscription(accountId));
+
+  for (const row of await storage.listSystemSettings(`${USAGE_PREFIX}${accountId}:`)) {
+    await storage.deleteSystemSetting(row.key);
+  }
+  for (const row of await storage.listSystemSettings(BILLING_AUDIT_PREFIX)) {
+    const entry = JSON.parse(row.value) as BillingAuditEntry;
+    if (entry.accountId === accountId) {
+      await storage.deleteSystemSetting(row.key);
+    }
+  }
+  for (const row of await storage.listSystemSettings(BILLING_CHECKOUT_PREFIX)) {
+    const session = JSON.parse(row.value) as BillingCheckoutSession;
+    if (session.accountId === accountId) {
+      await storage.deleteSystemSetting(row.key);
+    }
+  }
+  for (const row of await storage.listSystemSettings(BILLING_PORTAL_PREFIX)) {
+    const session = JSON.parse(row.value) as BillingPortalSession;
+    if (session.accountId === accountId) {
+      await storage.deleteSystemSetting(row.key);
+    }
+  }
+  for (const row of await storage.listSystemSettings(BILLING_EVENT_PREFIX)) {
+    const payload = JSON.parse(row.value) as { event?: BillingEvent };
+    if (payload.event?.accountId === accountId) {
+      await storage.deleteSystemSetting(row.key);
+    }
+  }
+}
+
+export function verifyBillingSignature(rawBody: string | Buffer, signature: string | undefined, secret: string | undefined): boolean {
   if (!secret) return process.env.NODE_ENV !== "production" && signature === "test-signature";
   if (!signature) return false;
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");

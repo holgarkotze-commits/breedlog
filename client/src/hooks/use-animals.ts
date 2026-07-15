@@ -31,6 +31,8 @@ async function pruneHiddenAnimalsFromCache(serverAnimals: AnimalWithRelations[])
   );
 }
 
+class AnimalVisibilityError extends Error {}
+
 export function useAnimals(filters?: { search?: string; status?: string; sex?: string }) {
   const queryKey = [api.animals.list.path, filters];
   
@@ -56,7 +58,9 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
         if (!res.ok) throw new Error("Failed to fetch animals");
         const data = api.animals.list.responses[200].parse(await res.json());
         await putManyInStore("animals", data);
-        await pruneHiddenAnimalsFromCache(data);
+        if (!filters?.search && !filters?.status && !filters?.sex) {
+          await pruneHiddenAnimalsFromCache(data);
+        }
         return data;
       } catch (error) {
         if (!navigator.onLine) {
@@ -121,7 +125,7 @@ export function useAnimal(id: number) {
         }
 
         if ([403, 404, 423].includes(res.status)) {
-          throw new Error("Animal not found");
+          throw new AnimalVisibilityError("Animal not found");
         }
 
         // Server error - fallback to IndexedDB only for temporary backend failures.
@@ -134,6 +138,9 @@ export function useAnimal(id: number) {
 
         throw new Error("Animal not found");
       } catch (error) {
+        if (error instanceof AnimalVisibilityError) {
+          throw error;
+        }
         // Network error or any other failure - fallback to IndexedDB
         console.log("[useAnimal] Fetch failed, checking IndexedDB:", error);
         const cached = await getFromStore<AnimalWithRelations>("animals", id);

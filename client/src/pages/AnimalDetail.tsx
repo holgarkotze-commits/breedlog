@@ -1228,6 +1228,22 @@ ${data.notes || "No notes recorded."}
             photoBase64: nativePhotoBase64,
             profile: nativeProfile,
         });
+        await createExportedDoc.mutateAsync({
+            name: nativeFilename,
+            documentType: "individual",
+            subfolder: "individual",
+            animalId: animal.id,
+            metadata: {
+              exportType: "pdf",
+              quotaClass: "individual_pdf",
+              category: "individual-performance",
+              sourceSection: "individual",
+              animalCount: 1,
+              pageCount: 1,
+              status: "success",
+              rowsSummary: [{ tagId: animal.tagId, sex: animal.sex, breed: animal.breed, status: animal.status }],
+            }
+        });
         const nativePath = await saveFileInNativeDownloads(pdfBlob, nativeFilename, "application/pdf");
 
         if (nativePath) {
@@ -1248,21 +1264,6 @@ ${data.notes || "No notes recorded."}
             toast({ title: "PDF Ready", description: `Performance datasheet opened for ${animal.tagId}` });
         }
 
-        createExportedDoc.mutate({
-            name: nativeFilename,
-            documentType: "individual",
-            subfolder: "individual",
-            animalId: animal.id,
-            metadata: {
-              exportType: "pdf",
-              category: "individual-performance",
-              sourceSection: "individual",
-              animalCount: 1,
-              pageCount: 1,
-              status: "success",
-              rowsSummary: [{ tagId: animal.tagId, sex: animal.sex, breed: animal.breed, status: animal.status }],
-            }
-        });
         return;
 
         /* Legacy HTML print path retired in favor of the real PDF blob export.

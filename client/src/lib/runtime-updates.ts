@@ -84,7 +84,7 @@ export function applyPendingPwaUpdate() {
 }
 
 export function detectRuntimePlatform(): BreedLogRuntimePlatform {
-  const win = window as Window & { __TAURI__?: unknown; __TAURI_INTERNALS__?: unknown };
+  const win = window as Window & { __TAURI__?: unknown; __TAURI_INTERNALS__?: unknown; Capacitor?: unknown };
   const { hostname, protocol } = window.location;
   if (
     win.__TAURI__ ||
@@ -96,7 +96,7 @@ export function detectRuntimePlatform(): BreedLogRuntimePlatform {
   }
   if (
     protocol === "capacitor:" ||
-    navigator.userAgent.toLowerCase().includes("android")
+    Boolean(win.Capacitor)
   ) {
     return "android";
   }

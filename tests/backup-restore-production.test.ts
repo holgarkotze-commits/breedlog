@@ -30,7 +30,37 @@ test("encrypted .breedlogbackup survives reset and restores exact workspace reco
     sex: "ram",
     status: "active",
   });
+  const lamb = await storage.createAnimal(userId, {
+    tagId: "CERT-0003",
+    name: "Backup Lamb",
+    sex: "ewe",
+    status: "active",
+    birthDate: "2026-07-10",
+  });
   await storage.updateAnimal(userId, ewe.id, { sireId: ram.id });
+  const matingGroup = await storage.createMatingGroup(userId, {
+    name: "July Group",
+    ramId: ram.id,
+    eweIds: [ewe.id],
+    dateIn: "2026-06-01",
+    dateOut: "2026-06-30",
+    lambingSeason: "26A",
+    notes: "Restore proof group",
+  });
+  const breedingEvent = await storage.createBreedingEvent(userId, {
+    eweId: ewe.id,
+    ramId: ram.id,
+    matingGroupId: matingGroup.id,
+    matingDate: "2026-06-02",
+    matingType: "natural",
+    lambingDate: "2026-07-10",
+    lambCount: 1,
+    notes: "Restore proof event",
+  });
+  await storage.createOffspring(userId, {
+    breedingEventId: breedingEvent.id,
+    lambId: lamb.id,
+  });
   await storage.createHealthRecord(userId, {
     animalId: ewe.id,
     date: "2026-07-01",
@@ -50,6 +80,48 @@ test("encrypted .breedlogbackup survives reset and restores exact workspace reco
     animalId: ewe.id,
     metadata: { purpose: "backup-certification" },
   });
+  await storage.createAnimalImage(userId, {
+    animalId: ewe.id,
+    fileName: "backup-ewe.jpg",
+    imageData: "data:image/jpeg;base64,ZmFrZS1pbWFnZQ==",
+    caption: "Restore proof image",
+  });
+  const flockEvent = await storage.createFlockHealthEvent(userId, {
+    eventName: "Vaccination Day",
+    eventType: "vaccination",
+    eventDate: "2026-07-03",
+    productName: "Multivax",
+    route: "subcutaneous",
+    dose: "2ml",
+    notes: "Whole flock proof",
+  });
+  await storage.createFlockHealthTreatments(userId, [{
+    eventId: flockEvent.id,
+    animalId: ewe.id,
+    quantity: "2",
+    route: "subcutaneous",
+    notes: "Ewe treated",
+  }]);
+  const bloodline = await storage.createBloodline(userId, {
+    name: "Cert Foundation",
+    type: "foundation_line",
+    foundationAnimalId: ram.id,
+    status: "active",
+    evidenceStatus: "proven",
+    notes: "Restore proof bloodline",
+  });
+  const geneticLine = await storage.createGeneticLine(userId, {
+    lineName: "Growth Focus",
+    lineGoal: "Improve post-weaning growth",
+    activeStatus: true,
+  });
+  await storage.setAnimalBloodline(userId, {
+    animalId: lamb.id,
+    bloodlineId: bloodline.id,
+    geneticLineId: geneticLine.id,
+    role: "primary",
+    sourceConfidence: "known",
+  });
 
   const backup = await createWorkspaceBackup(storage, userId, {
     passphrase: "correct horse staple",
@@ -59,8 +131,8 @@ test("encrypted .breedlogbackup survives reset and restores exact workspace reco
   assert.notEqual(backup.ciphertext.includes("Backup Ewe"), true);
   assert.deepEqual(previewWorkspaceBackup(backup, userId, "correct horse staple"), {
     exportedAt: "2026-07-13T10:00:00.000Z",
-    animalCount: 2,
-    breedingEventCount: 0,
+    animalCount: 3,
+    breedingEventCount: 1,
     healthRecordCount: 1,
     performanceRecordCount: 1,
     documentCount: 0,
@@ -74,15 +146,35 @@ test("encrypted .breedlogbackup survives reset and restores exact workspace reco
     confirmOverwrite: true,
   });
   const restoredAnimals = await storage.getAnimals(userId, {});
-  assert.equal(restoredAnimals.length, 2);
+  assert.equal(restoredAnimals.length, 3);
   const restoredEwe = restoredAnimals.find((animal) => animal.name === "Backup Ewe");
   const restoredRam = restoredAnimals.find((animal) => animal.name === "Backup Ram");
+  const restoredLamb = restoredAnimals.find((animal) => animal.name === "Backup Lamb");
   assert.ok(restoredEwe);
   assert.ok(restoredRam);
+  assert.ok(restoredLamb);
   assert.equal(restoredEwe.sireId, restoredRam.id);
   assert.equal((await storage.getAllHealthRecords(userId)).length, 1);
   assert.equal((await storage.getAllPerformanceRecords(userId)).length, 1);
   assert.equal((await storage.getExportedDocuments(userId)).length, 1);
+  assert.equal((await storage.getAnimalImages(userId, restoredEwe.id)).length, 1);
+  assert.equal((await storage.getMatingGroups(userId)).length, 1);
+  const restoredBreedingEvents = await storage.getBreedingEvents(userId);
+  assert.equal(restoredBreedingEvents.length, 1);
+  const restoredOffspring = await storage.getOffspringByBreedingEvent(userId, restoredBreedingEvents[0].id);
+  assert.equal(restoredOffspring.length, 1);
+  assert.equal(restoredOffspring[0].lambId, restoredLamb.id);
+  const restoredFlockEvents = await storage.getFlockHealthEvents(userId);
+  assert.equal(restoredFlockEvents.length, 1);
+  assert.equal((await storage.getFlockHealthTreatments(userId, restoredFlockEvents[0].id)).length, 1);
+  const restoredBloodlines = await storage.getBloodlines(userId);
+  const restoredGeneticLines = await storage.getGeneticLines(userId);
+  assert.equal(restoredBloodlines.length, 1);
+  assert.equal(restoredGeneticLines.length, 1);
+  const restoredAssignments = await storage.getAnimalBloodlines(userId, restoredLamb.id);
+  assert.equal(restoredAssignments.length, 1);
+  assert.equal(restoredAssignments[0].bloodlineId, restoredBloodlines[0].id);
+  assert.equal(restoredAssignments[0].geneticLineId, restoredGeneticLines[0].id);
   assert.equal((await storage.getFarmSettings(userId))?.farmName, "Certification Farm");
 });
 

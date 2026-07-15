@@ -350,7 +350,7 @@ test("API: POST /api/exported-documents saves document with subfolder", async ()
       name: "TestCulledReport_2026-01-01.pdf",
       documentType: "culled",
       subfolder: "culled",
-      metadata: { exportType: "pdf", category: "culled", animalCount: 5, status: "success" },
+      metadata: { category: "culled", animalCount: 5, status: "success" },
     }),
   });
   assert.equal(res.status, 201);
@@ -407,7 +407,7 @@ test("API: POST /api/exported-documents for flock-health subfolder routes correc
       name: "FlockHealth_2026-06-22.pdf",
       documentType: "productivity",
       subfolder: "flock-health",
-      metadata: { exportType: "pdf", category: "flock-health", animalCount: 12, status: "success" },
+      metadata: { category: "flock-health", animalCount: 12, status: "success" },
     }),
   });
   assert.equal(res.status, 201);

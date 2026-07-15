@@ -189,6 +189,7 @@ export interface IStorage {
   deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void>;
   
   // Device-based Users
+  getUserById(userId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null } | undefined>;
   getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null } | undefined>;
   upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null }>;
   setSharedUserId(userId: string, sharedUserId: string | null): Promise<void>;
@@ -205,6 +206,7 @@ export interface IStorage {
   createAccount(data: { email: string; passwordHash?: string | null; authProvider?: string; emailVerified?: boolean; googleSubject?: string | null }): Promise<Account>;
   updateAccount(accountId: string, updates: Partial<Pick<Account, "passwordHash" | "emailVerified" | "emailVerifiedAt" | "recoveryRequired" | "lastLoginAt" | "status" | "googleSubject" | "updatedAt">>): Promise<Account | undefined>;
   getAccountWorkspace(accountId: string): Promise<AccountWorkspace | undefined>;
+  getAccountWorkspaceByWorkspaceUserId(workspaceUserId: string): Promise<AccountWorkspace | undefined>;
   linkAccountWorkspace(data: { accountId: string; workspaceUserId: string; legacyDeviceUserId?: string | null; migrationSource: string; migrationState?: string }): Promise<AccountWorkspace>;
   getAccountDevices(accountId: string): Promise<AccountDevice[]>;
   getAccountDeviceByDeviceId(deviceId: string): Promise<AccountDevice | undefined>;
@@ -216,6 +218,7 @@ export interface IStorage {
   consumeAccountToken(tokenId: string, now?: Date): Promise<void>;
   createAccountAuditEvent(data: { accountId?: string | null; workspaceUserId?: string | null; deviceId?: string | null; eventType: string; result?: string; detail?: string | null; metadata?: Record<string, unknown> | null; occurredAt?: Date }): Promise<AccountAuditEvent>;
   getAccountAuditEvents(accountId: string): Promise<AccountAuditEvent[]>;
+  purgeManagedAccount(accountId: string): Promise<void>;
   
   // System Settings (global app config)
   getSystemSetting(key: string): Promise<string | undefined>;
@@ -796,6 +799,13 @@ export class DatabaseStorage implements IStorage {
   }
   
   // === DEVICE-BASED USERS ===
+  async getUserById(userId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null } | undefined> {
+    const { users } = await import("@shared/models/auth");
+    const results = await db.select().from(users).where(eq(users.id, userId));
+    if (!results[0]) return undefined;
+    return { id: results[0].id, deviceId: results[0].deviceId!, sharedUserId: results[0].sharedUserId ?? null, deviceName: results[0].deviceName ?? null };
+  }
+
   async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null } | undefined> {
     const { users } = await import("@shared/models/auth");
     const results = await db.select().from(users).where(eq(users.deviceId, deviceId));
@@ -866,6 +876,12 @@ export class DatabaseStorage implements IStorage {
   async getAccountWorkspace(accountId: string): Promise<AccountWorkspace | undefined> {
     const { accountWorkspaces } = await import("@shared/models/auth");
     const results = await db.select().from(accountWorkspaces).where(eq(accountWorkspaces.accountId, accountId));
+    return results[0];
+  }
+
+  async getAccountWorkspaceByWorkspaceUserId(workspaceUserId: string): Promise<AccountWorkspace | undefined> {
+    const { accountWorkspaces } = await import("@shared/models/auth");
+    const results = await db.select().from(accountWorkspaces).where(eq(accountWorkspaces.workspaceUserId, workspaceUserId));
     return results[0];
   }
 
@@ -987,6 +1003,42 @@ export class DatabaseStorage implements IStorage {
   async getAccountAuditEvents(accountId: string): Promise<AccountAuditEvent[]> {
     const { accountAuditEvents } = await import("@shared/models/auth");
     return db.select().from(accountAuditEvents).where(eq(accountAuditEvents.accountId, accountId)).orderBy(desc(accountAuditEvents.occurredAt));
+  }
+
+  async purgeManagedAccount(accountId: string): Promise<void> {
+    const { sessions, users, accounts, accountWorkspaces, accountDevices, accountTokens, accountAuditEvents } = await import("@shared/models/auth");
+    const workspace = await this.getAccountWorkspace(accountId);
+    const devices = await this.getAccountDevices(accountId);
+    const deviceIds = [...new Set(devices.map((device) => device.deviceId).filter(Boolean))];
+    const userIds = [...new Set([
+      workspace?.workspaceUserId,
+      workspace?.legacyDeviceUserId ?? undefined,
+      ...devices.map((device) => device.deviceUserId),
+      ...devices.map((device) => device.workspaceUserId),
+    ].filter((value): value is string => Boolean(value)))];
+
+    await db.transaction(async (tx) => {
+      const sessionPredicates = [
+        sql`${sessions.sess}->>'accountId' = ${accountId}`,
+        ...deviceIds.map((deviceId) => sql`${sessions.sess}->>'deviceId' = ${deviceId}`),
+        ...userIds.map((userId) => sql`${sessions.sess}->>'userId' = ${userId}`),
+      ];
+      if (sessionPredicates.length > 0) {
+        await tx.delete(sessions).where(or(...sessionPredicates));
+      }
+      if (userIds.length > 0) {
+        await tx.delete(userActivations).where(inArray(userActivations.userId, userIds));
+        await tx.update(users).set({ sharedUserId: null, updatedAt: new Date() }).where(inArray(users.sharedUserId, userIds));
+      }
+      await tx.delete(accountAuditEvents).where(eq(accountAuditEvents.accountId, accountId));
+      await tx.delete(accountTokens).where(eq(accountTokens.accountId, accountId));
+      await tx.delete(accountDevices).where(eq(accountDevices.accountId, accountId));
+      await tx.delete(accountWorkspaces).where(eq(accountWorkspaces.accountId, accountId));
+      await tx.delete(accounts).where(eq(accounts.id, accountId));
+      if (userIds.length > 0) {
+        await tx.delete(users).where(inArray(users.id, userIds));
+      }
+    });
   }
   
   // === SYSTEM SETTINGS ===
@@ -1364,6 +1416,7 @@ export class InMemoryStorage implements IStorage {
   private accountDevicesMap = new Map<string, AccountDevice>();
   private accountTokensMap = new Map<string, AccountToken>();
   private accountAuditMap = new Map<string, AccountAuditEvent>();
+  private offspringMap = new Map<number, Offspring>();
 
   private now() { return new Date(); }
   private nextId(counter: "animalSeq" | "breedingSeq" | "matingSeq" | "recordSeq" | "genericSeq" | "inviteSeq" | "activationSeq") {
@@ -1459,8 +1512,8 @@ export class InMemoryStorage implements IStorage {
   async getBreedingEvents(userId: string): Promise<BreedingEvent[]> { return [...this.breedingEvents.values()].filter(e => e.userId === userId); }
   async createBreedingEvent(userId: string, event: Omit<InsertBreedingEvent, "userId">): Promise<BreedingEvent> { const id = this.nextId("breedingSeq"); const v = { id, ...event, userId } as BreedingEvent; this.breedingEvents.set(id, v); return v; }
   async deleteBreedingEvent(userId: string, id: number): Promise<void> { const e = this.breedingEvents.get(id); if (e?.userId === userId) this.breedingEvents.delete(id); }
-  async getOffspringByBreedingEvent(_userId: string, _eventId: number): Promise<Offspring[]> { return []; }
-  async createOffspring(_userId: string, newOffspring: Omit<InsertOffspring, "userId">): Promise<Offspring> { return { id: this.nextId("genericSeq"), ...newOffspring, userId: "in-memory" } as Offspring; }
+  async getOffspringByBreedingEvent(userId: string, eventId: number): Promise<Offspring[]> { return [...this.offspringMap.values()].filter(o => o.userId === userId && o.breedingEventId === eventId); }
+  async createOffspring(userId: string, newOffspring: Omit<InsertOffspring, "userId">): Promise<Offspring> { const row = { id: this.nextId("genericSeq"), ...newOffspring, userId } as Offspring; this.offspringMap.set(row.id, row); return row; }
   async getMatingGroups(userId: string): Promise<MatingGroup[]> { return [...this.matingGroups.values()].filter(g => g.userId === userId); }
   async createMatingGroup(userId: string, group: Omit<InsertMatingGroup, "userId">): Promise<MatingGroup> { const id = this.nextId("matingSeq"); const v = { id, ...group, userId } as MatingGroup; this.matingGroups.set(id, v); return v; }
   async updateMatingGroup(userId: string, id: number, updates: Partial<Omit<InsertMatingGroup, "userId">>): Promise<MatingGroup | null> { const g = this.matingGroups.get(id); if (!g || g.userId !== userId) return null; const v = { ...g, ...updates } as MatingGroup; this.matingGroups.set(id, v); return v; }
@@ -1506,6 +1559,7 @@ export class InMemoryStorage implements IStorage {
   async clearAllData(userId: string): Promise<void> {
     for (const [id, a] of this.animals.entries()) if (a.userId === userId) this.animals.delete(id);
     for (const [id, e] of this.breedingEvents.entries()) if (e.userId === userId) this.breedingEvents.delete(id);
+    for (const [id, o] of this.offspringMap.entries()) if (o.userId === userId) this.offspringMap.delete(id);
     for (const [id, g] of this.matingGroups.entries()) if (g.userId === userId) this.matingGroups.delete(id);
     for (const [id, r] of this.performanceRecords.entries()) if (r.userId === userId) this.performanceRecords.delete(id);
     for (const [id, r] of this.healthRecords.entries()) if (r.userId === userId) this.healthRecords.delete(id);
@@ -1561,6 +1615,7 @@ export class InMemoryStorage implements IStorage {
   async getAllActiveActivations(): Promise<UserActivation[]> { return [...this.activations.values()].filter(a => a.status === "active"); }
   async getActivationsByCodeId(inviteCodeId: number): Promise<UserActivation[]> { return [...this.activations.values()].filter(a => a.inviteCodeId === inviteCodeId); }
   async deleteActivationsByInviteCodeId(inviteCodeId: number): Promise<void> { for (const [id, a] of this.activations.entries()) if (a.inviteCodeId === inviteCodeId) this.activations.delete(id); }
+  async getUserById(userId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null } | undefined> { return this.users.get(userId); }
   async getUserByDeviceId(deviceId: string): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null } | undefined> { return [...this.users.values()].find(u => u.deviceId === deviceId); }
   async upsertUser(data: { deviceId: string; deviceName?: string }): Promise<{ id: string; deviceId: string; sharedUserId: string | null; deviceName?: string | null }> {
     const existing = await this.getUserByDeviceId(data.deviceId);
@@ -1611,6 +1666,9 @@ export class InMemoryStorage implements IStorage {
   }
   async getAccountWorkspace(accountId: string): Promise<AccountWorkspace | undefined> {
     return [...this.accountWorkspacesMap.values()].find((workspace) => workspace.accountId === accountId);
+  }
+  async getAccountWorkspaceByWorkspaceUserId(workspaceUserId: string): Promise<AccountWorkspace | undefined> {
+    return [...this.accountWorkspacesMap.values()].find((workspace) => workspace.workspaceUserId === workspaceUserId);
   }
   async linkAccountWorkspace(data: { accountId: string; workspaceUserId: string; legacyDeviceUserId?: string | null; migrationSource: string; migrationState?: string }): Promise<AccountWorkspace> {
     const existing = await this.getAccountWorkspace(data.accountId);
@@ -1706,6 +1764,33 @@ export class InMemoryStorage implements IStorage {
     return [...this.accountAuditMap.values()]
       .filter((event) => event.accountId === accountId)
       .sort((a, b) => (b.occurredAt?.getTime() ?? 0) - (a.occurredAt?.getTime() ?? 0));
+  }
+  async purgeManagedAccount(accountId: string): Promise<void> {
+    const workspace = await this.getAccountWorkspace(accountId);
+    const devices = await this.getAccountDevices(accountId);
+    const userIds = new Set<string>();
+    if (workspace?.workspaceUserId) userIds.add(workspace.workspaceUserId);
+    if (workspace?.legacyDeviceUserId) userIds.add(workspace.legacyDeviceUserId);
+    for (const device of devices) {
+      userIds.add(device.deviceUserId);
+      userIds.add(device.workspaceUserId);
+    }
+
+    for (const [id, activation] of this.activations.entries()) if (userIds.has(activation.userId)) this.activations.delete(id);
+    for (const [id, audit] of this.accountAuditMap.entries()) if (audit.accountId === accountId) this.accountAuditMap.delete(id);
+    for (const [id, token] of this.accountTokensMap.entries()) if (token.accountId === accountId) this.accountTokensMap.delete(id);
+    for (const [id, device] of this.accountDevicesMap.entries()) if (device.accountId === accountId) this.accountDevicesMap.delete(id);
+    for (const [id, accountWorkspace] of this.accountWorkspacesMap.entries()) if (accountWorkspace.accountId === accountId) this.accountWorkspacesMap.delete(id);
+    this.accounts.delete(accountId);
+
+    for (const user of this.users.values()) {
+      if (user.sharedUserId && userIds.has(user.sharedUserId) && !userIds.has(user.id)) {
+        user.sharedUserId = null;
+      }
+    }
+    for (const userId of userIds) {
+      this.users.delete(userId);
+    }
   }
   async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
   async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }

@@ -10,6 +10,8 @@ import {
   requestAccountDeletion,
 } from "../server/account-deletion";
 import { previewWorkspaceBackup } from "../server/backup";
+import { createCheckoutSession, completeTestCheckoutSession } from "../server/commercial";
+import { createManagedAuthProvider, registerManagedAccount } from "../server/managed-auth";
 import { storage } from "../server/storage";
 
 test("account deletion requires exact confirmation and creates 30-day recovery state", async () => {
@@ -78,6 +80,47 @@ test("expired deletion completion clears workspace data after recovery window", 
   assert.equal(completed.status, "completed");
   assert.ok(completed.legalTombstoneKey);
   assert.equal((await storage.getAnimals(userId, {})).length, 0);
+});
+
+test("expired deletion completion purges managed auth, workspace mappings, and commercial state", async () => {
+  const provider = createManagedAuthProvider(storage);
+  const deviceId = "account-delete-managed-device";
+  const deviceUser = await storage.upsertUser({ deviceId, deviceName: "Delete Device" });
+  const registered = await registerManagedAccount(storage, provider, {
+    email: "account-delete-managed@example.com",
+    password: "DeleteManagedPass1",
+    deviceId,
+    deviceUserId: deviceUser.id,
+    deviceName: "Delete Device",
+    platform: "windows",
+  });
+  const accountId = registered.account.id;
+  const workspaceUserId = registered.profile.workspaceUserId;
+
+  await storage.createAnimal(workspaceUserId, {
+    tagId: "DEL-ACCT-001",
+    name: "Managed Account Ewe",
+    sex: "ewe",
+    status: "active",
+  });
+  const checkout = await createCheckoutSession(storage, accountId, "premium_monthly");
+  await completeTestCheckoutSession(storage, checkout.sessionId, {
+    now: new Date("2026-07-13T00:00:00Z"),
+  });
+  await requestAccountDeletion(storage, workspaceUserId, {
+    typedConfirmation: "DELETE MY BREEDLOG ACCOUNT",
+    now: new Date("2026-07-13T00:00:00Z"),
+  });
+
+  const completed = await completeExpiredAccountDeletion(storage, workspaceUserId, new Date("2026-08-13T00:00:00Z"));
+  assert.equal(completed.status, "completed");
+  assert.equal(await storage.getAccountById(accountId), undefined);
+  assert.equal(await storage.getAccountWorkspace(accountId), undefined);
+  assert.equal((await storage.getAccountDevices(accountId)).length, 0);
+  assert.equal((await storage.getAccountAuditEvents(accountId)).length, 0);
+  assert.equal((await storage.getAnimals(workspaceUserId, {})).length, 0);
+  assert.equal(await storage.getSystemSetting("commercial:entitlement:" + accountId), undefined);
+  assert.equal(await storage.getSystemSetting("commercial:subscription:" + accountId), undefined);
 });
 
 test("deletion purge failure is retryable and queue worker completes it later", async () => {

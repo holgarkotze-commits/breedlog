@@ -1,0 +1,251 @@
+import assert from "node:assert/strict";
+import test, { after, before } from "node:test";
+import { createHmac } from "node:crypto";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+
+const BASE_URL = "http://127.0.0.1:5013";
+let server: ChildProcessWithoutNullStreams | null = null;
+let logs = "";
+
+async function waitForServer(timeoutMs = 20000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const response = await fetch(`${BASE_URL}/api/version`);
+      if (response.ok) return;
+    } catch {
+      // retry
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`Server did not become ready.\n${logs}`);
+}
+
+function testHeaders(userId: string, deviceId: string) {
+  return {
+    "Content-Type": "application/json",
+    "x-test-user-id": userId,
+    "x-test-device-id": deviceId,
+  };
+}
+
+function bearerHeaders(token: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function registerDevice(deviceId: string, deviceName: string) {
+  const response = await fetch(`${BASE_URL}/api/device/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deviceId, deviceName }),
+  });
+  assert.equal(response.status, 200);
+  return await response.json() as { token: string; userId: string; deviceId: string };
+}
+
+before(async () => {
+  server = spawn(process.execPath, ["--import", "tsx/esm", "server/index.ts"], {
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      USE_IN_MEMORY_STORAGE: "1",
+      SESSION_SECRET: "test-secret",
+      BILLING_WEBHOOK_SECRET: "webhook-secret",
+      ADMIN_PIN: "1234",
+      PORT: "5013",
+    },
+    stdio: "pipe",
+    detached: true,
+  });
+  server.stdout.on("data", (chunk) => { logs += chunk.toString(); });
+  server.stderr.on("data", (chunk) => { logs += chunk.toString(); });
+  await waitForServer();
+});
+
+after(async () => {
+  if (server && !server.killed) {
+    try {
+      if (process.platform === "win32") server.kill("SIGTERM");
+      else process.kill(-server.pid!, "SIGTERM");
+    } catch {
+      try { server.kill("SIGTERM"); } catch {}
+    }
+  }
+});
+
+test("billing webhook verification uses the captured raw request body", async () => {
+  const rawBody = JSON.stringify({
+    providerEventId: "evt-raw-body-1",
+    accountId: "webhook-raw-body-account",
+    eventType: "subscription.created",
+    planId: "premium",
+  }, null, 2);
+  const signature = createHmac("sha256", "webhook-secret").update(rawBody).digest("hex");
+
+  let response = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-BreedLog-Signature": signature,
+    },
+    body: rawBody,
+  });
+  assert.equal(response.status, 202);
+
+  response = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-BreedLog-Signature": signature,
+    },
+    body: rawBody,
+  });
+  assert.equal(response.status, 200);
+});
+
+test("individual PDF quota is inferred and enforced even when quotaClass is omitted", async () => {
+  const userId = "export-quota-user";
+  const deviceId = "export-quota-device";
+  await fetch(`${BASE_URL}/api/reset-all-data`, {
+    method: "POST",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({ confirmPhrase: "RESET BREEDLOG" }),
+  });
+
+  const animalResponse = await fetch(`${BASE_URL}/api/animals`, {
+    method: "POST",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({ tagId: "EXP-0001", sex: "ewe", status: "active" }),
+  });
+  assert.equal(animalResponse.status, 201);
+  const animal = await animalResponse.json() as { id: number };
+
+  for (let index = 0; index < 5; index += 1) {
+    const response = await fetch(`${BASE_URL}/api/exported-documents`, {
+      method: "POST",
+      headers: testHeaders(userId, deviceId),
+      body: JSON.stringify({
+        name: `animal-${index}.pdf`,
+        documentType: "individual",
+        subfolder: "individual",
+        animalId: animal.id,
+        metadata: {
+          exportType: "pdf",
+          animalCount: 1,
+          status: "success",
+        },
+      }),
+    });
+    assert.equal(response.status, 201);
+  }
+
+  const blocked = await fetch(`${BASE_URL}/api/exported-documents`, {
+    method: "POST",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({
+      name: "animal-6.pdf",
+      documentType: "individual",
+      subfolder: "individual",
+      animalId: animal.id,
+      metadata: {
+        exportType: "pdf",
+        animalCount: 1,
+        status: "success",
+      },
+    }),
+  });
+  assert.equal(blocked.status, 403);
+});
+
+test("CSV import enforces the active animal limit for Free accounts", async () => {
+  const userId = "csv-cap-user";
+  const deviceId = "csv-cap-device";
+  await fetch(`${BASE_URL}/api/reset-all-data`, {
+    method: "POST",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({ confirmPhrase: "RESET BREEDLOG" }),
+  });
+
+  const csvRows = ["tagId,sex,status"];
+  for (let index = 1; index <= 31; index += 1) {
+    csvRows.push(`CSV-${String(index).padStart(4, "0")},ewe,active`);
+  }
+
+  const response = await fetch(`${BASE_URL}/api/import/csv`, {
+    method: "POST",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({ csvData: csvRows.join("\n") }),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json() as { created: number; failed: number; errors: string[] };
+  assert.equal(body.created, 30);
+  assert.equal(body.failed, 1);
+  assert.match(body.errors[0], /Free accounts are limited to 30 active animals/);
+});
+
+test("revoked managed-device tokens can no longer authenticate protected requests", async () => {
+  const email = "revoked-managed-device@example.com";
+  const password = "VerySecurePass9";
+  const primaryDeviceId = "managed-device-primary-1234567890123456";
+  const secondaryDeviceId = "managed-device-second-1234567890123456";
+
+  const primary = await registerDevice(primaryDeviceId, "Primary Device");
+  let response = await fetch(`${BASE_URL}/api/auth/register`, {
+    method: "POST",
+    headers: bearerHeaders(primary.token),
+    body: JSON.stringify({
+      email,
+      password,
+      deviceName: "Primary Device",
+      platform: "windows",
+    }),
+  });
+  assert.equal(response.status, 201);
+  const registerBody = await response.json() as { profile: { accountId: string } };
+  const accountId = registerBody.profile.accountId;
+
+  const rawBody = JSON.stringify({
+    providerEventId: "evt-managed-device-premium",
+    accountId,
+    eventType: "subscription.created",
+    planId: "premium",
+  });
+  const signature = createHmac("sha256", "webhook-secret").update(rawBody).digest("hex");
+  response = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-BreedLog-Signature": signature,
+    },
+    body: rawBody,
+  });
+  assert.equal(response.status, 202);
+
+  const secondary = await registerDevice(secondaryDeviceId, "Secondary Device");
+  response = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: bearerHeaders(secondary.token),
+    body: JSON.stringify({
+      email,
+      password,
+      deviceName: "Secondary Device",
+      platform: "android",
+    }),
+  });
+  assert.equal(response.status, 200);
+
+  response = await fetch(`${BASE_URL}/api/auth/devices/revoke`, {
+    method: "POST",
+    headers: bearerHeaders(primary.token),
+    body: JSON.stringify({ deviceId: secondaryDeviceId }),
+  });
+  assert.equal(response.status, 200);
+
+  response = await fetch(`${BASE_URL}/api/animals`, {
+    headers: bearerHeaders(secondary.token),
+  });
+  assert.equal(response.status, 401);
+});

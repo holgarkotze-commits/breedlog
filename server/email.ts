@@ -19,6 +19,10 @@ function getTransporter() {
   });
 }
 
+export function canSendTransactionalEmail(): boolean {
+  return getTransporter() !== null;
+}
+
 function getAdminEmail(): string | null {
   return process.env.ADMIN_EMAIL || null;
 }
@@ -143,6 +147,63 @@ export async function sendIssueNotification(issue: FieldIssue): Promise<boolean>
     return true;
   } catch (err: any) {
     console.error("[Email] Failed to send issue notification:", err.message);
+    return false;
+  }
+}
+
+export async function sendManagedAuthTokenEmail(params: {
+  email: string;
+  kind: "email_verification" | "password_recovery";
+  token: string;
+  expiresAt: Date;
+}): Promise<boolean> {
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.warn("[Email] SMTP not configured. Managed auth email not sent.");
+    return false;
+  }
+
+  const actionLabel = params.kind === "email_verification" ? "Verify your BreedLog email address" : "Reset your BreedLog password";
+  const tokenLabel = params.kind === "email_verification" ? "Verification token" : "Recovery token";
+  const subject = params.kind === "email_verification"
+    ? "BreedLog email verification"
+    : "BreedLog password recovery";
+
+  const textBody = [
+    actionLabel,
+    "",
+    `${tokenLabel}: ${params.token}`,
+    `Expires at: ${params.expiresAt.toISOString()}`,
+    "",
+    "If you did not request this message, you can ignore it.",
+    "BreedLog — STITCH WORX",
+  ].join("\n");
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1f2937;">
+  <h2 style="margin: 0 0 12px;">${escapeHtml(actionLabel)}</h2>
+  <p style="margin: 0 0 16px;">Use the token below in BreedLog to continue.</p>
+  <div style="padding: 16px; border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; font-family: Consolas, monospace; font-size: 16px;">
+    ${escapeHtml(params.token)}
+  </div>
+  <p style="margin: 16px 0 0;">Expires at: ${escapeHtml(params.expiresAt.toISOString())}</p>
+  <p style="margin: 16px 0 0; color: #64748b;">If you did not request this message, you can ignore it.</p>
+</body>
+</html>`;
+
+  try {
+    await transporter.sendMail({
+      from: getSenderEmail(),
+      to: params.email,
+      subject,
+      text: textBody,
+      html: htmlBody,
+    });
+    return true;
+  } catch (err: any) {
+    console.error("[Email] Failed to send managed auth email:", err.message);
     return false;
   }
 }

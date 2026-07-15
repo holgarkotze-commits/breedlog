@@ -39,6 +39,24 @@ test("managed auth registration preserves the legacy workspace and issues verifi
   assert.equal(profile.devices[0].deviceId, deviceId);
 });
 
+test("managed auth registration preserves an existing shared workspace mapping", async () => {
+  const primary = await storage.upsertUser({ deviceId: "managed-auth-shared-primary", deviceName: "Primary Shared" });
+  const secondary = await storage.upsertUser({ deviceId: "managed-auth-shared-secondary", deviceName: "Secondary Shared" });
+  await storage.setSharedUserId(secondary.id, primary.id);
+
+  const result = await registerManagedAccount(storage, provider, {
+    email: "managed-auth-shared@example.com",
+    password: "VerySecurePassShared1",
+    deviceId: "managed-auth-shared-secondary",
+    deviceUserId: secondary.id,
+    deviceName: "Secondary Shared",
+    platform: "android",
+  });
+
+  assert.equal(result.profile.workspaceUserId, primary.id);
+  assert.equal((await storage.getUserById(secondary.id))?.sharedUserId, primary.id);
+});
+
 test("managed auth email verification and password recovery are deterministic", async () => {
   const deviceId = "managed-auth-device-verify";
   const deviceUser = await storage.upsertUser({ deviceId, deviceName: "Tablet A" });
@@ -68,6 +86,29 @@ test("managed auth email verification and password recovery are deterministic", 
     platform: "android",
   });
   assert.equal(loggedIn.account.id, registered.account.id);
+});
+
+test("password recovery fails closed in production when transactional email is unavailable", async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalSmtpHost = process.env.SMTP_HOST;
+  const originalSmtpUser = process.env.SMTP_USER;
+  const originalSmtpPass = process.env.SMTP_PASS;
+  process.env.NODE_ENV = "production";
+  delete process.env.SMTP_HOST;
+  delete process.env.SMTP_USER;
+  delete process.env.SMTP_PASS;
+
+  try {
+    await assert.rejects(
+      () => requestPasswordRecovery(storage, provider, "managed-auth-verify@example.com"),
+      (error: unknown) => error instanceof ManagedAuthError && error.code === "RECOVERY_EMAIL_UNAVAILABLE",
+    );
+  } finally {
+    process.env.NODE_ENV = originalNodeEnv;
+    if (originalSmtpHost === undefined) delete process.env.SMTP_HOST; else process.env.SMTP_HOST = originalSmtpHost;
+    if (originalSmtpUser === undefined) delete process.env.SMTP_USER; else process.env.SMTP_USER = originalSmtpUser;
+    if (originalSmtpPass === undefined) delete process.env.SMTP_PASS; else process.env.SMTP_PASS = originalSmtpPass;
+  }
 });
 
 test("device limits enforce free one-device and premium three-device boundaries", async () => {

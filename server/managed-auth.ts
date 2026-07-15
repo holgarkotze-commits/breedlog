@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import type { IStorage } from "./storage";
 import { getEntitlementState } from "./commercial";
+import { canSendTransactionalEmail, sendManagedAuthTokenEmail } from "./email";
 
 const PASSWORD_ITERATIONS = 210000;
 const PASSWORD_KEY_BYTES = 32;
@@ -168,6 +169,11 @@ export async function registerManagedAccount(
   if (existing) {
     throw new ManagedAuthError("EMAIL_IN_USE", "An account already exists for that email address.", 409);
   }
+  const deviceUser = await storage.getUserById(params.deviceUserId);
+  if (!deviceUser) {
+    throw new ManagedAuthError("DEVICE_USER_NOT_FOUND", "The current device workspace could not be resolved.", 404);
+  }
+  const workspaceUserId = deviceUser.sharedUserId || deviceUser.id;
 
   const account = await storage.createAccount({
     email,
@@ -178,14 +184,14 @@ export async function registerManagedAccount(
 
   await storage.linkAccountWorkspace({
     accountId: account.id,
-    workspaceUserId: params.deviceUserId,
+    workspaceUserId,
     legacyDeviceUserId: params.deviceUserId,
     migrationSource: "legacy_device_register",
   });
-  await storage.setSharedUserId(params.deviceUserId, params.deviceUserId);
+  await storage.setSharedUserId(params.deviceUserId, workspaceUserId);
   await storage.upsertAccountDevice({
     accountId: account.id,
-    workspaceUserId: params.deviceUserId,
+    workspaceUserId,
     deviceUserId: params.deviceUserId,
     deviceId: params.deviceId,
     deviceName: params.deviceName ?? null,
@@ -195,9 +201,17 @@ export async function registerManagedAccount(
   const verification = await provider.issueToken("email_verification", account.id, 60 * 24, {
     email,
   });
+  if (process.env.NODE_ENV === "production" && canSendTransactionalEmail()) {
+    await sendManagedAuthTokenEmail({
+      email,
+      kind: "email_verification",
+      token: verification.token,
+      expiresAt: verification.expiresAt,
+    });
+  }
   await storage.createAccountAuditEvent({
     accountId: account.id,
-    workspaceUserId: params.deviceUserId,
+    workspaceUserId,
     deviceId: params.deviceId,
     eventType: "account.registered",
     metadata: { email },
@@ -276,6 +290,13 @@ export async function requestPasswordRecovery(
   provider: ManagedAuthProvider,
   email: string,
 ) {
+  if (process.env.NODE_ENV === "production" && !canSendTransactionalEmail()) {
+    throw new ManagedAuthError(
+      "RECOVERY_EMAIL_UNAVAILABLE",
+      "Password recovery email is temporarily unavailable. Please contact support.",
+      503,
+    );
+  }
   const account = await storage.getAccountByEmail(normalizeEmail(email));
   if (!account) {
     return { requested: true, token: null as string | null, expiresAt: null as Date | null };
@@ -283,6 +304,21 @@ export async function requestPasswordRecovery(
   const token = await provider.issueToken("password_recovery", account.id, 60, {
     email: account.email,
   });
+  if (process.env.NODE_ENV === "production") {
+    const sent = await sendManagedAuthTokenEmail({
+      email: account.email,
+      kind: "password_recovery",
+      token: token.token,
+      expiresAt: token.expiresAt,
+    });
+    if (!sent) {
+      throw new ManagedAuthError(
+        "RECOVERY_EMAIL_UNAVAILABLE",
+        "Password recovery email is temporarily unavailable. Please contact support.",
+        503,
+      );
+    }
+  }
   await storage.updateAccount(account.id, { recoveryRequired: true });
   await storage.createAccountAuditEvent({
     accountId: account.id,

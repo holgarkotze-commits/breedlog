@@ -118,6 +118,9 @@ const apiLimiter = rateLimit({
 
 app.use("/api/beta/validate", authLimiter);
 app.use("/api/device/register", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/recovery/request", authLimiter);
 app.use("/api/admin", adminLimiter);
 app.use("/api", apiLimiter);
 

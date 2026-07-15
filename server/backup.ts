@@ -70,11 +70,15 @@ function deriveKey(accountId: string, salt: Buffer, passphrase?: string): Buffer
 async function collectWorkspace(storage: IStorage, accountId: string) {
   const animals = await storage.getAnimals(accountId, {});
   const animalImages = (await Promise.all(animals.map((animal) => storage.getAnimalImages(accountId, animal.id)))).flat();
+  const animalBloodlines = (await Promise.all(animals.map((animal) => storage.getAnimalBloodlines(accountId, animal.id)))).flat();
+  const breedingEvents = await storage.getBreedingEvents(accountId);
+  const offspring = (await Promise.all(breedingEvents.map((event) => storage.getOffspringByBreedingEvent(accountId, event.id)))).flat();
   const flockEvents = await storage.getFlockHealthEvents(accountId);
   const flockTreatments = (await Promise.all(flockEvents.map((event) => storage.getFlockHealthTreatments(accountId, event.id)))).flat();
   return {
     animals,
-    breedingEvents: await storage.getBreedingEvents(accountId),
+    breedingEvents,
+    offspring,
     matingGroups: await storage.getMatingGroups(accountId),
     performanceRecords: await storage.getAllPerformanceRecords(accountId),
     healthRecords: await storage.getAllHealthRecords(accountId),
@@ -86,7 +90,138 @@ async function collectWorkspace(storage: IStorage, accountId: string) {
     flockHealthTreatments: flockTreatments,
     bloodlines: await storage.getBloodlines(accountId),
     geneticLines: await storage.getGeneticLines(accountId),
+    animalBloodlines,
   };
+}
+
+async function restoreWorkspaceSnapshot(
+  storage: IStorage,
+  accountId: string,
+  workspace: Awaited<ReturnType<typeof collectWorkspace>>,
+) {
+  const animalIdMap = new Map<number, number>();
+  const matingGroupIdMap = new Map<number, number>();
+  const breedingEventIdMap = new Map<number, number>();
+  const flockEventIdMap = new Map<number, number>();
+  const bloodlineIdMap = new Map<number, number>();
+  const geneticLineIdMap = new Map<number, number>();
+
+  for (const original of workspace.animals) {
+    const { id, userId: _userId, createdAt: _createdAt, vectorClock: _vectorClock, lastSyncedAt: _lastSyncedAt, ...insertable } = original as any;
+    const created = await storage.createAnimal(accountId, { ...insertable, sireId: null, damId: null, createdAt: _createdAt });
+    animalIdMap.set(id, created.id);
+  }
+  for (const original of workspace.animals) {
+    const createdId = animalIdMap.get(original.id);
+    if (!createdId) continue;
+    const sireId = original.sireId ? animalIdMap.get(original.sireId) ?? null : null;
+    const damId = original.damId ? animalIdMap.get(original.damId) ?? null : null;
+    if (sireId || damId) {
+      await storage.updateAnimal(accountId, createdId, { sireId, damId });
+    }
+  }
+  if (workspace.farmSettings) {
+    const { id: _id, userId: _userId, createdAt: _createdAt, updatedAt: _updatedAt, ...settings } = workspace.farmSettings as any;
+    await storage.saveFarmSettings(accountId, settings);
+  }
+  for (const group of workspace.matingGroups) {
+    const { id, userId: _userId, ...insertable } = group as any;
+    const created = await storage.createMatingGroup(accountId, {
+      ...insertable,
+      ramId: insertable.ramId ? animalIdMap.get(insertable.ramId) ?? null : null,
+      eweIds: Array.isArray(insertable.eweIds) ? insertable.eweIds.map((eweId: number) => animalIdMap.get(eweId)).filter(Boolean) : [],
+    });
+    matingGroupIdMap.set(id, created.id);
+  }
+  for (const event of workspace.breedingEvents) {
+    const { id, userId: _userId, clientId: _clientId, vectorClock: _vectorClock, lastSyncedAt: _lastSyncedAt, ...insertable } = event as any;
+    const eweId = animalIdMap.get(event.eweId);
+    const ramId = animalIdMap.get(event.ramId);
+    if (!eweId || !ramId) continue;
+    const created = await storage.createBreedingEvent(accountId, {
+      ...insertable,
+      eweId,
+      ramId,
+      matingGroupId: insertable.matingGroupId ? matingGroupIdMap.get(insertable.matingGroupId) ?? null : null,
+    });
+    breedingEventIdMap.set(id, created.id);
+  }
+  for (const child of workspace.offspring ?? []) {
+    const { id: _id, userId: _userId, ...insertable } = child as any;
+    const breedingEventId = breedingEventIdMap.get(insertable.breedingEventId);
+    const lambId = insertable.lambId ? animalIdMap.get(insertable.lambId) ?? null : null;
+    if (!breedingEventId || !lambId) continue;
+    await storage.createOffspring(accountId, {
+      ...insertable,
+      breedingEventId,
+      lambId,
+    });
+  }
+  for (const record of workspace.performanceRecords) {
+    const { id: _id, userId: _userId, ...insertable } = record as any;
+    const animalId = animalIdMap.get(record.animalId);
+    if (animalId) await storage.createPerformanceRecord(accountId, { ...insertable, animalId });
+  }
+  for (const record of workspace.healthRecords) {
+    const { id: _id, userId: _userId, ...insertable } = record as any;
+    const animalId = animalIdMap.get(record.animalId);
+    if (animalId) await storage.createHealthRecord(accountId, { ...insertable, animalId });
+  }
+  for (const doc of workspace.documents) {
+    const { id: _id, userId: _userId, createdAt: _createdAt, vectorClock: _vectorClock, lastSyncedAt: _lastSyncedAt, ...insertable } = doc as any;
+    await storage.createDocument(accountId, { ...insertable, animalId: insertable.animalId ? animalIdMap.get(insertable.animalId) ?? null : null });
+  }
+  for (const image of workspace.animalImages) {
+    const { id: _id, userId: _userId, uploadedAt: _uploadedAt, ...insertable } = image as any;
+    const animalId = animalIdMap.get(image.animalId);
+    if (animalId) {
+      await storage.createAnimalImage(accountId, { ...insertable, animalId });
+    }
+  }
+  for (const doc of workspace.exportedDocuments) {
+    const { id: _id, userId: _userId, exportedAt: _exportedAt, ...insertable } = doc as any;
+    await storage.createExportedDocument(accountId, { ...insertable, animalId: insertable.animalId ? animalIdMap.get(insertable.animalId) ?? null : null });
+  }
+  for (const event of workspace.flockHealthEvents) {
+    const { id, userId: _userId, createdAt: _createdAt, ...insertable } = event as any;
+    const created = await storage.createFlockHealthEvent(accountId, insertable);
+    flockEventIdMap.set(id, created.id);
+  }
+  for (const treatment of workspace.flockHealthTreatments) {
+    const { id: _id, userId: _userId, ...insertable } = treatment as any;
+    const eventId = flockEventIdMap.get(insertable.eventId);
+    if (!eventId) continue;
+    await storage.createFlockHealthTreatments(accountId, [{
+      ...insertable,
+      eventId,
+      animalId: insertable.animalId ? animalIdMap.get(insertable.animalId) ?? null : null,
+    }]);
+  }
+  for (const bloodline of workspace.bloodlines) {
+    const { id, userId: _userId, createdAt: _createdAt, ...insertable } = bloodline as any;
+    const created = await storage.createBloodline(accountId, {
+      ...insertable,
+      foundationAnimalId: insertable.foundationAnimalId ? animalIdMap.get(insertable.foundationAnimalId) ?? null : null,
+    });
+    bloodlineIdMap.set(id, created.id);
+  }
+  for (const line of workspace.geneticLines) {
+    const { id, userId: _userId, createdAt: _createdAt, ...insertable } = line as any;
+    const created = await storage.createGeneticLine(accountId, insertable);
+    geneticLineIdMap.set(id, created.id);
+  }
+  for (const assignment of workspace.animalBloodlines ?? []) {
+    const { id: _id, userId: _userId, assignedAt: _assignedAt, ...insertable } = assignment as any;
+    const animalId = animalIdMap.get(insertable.animalId);
+    const bloodlineId = bloodlineIdMap.get(insertable.bloodlineId);
+    if (!animalId || !bloodlineId) continue;
+    await storage.setAnimalBloodline(accountId, {
+      ...insertable,
+      animalId,
+      bloodlineId,
+      geneticLineId: insertable.geneticLineId ? geneticLineIdMap.get(insertable.geneticLineId) ?? null : null,
+    });
+  }
 }
 
 export async function createWorkspaceBackup(
@@ -192,42 +327,21 @@ export async function restoreWorkspaceBackup(
   }
   const plaintext = decryptWorkspaceBackup(backup, accountId, options.passphrase);
   const workspace = plaintext.workspace;
+  const currentWorkspace = await collectWorkspace(storage, accountId);
   await storage.clearAllData(accountId);
-  const idMap = new Map<number, number>();
-
-  for (const original of workspace.animals) {
-    const { id, userId: _userId, createdAt: _createdAt, vectorClock: _vectorClock, lastSyncedAt: _lastSyncedAt, ...insertable } = original as any;
-    const created = await storage.createAnimal(accountId, { ...insertable, sireId: null, damId: null, createdAt: _createdAt });
-    idMap.set(id, created.id);
-  }
-  for (const original of workspace.animals) {
-    const createdId = idMap.get(original.id);
-    if (!createdId) continue;
-    const sireId = original.sireId ? idMap.get(original.sireId) ?? null : null;
-    const damId = original.damId ? idMap.get(original.damId) ?? null : null;
-    if (sireId || damId) await storage.updateAnimal(accountId, createdId, { sireId, damId });
-  }
-  if (workspace.farmSettings) {
-    const { id: _id, userId: _userId, createdAt: _createdAt, updatedAt: _updatedAt, ...settings } = workspace.farmSettings as any;
-    await storage.saveFarmSettings(accountId, settings);
-  }
-  for (const record of workspace.performanceRecords) {
-    const { id: _id, userId: _userId, ...insertable } = record as any;
-    const animalId = idMap.get(record.animalId);
-    if (animalId) await storage.createPerformanceRecord(accountId, { ...insertable, animalId });
-  }
-  for (const record of workspace.healthRecords) {
-    const { id: _id, userId: _userId, ...insertable } = record as any;
-    const animalId = idMap.get(record.animalId);
-    if (animalId) await storage.createHealthRecord(accountId, { ...insertable, animalId });
-  }
-  for (const doc of workspace.documents) {
-    const { id: _id, userId: _userId, createdAt: _createdAt, vectorClock: _vectorClock, lastSyncedAt: _lastSyncedAt, ...insertable } = doc as any;
-    await storage.createDocument(accountId, { ...insertable, animalId: insertable.animalId ? idMap.get(insertable.animalId) ?? null : null });
-  }
-  for (const doc of workspace.exportedDocuments) {
-    const { id: _id, userId: _userId, exportedAt: _exportedAt, ...insertable } = doc as any;
-    await storage.createExportedDocument(accountId, { ...insertable, animalId: insertable.animalId ? idMap.get(insertable.animalId) ?? null : null });
+  try {
+    await restoreWorkspaceSnapshot(storage, accountId, workspace);
+  } catch (error) {
+    await storage.clearAllData(accountId);
+    try {
+      await restoreWorkspaceSnapshot(storage, accountId, currentWorkspace);
+    } catch (rollbackError: any) {
+      throw new BackupRejectedError(
+        "RESTORE_ROLLBACK_FAILED",
+        `Restore failed and rollback was unsuccessful: ${rollbackError?.message ?? "unknown rollback failure"}.`,
+      );
+    }
+    throw error;
   }
   return previewWorkspaceBackup(backup, accountId, options.passphrase);
 }

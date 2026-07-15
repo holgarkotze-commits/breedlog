@@ -1,5 +1,6 @@
 import type { IStorage } from "./storage";
 import { createWorkspaceBackup, type EncryptedBreedLogBackup } from "./backup";
+import { purgeCommercialState } from "./commercial";
 
 const DELETION_PREFIX = "account-deletion:";
 const DELETION_TOMBSTONE_PREFIX = "account-deletion-tombstone:";
@@ -102,15 +103,20 @@ export async function cancelAccountDeletion(storage: IStorage, accountId: string
 
 async function finalizeDeletionPurge(
   storage: IStorage,
-  accountId: string,
+  workspaceUserId: string,
   now: Date,
-  purgeHandler?: (accountId: string) => Promise<void>,
+  purgeHandler?: (workspaceUserId: string) => Promise<void>,
 ) {
   if (purgeHandler) {
-    await purgeHandler(accountId);
+    await purgeHandler(workspaceUserId);
   } else {
-    await storage.clearAllData(accountId);
-    await storage.deleteAccountDevices(accountId);
+    await storage.clearAllData(workspaceUserId);
+    const managedWorkspace = await storage.getAccountWorkspaceByWorkspaceUserId(workspaceUserId);
+    const commercialScopeId = managedWorkspace?.accountId ?? workspaceUserId;
+    await purgeCommercialState(storage, commercialScopeId);
+    if (managedWorkspace?.accountId) {
+      await storage.purgeManagedAccount(managedWorkspace.accountId);
+    }
   }
 }
 
