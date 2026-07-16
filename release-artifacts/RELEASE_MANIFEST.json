@@ -1,14 +1,14 @@
 {
   "manifestSchemaVersion": "1.0.0",
-  "breedlogProductVersion": "1.0.0-production-completion-candidate",
+  "breedlogProductVersion": "1.0.2-production-completion-candidate",
   "releaseChannel": "staging",
   "gitTag": null,
-  "sourceCommit": "b0c2908abb629e0ff9bcf1de1d3c960b37dbc591",
+  "sourceCommit": "fff61484dea330ba5921780d92af7c49bbe1d147",
   "sourceBranch": "breedlog-production-completion",
-  "buildTimestamp": "2026-07-15T22:12:40.531Z",
+  "buildTimestamp": "2026-07-16T19:26:43.997Z",
   "artifacts": {
-    "frontendArtifactHash": "27dbc44fa97767a5355cc02b5ab7e0e5583b04cdf912d24332c7e051aacb6be2",
-    "backendImageDigest": "7439b5bbdc687a442db9c4a54f9b34baa52da898aaeb895ca15c2f4b65bf2384"
+    "frontendArtifactHash": "7F2796F41BB8AE4729CA0CD4DEDD0EE20BBDCF295A4E4579775D2B222FFD9119",
+    "backendImageDigest": "F50FD9B7BBB2AC95FCB08D1205C1A8F0B734E776A53688D91B2EE7E98B6A5BEA"
   },
   "database": {
     "migrationIdentifiers": [
@@ -22,16 +22,16 @@
   },
   "mobile": {
     "androidAabHash": null,
-    "androidApkHash": null,
+    "androidApkHash": "010ADA1BC63A2349B281F3670D29F5797A025904CCE1A08B519D3220F6419D94",
     "androidPackageName": "com.stitchworx.breedlog",
     "androidVersionCode": null,
     "androidVersionName": null,
     "androidSigningFingerprint": null
   },
   "windows": {
-    "exeHash": "3890bc5fcfc68a5cbc6c7760ecfb85890473fa7e67fdf190476f858af2ea398d",
-    "nsisHash": "a949da47bb8b4e012f74c60a867e1645020e883e3a8a0cea8f15ee356b2cbf63",
-    "msiHash": "1a937f735b07c16c2cce2f9e5d8cb9380ac158a091c9084c7ea03db8bc8ace76",
+    "exeHash": "E436B7DCFF4AD438D2E55049885C037C114C899539AB94C1E9B63109BD8CD147",
+    "nsisHash": "259D7C0D88B27A051638E4318925D4F555170D3BAC9A79C8BDFB682DADF704C7",
+    "msiHash": "CCF45BFE62749FE2FBE5939993FDC41D3C6F465139C2ECBED2B634ACB9B2D1BB",
     "updaterHash": null,
     "publisher": "STITCH WORX",
     "signingCertificateThumbprint": null,
@@ -43,7 +43,8 @@
     ]
   },
   "pwa": {
-    "artifactIdentity": "dist/public/index.html"
+    "artifactIdentity": "dist/public/index.html",
+    "compiledApiOrigin": "https://app.breedlog.com"
   },
   "legal": {
     "documentVersions": [
@@ -55,11 +56,17 @@
   },
   "cataloguePricingVersion": "2026-07-locked-commercial-model",
   "environmentConfigurationVersion": "production-completion-env-contract-2026-07-13",
-  "ciWorkflowRunReferences": [],
+  "ciWorkflowRunReferences": [
+    "https://github.com/holgarkotze-commits/breedlog/actions/runs/29526726852/job/87716877760",
+    "https://github.com/holgarkotze-commits/breedlog/actions/runs/29526730553/job/87716890417",
+    "https://github.com/holgarkotze-commits/breedlog/actions/runs/29526730583/job/87716890808",
+    "https://github.com/holgarkotze-commits/breedlog/actions/runs/29526730555/job/87716890629"
+  ],
   "verification": {
-    "stagingStatus": "locally-verified",
+    "stagingStatus": "locally-verified-and-ci-verified",
     "productionStatus": "blocked",
     "localChecks": [
+      "npm.cmd ci",
       "npm.cmd run check",
       "npm.cmd run build",
       "npm.cmd run test:cert",
@@ -74,21 +81,22 @@
   ],
   "approvalRecords": [],
   "knownLimitations": [
-    "Live payment-provider activation is blocked pending merchant/provider decision and credentials.",
-    "Android signed release is blocked pending Google Play publisher and signing credentials.",
+    "Live payment-provider activation is blocked pending merchant/provider credentials and go-live approval.",
+    "Android signed production release is blocked pending Google Play publisher ownership and signing credentials.",
     "Windows signed installer/update activation is blocked pending code-signing certificate and updater keys.",
-    "Production domain/TLS deployment is blocked pending breedlog.com DNS/hosting access.",
-    "Legal documents are implementation drafts and require professional legal review before production launch."
+    "Production domain/TLS deployment is blocked pending breedlog.com DNS/hosting/database/storage access.",
+    "Legal documents are implementation drafts and require professional legal review before production launch.",
+    "Local physical Android install proof is blocked on this Windows seat because no Android SDK/device environment is configured."
   ],
   "generatedEvidenceIndex": [
-    "evidence/access-code-device-hardening-focused.log",
-    "evidence/data-isolation/phase1-data-isolation-test-2026-07-11.log",
-    "evidence/production-completion-android-sync.log",
-    "evidence/production-completion-build.log",
-    "evidence/production-completion-cargo-check.log",
+    "evidence/production-completion-npm-ci.log",
     "evidence/production-completion-check.log",
+    "evidence/production-completion-build.log",
+    "evidence/production-completion-test-cert.log",
+    "evidence/production-completion-android-sync.log",
+    "evidence/production-completion-cargo-check.log",
+    "evidence/production-completion-windows-build.log",
     "evidence/production-completion-git-diff-check.log",
-    "evidence/production-completion-tauri-info.log",
-    "evidence/production-completion-test-cert.log"
+    "release-artifacts/PR44_REVIEW_THREAD_REGISTER.md"
   ]
 }

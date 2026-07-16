@@ -1,9 +1,13 @@
 # External Activation Blockers
 
-These are not engineering failures and must not be represented as completed until real credentials/access are supplied.
+These items remain external to engineering and were not fabricated as complete.
 
-- Payment provider: merchant account, webhook secret, portal credentials and legal/tax approval for Premium monthly/yearly billing.
-- Android: Google Play publisher account, package ownership, Play Billing configuration, signing key material stored as CI secrets.
-- Windows: Authenticode certificate, timestamp authority configuration and updater signing key material.
-- Production web: DNS ownership/access for breedlog.com and app.breedlog.com, TLS/deployment target credentials and production database/storage credentials.
-- Legal: professional review and approval of privacy, terms, subscription, refund/cancellation and deletion documents.
+- Payment provider activation: merchant account, production webhook secret, portal/customer-billing credentials, and tax/legal go-live approval for Premium billing.
+- Android production release: Google Play publisher ownership, Play Billing production configuration, and the real Android signing-secret set (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`).
+- Windows production signing/update channel: Authenticode certificate, timestamp authority configuration, and updater signing keys.
+- Production web infrastructure: DNS/hosting/TLS/database/storage access for `breedlog.com` and `app.breedlog.com`.
+- Legal approval: professional review and approval of privacy, terms, subscription, refund/cancellation, and deletion-recovery documents.
+
+Seat-specific verification blocker on this Windows workstation:
+
+- A local Android SDK/device environment is not configured, so local physical Android installation proof could not be repeated here even though the GitHub Android workflow passed and the current debug APK was downloaded into the release pack.
