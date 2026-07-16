@@ -192,6 +192,53 @@ test("CSV import enforces the active animal limit for Free accounts", async () =
   assert.equal((await animals.json() as Array<unknown>).length, 30);
 });
 
+test("reactivating an inactive animal cannot bypass the Free active-animal cap", async () => {
+  const userId = "reactivation-cap-user";
+  const deviceId = "reactivation-cap-device";
+  await fetch(`${BASE_URL}/api/reset-all-data`, {
+    method: "POST",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({ confirmPhrase: "RESET BREEDLOG" }),
+  });
+
+  let response = await fetch(`${BASE_URL}/api/animals`, {
+    method: "POST",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({ tagId: "REACT-0000", sex: "ewe", status: "inactive" }),
+  });
+  assert.equal(response.status, 201);
+  const inactiveAnimal = await response.json() as { id: number };
+
+  for (let index = 1; index <= 30; index += 1) {
+    response = await fetch(`${BASE_URL}/api/animals`, {
+      method: "POST",
+      headers: testHeaders(userId, deviceId),
+      body: JSON.stringify({
+        tagId: `REACT-${String(index).padStart(4, "0")}`,
+        sex: "ewe",
+        status: "active",
+      }),
+    });
+    assert.equal(response.status, 201);
+  }
+
+  response = await fetch(`${BASE_URL}/api/animals/${inactiveAnimal.id}`, {
+    method: "PUT",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({ status: "active" }),
+  });
+  assert.equal(response.status, 403);
+  const body = await response.json() as { code: string; message: string };
+  assert.equal(body.code, "ACTIVE_ANIMAL_LIMIT_REACHED");
+
+  const animals = await fetch(`${BASE_URL}/api/animals`, {
+    headers: testHeaders(userId, deviceId),
+  });
+  assert.equal(animals.status, 200);
+  const rows = await animals.json() as Array<{ status?: string }>;
+  assert.equal(rows.filter((animal) => (animal.status ?? "active") === "active").length, 30);
+});
+
 test("revoked managed-device tokens can no longer authenticate protected requests", async () => {
   const email = "revoked-managed-device@example.com";
   const password = "VerySecurePass9";

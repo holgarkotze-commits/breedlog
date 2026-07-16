@@ -768,6 +768,12 @@ export async function registerRoutes(
           field: "name",
         });
       }
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({
+          message: err.message,
+          code: err.code,
+        });
+      }
       throw err;
     }
   });

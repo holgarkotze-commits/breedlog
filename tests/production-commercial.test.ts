@@ -106,6 +106,13 @@ test("downgrade keeps first 30 originally added animals visible without deleting
 test("Free monthly usage quotas are enforced by the backend usage ledger", async () => {
   const userId = "commercial-usage-quotas";
   await storage.clearAllData(userId);
+  for (let i = 0; i < 10; i++) {
+    await reserveUsage(storage, userId, "aiActions", new Date("2026-07-13T00:00:00Z"));
+  }
+  await assert.rejects(
+    () => reserveUsage(storage, userId, "aiActions", new Date("2026-07-13T00:00:00Z")),
+    /aiActions monthly quota/,
+  );
   for (let i = 0; i < 5; i++) {
     await reserveUsage(storage, userId, "individualPdfExports", new Date("2026-07-13T00:00:00Z"));
   }
