@@ -112,8 +112,10 @@ async function finalizeDeletionPurge(
   } else {
     await storage.clearAllData(workspaceUserId);
     const managedWorkspace = await storage.getAccountWorkspaceByWorkspaceUserId(workspaceUserId);
-    const commercialScopeId = managedWorkspace?.accountId ?? workspaceUserId;
-    await purgeCommercialState(storage, commercialScopeId);
+    await purgeCommercialState(storage, workspaceUserId);
+    if (managedWorkspace?.accountId && managedWorkspace.accountId !== workspaceUserId) {
+      await purgeCommercialState(storage, managedWorkspace.accountId);
+    }
     if (managedWorkspace?.accountId) {
       await storage.purgeManagedAccount(managedWorkspace.accountId);
     }

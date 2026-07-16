@@ -114,7 +114,9 @@ export function createManagedAuthProvider(storage: IStorage): ManagedAuthProvide
 }
 
 async function assertDeviceLimit(storage: IStorage, accountId: string, currentDeviceId: string) {
-  const entitlement = await getEntitlementState(storage, accountId);
+  const workspace = await storage.getAccountWorkspace(accountId);
+  const entitlementScopeId = workspace?.workspaceUserId ?? accountId;
+  const entitlement = await getEntitlementState(storage, entitlementScopeId);
   const devices = (await storage.getAccountDevices(accountId)).filter((device) => device.status === "active");
   const alreadyRegistered = devices.some((device) => device.deviceId === currentDeviceId);
   const limit = entitlement.planId === "premium" ? 3 : 1;

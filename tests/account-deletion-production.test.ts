@@ -103,8 +103,19 @@ test("expired deletion completion purges managed auth, workspace mappings, and c
     sex: "ewe",
     status: "active",
   });
-  const checkout = await createCheckoutSession(storage, accountId, "premium_monthly");
-  await completeTestCheckoutSession(storage, checkout.sessionId, {
+  await storage.createFieldIssue({
+    userId: workspaceUserId,
+    title: "Deletion-linked issue",
+    description: "Reference cleanup regression proof",
+    area: "accounts",
+    severity: "high",
+  });
+  const workspaceCheckout = await createCheckoutSession(storage, workspaceUserId, "premium_monthly");
+  await completeTestCheckoutSession(storage, workspaceCheckout.sessionId, {
+    now: new Date("2026-07-13T00:00:00Z"),
+  });
+  const accountCheckout = await createCheckoutSession(storage, accountId, "premium_monthly");
+  await completeTestCheckoutSession(storage, accountCheckout.sessionId, {
     now: new Date("2026-07-13T00:00:00Z"),
   });
   await requestAccountDeletion(storage, workspaceUserId, {
@@ -119,8 +130,11 @@ test("expired deletion completion purges managed auth, workspace mappings, and c
   assert.equal((await storage.getAccountDevices(accountId)).length, 0);
   assert.equal((await storage.getAccountAuditEvents(accountId)).length, 0);
   assert.equal((await storage.getAnimals(workspaceUserId, {})).length, 0);
+  assert.equal((await storage.getFieldIssues({ search: "Deletion-linked issue" }))[0]?.userId ?? null, null);
   assert.equal(await storage.getSystemSetting("commercial:entitlement:" + accountId), undefined);
   assert.equal(await storage.getSystemSetting("commercial:subscription:" + accountId), undefined);
+  assert.equal(await storage.getSystemSetting("commercial:entitlement:" + workspaceUserId), undefined);
+  assert.equal(await storage.getSystemSetting("commercial:subscription:" + workspaceUserId), undefined);
 });
 
 test("deletion purge failure is retryable and queue worker completes it later", async () => {

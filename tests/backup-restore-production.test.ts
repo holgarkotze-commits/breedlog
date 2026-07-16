@@ -67,6 +67,17 @@ test("encrypted .breedlogbackup survives reset and restores exact workspace reco
     treatment: "Vaccination",
     notes: "Certification restore proof",
   });
+  await storage.createEvaluation(userId, {
+    animalId: ewe.id,
+    date: "2026-07-01",
+    evaluator: "manual",
+    headScore: 5,
+    frontScore: 5,
+    middleScore: 4,
+    rearScore: 5,
+    overallType: "Euro",
+    comments: "Restore proof evaluation",
+  });
   await storage.createPerformanceRecord(userId, {
     animalId: ewe.id,
     date: "2026-07-02",
@@ -155,6 +166,7 @@ test("encrypted .breedlogbackup survives reset and restores exact workspace reco
   assert.ok(restoredLamb);
   assert.equal(restoredEwe.sireId, restoredRam.id);
   assert.equal((await storage.getAllHealthRecords(userId)).length, 1);
+  assert.equal((await storage.getEvaluations(userId, restoredEwe.id)).length, 1);
   assert.equal((await storage.getAllPerformanceRecords(userId)).length, 1);
   assert.equal((await storage.getExportedDocuments(userId)).length, 1);
   assert.equal((await storage.getAnimalImages(userId, restoredEwe.id)).length, 1);

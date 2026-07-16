@@ -184,6 +184,12 @@ test("CSV import enforces the active animal limit for Free accounts", async () =
   assert.equal(body.created, 30);
   assert.equal(body.failed, 1);
   assert.match(body.errors[0], /Free accounts are limited to 30 active animals/);
+
+  const animals = await fetch(`${BASE_URL}/api/animals`, {
+    headers: testHeaders(userId, deviceId),
+  });
+  assert.equal(animals.status, 200);
+  assert.equal((await animals.json() as Array<unknown>).length, 30);
 });
 
 test("revoked managed-device tokens can no longer authenticate protected requests", async () => {
@@ -204,8 +210,8 @@ test("revoked managed-device tokens can no longer authenticate protected request
     }),
   });
   assert.equal(response.status, 201);
-  const registerBody = await response.json() as { profile: { accountId: string } };
-  const accountId = registerBody.profile.accountId;
+  const registerBody = await response.json() as { profile: { accountId: string; workspaceUserId: string } };
+  const accountId = registerBody.profile.workspaceUserId;
 
   const rawBody = JSON.stringify({
     providerEventId: "evt-managed-device-premium",
@@ -248,4 +254,94 @@ test("revoked managed-device tokens can no longer authenticate protected request
     headers: bearerHeaders(secondary.token),
   });
   assert.equal(response.status, 401);
+
+  response = await fetch(`${BASE_URL}/api/auth/me`, {
+    headers: bearerHeaders(secondary.token),
+  });
+  assert.equal(response.status, 401);
+
+  response = await fetch(`${BASE_URL}/api/auth/devices/revoke`, {
+    method: "POST",
+    headers: bearerHeaders(secondary.token),
+    body: JSON.stringify({ deviceId: primaryDeviceId }),
+  });
+  assert.equal(response.status, 401);
+});
+
+test("hidden-animal EID scans do not leak matched animal identifiers into scan events", async () => {
+  const userId = "eid-hidden-user";
+  const deviceId = "eid-hidden-device";
+  await fetch(`${BASE_URL}/api/reset-all-data`, {
+    method: "POST",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({ confirmPhrase: "RESET BREEDLOG" }),
+  });
+
+  let rawBody = JSON.stringify({
+    providerEventId: "evt-hidden-eid-premium",
+    accountId: userId,
+    eventType: "subscription.created",
+    planId: "premium",
+  });
+  let signature = createHmac("sha256", "webhook-secret").update(rawBody).digest("hex");
+  let response = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-BreedLog-Signature": signature,
+    },
+    body: rawBody,
+  });
+  assert.equal(response.status, 202);
+
+  for (let index = 1; index <= 31; index += 1) {
+    response = await fetch(`${BASE_URL}/api/animals`, {
+      method: "POST",
+      headers: testHeaders(userId, deviceId),
+      body: JSON.stringify({
+        tagId: `EID-${String(index).padStart(4, "0")}`,
+        electronicId: `9820000000000${String(index).padStart(3, "0")}`,
+        sex: "ewe",
+        status: "active",
+      }),
+    });
+    assert.equal(response.status, 201);
+  }
+
+  rawBody = JSON.stringify({
+    providerEventId: "evt-hidden-eid-cancel",
+    accountId: userId,
+    eventType: "subscription.cancelled",
+    planId: "premium",
+  });
+  signature = createHmac("sha256", "webhook-secret").update(rawBody).digest("hex");
+  response = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-BreedLog-Signature": signature,
+    },
+    body: rawBody,
+  });
+  assert.equal(response.status, 202);
+
+  response = await fetch(`${BASE_URL}/api/eid/scan`, {
+    method: "POST",
+    headers: testHeaders(userId, deviceId),
+    body: JSON.stringify({
+      electronicIdRaw: "9820000000000031",
+      readerSource: "test-reader",
+    }),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json() as {
+    matched: boolean;
+    animal: unknown;
+    scanEvent: { animalId: number | null; matched: boolean; matchMethod: string | null };
+  };
+  assert.equal(body.matched, false);
+  assert.equal(body.animal, null);
+  assert.equal(body.scanEvent.animalId, null);
+  assert.equal(body.scanEvent.matched, false);
+  assert.equal(body.scanEvent.matchMethod, null);
 });

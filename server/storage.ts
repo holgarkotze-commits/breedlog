@@ -1028,6 +1028,7 @@ export class DatabaseStorage implements IStorage {
       }
       if (userIds.length > 0) {
         await tx.delete(userActivations).where(inArray(userActivations.userId, userIds));
+        await tx.update(fieldIssues).set({ userId: null, updatedAt: new Date() }).where(inArray(fieldIssues.userId, userIds));
         await tx.update(users).set({ sharedUserId: null, updatedAt: new Date() }).where(inArray(users.sharedUserId, userIds));
       }
       await tx.delete(accountAuditEvents).where(eq(accountAuditEvents.accountId, accountId));
@@ -1786,6 +1787,13 @@ export class InMemoryStorage implements IStorage {
     for (const user of this.users.values()) {
       if (user.sharedUserId && userIds.has(user.sharedUserId) && !userIds.has(user.id)) {
         user.sharedUserId = null;
+      }
+    }
+    const now = new Date();
+    for (const issue of this.fieldIssuesMap.values()) {
+      if (issue.userId && userIds.has(issue.userId)) {
+        issue.userId = null;
+        issue.updatedAt = now;
       }
     }
     for (const userId of userIds) {

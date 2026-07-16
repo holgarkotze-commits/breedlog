@@ -112,6 +112,8 @@ async function getCurrentDeviceUser(req: Request) {
 function accountDeletionBypass(path: string): boolean {
   return path.startsWith("/api/account/deletion")
     || path.startsWith("/api/billing/webhook/")
+    || path === "/api/auth/me"
+    || path === "/api/device/info"
     || path === "/api/auth/logout"
     || path === "/api/device/logout"
     || path === "/api/beta/logout";
@@ -224,9 +226,6 @@ export async function registerRoutes(
   // OpenAI key. The BreedLog assistant (/api/ai/*) is the supported,
   // authenticated AI surface.
 
-  // Register BreedLog AI Assistant routes
-  registerAIRoutes(app);
-
   app.use(async (req, res, next) => {
     const userId = getDeviceUserId(req);
     if (!userId || accountDeletionBypass(req.path)) {
@@ -240,6 +239,10 @@ export async function registerRoutes(
     }
     return next();
   });
+
+  // Register BreedLog AI Assistant routes after deletion gating so recovery
+  // windows suspend AI access just like the rest of the workspace.
+  registerAIRoutes(app);
 
   // === MANAGED ACCOUNT AUTHENTICATION ===
   app.get("/api/auth/me", requireAuth, async (req, res) => {
@@ -729,6 +732,15 @@ export async function registerRoutes(
         return hiddenAnimalNotFound(res);
       }
       const input = api.animals.update.input.parse(req.body);
+      const existing = await storage.getAnimal(userId, animalId);
+      if (!existing) {
+        return res.status(404).json({ message: "Animal not found" });
+      }
+      const nextStatus = input.status ?? existing.status ?? "active";
+      const wasActive = (existing.status ?? "active") === "active";
+      if (!wasActive && nextStatus === "active") {
+        await assertCanCreateAnimal(storage, userId);
+      }
       const animal = await storage.updateAnimal(userId, animalId, input);
       res.json(animal);
     } catch (err) {
@@ -1271,11 +1283,15 @@ export async function registerRoutes(
             continue;
           }
           try {
+            const status = record.status || "active";
+            if (status === "active") {
+              await assertCanCreateAnimal(storage, userId);
+            }
             await storage.createAnimal(userId, {
               tagId,
               sex: record.sex || 'ewe',
               breed: record.breed || "Meatmaster",
-              status: record.status || "active",
+              status,
             });
             count++;
           } catch (rowErr) {
@@ -1428,17 +1444,17 @@ export async function registerRoutes(
       }
 
       const animal = await storage.getAnimalByElectronicId(userId, electronicIdRaw);
+      const visibleMatch = animal && isAnimalVisible(visibility, animal.id) ? animal : null;
       const scanEvent = await storage.createEidScanEvent(userId, {
-        animalId: animal?.id ?? null,
+        animalId: visibleMatch?.id ?? null,
         electronicIdRaw,
         readerSource: input.readerSource ?? null,
         readerSessionId: input.readerSessionId ?? null,
         scannedAt: new Date(),
-        matched: !!animal,
-        matchMethod: animal ? "electronicId" : null,
+        matched: !!visibleMatch,
+        matchMethod: visibleMatch ? "electronicId" : null,
         payload: input.payload ?? null,
       });
-      const visibleMatch = animal && isAnimalVisible(visibility, animal.id) ? animal : null;
 
       return res.json({
         matched: !!visibleMatch,

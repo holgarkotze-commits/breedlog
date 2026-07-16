@@ -11,7 +11,8 @@ jobs:
     name: Windows desktop shell build
     runs-on: windows-latest
     env:
-      VITE_BREEDLOG_API_ORIGIN: http://127.0.0.1:5000
+      BREEDLOG_NATIVE_BUILD_TARGET: windows
+      VITE_BREEDLOG_API_ORIGIN: https://app.breedlog.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4

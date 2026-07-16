@@ -639,6 +639,7 @@ export async function applyBillingEvent(storage: IStorage, event: BillingEvent):
   const nextPlan: BreedLogPlanId =
     event.eventType === "subscription.refunded" ||
     event.eventType === "subscription.reversed" ||
+    event.eventType === "subscription.cancelled" ||
     event.eventType === "subscription.expired"
       ? "free"
       : event.planId ?? existingEntitlement.planId;

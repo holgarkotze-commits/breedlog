@@ -5,8 +5,6 @@
   "identifier": "com.stitchworx.breedlog",
   "build": {
     "frontendDist": "../dist/public",
-    "devUrl": "http://127.0.0.1:5000",
-    "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
   "app": {

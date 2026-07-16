@@ -82,6 +82,7 @@ async function collectWorkspace(storage: IStorage, accountId: string) {
     matingGroups: await storage.getMatingGroups(accountId),
     performanceRecords: await storage.getAllPerformanceRecords(accountId),
     healthRecords: await storage.getAllHealthRecords(accountId),
+    evaluations: (await Promise.all(animals.map((animal) => storage.getEvaluations(accountId, animal.id)))).flat(),
     farmSettings: await storage.getFarmSettings(accountId),
     documents: await storage.getDocuments(accountId),
     animalImages,
@@ -166,6 +167,11 @@ async function restoreWorkspaceSnapshot(
     const { id: _id, userId: _userId, ...insertable } = record as any;
     const animalId = animalIdMap.get(record.animalId);
     if (animalId) await storage.createHealthRecord(accountId, { ...insertable, animalId });
+  }
+  for (const evaluation of workspace.evaluations ?? []) {
+    const { id: _id, userId: _userId, ...insertable } = evaluation as any;
+    const animalId = animalIdMap.get(evaluation.animalId);
+    if (animalId) await storage.createEvaluation(accountId, { ...insertable, animalId });
   }
   for (const doc of workspace.documents) {
     const { id: _id, userId: _userId, createdAt: _createdAt, vectorClock: _vectorClock, lastSyncedAt: _lastSyncedAt, ...insertable } = doc as any;

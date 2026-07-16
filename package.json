@@ -18,7 +18,7 @@
     "android:build": "node scripts/build-android-shell.mjs",
     "android:open": "npx cap open android",
     "android:copy": "npm run build && npx cap copy android",
-    "desktop:dev": "npx tauri dev",
+    "desktop:dev": "npx tauri dev --config src-tauri/tauri.dev.conf.json",
     "desktop:build": "npm run build && npx tauri build",
     "windows:build": "npm run desktop:build",
     "seed:field-test:dry-run": "tsx scripts/seed-field-test-simulation.ts",

@@ -1,8 +1,30 @@
 apply plugin: 'com.android.application'
 
+def releaseSigningEnabled = System.getenv("BREEDLOG_ANDROID_SIGNING_ENABLED") == "true"
+def releaseKeystorePath = System.getenv("BREEDLOG_ANDROID_KEYSTORE_PATH")
+def releaseKeystorePassword = System.getenv("BREEDLOG_ANDROID_KEYSTORE_PASSWORD")
+def releaseKeyAlias = System.getenv("BREEDLOG_ANDROID_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("BREEDLOG_ANDROID_KEY_PASSWORD")
+
+if (releaseSigningEnabled && (!releaseKeystorePath || !releaseKeystorePassword || !releaseKeyAlias || !releaseKeyPassword)) {
+    throw new GradleException("BreedLog Android release signing is enabled but one or more signing secrets are missing.")
+}
+
 android {
     namespace = "com.stitchworx.breedlog"
     compileSdk = rootProject.ext.compileSdkVersion
+    signingConfigs {
+        release {
+            if (releaseSigningEnabled) {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseKeystorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                enableV1Signing true
+                enableV2Signing true
+            }
+        }
+    }
     defaultConfig {
         applicationId "com.stitchworx.breedlog"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -18,6 +40,9 @@ android {
     }
     buildTypes {
         release {
+            if (releaseSigningEnabled) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

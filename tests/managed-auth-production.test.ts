@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import nodemailer from "nodemailer";
 import { storage } from "../server/storage";
 import {
   buildManagedAuthProfile,
@@ -111,6 +112,61 @@ test("password recovery fails closed in production when transactional email is u
   }
 });
 
+test("password recovery uses the configured mail adapter in production", async () => {
+  const deviceId = "managed-auth-device-mailer";
+  const deviceUser = await storage.upsertUser({ deviceId, deviceName: "Mailer Device" });
+  await registerManagedAccount(storage, provider, {
+    email: "managed-auth-mailer@example.com",
+    password: "VerySecurePassMailer1",
+    deviceId,
+    deviceUserId: deviceUser.id,
+    deviceName: "Mailer Device",
+    platform: "android",
+  });
+
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalSmtpHost = process.env.SMTP_HOST;
+  const originalSmtpPort = process.env.SMTP_PORT;
+  const originalSmtpUser = process.env.SMTP_USER;
+  const originalSmtpPass = process.env.SMTP_PASS;
+  const originalSmtpFrom = process.env.SMTP_FROM;
+  const originalCreateTransport = nodemailer.createTransport;
+  const sentMessages: Array<{ message: Record<string, unknown> }> = [];
+
+  process.env.NODE_ENV = "production";
+  process.env.SMTP_HOST = "smtp.breedlog.test";
+  process.env.SMTP_PORT = "587";
+  process.env.SMTP_USER = "mailer@breedlog.test";
+  process.env.SMTP_PASS = "mailer-pass";
+  process.env.SMTP_FROM = "no-reply@breedlog.test";
+  (nodemailer as typeof nodemailer & { createTransport: typeof nodemailer.createTransport }).createTransport = ((config: unknown) => {
+    assert.ok(config);
+    return {
+      sendMail: async (message: Record<string, unknown>) => {
+        sentMessages.push({ message });
+        return { messageId: "managed-auth-mailer-test" };
+      },
+    } as Awaited<ReturnType<typeof nodemailer.createTransport>>;
+  }) as typeof nodemailer.createTransport;
+
+  try {
+    const recovery = await requestPasswordRecovery(storage, provider, "managed-auth-mailer@example.com");
+    assert.equal(recovery.requested, true);
+    assert.ok(recovery.token);
+    assert.equal(sentMessages.length, 1);
+    assert.equal(sentMessages[0].message.to, "managed-auth-mailer@example.com");
+    assert.match(String(sentMessages[0].message.subject), /password recovery/i);
+  } finally {
+    process.env.NODE_ENV = originalNodeEnv;
+    if (originalSmtpHost === undefined) delete process.env.SMTP_HOST; else process.env.SMTP_HOST = originalSmtpHost;
+    if (originalSmtpPort === undefined) delete process.env.SMTP_PORT; else process.env.SMTP_PORT = originalSmtpPort;
+    if (originalSmtpUser === undefined) delete process.env.SMTP_USER; else process.env.SMTP_USER = originalSmtpUser;
+    if (originalSmtpPass === undefined) delete process.env.SMTP_PASS; else process.env.SMTP_PASS = originalSmtpPass;
+    if (originalSmtpFrom === undefined) delete process.env.SMTP_FROM; else process.env.SMTP_FROM = originalSmtpFrom;
+    (nodemailer as typeof nodemailer & { createTransport: typeof nodemailer.createTransport }).createTransport = originalCreateTransport;
+  }
+});
+
 test("device limits enforce free one-device and premium three-device boundaries", async () => {
   const primary = await storage.upsertUser({ deviceId: "managed-limit-primary", deviceName: "Primary" });
   const registered = await registerManagedAccount(storage, provider, {
@@ -139,7 +195,7 @@ test("device limits enforce free one-device and premium three-device boundaries"
   await applyBillingEvent(storage, {
     provider: "test-provider",
     providerEventId: "managed-auth-premium-1",
-    accountId: registered.account.id,
+    accountId: registered.profile.workspaceUserId,
     eventType: "subscription.created",
     planId: "premium",
     effectiveAt: new Date().toISOString(),

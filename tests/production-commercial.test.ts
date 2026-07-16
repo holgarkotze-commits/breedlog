@@ -228,3 +228,21 @@ test("annual billing, webhook signatures, and quota add-ons remain deterministic
   assert.equal(reversed.entitlement.planId, "free");
   assert.equal(reversed.entitlement.status, "refunded");
 });
+
+test("immediate cancellation downgrades Premium entitlements back to Free limits", async () => {
+  const userId = "commercial-immediate-cancel";
+  await storage.clearAllData(userId);
+
+  const checkout = await createCheckoutSession(storage, userId, "premium_monthly");
+  await completeTestCheckoutSession(storage, checkout.sessionId, {
+    now: new Date("2026-07-13T00:00:00Z"),
+  });
+  assert.equal((await getEntitlementState(storage, userId)).planId, "premium");
+
+  const cancelled = await cancelBillingSubscription(storage, userId, { atPeriodEnd: false });
+  assert.equal(cancelled.cancelAtPeriodEnd, false);
+
+  const entitlement = await getEntitlementState(storage, userId);
+  assert.equal(entitlement.planId, "free");
+  assert.equal(entitlement.status, "cancelled");
+});

@@ -11,7 +11,8 @@ jobs:
     name: Android wrapper build
     runs-on: ubuntu-latest
     env:
-      VITE_BREEDLOG_API_ORIGIN: http://127.0.0.1:5000
+      BREEDLOG_NATIVE_BUILD_TARGET: android
+      VITE_BREEDLOG_API_ORIGIN: https://app.breedlog.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,15 +55,76 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
-      - name: Conditionally build signed release AAB
+      - name: Prepare optional Android release signing
+        id: prepare-signing
         shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
-            cd android
-            ./gradlew --no-daemon :app:bundleRelease
+          required=(ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD)
+          present=0
+          missing=()
+          for name in "${required[@]}"; do
+            if [ -n "${!name:-}" ]; then
+              present=$((present + 1))
+            else
+              missing+=("$name")
+            fi
+          done
+
+          if [ "$present" -gt 0 ] && [ "$present" -lt "${#required[@]}" ]; then
+            echo "::error::Android signing secrets are partially configured. Missing: ${missing[*]}"
+            exit 1
+          fi
+
+          if [ "$present" -eq "${#required[@]}" ]; then
+            keystore_path="$RUNNER_TEMP/breedlog-release.keystore"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+            {
+              echo "BREEDLOG_ANDROID_SIGNING_ENABLED=true"
+              echo "BREEDLOG_ANDROID_KEYSTORE_PATH=$keystore_path"
+              echo "BREEDLOG_ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD"
+              echo "BREEDLOG_ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS"
+              echo "BREEDLOG_ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "release_status=signed" >> "$GITHUB_OUTPUT"
           else
+            echo "BREEDLOG_ANDROID_SIGNING_ENABLED=false" >> "$GITHUB_ENV"
+            echo "release_status=unsigned_blocked" >> "$GITHUB_OUTPUT"
             echo "Signed Android release remains externally blocked by unavailable signing secrets; debug certification artifact was built successfully."
+          fi
+
+      - name: Build signed release Android artifacts
+        if: steps.prepare-signing.outputs.release_status == 'signed'
+        working-directory: android
+        run: ./gradlew --no-daemon :app:assembleRelease :app:bundleRelease
+
+      - name: Verify signed release APK
+        if: steps.prepare-signing.outputs.release_status == 'signed'
+        shell: bash
+        run: |
+          set -euo pipefail
+          apksigner verify --print-certs android/app/build/outputs/apk/release/*.apk
+
+      - name: Upload signed release Android artifacts
+        if: steps.prepare-signing.outputs.release_status == 'signed'
+        uses: actions/upload-artifact@v4
+        with:
+          name: breedlog-android-release
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+      - name: Remove temporary Android release keystore
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${BREEDLOG_ANDROID_KEYSTORE_PATH:-}" ] && [ -f "$BREEDLOG_ANDROID_KEYSTORE_PATH" ]; then
+            rm -f "$BREEDLOG_ANDROID_KEYSTORE_PATH"
           fi

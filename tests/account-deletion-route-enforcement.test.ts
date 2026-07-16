@@ -85,6 +85,24 @@ test("pending account deletion suspends ordinary access until cancellation", asy
   const blockedAnimals = await fetch(`${BASE_URL}/api/animals`, { headers: authHeaders() });
   assert.equal(blockedAnimals.status, 423);
 
+  const blockedAi = await fetch(`${BASE_URL}/api/ai/chat`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ question: "Should I keep this ewe?" }),
+  });
+  assert.equal(blockedAi.status, 423);
+
+  const deviceInfo = await fetch(`${BASE_URL}/api/device/info`, { headers: authHeaders() });
+  assert.equal(deviceInfo.status, 200);
+  assert.deepEqual(await deviceInfo.json(), {
+    registered: true,
+    userId: "deletion-route-user",
+    deviceId: "deletion-route-device",
+  });
+
+  const authMe = await fetch(`${BASE_URL}/api/auth/me`, { headers: authHeaders() });
+  assert.equal(authMe.status, 200);
+
   const deletionState = await fetch(`${BASE_URL}/api/account/deletion`, { headers: authHeaders() });
   assert.equal(deletionState.status, 200);
   assert.equal((await deletionState.json()).status, "pending");
