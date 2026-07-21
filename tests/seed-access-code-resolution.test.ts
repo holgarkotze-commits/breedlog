@@ -52,8 +52,8 @@ skipIfNoDb("seed --access-code resolves to real shared workspace userId, not the
 
     // Run the seed script in dry-run mode with --access-code
     const result = spawnSync(
-      "./node_modules/.bin/tsx",
-      ["scripts/seed-field-test-simulation.ts", "--access-code", codeText],
+      process.execPath,
+      ["--import", "tsx/esm", "scripts/seed-field-test-simulation.ts", "--access-code", codeText],
       { encoding: "utf8", cwd: process.cwd() },
     );
 
@@ -127,8 +127,8 @@ skipIfNoDb("seed --access-code with chained sharedUserId resolves to primary wor
     );
 
     const result = spawnSync(
-      "./node_modules/.bin/tsx",
-      ["scripts/seed-field-test-simulation.ts", "--access-code", codeText],
+      process.execPath,
+      ["--import", "tsx/esm", "scripts/seed-field-test-simulation.ts", "--access-code", codeText],
       { encoding: "utf8", cwd: process.cwd() },
     );
     assert.equal(result.status, 0, `seed failed: ${result.stderr}`);
@@ -155,8 +155,8 @@ skipIfNoDb("seed --access-code with chained sharedUserId resolves to primary wor
 
 skipIfNoDb("seed --access-code with non-existent code fails clearly (no orphaned data)", async () => {
   const result = spawnSync(
-    "./node_modules/.bin/tsx",
-    ["scripts/seed-field-test-simulation.ts", "--access-code", "DOESNOTEXIST9999"],
+    process.execPath,
+    ["--import", "tsx/esm", "scripts/seed-field-test-simulation.ts", "--access-code", "DOESNOTEXIST9999"],
     { encoding: "utf8", cwd: process.cwd() },
   );
   assert.notEqual(result.status, 0, "must exit non-zero on unknown code");
@@ -166,8 +166,8 @@ skipIfNoDb("seed --access-code with non-existent code fails clearly (no orphaned
 skipIfNoDb("seed --user-id back-compat: explicit UUID is used verbatim", async () => {
   const someUuid = randomUUID();
   const result = spawnSync(
-    "./node_modules/.bin/tsx",
-    ["scripts/seed-field-test-simulation.ts", "--user-id", someUuid],
+    process.execPath,
+    ["--import", "tsx/esm", "scripts/seed-field-test-simulation.ts", "--user-id", someUuid],
     { encoding: "utf8", cwd: process.cwd() },
   );
   assert.equal(result.status, 0, `seed failed: ${result.stderr}`);

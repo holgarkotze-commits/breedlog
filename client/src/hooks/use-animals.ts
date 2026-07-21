@@ -21,6 +21,18 @@ async function normalizeTagForClient(tagId?: string | null, explicitPrefix?: str
   return splitTagInput(tagId, resolvedPrefix).canonicalTag;
 }
 
+async function pruneHiddenAnimalsFromCache(serverAnimals: AnimalWithRelations[]) {
+  const serverIds = new Set(serverAnimals.map((animal) => animal.id));
+  const cachedAnimals = await getAllFromStore<AnimalWithRelations>("animals");
+  await Promise.all(
+    cachedAnimals
+      .filter((animal) => animal.id > 0 && !serverIds.has(animal.id))
+      .map((animal) => deleteFromStore("animals", animal.id)),
+  );
+}
+
+class AnimalVisibilityError extends Error {}
+
 export function useAnimals(filters?: { search?: string; status?: string; sex?: string }) {
   const queryKey = [api.animals.list.path, filters];
   
@@ -46,6 +58,9 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
         if (!res.ok) throw new Error("Failed to fetch animals");
         const data = api.animals.list.responses[200].parse(await res.json());
         await putManyInStore("animals", data);
+        if (!filters?.search && !filters?.status && !filters?.sex) {
+          await pruneHiddenAnimalsFromCache(data);
+        }
         return data;
       } catch (error) {
         if (!navigator.onLine) {
@@ -108,17 +123,24 @@ export function useAnimal(id: number) {
           await putInStore("animals", data);
           return data;
         }
-        
-        // Server returned error (404, 500, etc.) - fallback to IndexedDB
+
+        if ([403, 404, 423].includes(res.status)) {
+          throw new AnimalVisibilityError("Animal not found");
+        }
+
+        // Server error - fallback to IndexedDB only for temporary backend failures.
         console.log("[useAnimal] Server returned", res.status, "- checking IndexedDB");
         const cached = await getFromStore<AnimalWithRelations>("animals", id);
         if (cached) {
           console.log("[useAnimal] Found in IndexedDB cache");
           return cached;
         }
-        
+
         throw new Error("Animal not found");
       } catch (error) {
+        if (error instanceof AnimalVisibilityError) {
+          throw error;
+        }
         // Network error or any other failure - fallback to IndexedDB
         console.log("[useAnimal] Fetch failed, checking IndexedDB:", error);
         const cached = await getFromStore<AnimalWithRelations>("animals", id);

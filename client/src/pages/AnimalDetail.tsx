@@ -6,6 +6,8 @@ import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import { Layout } from "@/components/Layout";
 import { useNavigationHistory } from "@/lib/navigation-history-context";
 import { cn } from "@/lib/utils";
+import { buildAnimalProfilePdfBlob } from "@/lib/animal-profile-pdf";
+import { saveFileInNativeDownloads } from "@/lib/native-file-save";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -1191,6 +1193,91 @@ ${data.notes || "No notes recorded."}
     };
     
     const handleExportPDF = async () => {
+        toast({ title: "Preparing PDF...", description: "Building performance datasheet, please wait." });
+
+        let nativePhotoBase64: string | null = null;
+        if (animal.photo) {
+            try {
+                const resp = await fetch(animal.photo);
+                if (resp.ok) {
+                    const blob = await resp.blob();
+                    nativePhotoBase64 = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                }
+            } catch {
+                nativePhotoBase64 = null;
+            }
+        }
+
+        const nativeExportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+        const nativeProfile = buildAnimalPerformanceProfile(
+            animal,
+            allAnimals || [],
+            breedingEvents || [],
+            healthRecords || []
+        );
+        const nativeFilename = getDocumentFileName("PerformanceDatasheet", animal.tagId || `ID${animal.id}`);
+        const pdfBlob = await buildAnimalProfilePdfBlob({
+            animal,
+            exportDate: nativeExportDate,
+            farmSettings,
+            photoBase64: nativePhotoBase64,
+            profile: nativeProfile,
+        });
+        await createExportedDoc.mutateAsync({
+            name: nativeFilename,
+            documentType: "individual",
+            subfolder: "individual",
+            animalId: animal.id,
+            metadata: {
+              exportType: "pdf",
+              quotaClass: "individual_pdf",
+              category: "individual-performance",
+              sourceSection: "individual",
+              animalCount: 1,
+              pageCount: 1,
+              status: "success",
+              rowsSummary: [{ tagId: animal.tagId, sex: animal.sex, breed: animal.breed, status: animal.status }],
+            }
+        });
+        const nativePath = await saveFileInNativeDownloads(pdfBlob, nativeFilename, "application/pdf");
+
+        if (nativePath) {
+            toast({ title: "PDF Exported", description: `${animal.tagId} performance datasheet saved to ${nativePath}` });
+        } else {
+            const blobUrl = URL.createObjectURL(pdfBlob);
+            const previewWindow = window.open(blobUrl, "_blank");
+            if (!previewWindow) {
+                const anchor = document.createElement("a");
+                anchor.href = blobUrl;
+                anchor.download = nativeFilename;
+                anchor.rel = "noopener";
+                document.body.appendChild(anchor);
+                anchor.click();
+                anchor.remove();
+            }
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+            toast({ title: "PDF Ready", description: `Performance datasheet opened for ${animal.tagId}` });
+        }
+
+        return;
+
+        /* Legacy HTML print path retired in favor of the real PDF blob export.
+        const printWindow = window.open("", "_blank");
+        if (!printWindow) {
+            toast({
+                title: "Pop-up blocked",
+                description: "Allow pop-ups for BreedLog in your browser settings, then try again.",
+                variant: "destructive",
+            });
+            return;
+        }
+        printWindow.document.write("<p style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px\">Preparing BreedLog PDF...</p>");
+        printWindow.document.close();
         toast({ title: "Preparing PDF…", description: "Building performance datasheet, please wait." });
 
         // Convert photo to base64 so it loads correctly in the print window
@@ -1609,16 +1696,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
         // reliably in PWA standalone mode where window.open('','_blank') + document.write fails.
         const blob = new Blob([content], { type: "text/html; charset=utf-8" });
         const blobUrl = URL.createObjectURL(blob);
-        const printWindow = window.open(blobUrl, "_blank");
-        if (!printWindow) {
-            URL.revokeObjectURL(blobUrl);
-            toast({
-                title: "Pop-up blocked",
-                description: "Allow pop-ups for BreedLog in your browser settings, then try again.",
-                variant: "destructive",
-            });
-            return;
-        }
+        printWindow.location.href = blobUrl;
         // onload fires once the blob page is fully rendered; fallback at 2.5s for browsers that don't fire it
         printWindow.onload = () => {
             setTimeout(() => { printWindow.print(); URL.revokeObjectURL(blobUrl); }, 400);
@@ -1641,6 +1719,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
             }
         });
         toast({ title: "PDF Ready", description: `Performance datasheet opened for ${animal.tagId}` });
+        */
     };
     
     return (

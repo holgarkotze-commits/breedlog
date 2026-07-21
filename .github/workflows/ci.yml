@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - work
+      - breedlog-production-completion
   pull_request:
     branches:
       - main
@@ -55,11 +56,24 @@ jobs:
       - name: TypeScript check
         run: npm run check
 
+      # The suite must actually execute the full tests/ tree. A silent glob or
+      # runner regression that drops test files must fail this gate, so the
+      # aggregate executed-test count is enforced against a floor.
       - name: Run certification tests
-        run: npm run test:cert
+        run: |
+          npm run test:cert 2>&1 | tee /tmp/test-cert.log
+          total=$(grep -E '^# tests ' /tmp/test-cert.log | awk '{s+=$3} END {print s+0}')
+          echo "Executed ${total} certification tests"
+          if [ "${total}" -lt 500 ]; then
+            echo "::error::Certification suite executed only ${total} tests (expected >= 500). The test glob or runner is broken."
+            exit 1
+          fi
 
       - name: Production build
         run: npm run build
+
+      - name: Generate release pack
+        run: npm run release:pack
 
       - name: Push DB schema
         run: npm run db:push

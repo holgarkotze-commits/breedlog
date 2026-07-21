@@ -78,7 +78,7 @@ async function activateAndGetToken(deviceId: string, ua = "Mozilla/5.0 (X11; Lin
 }
 
 before(async () => {
-  server = spawn("node", ["--import", "tsx/esm", "server/index.ts"], {
+  server = spawn(process.execPath, ["--import", "tsx/esm", "server/index.ts"], {
     env: {
       ...process.env,
       NODE_ENV: "test",

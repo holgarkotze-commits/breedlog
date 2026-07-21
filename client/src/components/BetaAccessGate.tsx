@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Lock, Shield, WifiOff, Loader2, RefreshCw, Download, Smartphone, Monitor, Share, Plus, ArrowRight, ArrowUpRight, ChevronRight } from "lucide-react";
 import { apiRequest, setDeviceToken, getDeviceToken } from "@/lib/queryClient";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
+import { isInstalledBreedLogRuntime } from "@/lib/runtime-updates";
 import { cn } from "@/lib/utils";
 
 interface AccessStatus {
@@ -379,10 +380,7 @@ export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
   // isLoading → false before isInstalled → true, causing the install screen to
   // flash even when the app is already running as a standalone PWA.
   useEffect(() => {
-    const isStandalone =
-      window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as { standalone?: boolean }).standalone === true;
-    if (isInstalled || isStandalone) {
+    if (isInstalled || isInstalledBreedLogRuntime()) {
       setShowInstallFirst(false);
       return;
     }

@@ -33,6 +33,7 @@ import { performLogout } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from "@/components/ui/sheet";
 import { useNavigationHistory } from "@/lib/navigation-history-context";
+import { BREEDLOG_RUNTIME_VERSION } from "@shared/update-runtime";
 
 function ScrambleText({ text, className }: { text: string; className?: string }) {
   const [displayText, setDisplayText] = useState("");
@@ -208,7 +209,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
           <div className="rounded-lg border border-white/10 bg-black/20 p-3 backdrop-blur-sm">
             <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-mono text-slate-100/75">BreedLog v1.0.0</p>
+              <p className="text-xs font-mono text-slate-100/75">BreedLog v{BREEDLOG_RUNTIME_VERSION}</p>
               <div className="flex items-center gap-1.5">
                 <SyncStatusBadge />
                 <GlobalRefreshButton location="sidebar" />

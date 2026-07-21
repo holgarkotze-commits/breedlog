@@ -32,7 +32,45 @@ const allowlist = [
   "zod-validation-error",
 ];
 
+const NATIVE_BUILD_TARGETS = new Set(["windows", "android"]);
+const REQUIRED_PRODUCTION_APP_ORIGIN = "https://app.breedlog.com";
+
+function assertNativeApiOriginContract() {
+  const nativeTarget = process.env.BREEDLOG_NATIVE_BUILD_TARGET?.trim();
+  if (!nativeTarget) {
+    return;
+  }
+  if (!NATIVE_BUILD_TARGETS.has(nativeTarget)) {
+    throw new Error(`Unsupported BREEDLOG_NATIVE_BUILD_TARGET: ${nativeTarget}`);
+  }
+
+  const configuredOrigin = process.env.VITE_BREEDLOG_API_ORIGIN?.trim();
+  if (!configuredOrigin) {
+    throw new Error(
+      `Native ${nativeTarget} candidate builds must set VITE_BREEDLOG_API_ORIGIN to the authenticated BreedLog app origin.`,
+    );
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(configuredOrigin);
+  } catch {
+    throw new Error(`Invalid VITE_BREEDLOG_API_ORIGIN for native ${nativeTarget} build: ${configuredOrigin}`);
+  }
+
+  if (parsed.origin !== REQUIRED_PRODUCTION_APP_ORIGIN) {
+    throw new Error(
+      `Native ${nativeTarget} candidate builds must target ${REQUIRED_PRODUCTION_APP_ORIGIN}, received ${parsed.origin}.`,
+    );
+  }
+
+  if (["127.0.0.1", "localhost"].includes(parsed.hostname)) {
+    throw new Error(`Native ${nativeTarget} candidate builds must not target localhost.`);
+  }
+}
+
 async function buildAll() {
+  assertNativeApiOriginContract();
   await rm("dist", { recursive: true, force: true });
 
   console.log("building client...");

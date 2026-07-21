@@ -91,7 +91,7 @@ async function adminResetSlot(id: number, slotType: "desktop" | "mobile") {
 }
 
 before(async () => {
-  server = spawn("./node_modules/.bin/tsx", ["server/index.ts"], {
+  server = spawn(process.execPath, ["--import", "tsx/esm", "server/index.ts"], {
     env: {
       ...process.env,
       NODE_ENV: "test",
@@ -110,7 +110,12 @@ before(async () => {
 
 after(async () => {
   if (server && !server.killed) {
-    try { process.kill(-server.pid!, "SIGTERM"); } catch { /* noop */ }
+    try {
+      if (process.platform === "win32") server.kill("SIGTERM");
+      else process.kill(-server.pid!, "SIGTERM");
+    } catch {
+      try { server.kill("SIGTERM"); } catch { /* noop */ }
+    }
   }
 });
 

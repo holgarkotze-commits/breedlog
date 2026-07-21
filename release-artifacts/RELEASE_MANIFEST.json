@@ -1,0 +1,102 @@
+{
+  "manifestSchemaVersion": "1.0.0",
+  "breedlogProductVersion": "1.0.2-production-completion-candidate",
+  "releaseChannel": "staging",
+  "gitTag": null,
+  "sourceCommit": "fff61484dea330ba5921780d92af7c49bbe1d147",
+  "sourceBranch": "breedlog-production-completion",
+  "buildTimestamp": "2026-07-16T19:26:43.997Z",
+  "artifacts": {
+    "frontendArtifactHash": "7F2796F41BB8AE4729CA0CD4DEDD0EE20BBDCF295A4E4579775D2B222FFD9119",
+    "backendImageDigest": "F50FD9B7BBB2AC95FCB08D1205C1A8F0B734E776A53688D91B2EE7E98B6A5BEA"
+  },
+  "database": {
+    "migrationIdentifiers": [
+      "startup-idempotent-schema-migrations",
+      "drizzle-schema"
+    ],
+    "migrationChecksums": [
+      "d4af42addc17033078489682fbeca6cfb04ee51d46d4ad30d046af0ac24ae9f6",
+      "a4a53e775a1f8fd57ac682d648887ff61c912f119c8ad8c975e8f4b1cf6c9e22"
+    ]
+  },
+  "mobile": {
+    "androidAabHash": null,
+    "androidApkHash": "010ADA1BC63A2349B281F3670D29F5797A025904CCE1A08B519D3220F6419D94",
+    "androidPackageName": "com.stitchworx.breedlog",
+    "androidVersionCode": null,
+    "androidVersionName": null,
+    "androidSigningFingerprint": null
+  },
+  "windows": {
+    "exeHash": "E436B7DCFF4AD438D2E55049885C037C114C899539AB94C1E9B63109BD8CD147",
+    "nsisHash": "259D7C0D88B27A051638E4318925D4F555170D3BAC9A79C8BDFB682DADF704C7",
+    "msiHash": "CCF45BFE62749FE2FBE5939993FDC41D3C6F465139C2ECBED2B634ACB9B2D1BB",
+    "updaterHash": null,
+    "publisher": "STITCH WORX",
+    "signingCertificateThumbprint": null,
+    "updaterPublicKeyIdentifier": null,
+    "artifactPaths": [
+      "src-tauri/target/release/breedlog-desktop.exe",
+      "src-tauri/target/release/bundle/nsis/BreedLog_1.0.2_x64-setup.exe",
+      "src-tauri/target/release/bundle/msi/BreedLog_1.0.2_x64_en-US.msi"
+    ]
+  },
+  "pwa": {
+    "artifactIdentity": "dist/public/index.html",
+    "compiledApiOrigin": "https://app.breedlog.com"
+  },
+  "legal": {
+    "documentVersions": [
+      "privacy-policy-draft-2026-07-13",
+      "terms-of-service-draft-2026-07-13",
+      "subscription-terms-draft-2026-07-13",
+      "account-deletion-policy-draft-2026-07-13"
+    ]
+  },
+  "cataloguePricingVersion": "2026-07-locked-commercial-model",
+  "environmentConfigurationVersion": "production-completion-env-contract-2026-07-13",
+  "ciWorkflowRunReferences": [
+    "https://github.com/holgarkotze-commits/breedlog/actions/runs/29526726852/job/87716877760",
+    "https://github.com/holgarkotze-commits/breedlog/actions/runs/29526730553/job/87716890417",
+    "https://github.com/holgarkotze-commits/breedlog/actions/runs/29526730583/job/87716890808",
+    "https://github.com/holgarkotze-commits/breedlog/actions/runs/29526730555/job/87716890629"
+  ],
+  "verification": {
+    "stagingStatus": "locally-verified-and-ci-verified",
+    "productionStatus": "blocked",
+    "localChecks": [
+      "npm.cmd ci",
+      "npm.cmd run check",
+      "npm.cmd run build",
+      "npm.cmd run test:cert",
+      "npm.cmd run android:sync",
+      "cargo check --manifest-path src-tauri/Cargo.toml",
+      "npm.cmd run windows:build",
+      "git diff --check"
+    ]
+  },
+  "rollbackArtifactReferences": [
+    "docs/operations/RUNBOOKS.md#rollback"
+  ],
+  "approvalRecords": [],
+  "knownLimitations": [
+    "Live payment-provider activation is blocked pending merchant/provider credentials and go-live approval.",
+    "Android signed production release is blocked pending Google Play publisher ownership and signing credentials.",
+    "Windows signed installer/update activation is blocked pending code-signing certificate and updater keys.",
+    "Production domain/TLS deployment is blocked pending breedlog.com DNS/hosting/database/storage access.",
+    "Legal documents are implementation drafts and require professional legal review before production launch.",
+    "Local physical Android install proof is blocked on this Windows seat because no Android SDK/device environment is configured."
+  ],
+  "generatedEvidenceIndex": [
+    "evidence/production-completion-npm-ci.log",
+    "evidence/production-completion-check.log",
+    "evidence/production-completion-build.log",
+    "evidence/production-completion-test-cert.log",
+    "evidence/production-completion-android-sync.log",
+    "evidence/production-completion-cargo-check.log",
+    "evidence/production-completion-windows-build.log",
+    "evidence/production-completion-git-diff-check.log",
+    "release-artifacts/PR44_REVIEW_THREAD_REGISTER.md"
+  ]
+}

@@ -10,6 +10,66 @@ import { parse } from "csv-parse/sync";
 import { buildBreedLogCsvContent, buildBreedLogCsvRows, parseBreedLogCsvRecords, buildBreedLogImportTemplateCsv } from "@shared/import-export";
 import { buildBreedLogSimulationDataset } from "@shared/breedlog-simulation";
 import { MASTER_SIMULATION_ACCESS_CODE, MASTER_SIMULATION_BATCH_MARKER, MASTER_SIMULATION_MAX_DEVICES, isMasterSimulationCode } from "@shared/master-simulation";
+import {
+  BILLING_CATALOG,
+  EntitlementDeniedError,
+  applyBillingEvent,
+  areBillingTestRoutesEnabled,
+  assertCanCreateAnimal,
+  billingEventSchema,
+  cancelBillingSubscription,
+  completeTestCheckoutSession,
+  createBillingPortalSession,
+  createCheckoutSession,
+  getDowngradeVisibleAnimalIdSet,
+  getBillingSubscriptionState,
+  getEntitlementState,
+  listBillingAuditEntries,
+  projectDowngradedAnimalVisibility,
+  reserveUsage,
+  simulateBillingProviderEvent,
+  verifyBillingSignature,
+} from "./commercial";
+import {
+  BackupRejectedError,
+  createWorkspaceBackup,
+  previewWorkspaceBackup,
+  restoreWorkspaceBackup,
+  type EncryptedBreedLogBackup,
+} from "./backup";
+import {
+  getAutomaticBackupStatus,
+  runAutomaticBackupForWorkspace,
+  runAutomaticBackupSweep,
+} from "./backup-jobs";
+import { resolveBackupStorageAdapter } from "./backup-storage";
+import {
+  AccountDeletionError,
+  cancelAccountDeletion,
+  getAccountDeletionState,
+  isAccountSuspendedForDeletion,
+  processExpiredAccountDeletionQueue,
+  requestAccountDeletion,
+} from "./account-deletion";
+import {
+  ManagedAuthError,
+  buildManagedAuthProfile,
+  createManagedAuthProvider,
+  loginManagedAccount,
+  registerManagedAccount,
+  requestPasswordRecovery,
+  resetPasswordWithToken,
+  revokeManagedDevice,
+  verifyAccountEmail,
+} from "./managed-auth";
+import {
+  BREEDLOG_DATA_SCHEMA_VERSION,
+  BREEDLOG_RUNTIME_BUILD_DATE,
+  BREEDLOG_RUNTIME_VERSION,
+  BREEDLOG_ANDROID_VERSION_CODE,
+  evaluateRuntimeUpdateState,
+  type BreedLogRuntimePlatform,
+} from "@shared/update-runtime";
 
 // Helper to extract userId from device session
 function getUserId(req: Request): string {
@@ -22,6 +82,84 @@ function getUserId(req: Request): string {
 
 // Middleware to require device authentication
 const requireAuth = requireDeviceAuth;
+const managedAuthProvider = createManagedAuthProvider(storage);
+const backupStorageAdapter = resolveBackupStorageAdapter();
+const billingTestRoutesEnabled = areBillingTestRoutesEnabled();
+
+function inferExportQuotaClass(documentType: string, subfolder: string, animalId: number | null | undefined, metadata: Record<string, any> | null | undefined) {
+  if (metadata?.quotaClass === "individual_pdf" || metadata?.quotaClass === "batch_pdf") {
+    return metadata.quotaClass;
+  }
+  if (metadata?.exportType !== "pdf") {
+    return null;
+  }
+  return documentType === "individual" && subfolder === "individual" && animalId
+    ? "individual_pdf"
+    : "batch_pdf";
+}
+
+async function getCurrentDeviceUser(req: Request) {
+  const deviceId = getDeviceId(req);
+  if (!deviceId) {
+    throw new ManagedAuthError("DEVICE_NOT_REGISTERED", "Device must be registered before account authentication.", 401);
+  }
+  const deviceUser = await storage.getUserByDeviceId(deviceId);
+  if (!deviceUser) {
+    throw new ManagedAuthError("DEVICE_NOT_REGISTERED", "Device must be registered before account authentication.", 401);
+  }
+  return { deviceId, deviceUser };
+}
+
+function accountDeletionBypass(path: string): boolean {
+  return path.startsWith("/api/account/deletion")
+    || path.startsWith("/api/billing/webhook/")
+    || path === "/api/auth/me"
+    || path === "/api/device/info"
+    || path === "/api/auth/logout"
+    || path === "/api/device/logout"
+    || path === "/api/beta/logout";
+}
+
+type DowngradeVisibilityContext = {
+  visibleAnimalIds: Set<number>;
+  hiddenAnimalIds: Set<number>;
+};
+
+async function getDowngradeVisibilityContext(userId: string): Promise<DowngradeVisibilityContext | null> {
+  const entitlement = await getEntitlementState(storage, userId);
+  if (entitlement.planId !== "free") {
+    return null;
+  }
+  const allAnimals = await storage.getAnimals(userId, {});
+  const visibleAnimalIds = getDowngradeVisibleAnimalIdSet(allAnimals);
+  const hiddenAnimalIds = new Set(
+    allAnimals
+      .filter((animal) => (animal.status ?? "active") === "active" && !visibleAnimalIds.has(animal.id))
+      .map((animal) => animal.id),
+  );
+  return { visibleAnimalIds, hiddenAnimalIds };
+}
+
+function isAnimalVisible(context: DowngradeVisibilityContext | null, animalId: number | null | undefined) {
+  if (!context || animalId == null) return true;
+  return context.visibleAnimalIds.has(animalId);
+}
+
+function filterRowsForVisibleAnimals<T>(
+  context: DowngradeVisibilityContext | null,
+  rows: T[],
+  selectors: Array<(row: T) => number | null | undefined>,
+): T[] {
+  if (!context) return rows;
+  return rows.filter((row) => selectors.every((selector) => isAnimalVisible(context, selector(row))));
+}
+
+function hiddenAnimalNotFound(res: Response) {
+  return res.status(404).json({
+    message: "Animal is hidden on the Free plan. Reactivate Premium to restore the full workspace.",
+    code: "ANIMAL_HIDDEN_BY_DOWNGRADE",
+  });
+}
 
 async function seedMasterSimulationIfNeeded(targetUserId: string, code: string) {
   if (!isMasterSimulationCode(code)) return;
@@ -89,29 +227,401 @@ export async function registerRoutes(
   // OpenAI key. The BreedLog assistant (/api/ai/*) is the supported,
   // authenticated AI surface.
 
-  // Register BreedLog AI Assistant routes
+  app.use(async (req, res, next) => {
+    const userId = getDeviceUserId(req);
+    if (!userId || accountDeletionBypass(req.path)) {
+      return next();
+    }
+    if (await isAccountSuspendedForDeletion(storage, userId)) {
+      return res.status(423).json({
+        message: "This account is suspended during the deletion recovery window. Cancel deletion to resume normal access.",
+        code: "ACCOUNT_DELETION_SUSPENDED",
+      });
+    }
+    return next();
+  });
+
+  // Register BreedLog AI Assistant routes after deletion gating so recovery
+  // windows suspend AI access just like the rest of the workspace.
   registerAIRoutes(app);
+
+  // === MANAGED ACCOUNT AUTHENTICATION ===
+  app.get("/api/auth/me", requireAuth, async (req, res) => {
+    try {
+      const sessionAccountId = req.session.accountId;
+      const deviceId = getDeviceId(req);
+      const accountDevice = !sessionAccountId && deviceId ? await storage.getAccountDeviceByDeviceId(deviceId) : null;
+      const accountId = sessionAccountId || accountDevice?.accountId;
+      if (!accountId) {
+        return res.json({
+          authenticated: false,
+          provider: managedAuthProvider.providerName,
+          googleEnabled: managedAuthProvider.googleEnabled,
+        });
+      }
+      if (!req.session.accountId) {
+        req.session.accountId = accountId;
+      }
+      res.json({
+        authenticated: true,
+        provider: managedAuthProvider.providerName,
+        googleEnabled: managedAuthProvider.googleEnabled,
+        profile: await buildManagedAuthProfile(storage, accountId),
+      });
+    } catch (err) {
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/register", requireAuth, async (req, res) => {
+    try {
+      const body = z.object({
+        email: z.string().email(),
+        password: z.string().min(10),
+        deviceName: z.string().max(120).optional(),
+        platform: z.string().max(32).optional(),
+      }).parse(req.body);
+      const { deviceId, deviceUser } = await getCurrentDeviceUser(req);
+      const result = await registerManagedAccount(storage, managedAuthProvider, {
+        email: body.email,
+        password: body.password,
+        deviceId,
+        deviceUserId: deviceUser.id,
+        deviceName: body.deviceName ?? deviceUser.deviceName ?? null,
+        platform: body.platform ?? null,
+      });
+      req.session.accountId = result.account.id;
+      req.session.userId = result.profile.workspaceUserId;
+      req.session.deviceId = deviceId;
+      res.status(201).json({
+        authenticated: true,
+        profile: result.profile,
+        verification: process.env.NODE_ENV === "production" ? { expiresAt: result.verification.expiresAt.toISOString() } : {
+          token: result.verification.token,
+          expiresAt: result.verification.expiresAt.toISOString(),
+        },
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/login", requireAuth, async (req, res) => {
+    try {
+      const body = z.object({
+        email: z.string().email(),
+        password: z.string().min(1),
+        deviceName: z.string().max(120).optional(),
+        platform: z.string().max(32).optional(),
+      }).parse(req.body);
+      const { deviceId, deviceUser } = await getCurrentDeviceUser(req);
+      const result = await loginManagedAccount(storage, managedAuthProvider, {
+        email: body.email,
+        password: body.password,
+        deviceId,
+        deviceUserId: deviceUser.id,
+        deviceName: body.deviceName ?? deviceUser.deviceName ?? null,
+        platform: body.platform ?? null,
+      });
+      req.session.accountId = result.account.id;
+      req.session.userId = result.workspaceUserId;
+      req.session.deviceId = deviceId;
+      res.json({ authenticated: true, profile: result.profile });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/logout", requireAuth, async (req, res) => {
+    req.session.accountId = undefined;
+    res.json({ success: true });
+  });
+
+  app.post("/api/auth/recovery/request", async (req, res) => {
+    try {
+      const body = z.object({ email: z.string().email() }).parse(req.body);
+      const result = await requestPasswordRecovery(storage, managedAuthProvider, body.email);
+      res.json(process.env.NODE_ENV === "production" ? { requested: true } : {
+        requested: true,
+        token: result.token,
+        expiresAt: result.expiresAt?.toISOString() ?? null,
+      });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/recovery/confirm", async (req, res) => {
+    try {
+      const body = z.object({
+        token: z.string().min(10),
+        newPassword: z.string().min(10),
+      }).parse(req.body);
+      const profile = await resetPasswordWithToken(storage, managedAuthProvider, body.token, body.newPassword);
+      res.json({ success: true, profile });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/verify-email", async (req, res) => {
+    try {
+      const body = z.object({ token: z.string().min(10) }).parse(req.body);
+      const profile = await verifyAccountEmail(storage, managedAuthProvider, body.token);
+      res.json({ success: true, profile });
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.get("/api/auth/devices", requireAuth, async (req, res) => {
+    try {
+      const accountId = req.session.accountId;
+      if (!accountId) {
+        return res.status(401).json({ message: "Managed account session required", code: "ACCOUNT_SESSION_REQUIRED" });
+      }
+      res.json(await buildManagedAuthProfile(storage, accountId));
+    } catch (err) {
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/auth/devices/revoke", requireAuth, async (req, res) => {
+    try {
+      const accountId = req.session.accountId;
+      if (!accountId) {
+        return res.status(401).json({ message: "Managed account session required", code: "ACCOUNT_SESSION_REQUIRED" });
+      }
+      const body = z.object({ deviceId: z.string().min(8) }).parse(req.body);
+      const currentDeviceId = getDeviceId(req);
+      if (currentDeviceId === body.deviceId) {
+        return res.status(400).json({ message: "Use logout on this device instead of self-revocation.", code: "CANNOT_REVOKE_CURRENT_DEVICE" });
+      }
+      res.json(await revokeManagedDevice(storage, accountId, body.deviceId));
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof ManagedAuthError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  // === COMMERCIAL ENTITLEMENTS AND BILLING ===
+  app.get("/api/billing/catalog", requireAuth, async (_req, res) => {
+    res.json({
+      provider: "test-provider",
+      pricingVersion: "2026-07-locked-commercial-model",
+      products: Object.values(BILLING_CATALOG),
+    });
+  });
+
+  app.get("/api/billing/subscription", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    res.json({
+      subscription: await getBillingSubscriptionState(storage, userId),
+      entitlement: await getEntitlementState(storage, userId),
+      audit: await listBillingAuditEntries(storage, userId),
+    });
+  });
+
+  app.post("/api/billing/checkout-session", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const body = z.object({
+        productCode: z.enum(["premium_monthly", "premium_annual", "addon_pdf_250"]),
+        returnUrl: z.string().url().optional(),
+        cancelUrl: z.string().url().optional(),
+      }).parse(req.body);
+      const session = await createCheckoutSession(storage, userId, body.productCode, {
+        returnUrl: body.returnUrl,
+        cancelUrl: body.cancelUrl,
+      });
+      res.status(201).json(session);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/billing/portal-session", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    res.status(201).json(await createBillingPortalSession(storage, userId));
+  });
+
+  app.post("/api/billing/subscription/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      res.json(await cancelBillingSubscription(storage, userId, {
+        atPeriodEnd: req.body?.atPeriodEnd !== false,
+      }));
+    } catch (err) {
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  if (billingTestRoutesEnabled) {
+    app.post("/api/billing/test/checkout/:sessionId/complete", requireAuth, async (req, res) => {
+      try {
+        res.json(await completeTestCheckoutSession(storage, String(req.params.sessionId)));
+      } catch (err) {
+        if (err instanceof EntitlementDeniedError) {
+          return res.status(err.status).json({ message: err.message, code: err.code });
+        }
+        throw err;
+      }
+    });
+
+    app.post("/api/billing/test/simulate", requireAuth, async (req, res) => {
+      try {
+        const userId = getUserId(req);
+        const body = z.object({
+          eventType: z.enum([
+            "subscription.created",
+            "subscription.renewed",
+            "subscription.cancelled",
+            "subscription.grace_period",
+            "subscription.payment_failed",
+            "subscription.refunded",
+            "subscription.reversed",
+            "subscription.expired",
+          ]),
+        }).parse(req.body);
+        res.json(await simulateBillingProviderEvent(storage, userId, { eventType: body.eventType }));
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+        }
+        if (err instanceof EntitlementDeniedError) {
+          return res.status(err.status).json({ message: err.message, code: err.code });
+        }
+        throw err;
+      }
+    });
+  }
+
+  app.get("/api/entitlements/me", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    const entitlement = await getEntitlementState(storage, userId);
+    const animals = await storage.getAnimals(userId, {});
+    const downgradeProjection = projectDowngradedAnimalVisibility(animals);
+    res.json({
+      entitlement,
+      downgradeProjection: {
+        visibleAnimalIds: downgradeProjection.visible.map((animal) => animal.id),
+        hiddenAnimalIds: downgradeProjection.hidden.map((animal) => animal.id),
+        rule: downgradeProjection.rule,
+      },
+    });
+  });
+
+  app.post("/api/billing/webhook/:provider", async (req, res) => {
+    try {
+      const rawBody = Buffer.isBuffer(req.rawBody)
+        ? req.rawBody
+        : typeof req.rawBody === "string"
+          ? Buffer.from(req.rawBody, "utf8")
+          : null;
+      const provider = String(req.params.provider || "");
+      const signature = req.header("X-BreedLog-Signature");
+      const secret = process.env.BILLING_WEBHOOK_SECRET;
+      if (!rawBody) {
+        return res.status(400).json({ message: "Missing raw billing webhook body" });
+      }
+      if (!verifyBillingSignature(rawBody, signature, secret)) {
+        return res.status(401).json({ message: "Invalid billing webhook signature" });
+      }
+      const event = billingEventSchema.parse({ ...req.body, provider });
+      const result = await applyBillingEvent(storage, event);
+      res.status(result.idempotent ? 200 : 202).json(result);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
+      }
+      throw err;
+    }
+  });
 
   // === ANIMALS ===
   // All animal routes now require authentication and filter by userId
   app.get(api.animals.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const filters = req.query as { search?: string; status?: string; sex?: string };
-    const animals = await storage.getAnimals(userId, filters);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animals = filterRowsForVisibleAnimals(
+      visibility,
+      await storage.getAnimals(userId, filters),
+      [(animal) => animal.id],
+    );
     res.json(animals);
   });
 
   app.get(api.animals.get.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const animal = await storage.getAnimal(userId, Number(req.params.id));
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animalId = Number(req.params.id);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
+    const animal = await storage.getAnimal(userId, animalId);
     if (!animal) {
       return res.status(404).json({ message: "Animal not found" });
     }
-    
-    const dam = animal.damId ? await storage.getAnimal(userId, animal.damId) : null;
-    const sire = animal.sireId ? await storage.getAnimal(userId, animal.sireId) : null;
-    
-    const allAnimals = await storage.getAnimals(userId, {});
+
+    const dam = animal.damId && isAnimalVisible(visibility, animal.damId) ? await storage.getAnimal(userId, animal.damId) : null;
+    const sire = animal.sireId && isAnimalVisible(visibility, animal.sireId) ? await storage.getAnimal(userId, animal.sireId) : null;
+
+    const allAnimals = filterRowsForVisibleAnimals(
+      visibility,
+      await storage.getAnimals(userId, {}),
+      [(candidate) => candidate.id],
+    );
     const offspringAsDam = animal.sex === "ewe" ? allAnimals.filter(a => a.damId === animal.id) : [];
     const offspringAsSire = animal.sex === "ram" ? allAnimals.filter(a => a.sireId === animal.id) : [];
 
@@ -121,6 +631,10 @@ export async function registerRoutes(
   app.get(api.animals.familyTree.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const animalId = Number(req.params.id);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
     const animal = await storage.getAnimal(userId, animalId);
     if (!animal) {
       return res.status(404).json({ message: "Animal not found" });
@@ -135,15 +649,15 @@ export async function registerRoutes(
       visited.add(currentId);
 
       const current = await storage.getAnimal(userId, currentId);
-      if (!current) return;
+      if (!current || !isAnimalVisible(visibility, current.id)) return;
 
       nodes.push(current);
 
-      if (current.damId) {
+      if (current.damId && isAnimalVisible(visibility, current.damId)) {
         links.push({ source: current.damId, target: currentId, type: "dam" });
         await traverse(current.damId, depth + 1);
       }
-      if (current.sireId) {
+      if (current.sireId && isAnimalVisible(visibility, current.sireId)) {
         links.push({ source: current.sireId, target: currentId, type: "sire" });
         await traverse(current.sireId, depth + 1);
       }
@@ -166,6 +680,7 @@ export async function registerRoutes(
       }
       const input = api.animals.create.input.parse(req.body);
       const createInput = idempotencyKey ? { ...input, clientId: idempotencyKey } : input;
+      await assertCanCreateAnimal(storage, userId);
       const animal = await storage.createAnimal(userId, createInput);
       res.status(201).json(animal);
     } catch (err) {
@@ -193,6 +708,12 @@ export async function registerRoutes(
           field: "name",
         });
       }
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({
+          message: err.message,
+          code: err.code,
+        });
+      }
       if (req.header("X-Idempotency-Key")) {
         const existing = await storage.getAnimalByClientId(getUserId(req), req.header("X-Idempotency-Key")!.trim());
         if (existing) {
@@ -206,8 +727,22 @@ export async function registerRoutes(
   app.put(api.animals.update.path, requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      const animalId = Number(req.params.id);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const input = api.animals.update.input.parse(req.body);
-      const animal = await storage.updateAnimal(userId, Number(req.params.id), input);
+      const existing = await storage.getAnimal(userId, animalId);
+      if (!existing) {
+        return res.status(404).json({ message: "Animal not found" });
+      }
+      const nextStatus = input.status ?? existing.status ?? "active";
+      const wasActive = (existing.status ?? "active") === "active";
+      if (!wasActive && nextStatus === "active") {
+        await assertCanCreateAnimal(storage, userId);
+      }
+      const animal = await storage.updateAnimal(userId, animalId, input);
       res.json(animal);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -234,13 +769,24 @@ export async function registerRoutes(
           field: "name",
         });
       }
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({
+          message: err.message,
+          code: err.code,
+        });
+      }
       throw err;
     }
   });
 
   app.delete(api.animals.delete.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    await storage.deleteAnimal(userId, Number(req.params.id));
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animalId = Number(req.params.id);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
+    await storage.deleteAnimal(userId, animalId);
     res.status(204).send();
   });
 
@@ -248,6 +794,10 @@ export async function registerRoutes(
   app.get("/api/animals/:id/images", requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const animalId = Number(req.params.id);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
     const images = await storage.getAnimalImages(userId, animalId);
     res.json(images);
   });
@@ -256,6 +806,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { imageData, fileName, caption } = req.body;
       
       if (!imageData || !fileName) {
@@ -294,6 +848,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { ramLambClass } = req.body;
       
       if (!['stud', 'commercial', 'cull', 'unclassified'].includes(ramLambClass)) {
@@ -320,6 +878,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const animal = await storage.getAnimal(userId, animalId);
       
       if (!animal) {
@@ -343,6 +905,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { ramType, ramBreedingStatus } = req.body;
       
       if (!['breeding_ram', 'stud_ram', 'commercial_ram'].includes(ramType)) {
@@ -378,6 +944,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { cullReason } = req.body;
       
       const animal = await storage.getAnimal(userId, animalId);
@@ -405,6 +975,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const animalId = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const { reason, notes } = req.body;
       
       if (!['sold', 'deceased', 'transferred'].includes(reason)) {
@@ -443,14 +1017,24 @@ export async function registerRoutes(
   // Get culled animals
   app.get("/api/animals/culled", requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const animals = await storage.getAnimals(userId, { status: 'culled' });
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animals = filterRowsForVisibleAnimals(
+      visibility,
+      await storage.getAnimals(userId, { status: 'culled' }),
+      [(animal) => animal.id],
+    );
     res.json(animals);
   });
 
   // === BREEDING ===
   app.get(api.breeding.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const events = await storage.getBreedingEvents(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const events = filterRowsForVisibleAnimals(
+      visibility,
+      await storage.getBreedingEvents(userId),
+      [(event) => event.eweId, (event) => event.ramId],
+    );
     res.json(events);
   });
 
@@ -458,6 +1042,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.breeding.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.eweId) || !isAnimalVisible(visibility, input.ramId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const event = await storage.createBreedingEvent(userId, input);
       res.status(201).json(event);
     } catch (err) {
@@ -488,7 +1076,12 @@ export async function registerRoutes(
   
   app.get(api.breeding.groups.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const groups = await storage.getMatingGroups(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const groups = (await storage.getMatingGroups(userId)).filter((group) => {
+      if (!visibility) return true;
+      return isAnimalVisible(visibility, group.ramId)
+        && (group.eweIds ?? []).every((animalId) => isAnimalVisible(visibility, animalId));
+    });
     res.json(groups);
   });
   
@@ -496,6 +1089,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.breeding.groups.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.ramId) || (input.eweIds ?? []).some((id) => !isAnimalVisible(visibility, id))) {
+        return hiddenAnimalNotFound(res);
+      }
       const group = await storage.createMatingGroup(userId, input);
       res.status(201).json(group);
     } catch (err) {
@@ -513,6 +1110,18 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const id = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      const existing = (await storage.getMatingGroups(userId)).find((group) => group.id === id);
+      if (!existing) {
+        return res.status(404).json({ message: "Mating group not found" });
+      }
+      if (!isAnimalVisible(visibility, existing.ramId) || (existing.eweIds ?? []).some((animalId) => !isAnimalVisible(visibility, animalId))) {
+        return hiddenAnimalNotFound(res);
+      }
+      if ((req.body?.ramId != null && !isAnimalVisible(visibility, req.body.ramId))
+        || (Array.isArray(req.body?.eweIds) && req.body.eweIds.some((animalId: number) => !isAnimalVisible(visibility, animalId)))) {
+        return hiddenAnimalNotFound(res);
+      }
       const updated = await storage.updateMatingGroup(userId, id, req.body);
       if (!updated) {
         return res.status(404).json({ message: "Mating group not found" });
@@ -527,6 +1136,14 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const id = Number(req.params.id);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      const existing = (await storage.getMatingGroups(userId)).find((group) => group.id === id);
+      if (!existing) {
+        return res.status(404).json({ message: "Mating group not found" });
+      }
+      if (!isAnimalVisible(visibility, existing.ramId) || (existing.eweIds ?? []).some((animalId) => !isAnimalVisible(visibility, animalId))) {
+        return hiddenAnimalNotFound(res);
+      }
       await storage.deleteMatingGroup(userId, id);
       res.status(204).send();
     } catch (err) {
@@ -537,13 +1154,21 @@ export async function registerRoutes(
   // === RECORDS ===
   app.get(api.records.performance.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const records = await storage.getPerformanceRecords(userId, Number(req.params.id));
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animalId = Number(req.params.id);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
+    const records = await storage.getPerformanceRecords(userId, animalId);
     res.json(records);
   });
 
   app.get('/api/performance-records', requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const records = await storage.getAllPerformanceRecords(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const records = filterRowsForVisibleAnimals(visibility, await storage.getAllPerformanceRecords(userId), [
+      (record) => record.animalId,
+    ]);
     res.json(records);
   });
   
@@ -551,6 +1176,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.records.performance.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const record = await storage.createPerformanceRecord(userId, input);
       res.status(201).json(record);
     } catch (err) {
@@ -566,13 +1195,21 @@ export async function registerRoutes(
 
   app.get(api.records.health.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const records = await storage.getHealthRecords(userId, Number(req.params.id));
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const animalId = Number(req.params.id);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
+    const records = await storage.getHealthRecords(userId, animalId);
     res.json(records);
   });
 
   app.get('/api/health-records', requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const records = await storage.getAllHealthRecords(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const records = filterRowsForVisibleAnimals(visibility, await storage.getAllHealthRecords(userId), [
+      (record) => record.animalId,
+    ]);
     res.json(records);
   });
 
@@ -580,6 +1217,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.records.health.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const record = await storage.createHealthRecord(userId, input);
       res.status(201).json(record);
     } catch (err) {
@@ -598,7 +1239,10 @@ export async function registerRoutes(
   app.get(api.settings.export.path, requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const animals = await storage.getAnimals(userId);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      const animals = filterRowsForVisibleAnimals(visibility, await storage.getAnimals(userId), [
+        (animal) => animal.id,
+      ]);
       const farmSettings = await storage.getFarmSettings(userId);
       const csvRows = buildBreedLogCsvRows(animals, farmSettings?.studPrefix || null);
       const csvData = buildBreedLogCsvContent(csvRows);
@@ -646,11 +1290,15 @@ export async function registerRoutes(
             continue;
           }
           try {
+            const status = record.status || "active";
+            if (status === "active") {
+              await assertCanCreateAnimal(storage, userId);
+            }
             await storage.createAnimal(userId, {
               tagId,
               sex: record.sex || 'ewe',
               breed: record.breed || "Meatmaster",
-              status: record.status || "active",
+              status,
             });
             count++;
           } catch (rowErr) {
@@ -699,7 +1347,10 @@ export async function registerRoutes(
   // === DOCUMENTS ===
   app.get(api.documents.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
-    const docs = await storage.getDocuments(userId);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    const docs = filterRowsForVisibleAnimals(visibility, await storage.getDocuments(userId), [
+      (doc) => doc.animalId,
+    ]);
     res.json(docs);
   });
 
@@ -707,6 +1358,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const data = api.documents.upload.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, data.animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const doc = await storage.createDocument(userId, data);
       res.status(201).json(doc);
     } catch (err) {
@@ -754,11 +1409,14 @@ export async function registerRoutes(
 
       for (const animal of parsed.rowsToCreate) {
         try {
+          await assertCanCreateAnimal(storage, userId);
           await storage.createAnimal(userId, animal);
           created += 1;
         } catch (err) {
           if (err instanceof DuplicateElectronicIdError || err instanceof DuplicateTagIdError || err instanceof DuplicateAnimalNameError) {
             duplicates += 1;
+          } else if (err instanceof EntitlementDeniedError) {
+            errors.push(`Create failed for ${animal.tagId}: ${err.message}`);
           } else {
             errors.push(`Create failed for ${animal.tagId}: ${err instanceof Error ? err.message : 'unknown error'}`);
           }
@@ -786,28 +1444,30 @@ export async function registerRoutes(
       const userId = getUserId(req);
       const input = api.eid.scan.input.parse(req.body);
       const electronicIdRaw = input.electronicIdRaw.trim();
+      const visibility = await getDowngradeVisibilityContext(userId);
 
       if (!electronicIdRaw) {
         return res.status(400).json({ message: "electronicIdRaw is required", field: "electronicIdRaw" });
       }
 
       const animal = await storage.getAnimalByElectronicId(userId, electronicIdRaw);
+      const visibleMatch = animal && isAnimalVisible(visibility, animal.id) ? animal : null;
       const scanEvent = await storage.createEidScanEvent(userId, {
-        animalId: animal?.id ?? null,
+        animalId: visibleMatch?.id ?? null,
         electronicIdRaw,
         readerSource: input.readerSource ?? null,
         readerSessionId: input.readerSessionId ?? null,
         scannedAt: new Date(),
-        matched: !!animal,
-        matchMethod: animal ? "electronicId" : null,
+        matched: !!visibleMatch,
+        matchMethod: visibleMatch ? "electronicId" : null,
         payload: input.payload ?? null,
       });
 
       return res.json({
-        matched: !!animal,
-        animal: animal ?? null,
+        matched: !!visibleMatch,
+        animal: visibleMatch,
         scanEvent,
-        status: animal ? "matched" : "unassigned",
+        status: visibleMatch ? "matched" : "unassigned",
       });
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -825,8 +1485,11 @@ export async function registerRoutes(
   app.get("/api/exported-documents", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const visibility = await getDowngradeVisibilityContext(userId);
       const subfolder = req.query.subfolder as string | undefined;
-      const docs = await storage.getExportedDocuments(userId, subfolder);
+      const docs = filterRowsForVisibleAnimals(visibility, await storage.getExportedDocuments(userId, subfolder), [
+        (doc) => doc.animalId,
+      ]);
       res.json(docs);
     } catch (err: any) {
       console.error("Get exported docs error:", err);
@@ -837,9 +1500,19 @@ export async function registerRoutes(
   app.post("/api/exported-documents", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
+      const visibility = await getDowngradeVisibilityContext(userId);
       const { name, documentType, subfolder, animalId, metadata } = req.body;
       if (!name || !documentType || !subfolder) {
         return res.status(400).json({ message: "Missing required fields" });
+      }
+      if (!isAnimalVisible(visibility, animalId ?? null)) {
+        return hiddenAnimalNotFound(res);
+      }
+      const quotaClass = inferExportQuotaClass(documentType, subfolder, animalId, metadata ?? null);
+      if (quotaClass === "individual_pdf") {
+        await reserveUsage(storage, userId, "individualPdfExports");
+      } else if (quotaClass === "batch_pdf") {
+        await reserveUsage(storage, userId, "batchPdfExports");
       }
       const doc = await storage.createExportedDocument(userId, {
         name,
@@ -850,6 +1523,9 @@ export async function registerRoutes(
       });
       res.status(201).json(doc);
     } catch (err: any) {
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
       console.error("Create exported doc error:", err);
       res.status(500).json({ message: err.message });
     }
@@ -864,6 +1540,138 @@ export async function registerRoutes(
       console.error("Delete exported doc error:", err);
       res.status(500).json({ message: err.message });
     }
+  });
+
+  // === ENCRYPTED BREEDLOG BACKUPS ===
+  app.post("/api/backups/manual", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const backup = await createWorkspaceBackup(storage, userId, {
+        manual: true,
+        passphrase: req.body?.passphrase,
+      });
+      res.status(201).json({
+        fileName: `breedlog-${userId.slice(0, 8)}-${backup.exportedAt.slice(0, 10)}.breedlogbackup`,
+        backup,
+      });
+    } catch (err: any) {
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      if (err instanceof BackupRejectedError) {
+        return res.status(400).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/backups/preview-restore", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const preview = previewWorkspaceBackup(req.body?.backup as EncryptedBreedLogBackup, userId, req.body?.passphrase);
+      res.json(preview);
+    } catch (err: any) {
+      if (err instanceof BackupRejectedError) {
+        return res.status(400).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/backups/restore", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const result = await restoreWorkspaceBackup(storage, userId, req.body?.backup as EncryptedBreedLogBackup, {
+        passphrase: req.body?.passphrase,
+        confirmOverwrite: req.body?.confirmOverwrite === true,
+      });
+      res.json(result);
+    } catch (err: any) {
+      if (err instanceof BackupRejectedError) {
+        return res.status(400).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.get("/api/backups/automatic/status", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    res.json(await getAutomaticBackupStatus(storage, userId));
+  });
+
+  app.post("/api/backups/automatic/run", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const result = await runAutomaticBackupForWorkspace(storage, backupStorageAdapter, userId, {
+        now: req.body?.now ? new Date(req.body.now) : undefined,
+        force: req.body?.force === true,
+        passphrase: req.body?.passphrase,
+      });
+      res.status(result.status === "skipped" ? 200 : 201).json(result);
+    } catch (err: any) {
+      if (err instanceof BackupRejectedError) {
+        return res.status(400).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/admin/backups/automatic/run", requireAdminPin, async (req, res) => {
+    const requestedWorkspace = typeof req.body?.workspaceUserId === "string" ? req.body.workspaceUserId : undefined;
+    const results = requestedWorkspace
+      ? [await runAutomaticBackupForWorkspace(storage, backupStorageAdapter, requestedWorkspace, {
+          now: req.body?.now ? new Date(req.body.now) : undefined,
+          force: req.body?.force === true,
+          passphrase: req.body?.passphrase,
+        })]
+      : await runAutomaticBackupSweep(storage, backupStorageAdapter, {
+          now: req.body?.now ? new Date(req.body.now) : undefined,
+        });
+    res.json({ results });
+  });
+
+  // === ACCOUNT DELETION AND RECOVERY WINDOW ===
+  app.get("/api/account/deletion", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    res.json(await getAccountDeletionState(storage, userId));
+  });
+
+  app.post("/api/account/deletion", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const result = await requestAccountDeletion(storage, userId, {
+        typedConfirmation: req.body?.typedConfirmation,
+        exportBeforeDeletion: req.body?.exportBeforeDeletion === true,
+        passphrase: req.body?.passphrase,
+      });
+      res.status(202).json(result);
+    } catch (err) {
+      if (err instanceof AccountDeletionError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/account/deletion/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      res.json(await cancelAccountDeletion(storage, userId));
+    } catch (err) {
+      if (err instanceof AccountDeletionError) {
+        return res.status(err.status).json({ message: err.message, code: err.code });
+      }
+      throw err;
+    }
+  });
+
+  app.post("/api/admin/account-deletion/process", requireAdminPin, async (req, res) => {
+    res.json({
+      results: await processExpiredAccountDeletionQueue(
+        storage,
+        req.body?.now ? new Date(req.body.now) : new Date(),
+      ),
+    });
   });
 
   // === FIELD TEST ISSUE REPORTS ===
@@ -1001,6 +1809,10 @@ export async function registerRoutes(
   app.get(api.evaluations.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const animalId = Number(req.params.id);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
     const evals = await storage.getEvaluations(userId, animalId);
     res.json(evals);
   });
@@ -1009,6 +1821,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.evaluations.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const evaluation = await storage.createEvaluation(userId, input);
       res.status(201).json(evaluation);
     } catch (err) {
@@ -1026,14 +1842,16 @@ export async function registerRoutes(
   app.post("/api/reset-all-data", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { confirmPhrase } = req.body;
+      const { confirmPhrase, backupBeforeReset, passphrase } = req.body;
       
       if (confirmPhrase !== "RESET BREEDLOG") {
         return res.status(400).json({ message: "Invalid confirmation phrase" });
       }
-      
+      const backup = backupBeforeReset
+        ? await createWorkspaceBackup(storage, userId, { manual: false, passphrase })
+        : null;
       await storage.clearAllData(userId);
-      res.json({ message: "All data cleared successfully" });
+      res.json({ message: "All data cleared successfully", backup });
     } catch (err: any) {
       console.error("Reset data error:", err);
       res.status(500).json({ message: err.message || "Failed to reset data" });
@@ -1561,16 +2379,43 @@ export async function registerRoutes(
   
   // === VERSION ENDPOINT (for cache-busting) ===
   // Returns current app version - client checks on startup and forces reload if mismatched
-  const APP_VERSION = "1.0.1"; // Increment on each deployment
+  const APP_VERSION = BREEDLOG_RUNTIME_VERSION;
   app.get("/api/version", (req, res) => {
     res.set({
       'Cache-Control': 'no-store, no-cache, must-revalidate',
       'Pragma': 'no-cache'
     });
     res.json({ 
-      version: APP_VERSION,
+      version: BREEDLOG_RUNTIME_VERSION,
+      buildDate: BREEDLOG_RUNTIME_BUILD_DATE,
+      dataSchemaVersion: BREEDLOG_DATA_SCHEMA_VERSION,
+      androidVersionCode: BREEDLOG_ANDROID_VERSION_CODE,
       serverTime: new Date().toISOString()
     });
+  });
+
+  app.get("/api/runtime/update-state", (req, res) => {
+    const platform = String(req.query.platform || "pwa") as BreedLogRuntimePlatform;
+    if (!["pwa", "windows", "android"].includes(platform)) {
+      return res.status(400).json({ message: "platform must be pwa, windows, or android" });
+    }
+    const currentVersion = typeof req.query.currentVersion === "string" && req.query.currentVersion.trim()
+      ? req.query.currentVersion.trim()
+      : BREEDLOG_RUNTIME_VERSION;
+    const currentDataSchemaVersion = typeof req.query.currentDataSchemaVersion === "string"
+      ? Number.parseInt(req.query.currentDataSchemaVersion, 10)
+      : BREEDLOG_DATA_SCHEMA_VERSION;
+    const currentBuildNumber = typeof req.query.currentBuildNumber === "string"
+      ? Number.parseInt(req.query.currentBuildNumber, 10)
+      : undefined;
+    const channel = req.query.channel === "stable" ? "stable" : "test";
+    return res.json(evaluateRuntimeUpdateState({
+      platform,
+      currentVersion,
+      currentDataSchemaVersion: Number.isFinite(currentDataSchemaVersion) ? currentDataSchemaVersion : BREEDLOG_DATA_SCHEMA_VERSION,
+      currentBuildNumber: Number.isFinite(currentBuildNumber ?? Number.NaN) ? currentBuildNumber : undefined,
+      channel,
+    }));
   });
   
   // === ADMIN ROUTES (require ADMIN_PIN for access) ===
@@ -2152,7 +2997,12 @@ export async function registerRoutes(
   app.get("/api/genetics/animal/:animalId/bloodlines", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const rows = await storage.getAnimalBloodlines(userId, parseInt(req.params.animalId));
+      const animalId = parseInt(req.params.animalId);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
+      const rows = await storage.getAnimalBloodlines(userId, animalId);
       res.json(rows);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -2161,7 +3011,12 @@ export async function registerRoutes(
   app.post("/api/genetics/animal/:animalId/bloodlines", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const row = await storage.setAnimalBloodline(userId, { ...req.body, animalId: parseInt(req.params.animalId) });
+      const animalId = parseInt(req.params.animalId);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
+      const row = await storage.setAnimalBloodline(userId, { ...req.body, animalId });
       res.status(201).json(row);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -2181,6 +3036,10 @@ export async function registerRoutes(
       const userId = getUserId(req);
       const { ramId, eweId } = req.body as { ramId: number; eweId: number };
       if (!ramId || !eweId) return res.status(400).json({ message: "ramId and eweId required" });
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, ramId) || !isAnimalVisible(visibility, eweId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const allAnimals = await storage.getAnimals(userId, {});
       const animalMap = new Map(allAnimals.map((a: any) => [a.id, a]));
       const ram = animalMap.get(ramId);
@@ -2196,7 +3055,6 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const bloodlineId = parseInt(req.params.bloodlineId);
-      const assignments = await storage.getAnimalBloodlines(userId, 0).catch(() => [] as any[]);
       const allAssignments: any[] = [];
       const allAnimals = await storage.getAnimals(userId, {});
       for (const animal of allAnimals) {

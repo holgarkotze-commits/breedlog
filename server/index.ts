@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import compression from "compression";
 import { rateLimit } from "express-rate-limit";
 import { registerRoutes } from "./routes";
+import { formatApiLogBody } from "./observability";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { pool } from "./db";
@@ -21,6 +22,26 @@ declare module "http" {
 
 // Remove fingerprinting header
 app.disable("x-powered-by");
+
+const TRUSTED_NATIVE_APP_ORIGINS = new Set([
+  "http://tauri.localhost",
+  "https://tauri.localhost",
+  "tauri://localhost",
+  "capacitor://localhost",
+  "http://localhost",
+]);
+
+function resolveCorsOrigin(originHeader: string | undefined) {
+  if (!originHeader) return null;
+  if (TRUSTED_NATIVE_APP_ORIGINS.has(originHeader)) {
+    return originHeader;
+  }
+  const configuredOrigins = (process.env.BREEDLOG_CORS_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return configuredOrigins.includes(originHeader) ? originHeader : null;
+}
 
 // Trust proxy in production (Replit uses a reverse proxy)
 if (process.env.NODE_ENV === "production") {
@@ -46,6 +67,24 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
   next();
+});
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = resolveCorsOrigin(req.headers.origin);
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Authorization, Content-Type, Cache-Control, Pragma, X-Admin-Pin, X-Device-Token, X-Idempotency-Key",
+    );
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  }
+  if (req.method === "OPTIONS" && req.path.startsWith("/api/")) {
+    return res.sendStatus(204);
+  }
+  return next();
 });
 
 // Rate limiting — auth/activation endpoints (strict)
@@ -80,6 +119,9 @@ const apiLimiter = rateLimit({
 
 app.use("/api/beta/validate", authLimiter);
 app.use("/api/device/register", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/recovery/request", authLimiter);
 app.use("/api/admin", adminLimiter);
 app.use("/api", apiLimiter);
 
@@ -123,7 +165,11 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        // Redact credential-bearing fields and truncate: raw bodies here
+        // previously wrote 365-day device tokens and full backup payloads
+        // into production logs.
+        const body = formatApiLogBody(capturedJsonResponse);
+        if (body) logLine += ` :: ${body}`;
       }
 
       log(logLine);
@@ -166,6 +212,72 @@ async function runStartupMigrations() {
         sid varchar PRIMARY KEY,
         sess jsonb NOT NULL,
         expire timestamp NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS accounts (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        email varchar(320) NOT NULL UNIQUE,
+        password_hash text,
+        auth_provider varchar(32) NOT NULL DEFAULT 'local',
+        email_verified boolean NOT NULL DEFAULT false,
+        email_verified_at timestamp,
+        recovery_required boolean NOT NULL DEFAULT false,
+        google_subject varchar(255) UNIQUE,
+        status varchar(32) NOT NULL DEFAULT 'active',
+        created_at timestamp DEFAULT now(),
+        updated_at timestamp DEFAULT now(),
+        last_login_at timestamp
+      );
+
+      CREATE TABLE IF NOT EXISTS account_workspaces (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        account_id varchar NOT NULL UNIQUE REFERENCES accounts(id),
+        workspace_user_id varchar NOT NULL UNIQUE REFERENCES users(id),
+        legacy_device_user_id varchar REFERENCES users(id),
+        migration_source varchar(32) NOT NULL DEFAULT 'managed_account',
+        migration_state varchar(32) NOT NULL DEFAULT 'completed',
+        created_at timestamp DEFAULT now(),
+        updated_at timestamp DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS account_devices (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        account_id varchar NOT NULL REFERENCES accounts(id),
+        workspace_user_id varchar NOT NULL REFERENCES users(id),
+        device_user_id varchar NOT NULL REFERENCES users(id),
+        device_id varchar(128) NOT NULL UNIQUE,
+        device_name text,
+        platform varchar(32),
+        auth_provider varchar(32) NOT NULL DEFAULT 'local',
+        status varchar(32) NOT NULL DEFAULT 'active',
+        last_seen_at timestamp DEFAULT now(),
+        revoked_at timestamp,
+        created_at timestamp DEFAULT now(),
+        updated_at timestamp DEFAULT now()
+      );
+
+      CREATE TABLE IF NOT EXISTS account_tokens (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        account_id varchar NOT NULL REFERENCES accounts(id),
+        token_type varchar(32) NOT NULL,
+        token_hash varchar(128) NOT NULL,
+        expires_at timestamp NOT NULL,
+        consumed_at timestamp,
+        metadata jsonb,
+        created_at timestamp DEFAULT now(),
+        UNIQUE(token_type, token_hash)
+      );
+
+      CREATE TABLE IF NOT EXISTS account_audit_events (
+        id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+        account_id varchar REFERENCES accounts(id),
+        workspace_user_id varchar REFERENCES users(id),
+        device_id varchar(128),
+        event_type varchar(64) NOT NULL,
+        result varchar(32) NOT NULL DEFAULT 'success',
+        detail text,
+        metadata jsonb,
+        occurred_at timestamp DEFAULT now()
       );
 
       CREATE TABLE IF NOT EXISTS invite_codes (
@@ -302,6 +414,49 @@ async function runStartupMigrations() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS shared_user_id varchar;
     `);
     await client.query(`
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS password_hash text;
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS auth_provider varchar(32) NOT NULL DEFAULT 'local';
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS email_verified boolean NOT NULL DEFAULT false;
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS email_verified_at timestamp;
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS recovery_required boolean NOT NULL DEFAULT false;
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS google_subject varchar(255);
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS status varchar(32) NOT NULL DEFAULT 'active';
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now();
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS updated_at timestamp DEFAULT now();
+      ALTER TABLE accounts ADD COLUMN IF NOT EXISTS last_login_at timestamp;
+    `);
+    await client.query(`
+      ALTER TABLE account_workspaces ADD COLUMN IF NOT EXISTS legacy_device_user_id varchar;
+      ALTER TABLE account_workspaces ADD COLUMN IF NOT EXISTS migration_source varchar(32) NOT NULL DEFAULT 'managed_account';
+      ALTER TABLE account_workspaces ADD COLUMN IF NOT EXISTS migration_state varchar(32) NOT NULL DEFAULT 'completed';
+      ALTER TABLE account_workspaces ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now();
+      ALTER TABLE account_workspaces ADD COLUMN IF NOT EXISTS updated_at timestamp DEFAULT now();
+    `);
+    await client.query(`
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS workspace_user_id varchar REFERENCES users(id);
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS device_user_id varchar REFERENCES users(id);
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS device_name text;
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS platform varchar(32);
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS auth_provider varchar(32) NOT NULL DEFAULT 'local';
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS status varchar(32) NOT NULL DEFAULT 'active';
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS last_seen_at timestamp DEFAULT now();
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS revoked_at timestamp;
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now();
+      ALTER TABLE account_devices ADD COLUMN IF NOT EXISTS updated_at timestamp DEFAULT now();
+    `);
+    await client.query(`
+      ALTER TABLE account_tokens ADD COLUMN IF NOT EXISTS metadata jsonb;
+      ALTER TABLE account_tokens ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT now();
+    `);
+    await client.query(`
+      ALTER TABLE account_audit_events ADD COLUMN IF NOT EXISTS workspace_user_id varchar REFERENCES users(id);
+      ALTER TABLE account_audit_events ADD COLUMN IF NOT EXISTS device_id varchar(128);
+      ALTER TABLE account_audit_events ADD COLUMN IF NOT EXISTS result varchar(32) NOT NULL DEFAULT 'success';
+      ALTER TABLE account_audit_events ADD COLUMN IF NOT EXISTS detail text;
+      ALTER TABLE account_audit_events ADD COLUMN IF NOT EXISTS metadata jsonb;
+      ALTER TABLE account_audit_events ADD COLUMN IF NOT EXISTS occurred_at timestamp DEFAULT now();
+    `);
+    await client.query(`
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS device_type varchar DEFAULT 'unknown';
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS last_online_check timestamp DEFAULT now();
       ALTER TABLE user_activations ADD COLUMN IF NOT EXISTS offline_grace_start timestamp;
@@ -363,6 +518,9 @@ async function runStartupMigrations() {
       CREATE INDEX IF NOT EXISTS idx_sessions_expire         ON sessions(expire);
       CREATE INDEX IF NOT EXISTS idx_user_activations_user   ON user_activations(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_activations_device ON user_activations(device_id);
+      CREATE INDEX IF NOT EXISTS idx_account_devices_account ON account_devices(account_id);
+      CREATE INDEX IF NOT EXISTS idx_account_tokens_account ON account_tokens(account_id);
+      CREATE INDEX IF NOT EXISTS idx_account_audit_account ON account_audit_events(account_id, occurred_at);
     `);
 
     console.log("[Startup] Schema migrations and indexes applied successfully");
@@ -403,20 +561,23 @@ async function runStartupMigrations() {
 
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
-  } else {
+  } else if (process.env.NODE_ENV !== "test") {
+    // Certification tests exercise API behavior only. Skipping Vite in test mode
+    // keeps server startup deterministic and avoids parallel dev-server pressure.
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);
+  const host = process.env.HOST || (process.env.NODE_ENV === "test" ? "127.0.0.1" : "0.0.0.0");
   httpServer.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host,
+      reusePort: process.platform !== "win32",
     },
     () => {
-      log(`serving on port ${port}`);
+      log(`serving on ${host}:${port}`);
     },
   );
 })();

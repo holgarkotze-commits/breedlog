@@ -1,0 +1,56 @@
+name: Windows Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  windows-build:
+    name: Windows desktop shell build
+    runs-on: windows-latest
+    env:
+      BREEDLOG_NATIVE_BUILD_TARGET: windows
+      VITE_BREEDLOG_API_ORIGIN: https://app.breedlog.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Compile Tauri desktop shell
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+
+      - name: Build unsigned Windows bundle
+        run: npm run windows:build
+
+      - name: Upload Windows bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: breedlog-windows-bundles
+          path: |
+            src-tauri/target/release/bundle/nsis/**
+            src-tauri/target/release/bundle/msi/**
+          if-no-files-found: error
+
+      - name: Note signing status
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERT_BASE64)) {
+            Write-Host "Signed Windows release remains externally blocked by unavailable Authenticode/updater signing credentials; unsigned certification artifacts were built successfully."
+          } else {
+            Write-Host "Windows signing secret is present; signed release activation can proceed in the dedicated release flow."
+          }

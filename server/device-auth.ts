@@ -10,6 +10,7 @@ declare module "express-session" {
   interface SessionData {
     deviceId?: string;
     userId?: string;
+    accountId?: string;
     isAdmin?: boolean;
   }
 }
@@ -151,6 +152,10 @@ export function setupDeviceAuth(app: Express) {
         // Look up user by deviceId
         const user = await storage.getUserByDeviceId(validation.deviceId);
         if (user) {
+          const accountDevice = await storage.getAccountDeviceByDeviceId(validation.deviceId);
+          if (accountDevice && accountDevice.status !== "active") {
+            return next();
+          }
           // If this device shares a workspace with another device (same invite code),
           // use that device's userId so both devices read/write the same data.
           const effectiveUserId = user.sharedUserId || user.id;
@@ -162,6 +167,7 @@ export function setupDeviceAuth(app: Express) {
           // Also sync to session for backwards compatibility
           req.session.deviceId = validation.deviceId;
           req.session.userId = effectiveUserId;
+          req.session.accountId = accountDevice?.accountId;
         }
       }
     }
@@ -226,6 +232,8 @@ export function registerDeviceAuthRoutes(app: Express) {
     const userId = getUserId(req);
     const deviceId = getDeviceId(req);
     
+    // Deliberately no environment or database details here: this endpoint is
+    // unauthenticated and infrastructure identifiers do not belong in it.
     res.json({
       hasTokenOnRequest: !!token,
       tokenValid: tokenValidation.valid,
@@ -233,8 +241,6 @@ export function registerDeviceAuthRoutes(app: Express) {
       isRegistered: !!userId,
       userId: userId || null,
       serverTime: new Date().toISOString(),
-      env: process.env.NODE_ENV || "development",
-      dbHost: process.env.PGHOST?.substring(0, 20) + "..." || "unknown"
     });
   });
 

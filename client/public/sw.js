@@ -1,6 +1,6 @@
-const STATIC_CACHE = 'breedlog-static-v2';
-const API_CACHE = 'breedlog-api-v2';
-const APP_SHELL_CACHE = 'breedlog-shell-v2';
+const STATIC_CACHE = 'breedlog-static-v3';
+const API_CACHE = 'breedlog-api-v3';
+const APP_SHELL_CACHE = 'breedlog-shell-v3';
 
 const STATIC_ASSETS = [
   '/',
@@ -38,7 +38,6 @@ self.addEventListener('install', (event) => {
       return cache.addAll(STATIC_ASSETS);
     })
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -54,6 +53,9 @@ self.addEventListener('activate', (event) => {
             return caches.delete(name);
           })
       );
+    }).then(async () => {
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach((client) => client.postMessage({ type: 'SW_ACTIVATED' }));
     })
   );
   self.clients.claim();

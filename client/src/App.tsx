@@ -8,6 +8,7 @@ import { OfflineBanner } from "@/components/NetworkStatusIndicator";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AppUpdateBanner } from "@/components/AppUpdateBanner";
 import { NavigationHistoryProvider } from "@/lib/navigation-history-context";
 import { AIAssistantProvider } from "@/lib/ai-assistant-context";
 import { AskBreedLogButton } from "@/components/AskBreedLogButton";
@@ -35,6 +36,7 @@ const Admin = lazy(() => import("@/pages/Admin"));
 const Help = lazy(() => import("@/pages/Help"));
 const ReportIssue = lazy(() => import("@/pages/ReportIssue"));
 const Genetics = lazy(() => import("@/pages/Genetics"));
+const LegalDocumentPage = lazy(() => import("@/pages/LegalDocumentPage"));
 
 // Loading fallback for lazy loaded pages
 
@@ -95,6 +97,7 @@ function Router() {
         <Route path="/help" component={Help} />
         <Route path="/report-issue" component={ReportIssue} />
         <Route path="/genetics" component={Genetics} />
+        <Route path="/legal/:document" component={LegalDocumentPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>
@@ -107,6 +110,7 @@ function AuthenticatedApp() {
     <AIAssistantProvider>
       <NavigationHistoryProvider>
         <OfflineBanner />
+        <AppUpdateBanner />
         <PWAInstallPrompt />
         <Router />
         <AskBreedLogButton />
@@ -207,6 +211,16 @@ function AppContent() {
       <RouteErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <Admin />
+        </Suspense>
+      </RouteErrorBoundary>
+    );
+  }
+
+  if (location.startsWith("/legal/")) {
+    return (
+      <RouteErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <Router />
         </Suspense>
       </RouteErrorBoundary>
     );

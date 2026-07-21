@@ -37,7 +37,7 @@ function spawnServer(port: number, envOverrides: Record<string, string | undefin
   for (const key of Object.keys(env)) {
     if (env[key] === undefined) delete env[key];
   }
-  return spawn("node", ["--import", "tsx/esm", "server/index.ts"], {
+  return spawn(process.execPath, ["--import", "tsx/esm", "server/index.ts"], {
     env: env as NodeJS.ProcessEnv,
     stdio: ["ignore", "pipe", "pipe"],
   });

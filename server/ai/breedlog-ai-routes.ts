@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { requireDeviceAuth, getUserId } from "../device-auth";
 import { storage } from "../storage";
+import { EntitlementDeniedError, reserveUsage } from "../commercial";
 import {
   isConfigured,
   generateContent,
@@ -248,6 +249,15 @@ export function registerAIRoutes(app: Express): void {
       });
     }
 
+    try {
+      await reserveUsage(storage, userId, "aiActions");
+    } catch (err) {
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ error: err.message, code: err.code });
+      }
+      throw err;
+    }
+
     let animals: Awaited<ReturnType<typeof storage.getAnimals>>;
     let breedingEvents: Awaited<ReturnType<typeof storage.getBreedingEvents>>;
     let performanceRecords: Awaited<ReturnType<typeof storage.getAllPerformanceRecords>>;
@@ -268,6 +278,9 @@ export function registerAIRoutes(app: Express): void {
           storage.getFarmSettings(userId),
         ]);
     } catch (err) {
+      if (err instanceof EntitlementDeniedError) {
+        return res.status(err.status).json({ error: err.message, code: err.code });
+      }
       const msg = err instanceof Error ? err.message : String(err);
       return res.status(500).json({ error: "Failed to load workspace data.", detail: msg });
     }

@@ -2,25 +2,19 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { openDatabase } from "./lib/indexeddb";
+import {
+  installNativeApiFetchBridge,
+  registerBreedLogServiceWorker,
+  shouldRegisterPwaServiceWorker,
+} from "./lib/runtime-updates";
 
-if ('serviceWorker' in navigator) {
+installNativeApiFetchBridge();
+
+if ('serviceWorker' in navigator && shouldRegisterPwaServiceWorker()) {
   window.addEventListener('load', async () => {
     try {
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/'
-      });
-      console.log('[PWA] Service Worker registered:', registration.scope);
-      
-      registration.addEventListener('updatefound', () => {
-        const newWorker = registration.installing;
-        if (newWorker) {
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('[PWA] New content available, refresh to update');
-            }
-          });
-        }
-      });
+      await registerBreedLogServiceWorker();
+      console.log('[PWA] Service Worker registered');
     } catch (error) {
       console.error('[PWA] Service Worker registration failed:', error);
     }
