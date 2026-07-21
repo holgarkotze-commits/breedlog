@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import compression from "compression";
 import { rateLimit } from "express-rate-limit";
 import { registerRoutes } from "./routes";
+import { formatApiLogBody } from "./observability";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { pool } from "./db";
@@ -164,7 +165,11 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        // Redact credential-bearing fields and truncate: raw bodies here
+        // previously wrote 365-day device tokens and full backup payloads
+        // into production logs.
+        const body = formatApiLogBody(capturedJsonResponse);
+        if (body) logLine += ` :: ${body}`;
       }
 
       log(logLine);

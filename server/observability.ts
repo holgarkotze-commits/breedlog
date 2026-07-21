@@ -29,6 +29,22 @@ export function redactForLog(value: unknown): unknown {
   return "[UNSERIALIZABLE]";
 }
 
+// Response bodies mirrored into the API request log must never carry
+// credential material (device tokens, recovery tokens, backup ciphertext)
+// and must stay one readable line even for large payloads.
+const API_LOG_BODY_LIMIT = 160;
+
+export function formatApiLogBody(body: unknown, limit = API_LOG_BODY_LIMIT): string {
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(redactForLog(body));
+  } catch {
+    return "[UNSERIALIZABLE]";
+  }
+  if (serialized === undefined) return "";
+  return serialized.length > limit ? `${serialized.slice(0, limit - 1)}…` : serialized;
+}
+
 export function createLogEvent(input: Omit<BreedLogLogEvent, "timestamp"> & { timestamp?: string }): BreedLogLogEvent {
   return {
     ...input,
