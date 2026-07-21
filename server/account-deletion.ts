@@ -176,6 +176,11 @@ export async function processExpiredAccountDeletionQueue(
     if (!state.accountId || !state.recoveryUntil) {
       continue;
     }
+    // Cancelled and completed requests are terminal — without this skip they
+    // are re-attempted forever and reported as "failed" on every sweep.
+    if (!["pending", "purge_failed"].includes(state.status)) {
+      continue;
+    }
     if (new Date(state.recoveryUntil).getTime() > now.getTime()) {
       results.push({ accountId: state.accountId, status: "skipped", reason: "recovery_window_active" });
       continue;

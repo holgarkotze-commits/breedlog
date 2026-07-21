@@ -168,3 +168,19 @@ test("deletion purge failure is retryable and queue worker completes it later", 
   assert.equal(queueResults.find((row) => row.accountId === userId)?.status, "completed");
   assert.equal((await getAccountDeletionState(storage, userId)).status, "completed");
 });
+
+test("cancelled and completed deletion requests are skipped by the expiry sweep, not reported as failed", async () => {
+  const userId = "account-delete-cancelled-sweep";
+  await storage.clearAllData(userId);
+  await requestAccountDeletion(storage, userId, {
+    typedConfirmation: "DELETE MY BREEDLOG ACCOUNT",
+    now: new Date("2026-05-01T00:00:00Z"),
+  });
+  await cancelAccountDeletion(storage, userId, new Date("2026-05-02T00:00:00Z"));
+
+  // Sweep far past the (already-cancelled) recovery window.
+  const results = await processExpiredAccountDeletionQueue(storage, new Date("2026-09-01T00:00:00Z"));
+  const row = results.find((entry) => entry.accountId === userId);
+  assert.equal(row, undefined, "a cancelled deletion must not appear in the sweep results at all");
+  assert.equal((await getAccountDeletionState(storage, userId)).status, "cancelled");
+});

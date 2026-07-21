@@ -150,3 +150,59 @@ test("free downgrade hides later animals and their related records from ordinary
   assert.equal(entitlements.downgradeProjection.visibleAnimalIds.length, 30);
   assert.equal(entitlements.downgradeProjection.hiddenAnimalIds.length, 10);
 });
+
+test("free downgrade also hides animals from evaluations, genetics, and mating-risk routes", async () => {
+  await resetData();
+  await upgradeToPremium();
+
+  const createdIds: number[] = [];
+  for (let index = 1; index <= 32; index += 1) {
+    const response = await fetch(`${BASE_URL}/api/animals`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ tagId: `GEN-${String(index).padStart(4, "0")}`, sex: index % 2 === 0 ? "ewe" : "ram", status: "active" }),
+    });
+    assert.equal(response.status, 201);
+    createdIds.push((await response.json()).id);
+  }
+
+  const hiddenAnimalId = createdIds[31];
+  const visibleRamId = createdIds[0];
+
+  const downgradeRes = await fetch(`${BASE_URL}/api/billing/test/simulate`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ eventType: "subscription.refunded" }),
+  });
+  assert.equal(downgradeRes.status, 200);
+
+  const evalListRes = await fetch(`${BASE_URL}/api/animals/${hiddenAnimalId}/evaluations`, { headers: authHeaders() });
+  assert.equal(evalListRes.status, 404, "evaluation list must not expose hidden animals");
+
+  const evalCreateRes = await fetch(`${BASE_URL}/api/evaluations`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ animalId: hiddenAnimalId, evaluator: "manual", comments: "hidden animal evaluation" }),
+  });
+  assert.equal(evalCreateRes.status, 404, "evaluation create must not accept hidden animals");
+
+  const bloodlineListRes = await fetch(`${BASE_URL}/api/genetics/animal/${hiddenAnimalId}/bloodlines`, { headers: authHeaders() });
+  assert.equal(bloodlineListRes.status, 404, "animal bloodline list must not expose hidden animals");
+
+  const bloodlineSetRes = await fetch(`${BASE_URL}/api/genetics/animal/${hiddenAnimalId}/bloodlines`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ bloodlineId: 1 }),
+  });
+  assert.equal(bloodlineSetRes.status, 404, "animal bloodline assignment must not accept hidden animals");
+
+  const matingRiskRes = await fetch(`${BASE_URL}/api/genetics/mating-risk`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ ramId: visibleRamId, eweId: hiddenAnimalId }),
+  });
+  assert.equal(matingRiskRes.status, 404, "mating-risk must not evaluate hidden animals");
+
+  const visibleEvalRes = await fetch(`${BASE_URL}/api/animals/${visibleRamId}/evaluations`, { headers: authHeaders() });
+  assert.equal(visibleEvalRes.status, 200, "visible animals keep full evaluation access");
+});
