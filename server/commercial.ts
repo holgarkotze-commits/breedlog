@@ -617,6 +617,14 @@ export async function purgeCommercialState(storage: IStorage, accountId: string)
   }
 }
 
+// Test billing routes mint entitlements without a signed provider event, so
+// they must be impossible to enable in production: NODE_ENV=test always has
+// them, BILLING_TEST_ROUTES=1 opts in for dev/staging only.
+export function areBillingTestRoutesEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.NODE_ENV === "test") return true;
+  return env.BILLING_TEST_ROUTES === "1" && env.NODE_ENV !== "production";
+}
+
 export function verifyBillingSignature(rawBody: string | Buffer, signature: string | undefined, secret: string | undefined): boolean {
   if (!secret) return process.env.NODE_ENV !== "production" && signature === "test-signature";
   if (!signature) return false;

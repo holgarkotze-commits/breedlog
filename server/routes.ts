@@ -14,6 +14,7 @@ import {
   BILLING_CATALOG,
   EntitlementDeniedError,
   applyBillingEvent,
+  areBillingTestRoutesEnabled,
   assertCanCreateAnimal,
   billingEventSchema,
   cancelBillingSubscription,
@@ -83,7 +84,7 @@ function getUserId(req: Request): string {
 const requireAuth = requireDeviceAuth;
 const managedAuthProvider = createManagedAuthProvider(storage);
 const backupStorageAdapter = resolveBackupStorageAdapter();
-const billingTestRoutesEnabled = process.env.NODE_ENV === "test" || process.env.BILLING_TEST_ROUTES === "1";
+const billingTestRoutesEnabled = areBillingTestRoutesEnabled();
 
 function inferExportQuotaClass(documentType: string, subfolder: string, animalId: number | null | undefined, metadata: Record<string, any> | null | undefined) {
   if (metadata?.quotaClass === "individual_pdf" || metadata?.quotaClass === "batch_pdf") {
@@ -1808,6 +1809,10 @@ export async function registerRoutes(
   app.get(api.evaluations.list.path, requireAuth, async (req, res) => {
     const userId = getUserId(req);
     const animalId = Number(req.params.id);
+    const visibility = await getDowngradeVisibilityContext(userId);
+    if (!isAnimalVisible(visibility, animalId)) {
+      return hiddenAnimalNotFound(res);
+    }
     const evals = await storage.getEvaluations(userId, animalId);
     res.json(evals);
   });
@@ -1816,6 +1821,10 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const input = api.evaluations.create.input.parse(req.body);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, input.animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const evaluation = await storage.createEvaluation(userId, input);
       res.status(201).json(evaluation);
     } catch (err) {
@@ -2988,7 +2997,12 @@ export async function registerRoutes(
   app.get("/api/genetics/animal/:animalId/bloodlines", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const rows = await storage.getAnimalBloodlines(userId, parseInt(req.params.animalId));
+      const animalId = parseInt(req.params.animalId);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
+      const rows = await storage.getAnimalBloodlines(userId, animalId);
       res.json(rows);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -2997,7 +3011,12 @@ export async function registerRoutes(
   app.post("/api/genetics/animal/:animalId/bloodlines", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const row = await storage.setAnimalBloodline(userId, { ...req.body, animalId: parseInt(req.params.animalId) });
+      const animalId = parseInt(req.params.animalId);
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, animalId)) {
+        return hiddenAnimalNotFound(res);
+      }
+      const row = await storage.setAnimalBloodline(userId, { ...req.body, animalId });
       res.status(201).json(row);
     } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
@@ -3017,6 +3036,10 @@ export async function registerRoutes(
       const userId = getUserId(req);
       const { ramId, eweId } = req.body as { ramId: number; eweId: number };
       if (!ramId || !eweId) return res.status(400).json({ message: "ramId and eweId required" });
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (!isAnimalVisible(visibility, ramId) || !isAnimalVisible(visibility, eweId)) {
+        return hiddenAnimalNotFound(res);
+      }
       const allAnimals = await storage.getAnimals(userId, {});
       const animalMap = new Map(allAnimals.map((a: any) => [a.id, a]));
       const ram = animalMap.get(ramId);
@@ -3032,7 +3055,6 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const bloodlineId = parseInt(req.params.bloodlineId);
-      const assignments = await storage.getAnimalBloodlines(userId, 0).catch(() => [] as any[]);
       const allAssignments: any[] = [];
       const allAnimals = await storage.getAnimals(userId, {});
       for (const animal of allAnimals) {

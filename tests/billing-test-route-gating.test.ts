@@ -62,3 +62,21 @@ test("test billing routes are not exposed outside test mode", async () => {
   });
   assert.equal(complete.status, 404);
 });
+
+test("billing test-route gating can never be enabled in production", async () => {
+  const { areBillingTestRoutesEnabled } = await import("../server/commercial");
+  assert.equal(areBillingTestRoutesEnabled({ NODE_ENV: "test" } as NodeJS.ProcessEnv), true);
+  assert.equal(areBillingTestRoutesEnabled({ NODE_ENV: "development" } as NodeJS.ProcessEnv), false);
+  assert.equal(areBillingTestRoutesEnabled({ NODE_ENV: "development", BILLING_TEST_ROUTES: "1" } as NodeJS.ProcessEnv), true);
+  // The critical case: an operator flag must not open the self-upgrade route in production.
+  assert.equal(areBillingTestRoutesEnabled({ NODE_ENV: "production", BILLING_TEST_ROUTES: "1" } as NodeJS.ProcessEnv), false);
+  assert.equal(areBillingTestRoutesEnabled({ NODE_ENV: "production" } as NodeJS.ProcessEnv), false);
+});
+
+test("device status diagnostics do not disclose environment or database details", async () => {
+  const response = await fetch(`${BASE_URL}/api/device/status`);
+  assert.equal(response.status, 200);
+  const body = await response.json() as Record<string, unknown>;
+  assert.ok(!("dbHost" in body), "dbHost must not be exposed on the unauthenticated status endpoint");
+  assert.ok(!("env" in body), "env must not be exposed on the unauthenticated status endpoint");
+});

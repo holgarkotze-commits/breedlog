@@ -232,6 +232,8 @@ export function registerDeviceAuthRoutes(app: Express) {
     const userId = getUserId(req);
     const deviceId = getDeviceId(req);
     
+    // Deliberately no environment or database details here: this endpoint is
+    // unauthenticated and infrastructure identifiers do not belong in it.
     res.json({
       hasTokenOnRequest: !!token,
       tokenValid: tokenValidation.valid,
@@ -239,8 +241,6 @@ export function registerDeviceAuthRoutes(app: Express) {
       isRegistered: !!userId,
       userId: userId || null,
       serverTime: new Date().toISOString(),
-      env: process.env.NODE_ENV || "development",
-      dbHost: process.env.PGHOST?.substring(0, 20) + "..." || "unknown"
     });
   });
 
