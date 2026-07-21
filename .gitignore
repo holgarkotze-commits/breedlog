@@ -6,3 +6,7 @@ vite.config.ts.*
 *.tar.gz
 release-artifacts/ci-artifacts/
 release-artifacts/windows-proof/
+test-results/
+cookies.txt
+.canvas/
+attached_assets/
