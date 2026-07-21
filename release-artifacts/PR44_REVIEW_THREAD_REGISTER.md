@@ -42,3 +42,14 @@ Verification attached to the thread replies:
   - Android wrapper build PASS
   - both Type-check, Build & Test jobs PASS
   - Windows desktop shell build PASS
+
+## Independent revalidation note (2026-07-21)
+
+All 23 thread fixes above were independently re-verified against the code on
+the final head by the closing architect review pass. One correction to the
+verification claims attached to the thread replies: "CI ... passed both
+Type-check/Build/Test jobs" was true but weaker than stated — until commit
+`2499dc2` the CI test step only executed 4 of the certification tests because
+of a shell glob defect in `test:cert`. The full suite (including every
+regression test named in this register) now runs and passes in CI, enforced
+by an executed-test-count floor.

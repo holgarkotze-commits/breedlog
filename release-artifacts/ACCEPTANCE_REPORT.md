@@ -90,3 +90,70 @@
 - Windows Authenticode certificate and updater-signing keys
 - Production DNS/TLS/hosting/database/storage credentials for `breedlog.com` and `app.breedlog.com`
 - Professional legal review/approval of the policy and commercial documents
+
+## Independent final senior-architect review pass (2026-07-21)
+
+Performed on branch `breedlog-production-completion` continuing head `e1a4ce8`,
+in a clean Linux cloud environment from a fresh clone and `npm ci`.
+
+### Independent revalidation of all prior P1/P2 findings
+
+Every defect listed in the PR #44 body and every review-thread fix claim was
+re-verified against the actual code (not the thread replies). All 14 PR-body
+defects and all 23 review-thread fixes are present on the head. Verified
+production paths include: device-limit entitlement scope
+(`server/managed-auth.ts`), cancellation downgrade (`server/commercial.ts`),
+full backup collection coverage incl. evaluations (`server/backup.ts`),
+AI quota reservation (`server/ai/breedlog-ai-routes.ts`), deletion-suspension
+ordering and bypass list (`server/routes.ts`), raw-body webhook verification,
+billing test-route gating, reactivation/CSV caps, hidden-EID scan events,
+revoked-device rejection (`server/device-auth.ts`), transactional managed
+account purge incl. `field_issues` (`server/storage.ts`), Windows API-origin
+build contract and Android signing contract (workflows + `android/app/build.gradle`).
+
+### New defects found and fixed in this pass
+
+- P1 `2499dc2` — the `test:cert` glob `tests/**/*.test.ts` collapses to a
+  single path segment under POSIX `sh`, so CI (and any Linux/Replit run of
+  `npm run test:cert`) executed only `tests/isolation/phase1-data-isolation.test.ts`
+  — 4 of 572 tests. All earlier "CI: certification tests PASS" results on this
+  branch proved only those 4 tests. (Windows-local runs expanded the glob via
+  Node and did run the full suite, so local totals reported earlier were real.)
+  Fixed with explicit globs plus a CI executed-test-count floor (>= 500).
+- P2 `cfb8b51` — the API request logger wrote full response bodies (365-day
+  device tokens, recovery tokens, encrypted backup payloads) into production
+  logs. Now redacted and truncated; regression `tests/api-log-redaction.test.ts`.
+- P3 `e3f82b7` — `BILLING_TEST_ROUTES=1` could enable the entitlement-minting
+  test billing routes in production; now structurally impossible.
+  `/api/device/status` no longer discloses `NODE_ENV`/`PGHOST` unauthenticated.
+- P3 `e348ed9` — downgrade-visibility now also enforced on evaluations,
+  genetics animal-bloodline, and mating-risk routes; expired-deletion sweep no
+  longer re-reports cancelled/completed requests as failed; dead code removed.
+- Cleanup `fc8bfea` — removed 331 unreferenced tracked files
+  (~71 MB `attached_assets/` Replit paste bucket, Playwright `test-results/`,
+  empty `cookies.txt`, `.canvas/`), tracked files 800 → 470.
+
+### Verification on this pass (Linux, clean clone)
+
+- `npm ci`: PASS
+- `npm run check`: PASS
+- `npm run test:cert` (now the full tree): PASS — 582 tests, 578 pass, 0 fail,
+  4 skipped (DB-gated seed tests; they run in CI where DATABASE_URL exists)
+- `npm run build`: PASS
+- `npx cap sync android`: PASS
+- `cargo check --manifest-path src-tauri/Cargo.toml`: PASS
+- `git diff --check`: PASS
+- Runtime smoke test against an isolated in-memory server: 31/31 PASS —
+  empty normal workspaces, animal CRUD/archive/reactivate, breeding/health/
+  performance/evaluation records, pedigree resolution, encrypted backup →
+  reset → restore round-trip with matching collection counts, cross-user
+  direct-ID isolation, backup owner-binding rejection, U2A2ZAVQ activation
+  with the Kwantam demonstration herd (541 animals) and zero leakage into
+  normal workspaces, deletion suspension (423) and recovery cancellation,
+  unauthenticated AI rejection.
+- `npm run windows:build`: not runnable in this Linux environment (NSIS/MSI
+  require Windows). Proof source: the Windows Build workflow on the final head.
+- Android Gradle build: proof source: the Android Build workflow on the final head.
+- Prior physical Windows install/launch acceptance (above) was performed on
+  `fff6148` artifacts; no client, Tauri, or Android source changed in this
+  pass, so that evidence is inherited, not re-executed.
