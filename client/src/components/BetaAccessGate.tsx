@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Lock, Shield, WifiOff, Loader2, RefreshCw, Download, Smartphone, Monitor, Share, Plus, ArrowRight, ArrowUpRight, ChevronRight } from "lucide-react";
-import { apiRequest, setDeviceToken, getDeviceToken } from "@/lib/queryClient";
+import { Lock, Shield, WifiOff, Loader2, RefreshCw, Download, Smartphone, Monitor, Share, ChevronRight } from "lucide-react";
+import { apiRequest, setDeviceToken } from "@/lib/queryClient";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { isInstalledBreedLogRuntime } from "@/lib/runtime-updates";
 import { cn } from "@/lib/utils";
@@ -101,11 +101,6 @@ function detectPlatform(): "ios" | "android" | "desktop-chrome" | "desktop-edge"
   const isChrome = /chrome/.test(ua) && !isEdge;
   if (isChrome && !isMobileUA) return "desktop-chrome";
   return "other";
-}
-
-function isMobilePlatform(): boolean {
-  const ua = navigator.userAgent.toLowerCase();
-  return /iphone|ipad|ipod|android/.test(ua);
 }
 
 // ============================================================
@@ -365,7 +360,7 @@ interface BetaAccessGateProps {
 
 export function BetaAccessGate({ children, deviceId }: BetaAccessGateProps) {
   const queryClient = useQueryClient();
-  const { hasAccess, needsCode, reason, offlineGraceExpired, isLoading, isOnline, refetch } = useBetaAccess(deviceId);
+  const { hasAccess, offlineGraceExpired, isLoading, refetch } = useBetaAccess(deviceId);
   const { isInstalled } = usePWAInstall();
 
   const savedCode = getSavedCode();

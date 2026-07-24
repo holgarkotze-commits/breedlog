@@ -6,11 +6,9 @@
 const SESSION_KEY = "breedlog_telemetry_session_id";
 const QUEUE_KEY = "breedlog_telemetry_queue";
 const HEARTBEAT_INTERVAL_MS = 60_000; // 60 seconds
-const SESSION_TIMEOUT_MS = 3 * 60_000; // 3 minutes — if no heartbeat, session is dead
 
 let _sessionId: string | null = null;
 let _heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-let _lastHeartbeat = 0;
 let _flushing = false;
 
 // ── Session ID ────────────────────────────────────────────────────────────────
@@ -156,7 +154,6 @@ function sendHeartbeat(): void {
       body: JSON.stringify({ sessionId }),
       keepalive: true,
     }).catch(() => { /* silent */ });
-    _lastHeartbeat = Date.now();
   } catch { /* never crash */ }
 }
 

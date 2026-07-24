@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl } from "@shared/routes";
-import { type InsertBreedingEvent, type InsertMatingGroup, type BreedingEvent, type MatingGroup } from "@shared/schema";
+import { api } from "@shared/routes";
+import { type InsertBreedingEvent, type BreedingEvent, type MatingGroup } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { 
@@ -254,58 +254,6 @@ export function useMatingGroups() {
       const visiblePending = pendingMatingGroups.filter(g => !deletedIds.has(g.id));
 
       return [...visibleData, ...visiblePending];
-    }
-  });
-}
-
-export function useCreateMatingGroup() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const { isOnline } = useNetworkStatus();
-
-  return useMutation({
-    mutationFn: async (data: InsertMatingGroup) => {
-      const tempId = -Date.now();
-      const tempRecord = { ...data, id: tempId } as MatingGroup;
-
-      await putInStore('matingGroups', tempRecord);
-
-      if (!isOnline) {
-        console.log('[useCreateMatingGroup] Offline - queuing for sync');
-        await addToSyncQueue({
-          entity: 'matingGroups',
-          action: 'create',
-          data: data,
-          tempId: tempId,
-        });
-        return tempRecord;
-      }
-
-      // Include auth token for device-based authentication
-      const { getDeviceToken } = await import("@/lib/queryClient");
-      const token = getDeviceToken();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      
-      const res = await fetch(api.breeding.groups.create.path, {
-        method: api.breeding.groups.create.method,
-        headers,
-        body: JSON.stringify(data),
-        credentials: "include"
-      });
-      if(!res.ok) throw new Error("Failed to create mating group");
-      const created = api.breeding.groups.create.responses[201].parse(await res.json());
-      
-      await putInStore('matingGroups', created);
-      
-      return created;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.breeding.groups.list.path] });
-      toast({ title: "Success", description: "Mating group created" });
-    },
-    onError: (error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   });
 }
