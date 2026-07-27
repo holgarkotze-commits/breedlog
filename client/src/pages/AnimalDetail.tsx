@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -26,11 +26,9 @@ import { ArrowLeft, Dna, Syringe, Scale, FileText, Plus, Upload, Edit, Camera, I
 import { useAnimalBreedingEvents } from "@/hooks/use-breeding";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Link } from "wouter";
 import logo from "@/assets/breedlog-logo-mark.png";
 import { useToast } from "@/hooks/use-toast";
-import type { Animal, AnimalWithRelations, BreedingEvent } from "@shared/schema";
-import { calculateEweBreedingStats } from "@/lib/breeding-stats";
+import type { Animal, AnimalWithRelations } from "@shared/schema";
 import { ImageCropDialog } from "@/components/ImageCropDialog";
 import { splitTagInput } from "@shared/tag-utils";
 import { isMetricWeight, resolveBirthWeight, resolveWeaningWeight } from "@shared/animal-lifecycle";
@@ -117,7 +115,7 @@ function ZoomableImagePreview({ src, alt, onClose }: { src: string; alt: string;
 }
 
 export default function AnimalDetail() {
-  const [match, params] = useRoute("/animals/:id");
+  const [, params] = useRoute("/animals/:id");
   const id = parseInt(params?.id || "0");
   const { data: animal, isLoading } = useAnimal(id);
   const { data: farmSettings } = useFarmSettings();
@@ -1062,12 +1060,6 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-    };
-    
-    const handleExportJSON = () => {
-        const profileData = getProfileData();
-        downloadFile(JSON.stringify(profileData, null, 2), `${animal.tagId}_profile_${new Date().toISOString().split('T')[0]}.json`, "application/json");
-        toast({ title: "JSON Exported", description: `${animal.tagId} profile downloaded as JSON` });
     };
     
     const handleExportCSV = () => {
@@ -2358,137 +2350,6 @@ function ImagesView({ animalId }: { animalId: number }) {
                                 data-testid="button-confirm-delete-image"
                             >
                                 {isDeleting ? "Deleting..." : "Delete"}
-                            </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
-            </CardContent>
-        </Card>
-    );
-}
-
-function DocumentsView({ animalId }: { animalId: number }) {
-    const [documents, setDocuments] = useState<{id: string, name: string, url: string, date: string}[]>([]);
-    const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
-    const [docToDelete, setDocToDelete] = useState<string | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const newDoc = {
-                    id: Date.now().toString(),
-                    name: file.name,
-                    url: reader.result as string,
-                    date: new Date().toLocaleDateString()
-                };
-                setDocuments(prev => [...prev, newDoc]);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleDeleteConfirm = () => {
-        if (docToDelete) {
-            setDocuments(prev => prev.filter(d => d.id !== docToDelete));
-            setDocToDelete(null);
-        }
-    };
-
-    return (
-        <Card className="bg-gradient-to-br from-card via-card to-secondary/20 rugged-card">
-            <CardHeader className="border-b border-border/50 bg-secondary/50">
-                <CardTitle className="text-lg flex items-center gap-2">
-                    <Image className="w-5 h-5 text-primary" />
-                    <span>MY DOCUMENTS</span>
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">Upload photos, screenshots, or documents for this animal</p>
-            </CardHeader>
-            <CardContent className="p-4">
-                <input 
-                    ref={fileInputRef} 
-                    type="file" 
-                    accept="image/*,.pdf" 
-                    onChange={handleUpload} 
-                    className="hidden" 
-                    data-testid="input-upload-document"
-                />
-                
-                <Button 
-                    variant="outline" 
-                    className="w-full mb-4 border-dashed"
-                    onClick={() => fileInputRef.current?.click()}
-                    data-testid="button-add-document"
-                >
-                    <Upload className="w-4 h-4 mr-2" /> Add Document or Screenshot
-                </Button>
-
-                {documents.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                        <Image className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">No documents uploaded yet</p>
-                        <p className="text-xs mt-1">Tap the button above to add photos or files</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {documents.map((doc) => (
-                            <div key={doc.id} className="relative group">
-                                <div 
-                                    className="aspect-square rounded-lg overflow-hidden border border-border bg-secondary cursor-pointer hover:border-primary transition-colors"
-                                    onClick={() => setSelectedDoc(doc.url)}
-                                >
-                                    {doc.url.startsWith('data:image') ? (
-                                        <img src={doc.url} alt={doc.name} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="w-full h-full flex flex-col items-center justify-center p-2">
-                                            <FileText className="w-8 h-8 text-primary mb-1" />
-                                            <span className="text-[10px] text-center truncate w-full">{doc.name}</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="absolute -top-2 -right-2 scale-75"
-                                    onClick={() => setDocToDelete(doc.id)}
-                                    data-testid={`button-delete-doc-${doc.id}`}
-                                >
-                                    <X className="w-4 h-4" />
-                                </Button>
-                                <p className="text-[10px] text-muted-foreground mt-1 truncate">{doc.date}</p>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Lightbox for viewing documents */}
-                <Dialog open={!!selectedDoc} onOpenChange={() => setSelectedDoc(null)}>
-                    <DialogContent className="max-w-2xl p-2 bg-card/98 border border-primary/50">
-                        {selectedDoc && (
-                            <img src={selectedDoc} alt="Document preview" className="w-full h-auto max-h-[80vh] object-contain rounded" />
-                        )}
-                    </DialogContent>
-                </Dialog>
-
-                {/* Delete confirmation dialog */}
-                <AlertDialog open={docToDelete !== null} onOpenChange={(open) => !open && setDocToDelete(null)}>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Document</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                Are you sure you want to delete this document? This action cannot be undone.
-                            </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                            <AlertDialogCancel data-testid="button-cancel-delete-doc">Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                                onClick={handleDeleteConfirm}
-                                className="bg-white text-red-600 border border-red-200 hover:bg-red-50"
-                                data-testid="button-confirm-delete-doc"
-                            >
-                                Delete
                             </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>

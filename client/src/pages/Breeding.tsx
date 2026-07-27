@@ -1,5 +1,5 @@
 import { Layout } from "@/components/Layout";
-import { useBreedingEvents, useCreateBreedingEvent } from "@/hooks/use-breeding";
+import { useBreedingEvents } from "@/hooks/use-breeding";
 import { useMatingGroups, useCreateMatingGroup, useUpdateMatingGroup, useDeleteMatingGroup } from "@/hooks/use-mating-groups";
 import { useAnimals } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -14,10 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertBreedingEventSchema, insertMatingGroupSchema, type MatingGroup } from "@shared/schema";
+import { insertMatingGroupSchema, type MatingGroup } from "@shared/schema";
 import { Plus, Calendar, Shield, Heart, Users, Download, Pencil, Trash2, Archive, ChevronRight } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { format, addDays, addMonths } from "date-fns";
@@ -32,7 +31,6 @@ export default function Breeding() {
   const { data: animals } = useAnimals({});
   const { data: farmSettings } = useFarmSettings();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
-  const [openRecord, setOpenRecord] = useState(false);
   const [openMatingGroup, setOpenMatingGroup] = useState(false);
   const [editingGroup, setEditingGroup] = useState<MatingGroup | null>(null);
 
@@ -752,137 +750,6 @@ function CreateMatingGroupDialog({ open, onOpenChange }: { open: boolean, onOpen
               className="w-full rugged-btn bg-primary text-primary-foreground"
             >
               {isPending ? "Creating..." : "Create Mating Group"}
-            </Button>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function RecordEventButton({ onOpenMating }: { onOpenMating: () => void }) {
-  return (
-    <Button 
-      onClick={onOpenMating}
-      data-testid="button-record-event" 
-      className="rugged-btn bg-primary text-primary-foreground"
-    >
-      <Plus className="w-4 h-4 mr-2" /> Record Mating
-    </Button>
-  );
-}
-
-function RecordBreedingDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (open: boolean) => void }) {
-  const { mutate, isPending } = useCreateBreedingEvent();
-  const { data: animals } = useAnimals({});
-  
-  const rams = animals?.filter(a => a.sex === 'ram' && a.status === 'active') || [];
-  const ewes = animals?.filter(a => a.sex === 'ewe' && a.status === 'active') || [];
-  
-  const form = useForm({
-    resolver: zodResolver(insertBreedingEventSchema),
-    defaultValues: {
-      eweId: 0,
-      ramId: 0,
-      matingDate: new Date().toISOString().split('T')[0],
-      matingType: "natural",
-    }
-  });
-
-  const onSubmit = (data: any) => {
-    mutate({
-      ...data,
-      eweId: Number(data.eweId),
-      ramId: Number(data.ramId),
-    }, { onSuccess: () => onOpenChange(false) });
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-card border-border">
-        <DialogHeader>
-          <DialogTitle className="uppercase font-bold">Record Mating Event</DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-1 xs:grid-cols-2 gap-4">
-              <FormField name="eweId" control={form.control} render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center gap-1">
-                    <Heart className="w-3 h-3 text-pink-400" /> Ewe
-                  </FormLabel>
-                  <Select onValueChange={(v) => field.onChange(Number(v))} value={String(field.value || "")}>
-                    <FormControl>
-                      <SelectTrigger className="rugged-input">
-                        <SelectValue placeholder="Select ewe..." />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {ewes.map(ewe => (
-                        <SelectItem key={ewe.id} value={String(ewe.id)}>
-                          {ewe.tagId} {ewe.name ? `(${ewe.name})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage/>
-                </FormItem>
-              )}/>
-              <FormField name="ramId" control={form.control} render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center gap-1">
-                    <Shield className="w-3 h-3 text-blue-400" /> Ram
-                  </FormLabel>
-                  <Select onValueChange={(v) => field.onChange(Number(v))} value={String(field.value || "")}>
-                    <FormControl>
-                      <SelectTrigger className="rugged-input">
-                        <SelectValue placeholder="Select ram..." />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {rams.map(ram => (
-                        <SelectItem key={ram.id} value={String(ram.id)}>
-                          {ram.tagId} {ram.name ? `(${ram.name})` : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage/>
-                </FormItem>
-              )}/>
-            </div>
-            <FormField name="matingDate" control={form.control} render={({ field }) => (
-              <FormItem>
-                <FormLabel>Date</FormLabel>
-                <FormControl>
-                  <Input type="date" className="rugged-input" {...field} value={String(field.value)} />
-                </FormControl>
-                <FormMessage/>
-              </FormItem>
-            )}/>
-            <FormField name="matingType" control={form.control} render={({ field }) => (
-              <FormItem>
-                <FormLabel>Type</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="rugged-input">
-                      <SelectValue/>
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="natural">Natural</SelectItem>
-                    <SelectItem value="AI">AI (Artificial Insemination)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormItem>
-            )}/>
-            <Button 
-              type="submit" 
-              disabled={isPending} 
-              data-testid="button-save-breeding" 
-              className="w-full rugged-btn bg-primary text-primary-foreground"
-            >
-              {isPending ? "Saving..." : "Save Record"}
             </Button>
           </form>
         </Form>

@@ -15,22 +15,6 @@ import {
 } from './indexeddb';
 import { apiRequest } from './queryClient';
 
-interface TempIdMapping {
-  tempId: number;
-  serverId: number;
-  entity: string;
-}
-
-async function getTempIdMappings(): Promise<TempIdMapping[]> {
-  try {
-    const mappings = await getAllFromStore<TempIdMapping>('metadata');
-    return mappings.filter(m => (m as { key?: string }).key?.startsWith('tempId:'))
-      .map(m => m as unknown as TempIdMapping);
-  } catch {
-    return [];
-  }
-}
-
 async function saveTempIdMapping(tempId: number, serverId: number, entity: string): Promise<void> {
   const mapping = { key: `tempId:${entity}:${tempId}`, tempId, serverId, entity };
   await putInStore('metadata', mapping);
