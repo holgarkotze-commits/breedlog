@@ -33,7 +33,9 @@ import { Label } from "@/components/ui/label";
 import { DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import logo from "@/assets/breedlog-logo-mark.png";
 import type { PDFQuality } from "@/lib/pdf-utils";
-import { getHerdCounts } from "@/lib/herd-counts";
+import { getHerdCounts, isActiveAnimal } from "@/lib/herd-counts";
+import { getRamProgenyMetrics } from "@/lib/animal-performance";
+import { getCanonicalGroupCSS, renderExportHeader, renderExportFooter, wrapExportDocument, sanitizePublicNote } from "@/lib/export-template";
 import { api } from "@shared/routes";
 import { nextTagRawSequence, splitTagInput } from "@shared/tag-utils";
 import { calculateLambStage } from "@shared/lamb-stage";
@@ -182,7 +184,7 @@ export default function Animals() {
   
   // PDF Export Dialog state
   const [isPdfExportDialogOpen, setIsPdfExportDialogOpen] = useState(false);
-  const [pdfExportType, setPdfExportType] = useState<'fullHerd' | 'rams' | 'ewes' | 'lambs' | 'culled' | 'ramsRegister' | 'ewesRegister'>('fullHerd');
+  const [pdfExportType, setPdfExportType] = useState<'fullHerd' | 'rams' | 'ewes' | 'lambs' | 'culled' | 'sold' | 'ramsRegister' | 'ewesRegister'>('fullHerd');
   const [visibleAnimalsCount, setVisibleAnimalsCount] = useState(ANIMALS_INITIAL_VISIBLE_COUNT);
   
   const getDocumentFileName = (type: string, identifier: string) => {
@@ -209,6 +211,9 @@ export default function Animals() {
         break;
       case 'culled':
         exportCulledPDF();
+        break;
+      case 'sold':
+        exportSoldPDF();
         break;
       case 'ramsRegister':
         exportRamsPDF();
@@ -280,13 +285,16 @@ export default function Animals() {
     const fb = farmSettings;
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
     
-    const rams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram");
-    const ewes = allAnimals.filter(a => a.sex?.toLowerCase() === "ewe");
-    const lambs = allAnimals.filter(a => {
+    // Active-animal selector: use the authoritative herd-counts selector so
+    // the exported animal set matches exactly what My Herd displays.
+    const activeAnimals = allAnimals.filter(isActiveAnimal);
+    const rams = activeAnimals.filter(a => a.sex?.toLowerCase() === "ram");
+    const ewes = activeAnimals.filter(a => a.sex?.toLowerCase() === "ewe");
+    const lambs = activeAnimals.filter(a => {
       if (!a.birthDate) return false;
       const birthDate = new Date(a.birthDate);
       const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
-      return ageInDays <= 240 && a.status !== 'culled' && a.status !== 'sold' && a.status !== 'dead';
+      return ageInDays <= 240;
     });
     
     if (rams.length === 0 && ewes.length === 0 && lambs.length === 0) {
@@ -374,6 +382,7 @@ export default function Animals() {
               <div class="footer-branding">
                 <p class="breedlog-text">BREEDLOG</p>
                 <p class="tagline">Professional Livestock Management</p>
+                <p class="creator">A STITCH WORX Product</p>
               </div>
             </div>
           </div>
@@ -448,6 +457,7 @@ export default function Animals() {
               <div class="footer-branding">
                 <p class="breedlog-text">BREEDLOG</p>
                 <p class="tagline">Professional Livestock Management</p>
+                <p class="creator">A STITCH WORX Product</p>
               </div>
             </div>
           </div>
@@ -523,6 +533,7 @@ export default function Animals() {
               <div class="footer-branding">
                 <p class="breedlog-text">BREEDLOG</p>
                 <p class="tagline">Professional Livestock Management</p>
+                <p class="creator">A STITCH WORX Product</p>
               </div>
             </div>
           </div>
@@ -538,10 +549,10 @@ export default function Animals() {
   <meta charset="UTF-8">
   <title>${fb?.studName || fb?.farmName || "BreedLog"} - Full Herd Register</title>
   <style>
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 landscape; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
+    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 30mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
     .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
@@ -571,8 +582,9 @@ export default function Animals() {
     @media print { 
       .page { page-break-after: always; } 
       .page:last-child { page-break-after: avoid; }
-      thead { display: table-header-group; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
+    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -702,6 +714,7 @@ export default function Animals() {
               <div class="footer-branding">
                 <p class="breedlog-text">BREEDLOG</p>
                 <p class="tagline">Professional Livestock Management</p>
+                <p class="creator">A STITCH WORX Product</p>
               </div>
             </div>
           </div>
@@ -715,10 +728,10 @@ export default function Animals() {
   <meta charset="UTF-8">
   <title>${fb?.studName || fb?.farmName || "BreedLog"} - ${exportTitle}</title>
   <style>
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 landscape; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
+    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 30mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
     .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
@@ -747,8 +760,9 @@ export default function Animals() {
     @media print { 
       .page { page-break-after: always; } 
       .page:last-child { page-break-after: avoid; }
-      thead { display: table-header-group; }
+      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
+    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -846,10 +860,10 @@ export default function Animals() {
   <meta charset="UTF-8">
   <title>${fb?.studName || fb?.farmName || "BreedLog"} - ${exportTitle}</title>
   <style>
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 landscape; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
+    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 30mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
     .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
@@ -876,9 +890,9 @@ export default function Animals() {
     @media print {
       .page { page-break-after: always; }
       .page:last-child { page-break-after: avoid; }
-      thead { display: table-header-group; }
       body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
+    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -902,47 +916,63 @@ export default function Animals() {
     toast({ title: "PDF Ready", description: `${exportTitle} export opened for printing` });
   };
 
-  // Dedicated Ram Export PDF with images
+  // Active Rams Register PDF — uses the authoritative getRamProgenyMetrics so
+  // the metrics here match the individual animal profile exactly.
+  // Source: only active rams (status === "active" via isActiveAnimal).
+  // Columns: Total Progeny, Mating Events, Lambing Events, Lambing Rate, Avg weights.
+  // "Twin Count" has been removed — it was incorrectly mapped to mating events.
   const exportRamsPDF = () => {
     if (!allAnimals || !breedingEvents) return;
     const fb = farmSettings;
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    
-    const rams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram");
-    
+
+    // ACTIVE rams only — no historical/sold/culled animals
+    const rams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram" && isActiveAnimal(a));
+
     if (rams.length === 0) {
-      toast({ title: "No Rams", description: "No rams found to export", variant: "destructive" });
+      toast({ title: "No Active Rams", description: "No active rams found to export", variant: "destructive" });
       return;
     }
-    
-    // Calculate stats for each ram
+
+    // Use the authoritative ram progeny metrics (same as individual PDF and animal profile)
     const ramsWithStats = rams.map(ram => {
-      const stats = calculateRamBreedingStats(ram.id, breedingEvents, allAnimals);
+      const stats = getRamProgenyMetrics(ram.id, allAnimals, breedingEvents);
       return { ...ram, stats };
     });
-    
+
     const ramsPerPage = 20;
-    const totalPages = Math.ceil(ramsWithStats.length / ramsPerPage);
-    
+    const totalPages = Math.max(1, Math.ceil(ramsWithStats.length / ramsPerPage));
+    const css = getCanonicalGroupCSS() + `
+      .rams-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .rams-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
+      .rams-table td { padding: 5px 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
+      .rams-table tbody tr:nth-child(even) { background: #fafafa; }
+      .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
+      .status-active { background: #22c55e20; color: #16a34a; }
+      .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
+    `;
+
     let pagesHtml = "";
-    for (let page = 0; page < Math.max(1, totalPages); page++) {
+    for (let page = 0; page < totalPages; page++) {
       const startIdx = page * ramsPerPage;
       const pageRams = ramsWithStats.slice(startIdx, startIdx + ramsPerPage);
-      
+
       const tableRows = pageRams.map((ram) => {
+        const s = ram.stats;
         return `<tr>
           <td><strong>${ram.tagId}</strong></td>
           <td>${ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : '-'}</td>
-          <td>${ram.stats.totalLambs || 0}</td>
-          <td>${ram.stats.avgBirthWeight || '-'}</td>
-          <td>${ram.stats.avgWeight100Day || '-'}</td>
-          <td>${ram.stats.avgWeight270Day || '-'}</td>
-          <td>${ram.stats.twinCount || 0}</td>
-          <td>${ram.stats.avgWeanWeight || '-'}</td>
+          <td>${s.totalProgeny}</td>
+          <td>${s.matingEvents}</td>
+          <td>${s.lambingEvents}</td>
+          <td>${s.lambingRate !== null ? s.lambingRate + '%' : '-'}</td>
+          <td>${s.avgProgenyBirthWeight !== null ? s.avgProgenyBirthWeight + ' kg' : 'Not recorded'}</td>
+          <td>${s.avgProgeny100Day !== null ? s.avgProgeny100Day + ' kg' : 'Not recorded'}</td>
+          <td>${s.avgProgeny270Day !== null ? s.avgProgeny270Day + ' kg' : 'Not recorded'}</td>
           <td><span class="status status-${ram.status}">${ram.status}</span></td>
         </tr>`;
       }).join('');
-      
+
       pagesHtml += `
         <div class="page">
           <div class="header">
@@ -951,93 +981,51 @@ export default function Animals() {
             </div>
             <div class="header-center">
               <h1>${fb?.studName || fb?.farmName || "Rams Register"}</h1>
-              <p class="subtitle">Breeding Ram Performance Report</p>
+              <p class="subtitle">Active Breeding Ram Performance Register</p>
             </div>
             <div class="header-right">
-              <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
+              <p>Page ${page + 1} of ${totalPages}</p>
               <p>${exportDate}</p>
             </div>
           </div>
-          
+
           <table class="rams-table">
             <thead>
               <tr>
                 <th>Ram ID</th>
                 <th>DOB</th>
-                <th>Total Lambs</th>
+                <th>Total Progeny</th>
+                <th>Mating Events</th>
+                <th>Lambing Events</th>
+                <th>Lambing Rate</th>
                 <th>Avg Birth (kg)</th>
                 <th>Avg 100-Day (kg)</th>
                 <th>Avg 270-Day (kg)</th>
-                <th>Twin Count</th>
-                <th>Avg Wean (kg)</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>${tableRows}</tbody>
           </table>
-          
+
           <div class="footer">
             <div class="footer-info">
               <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-              <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
+              <p>${fb?.ownerName || ""}${fb?.ownerPhone ? " | " + fb.ownerPhone : ""}</p>
             </div>
             <div class="footer-branding">
               <p class="breedlog-text">BREEDLOG</p>
               <p class="tagline">Professional Livestock Management</p>
+              <p class="creator">A STITCH WORX Product</p>
             </div>
           </div>
         </div>
       `;
     }
-    
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${fb?.studName || fb?.farmName || "BreedLog"} - Rams Register</title>
-  <style>
-    @page { size: A4 landscape; margin: 10mm; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
-    .page:last-child { page-break-after: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
-    .header-left { width: 60px; flex-shrink: 0; }
-    .header-center { flex: 1; text-align: center; }
-    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
-    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
-    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
-    .rams-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .rams-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-    .rams-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
-    .rams-table tbody tr { height: auto; }
-    .rams-table tr:nth-child(even) { background: #fafafa; }
-    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
-    .status-active { background: #22c55e20; color: #16a34a; }
-    .status-sold { background: #f59e0b20; color: #d97706; }
-    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
-    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
-    .footer-info { flex: 1; }
-    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
-    .footer-info p { font-size: 7pt; margin-top: 2px; color: #d8d8d8; }
-    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
-    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-    @media print {
-      .page { page-break-after: always; }
-      .page:last-child { page-break-after: avoid; }
-      thead { display: table-header-group; }
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    }
-  </style>
-</head>
-<body>
-  ${pagesHtml}
-</body>
-</html>
-    `;
-    
+
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>${fb?.studName || fb?.farmName || "BreedLog"} - Active Rams Register</title>
+<style>${css}</style></head><body>${pagesHtml}</body></html>`;
+
     const printWindow = window.open("", "_blank");
     if (printWindow) {
       printWindow.document.write(htmlContent);
@@ -1045,12 +1033,12 @@ export default function Animals() {
       setTimeout(() => printWindow.print(), 500);
     }
     createExportedDoc.mutate({
-      name: getDocumentFileName("RamsRegister", "Full"),
+      name: getDocumentFileName("RamsRegister", "Active"),
       documentType: "herd",
       subfolder: "herd",
-      metadata: { exportType: "pdf", category: "rams-register", sourceSection: "rams", animalCount: rams.length, pageCount: Math.max(1, totalPages), status: "success" }
+      metadata: { exportType: "pdf", category: "rams-register", sourceSection: "rams", animalCount: rams.length, pageCount: totalPages, status: "success" }
     });
-    toast({ title: "PDF Ready", description: "Rams Register export opened for printing" });
+    toast({ title: "PDF Ready", description: `Active Rams Register (${rams.length} rams) opened for printing` });
   };
 
   const exportEwesPDF = () => {
@@ -1148,10 +1136,10 @@ export default function Animals() {
 <head>
   <title>Ewes Register - ${fb?.studName || fb?.farmName || "BreedLog"}</title>
   <style>
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 landscape; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
+    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 30mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
     .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
@@ -1177,9 +1165,9 @@ export default function Animals() {
     @media print {
       .page { page-break-after: always; }
       .page:last-child { page-break-after: avoid; }
-      thead { display: table-header-group; }
       body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
+    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
   </style>
 </head>
 <body>
@@ -1195,7 +1183,7 @@ export default function Animals() {
       setTimeout(() => printWindow.print(), 500);
     }
     createExportedDoc.mutate({
-      name: getDocumentFileName("EwesRegister", "Full"),
+      name: getDocumentFileName("EwesRegister", "Active"),
       documentType: "herd",
       subfolder: "herd",
       metadata: { exportType: "pdf", category: "ewes-register", sourceSection: "ewes", animalCount: ewes.length, pageCount: Math.max(1, totalPages), status: "success" }
@@ -1203,15 +1191,17 @@ export default function Animals() {
     toast({ title: "PDF Ready", description: "Ewes Register export opened for printing" });
   };
 
-  // Export Culled Animals PDF
+  // Export Culled Animals PDF — strictly status === "culled".
+  // No sold, deceased, or removed animals appear here.
+  // Notes are sanitized to remove internal simulation metadata.
   const exportCulledPDF = () => {
     if (!allAnimals) return;
     const fb = farmSettings;
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    
-    const culledAnimals = allAnimals.filter(a => 
-      a.classification === 'slaughter_cull' || 
-      a.ramLambClass === 'cull'
+
+    // Authoritative selector: only animals whose status is "culled"
+    const culledAnimals = allAnimals.filter(a =>
+      (a.status || '').toLowerCase() === 'culled'
     );
     
     if (culledAnimals.length === 0) {
@@ -1296,10 +1286,10 @@ export default function Animals() {
   <meta charset="UTF-8">
   <title>${fb?.studName || fb?.farmName || "BreedLog"} - Culled Animals</title>
   <style>
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 landscape; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-    .page { width: 277mm; min-height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
+    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 30mm; margin: 0 auto; page-break-after: always; position: relative; }
     .page:last-child { page-break-after: avoid; }
     .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
     .header-left { width: 60px; flex-shrink: 0; }
@@ -1326,9 +1316,9 @@ export default function Animals() {
     @media print {
       .page { page-break-after: always; }
       .page:last-child { page-break-after: avoid; }
-      thead { display: table-header-group; }
       body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
     }
+    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
   </style>
 </head>
 <body>${pagesHtml}</body>
@@ -1346,7 +1336,121 @@ export default function Animals() {
       subfolder: "herd",
       metadata: { exportType: "pdf", category: "culled", sourceSection: "culled", animalCount: culledRows.length, pageCount: Math.max(1, totalPages), status: "success", rowsSummary: culledRows.slice(0, 5) }
     });
-    toast({ title: "PDF Ready", description: "Culled Animals export opened for printing" });
+    toast({ title: "PDF Ready", description: `Culled Animals export (${culledRows.length} animals) opened for printing` });
+  };
+
+  // Export Sold Animals PDF — status === "sold" only.
+  // Notes are sanitized to remove internal simulation metadata.
+  const exportSoldPDF = () => {
+    if (!allAnimals) return;
+    const fb = farmSettings;
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+
+    const soldAnimals = allAnimals.filter(a =>
+      (a.status || '').toLowerCase() === 'sold'
+    );
+
+    if (soldAnimals.length === 0) {
+      toast({ title: "No Sold Animals", description: "No sold animals found to export", variant: "destructive" });
+      return;
+    }
+
+    const soldRows = buildCullSoldRows(soldAnimals);
+
+    const rowsPerPage = 20;
+    const totalPages = Math.max(1, Math.ceil(soldRows.length / rowsPerPage));
+    const css = getCanonicalGroupCSS() + `
+      .sold-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .sold-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
+      .sold-table td { padding: 5px 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
+      .sold-table tbody tr:nth-child(even) { background: #fafafa; }
+    `;
+
+    let pagesHtml = "";
+    for (let page = 0; page < totalPages; page++) {
+      const startIdx = page * rowsPerPage;
+      const pageRows = soldRows.slice(startIdx, startIdx + rowsPerPage);
+
+      const tableRows = pageRows.map((animal, idx) => {
+        const rowNum = startIdx + idx + 1;
+        return `<tr>
+          <td class="row-num">${rowNum}</td>
+          <td><strong>${animal["Animal ID"] || "-"}</strong></td>
+          <td>${animal["Sex"] || '-'}</td>
+          <td>${animal["Breed"] || '-'}</td>
+          <td>${animal["Date of birth"] || '-'}</td>
+          <td>${animal["Status date"] || '-'}</td>
+          <td>${animal["Reason"] || '-'}</td>
+          <td>${animal["Latest weight"] || '-'}</td>
+          <td>${animal["Notes"] || '-'}</td>
+        </tr>`;
+      }).join('');
+
+      pagesHtml += `
+        <div class="page">
+          <div class="header">
+            <div class="header-left">
+              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+            </div>
+            <div class="header-center">
+              <h1>${fb?.studName || fb?.farmName || "Sold Animals Register"}</h1>
+              <p class="subtitle">Sold Animals Export — Page ${page + 1} of ${totalPages}</p>
+            </div>
+            <div class="header-right">
+              <p>Page ${page + 1} of ${totalPages}</p>
+              <p>${exportDate}</p>
+            </div>
+          </div>
+
+          <table class="sold-table">
+            <thead>
+              <tr>
+                <th style="width:25px">#</th>
+                <th>Animal ID</th>
+                <th>Sex</th>
+                <th>Breed</th>
+                <th>DOB</th>
+                <th>Sale Date</th>
+                <th>Reason / Buyer</th>
+                <th>Weight</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+
+          <div class="footer">
+            <div class="footer-info">
+              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+              <p>${fb?.ownerName || ""}${fb?.ownerPhone ? " | " + fb.ownerPhone : ""}</p>
+            </div>
+            <div class="footer-branding">
+              <p class="breedlog-text">BREEDLOG</p>
+              <p class="tagline">Professional Livestock Management</p>
+              <p class="creator">A STITCH WORX Product</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>${fb?.studName || fb?.farmName || "BreedLog"} - Sold Animals Register</title>
+<style>${css}</style></head><body>${pagesHtml}</body></html>`;
+
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      setTimeout(() => printWindow.print(), 500);
+    }
+    createExportedDoc.mutate({
+      name: getDocumentFileName("SoldAnimals", "Full"),
+      documentType: "herd",
+      subfolder: "herd",
+      metadata: { exportType: "pdf", category: "sold", sourceSection: "sold", animalCount: soldRows.length, pageCount: totalPages, status: "success" }
+    });
+    toast({ title: "PDF Ready", description: `Sold Animals (${soldRows.length} animals) opened for printing` });
   };
 
   // Update filters AND expand the right section when URL changes
@@ -1479,6 +1583,12 @@ export default function Animals() {
                   data-testid="export-culled"
                 >
                   Export Culled Animals (PDF)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => { setPdfExportType('sold'); setIsPdfExportDialogOpen(true); }}
+                  data-testid="export-sold"
+                >
+                  Export Sold Animals (PDF)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1859,6 +1969,7 @@ export default function Animals() {
             pdfExportType === 'ewes' ? 'Ewes Only' :
             pdfExportType === 'lambs' ? 'Lambs Only' :
             pdfExportType === 'culled' ? 'Culled Animals' :
+            pdfExportType === 'sold' ? 'Sold Animals' :
             pdfExportType === 'ramsRegister' ? 'Rams Register' :
             pdfExportType === 'ewesRegister' ? 'Ewes Register' :
             'PDF'

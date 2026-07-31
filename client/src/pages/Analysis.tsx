@@ -37,6 +37,7 @@ import {
   ChevronDown,
   Database,
   Dna,
+  FileText,
   Heart,
   HeartPulse,
   Info,
@@ -51,6 +52,7 @@ import {
 } from "lucide-react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -61,6 +63,9 @@ import { cn } from "@/lib/utils";
 import { useAnalysisBundle } from "@/hooks/use-analysis";
 import { buildDataInsights, type DataInsights } from "@/lib/data-engine";
 import { AskSectionButton } from "@/components/AskBreedLogButton";
+import { useFarmSettings } from "@/hooks/use-farm-settings";
+import { format } from "date-fns";
+import { getCanonicalGroupCSS, wrapExportDocument, openExportPrintDialog } from "@/lib/export-template";
 
 type ConfidenceLevel = "Low" | "Medium" | "High" | "Proven";
 
@@ -626,6 +631,7 @@ function Section8Quality({ q }: { q: DataInsights["dataQuality"] }) {
 
 export default function Analysis() {
   const { animals, breedingEvents, performanceRecords, healthRecords, isLoading } = useAnalysisBundle();
+  const { data: farmSettings } = useFarmSettings();
   const [season, setSeason] = useState<string>("all");
   const [classification, setClassification] = useState<string>("all");
   const [sex, setSex] = useState<"all" | "ram" | "ewe">("all");
@@ -640,6 +646,121 @@ export default function Analysis() {
     }),
     [animals, breedingEvents, performanceRecords, healthRecords, season, classification, sex],
   );
+
+  // ── Export Report ─────────────────────────────────────────────────────────
+  const exportAnalysisPDF = () => {
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    const fb = farmSettings;
+    const d = insights.herdDistribution;
+    const sire = insights.sirePerformance;
+    const ewe = insights.eweMaternal;
+    const growth = insights.lambGrowth;
+    const rep = insights.reproductive;
+    const health = insights.health;
+    const quality = insights.dataQuality;
+
+    const row = (label: string, value: string | number) =>
+      `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:8pt">${label}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:8pt;font-weight:600;text-align:right">${value}</td></tr>`;
+
+    const section = (title: string, rows: string) =>
+      `<div style="margin-bottom:8mm"><h3 style="font-size:9pt;font-weight:800;text-transform:uppercase;background:#FFC300;padding:4px 8px;margin:0 0 4px 0">${title}</h3><table style="width:100%;border-collapse:collapse">${rows}</table></div>`;
+
+    const herdRows = section("Herd Distribution", [
+      row("Total in scope", d.total ?? 0),
+      row("Active", d.active ?? 0),
+      row("Rams", d.rams ?? 0),
+      row("Ewes", d.ewes ?? 0),
+      row("Lambs", d.lambs ?? 0),
+      row("Culled", d.culled ?? 0),
+      row("Stud", d.classification?.stud ?? 0),
+      row("Commercial", d.classification?.commercial ?? 0),
+    ].join(""));
+
+    const sireRows = sire.sufficient
+      ? section("Ram / Sire Performance", [
+          row("Active sires", sire.activeSires ?? 0),
+          row("Total progeny", sire.totalProgeny ?? 0),
+          row("Avg progeny per sire", sire.avgProgenyPerSire !== null ? Number(sire.avgProgenyPerSire).toFixed(1) : "—"),
+          row("Top sire", sire.leaderboard?.[0]?.sireTag ?? "—"),
+          row("Top sire offspring", sire.leaderboard?.[0]?.offspring ?? "—"),
+        ].join(""))
+      : section("Ram / Sire Performance", row("Status", "Insufficient data — add sire links to unlock"));
+
+    const eweRows = ewe.sufficient
+      ? section("Ewe Maternal Performance", [
+          row("Active ewes", ewe.activeEwes ?? 0),
+          row("Ewes lambed", ewe.ewesLambed ?? 0),
+          row("Barren ewes", ewe.barren ?? 0),
+          row("Twin-bearing ewes", ewe.twinBearing ?? 0),
+        ].join(""))
+      : section("Ewe Maternal Performance", row("Status", "Insufficient data — add dam links to unlock"));
+
+    const growthRows = growth.sufficient
+      ? section("Lamb Growth Performance", [
+          row("Sample count", growth.sampleCount ?? 0),
+          row("Avg birth weight", growth.avgBirthWeight !== null ? `${Number(growth.avgBirthWeight).toFixed(1)} kg` : "—"),
+          row("Avg weaning weight", growth.avgWeaningWeight !== null ? `${Number(growth.avgWeaningWeight).toFixed(1)} kg` : "—"),
+          row("Avg daily gain (ADG)", growth.avgADG !== null ? `${Number(growth.avgADG).toFixed(0)} g/day` : "—"),
+        ].join(""))
+      : section("Lamb Growth Performance", row("Status", "Insufficient data — record lamb weights to unlock"));
+
+    const repRows = rep.sufficient
+      ? section("Reproductive Efficiency", [
+          row("Ewes joined", rep.ewesJoined ?? 0),
+          row("Ewes lambed", rep.ewesLambed ?? 0),
+          row("Total lambs born", rep.totalLambsBorn ?? 0),
+          row("Lambing rate", rep.lambingRatePct !== null ? `${Number(rep.lambingRatePct).toFixed(1)}%` : "—"),
+          row("Lambs per ewe joined", rep.lambsPerEweJoined !== null ? Number(rep.lambsPerEweJoined).toFixed(2) : "—"),
+        ].join(""))
+      : section("Reproductive Efficiency", row("Status", "Insufficient data — record breeding events to unlock"));
+
+    const healthRows = health.sufficient
+      ? section("Health Overview", [
+          row("Total records", health.totalRecords ?? 0),
+          row("Animals treated", health.animalsTreated ?? 0),
+          row("Mortality count", health.mortalityCount ?? 0),
+          row("Survival rate", health.survivalPct !== null ? `${Number(health.survivalPct).toFixed(1)}%` : "—"),
+        ].join(""))
+      : section("Health Overview", row("Status", "Add health records to unlock"));
+
+    const qualityRows = section("Data Quality", [
+      row("Completeness score", `${quality.score.toFixed(0)}%`),
+      row("Warnings", quality.warnings.length),
+    ].join(""));
+
+    const pagesHtml = `
+      <div class="page">
+        <div class="header">
+          <div class="header-left">${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;">` : ""}</div>
+          <div class="header-center">
+            <h1>${fb?.studName || fb?.farmName || "Herd Data Report"}</h1>
+            <p class="subtitle">Full Herd Analytics & Data Export — ${exportDate}</p>
+          </div>
+          <div class="header-right">
+            <p>Page 1 of 1</p>
+            <p>${exportDate}</p>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6mm">
+          <div>${herdRows}${repRows}${healthRows}</div>
+          <div>${sireRows}${eweRows}${growthRows}${qualityRows}</div>
+        </div>
+        <div class="footer">
+          <div class="footer-info">
+            <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+            <p>${fb?.ownerName || ""}${fb?.ownerPhone ? " | " + fb.ownerPhone : ""}</p>
+          </div>
+          <div class="footer-branding">
+            <p class="breedlog-text">BREEDLOG</p>
+            <p class="tagline">Professional Livestock Management</p>
+            <p style="font-size:6pt;color:#aaa;margin-top:2px">A STITCH WORX Product</p>
+          </div>
+        </div>
+      </div>`;
+
+    const html = wrapExportDocument("Herd Data & Analytics Report", getCanonicalGroupCSS(), pagesHtml);
+    openExportPrintDialog(html);
+  };
 
   if (isLoading) {
     return (
@@ -689,7 +810,19 @@ export default function Analysis() {
               Real metrics from your real BreedLog records. Tap a section to expand.
             </p>
           </div>
-          <Dna className="h-7 w-7 text-primary md:h-8 md:w-8" />
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportAnalysisPDF}
+              data-testid="btn-export-analysis-pdf"
+              className="gap-1.5 text-xs"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Export Report
+            </Button>
+            <Dna className="h-7 w-7 text-primary md:h-8 md:w-8" />
+          </div>
         </div>
 
         {/* Filter bar (preserves legacy testid 'analysis-selector-panel') */}

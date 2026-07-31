@@ -14,8 +14,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dna, Plus, Pencil, Trash2, Archive, AlertTriangle,
-  CheckCircle2, HelpCircle, BookOpen, TrendingUp, GitFork, ChevronDown, ChevronUp, Zap
+  CheckCircle2, HelpCircle, BookOpen, TrendingUp, GitFork, ChevronDown, ChevronUp, Zap, FileText
 } from "lucide-react";
+import { format } from "date-fns";
+import { getCanonicalGroupCSS, wrapExportDocument, openExportPrintDialog } from "@/lib/export-template";
+import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -181,9 +184,73 @@ function BloodlineDialog({ existing, onClose }: { existing?: Bloodline; onClose:
 // ─── Bloodlines Tab ───────────────────────────────────────────────────────────
 function BloodlinesTab() {
   const { toast } = useToast();
+  const { data: farmSettings } = useFarmSettings();
   const [openDialog, setOpenDialog] = useState<"create" | number | null>(null);
 
   const { data: bloodlines = [], isLoading } = useQuery<Bloodline[]>({ queryKey: ["/api/genetics/bloodlines"] });
+
+  const exportBloodlinesPDF = () => {
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    const fb = farmSettings;
+
+    const rows = bloodlines.map((bl, idx) => `
+      <tr>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${idx + 1}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt;font-weight:700">${bl.name}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.type.replace(/_/g, " ")}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.evidenceStatus}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.status}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.originFarmOrBreeder || "—"}</td>
+        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.selectedTraits || "—"}</td>
+      </tr>
+    `).join("");
+
+    const pagesHtml = `
+      <div class="page">
+        <div class="header">
+          <div class="header-left">${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;">` : ""}</div>
+          <div class="header-center">
+            <h1>${fb?.studName || fb?.farmName || "Bloodline Register"}</h1>
+            <p class="subtitle">Genetics &amp; Bloodline Register — ${exportDate}</p>
+          </div>
+          <div class="header-right">
+            <p>Page 1 of 1</p>
+            <p>${exportDate}</p>
+          </div>
+        </div>
+        ${bloodlines.length === 0
+          ? `<div style="text-align:center;padding:30px;color:#888;font-size:10pt">No bloodlines recorded in this workspace.</div>`
+          : `<table style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">#</th>
+                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Bloodline Name</th>
+                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Type</th>
+                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Evidence</th>
+                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Status</th>
+                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Origin / Breeder</th>
+                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Selected Traits</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>`
+        }
+        <div class="footer">
+          <div class="footer-info">
+            <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
+            <p>${fb?.ownerName || ""}${fb?.ownerPhone ? " | " + fb.ownerPhone : ""}</p>
+          </div>
+          <div class="footer-branding">
+            <p class="breedlog-text">BREEDLOG</p>
+            <p class="tagline">Professional Livestock Management</p>
+            <p style="font-size:6pt;color:#aaa;margin-top:2px">A STITCH WORX Product</p>
+          </div>
+        </div>
+      </div>`;
+
+    const html = wrapExportDocument("Bloodline Register", getCanonicalGroupCSS(), pagesHtml);
+    openExportPrintDialog(html);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/genetics/bloodlines/${id}`),
@@ -200,17 +267,29 @@ function BloodlinesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">Named bloodline families in your flock. Evidence status reflects recorded performance — not opinion.</p>
-        <Dialog open={openDialog === "create"} onOpenChange={open => setOpenDialog(open ? "create" : null)}>
-          <DialogTrigger asChild>
-            <Button size="sm" data-testid="button-add-bloodline"><Plus className="w-4 h-4 mr-1" /> Add Bloodline</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>New Bloodline</DialogTitle></DialogHeader>
-            <BloodlineDialog onClose={() => setOpenDialog(null)} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportBloodlinesPDF}
+            data-testid="btn-export-bloodlines-pdf"
+            className="gap-1.5 text-xs"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Export PDF
+          </Button>
+          <Dialog open={openDialog === "create"} onOpenChange={open => setOpenDialog(open ? "create" : null)}>
+            <DialogTrigger asChild>
+              <Button size="sm" data-testid="button-add-bloodline"><Plus className="w-4 h-4 mr-1" /> Add Bloodline</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>New Bloodline</DialogTitle></DialogHeader>
+              <BloodlineDialog onClose={() => setOpenDialog(null)} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {isLoading && <div className="text-sm text-muted-foreground py-4 text-center">Loading...</div>}

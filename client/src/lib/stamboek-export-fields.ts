@@ -1,5 +1,6 @@
 import type { Animal, BreedingEvent, HealthRecord, MatingGroup } from "@shared/schema";
 import { calculateLambStage } from "@shared/lamb-stage";
+import { sanitizePublicNote } from "@/lib/export-template";
 
 export type ExportRow = Record<string, string | number | null>;
 const d = (v?: string | Date | null) => (v ? new Date(v).toISOString().slice(0, 10) : "");
@@ -25,4 +26,27 @@ export const buildEweExportRows = (e: Animal[], b: BreedingEvent[] = [], h: Heal
 
 export const buildRamExportRows = (r: Animal[], b: BreedingEvent[] = [], lambs: Animal[] = [], h: HealthRecord[] = []): ExportRow[] => r.map(a=>({"Ram ID":a.tagId||"","Electronic ID / tattoo / tag":[a.electronicId,a.tattooId,a.tagId].filter(Boolean).join(" / "),"Date of birth":d(a.birthDate),"Age":a.birthDate?Math.floor((Date.now()-new Date(a.birthDate).getTime())/86400000):"","Breed":a.breed||"","Status":a.status||"","Stud/commercial class":a.classification||"","Sire ID":a.externalSireInfo||"","Dam ID":a.externalDamInfo||"","Assigned ewe group":"","Mating date in":"","Mating date out":"","Number of ewes joined":b.filter(x=>x.ramId===a.id).length,"Number of lambs born from this sire":lambs.filter(x=>x.externalSireInfo===a.tagId).length,"Number of lambs weaned from this sire":"","Average 100-day progeny weight":"","Average 270-day progeny weight":"","Latest weight":a.currentWeight??"","Health summary":`${h.filter(x=>x.animalId===a.id).length} records`,"Cull/sale/death reason":a.removalReason||a.cullReason||"","Notes":a.notes||""}));
 
-export const buildCullSoldRows = (a: Animal[]): ExportRow[] => a.map(x=>({"Animal ID":x.tagId||"","Sex":x.sex||"","Breed":x.breed||"","Date of birth":d(x.birthDate),"Status":x.status||"","Status date":d(x.cullDate),"Reason":x.removalReason||x.cullReason||"","Sire":x.externalSireInfo||"","Dam":x.externalDamInfo||"","Latest weight":x.currentWeight??"","Last known group":x.managementGroup||"","Buyer/recipient":"","Price":"","Notes":x.notes||""}));
+/**
+ * Build rows for culled or sold animal registers.
+ * Notes are sanitized: internal simulation metadata / seed identifiers are
+ * stripped before the row is included in customer-facing PDFs.
+ * Latest weight is formatted with "kg" unit.
+ */
+export const buildCullSoldRows = (a: Animal[]): ExportRow[] => a.map(x=>{
+  const rawNote = sanitizePublicNote(x.notes);
+  const reason = x.removalReason||x.cullReason||"";
+  // Avoid duplicating the same text in both Reason and Notes columns.
+  const note = rawNote && rawNote !== reason ? rawNote : "";
+  const latestWeight = x.currentWeight != null ? `${x.currentWeight} kg` : "";
+  return {
+    "Animal ID": x.tagId||"",
+    "Sex": x.sex||"",
+    "Breed": x.breed||"",
+    "Date of birth": d(x.birthDate),
+    "Status": x.status||"",
+    "Status date": d(x.cullDate),
+    "Reason": reason,
+    "Latest weight": latestWeight,
+    "Notes": note,
+  };
+});
