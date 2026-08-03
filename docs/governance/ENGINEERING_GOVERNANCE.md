@@ -26,4 +26,4 @@ No secrets, `.env` values, tokens, signing keys, private farm data, or unredacte
 
 ## Permanent data-isolation rule
 
-`U2A2ZAVQ` is Haka’s controlled test/master simulation code. Its Kwantam simulation data must remain isolated from ordinary accounts. New normal users must receive clean workspaces unless an explicit verified migration/import is performed.
+The master simulation access code is centralised in `shared/master-simulation.ts` as `MASTER_SIMULATION_ACCESS_CODE`. The simulation dataset it seeds must remain isolated from ordinary commercial accounts. New normal users must receive clean workspaces unless an explicit verified migration or import is performed.

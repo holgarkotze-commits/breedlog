@@ -9,7 +9,7 @@ BreedLog stores account identity, device registration records, farm profile deta
 
 ## Workspace Isolation
 
-Each authenticated account is bound to a workspace. Normal commercial accounts must not receive or query Haka's controlled U2A2ZAVQ Kwantam simulation workspace. Backups, restores, exports and billing entitlements are workspace-scoped.
+Each authenticated account is bound to an isolated workspace. Normal commercial accounts must not receive or query the dedicated simulation workspace used for internal testing. Backups, restores, exports and billing entitlements are workspace-scoped.
 
 ## AI Processing
 
