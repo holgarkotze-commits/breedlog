@@ -625,7 +625,21 @@ export async function registerRoutes(
     const offspringAsDam = animal.sex === "ewe" ? allAnimals.filter(a => a.damId === animal.id) : [];
     const offspringAsSire = animal.sex === "ram" ? allAnimals.filter(a => a.sireId === animal.id) : [];
 
-    res.json({ ...animal, dam, sire, offspringAsDam, offspringAsSire });
+    // Resolve grandparents via targeted lookups — no full-list scan needed here.
+    const [paternalGrandsire, paternalGranddam, maternalGrandsire, maternalGranddam] = await Promise.all([
+      sire?.sireId && isAnimalVisible(visibility, sire.sireId) ? storage.getAnimal(userId, sire.sireId) : null,
+      sire?.damId  && isAnimalVisible(visibility, sire.damId)  ? storage.getAnimal(userId, sire.damId)  : null,
+      dam?.sireId  && isAnimalVisible(visibility, dam.sireId)  ? storage.getAnimal(userId, dam.sireId)  : null,
+      dam?.damId   && isAnimalVisible(visibility, dam.damId)   ? storage.getAnimal(userId, dam.damId)   : null,
+    ]);
+    const grandparents = {
+      paternalGrandsire: paternalGrandsire ?? null,
+      paternalGranddam:  paternalGranddam  ?? null,
+      maternalGrandsire: maternalGrandsire ?? null,
+      maternalGranddam:  maternalGranddam  ?? null,
+    };
+
+    res.json({ ...animal, dam, sire, offspringAsDam, offspringAsSire, grandparents });
   });
 
   app.get(api.animals.familyTree.path, requireAuth, async (req, res) => {

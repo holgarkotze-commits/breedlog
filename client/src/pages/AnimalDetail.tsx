@@ -366,33 +366,29 @@ function InfoRow({ label, value, testId }: { label: string, value: string, testI
     )
 }
 
-function PedigreeView({ animal }: { animal: any }) {
+function PedigreeView({ animal }: { animal: AnimalWithRelations }) {
     const { data: tree } = useFamilyTree(animal.id);
-    const { data: allAnimals } = useAnimals({});
     const [scale, setScale] = useState(0.85);
 
-    // Resolve one grandparent slot: prefer a linked workspace record, then
-    // fall back to the externalSireInfo / externalDamInfo text field on the parent.
+    // Grandparents are resolved server-side in GET /api/animals/:id.
+    // Fall back to externalSireInfo / externalDamInfo text on the parent when
+    // no linked Animal record exists (e.g. bought-in sire not in workspace).
     const resolveGrandparent = (
-        parentAnimal: any,
-        idField: 'sireId' | 'damId',
+        resolved: Animal | null | undefined,
+        parent: Animal | null | undefined,
         externalField: 'externalSireInfo' | 'externalDamInfo',
     ): { tagId: string | null; breed: string | null; animalId: number | null } => {
-        if (!parentAnimal) return { tagId: null, breed: null, animalId: null };
-        const linkedId = parentAnimal[idField] as number | null | undefined;
-        if (linkedId) {
-            const found = (allAnimals || []).find((a: Animal) => a.id === linkedId);
-            if (found) return { tagId: found.tagId, breed: found.breed ?? null, animalId: found.id };
-        }
-        const ext = parentAnimal[externalField] as string | null | undefined;
+        if (resolved) return { tagId: resolved.tagId, breed: resolved.breed ?? null, animalId: resolved.id };
+        const ext = parent?.[externalField] as string | null | undefined;
         if (ext) return { tagId: ext, breed: null, animalId: null };
         return { tagId: null, breed: null, animalId: null };
     };
 
-    const paternalGrandsire = resolveGrandparent(animal.sire, 'sireId', 'externalSireInfo');
-    const paternalGranddam  = resolveGrandparent(animal.sire, 'damId',  'externalDamInfo');
-    const maternalGrandsire = resolveGrandparent(animal.dam,  'sireId', 'externalSireInfo');
-    const maternalGranddam  = resolveGrandparent(animal.dam,  'damId',  'externalDamInfo');
+    const gp = animal.grandparents;
+    const paternalGrandsire = resolveGrandparent(gp?.paternalGrandsire, animal.sire, 'externalSireInfo');
+    const paternalGranddam  = resolveGrandparent(gp?.paternalGranddam,  animal.sire, 'externalDamInfo');
+    const maternalGrandsire = resolveGrandparent(gp?.maternalGrandsire, animal.dam,  'externalSireInfo');
+    const maternalGranddam  = resolveGrandparent(gp?.maternalGranddam,  animal.dam,  'externalDamInfo');
     const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     
@@ -1303,31 +1299,25 @@ ${data.notes || "No notes recorded."}
             healthRecords || []
         );
 
-        // Resolve three-generation grandparent data from the workspace animal list.
-        // For each grandparent slot we try, in order:
-        //   1. The parent's sireId / damId resolved from allAnimals (linked workspace record)
-        //   2. The parent's externalSireInfo / externalDamInfo text field (manual import string)
-        //   3. null → renders as a dashed "Unknown" node in the PDF
+        // Grandparents are resolved server-side in GET /api/animals/:id.
+        // Fall back to externalSireInfo / externalDamInfo text on the parent when
+        // no linked Animal record is available.
         const resolveAncestor = (
-            parentAnimal: Animal | null | undefined,
-            idField: 'sireId' | 'damId',
+            resolved: Animal | null | undefined,
+            parent: Animal | null | undefined,
             externalField: 'externalSireInfo' | 'externalDamInfo',
         ): PedigreeAncestor | null => {
-            if (!parentAnimal) return null;
-            const linkedId = parentAnimal[idField] as number | null | undefined;
-            if (linkedId) {
-                const found = (allAnimals || []).find((a: Animal) => a.id === linkedId);
-                if (found) return { tagId: found.tagId, breed: found.breed ?? null };
-            }
-            const externalText = parentAnimal[externalField] as string | null | undefined;
+            if (resolved) return { tagId: resolved.tagId, breed: resolved.breed ?? null };
+            const externalText = parent?.[externalField] as string | null | undefined;
             if (externalText) return { tagId: externalText };
             return null;
         };
+        const gp = animal.grandparents;
         const nativeGrandparents: PedigreeGrandparents = {
-            paternalGrandsire: resolveAncestor(animal.sire, 'sireId', 'externalSireInfo'),
-            paternalGranddam:  resolveAncestor(animal.sire, 'damId',  'externalDamInfo'),
-            maternalGrandsire: resolveAncestor(animal.dam,  'sireId', 'externalSireInfo'),
-            maternalGranddam:  resolveAncestor(animal.dam,  'damId',  'externalDamInfo'),
+            paternalGrandsire: resolveAncestor(gp?.paternalGrandsire, animal.sire, 'externalSireInfo'),
+            paternalGranddam:  resolveAncestor(gp?.paternalGranddam,  animal.sire, 'externalDamInfo'),
+            maternalGrandsire: resolveAncestor(gp?.maternalGrandsire, animal.dam,  'externalSireInfo'),
+            maternalGranddam:  resolveAncestor(gp?.maternalGranddam,  animal.dam,  'externalDamInfo'),
         };
 
         const nativeFilename = getDocumentFileName("PerformanceDatasheet", animal.tagId || `ID${animal.id}`);
