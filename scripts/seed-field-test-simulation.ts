@@ -4,12 +4,14 @@ import { db } from '../server/db';
 import { animals, matingGroups, inviteCodes, userActivations, users } from '../shared/schema';
 import { and, eq, like } from 'drizzle-orm';
 import { buildFieldTestSimulationDataset, SIM_BATCH_ID, MATING_START, MATING_END } from '../shared/field-test-simulation';
+import { assertSeedingAllowed, RAW_TARGET_OVERRIDE_FLAG } from '../shared/simulation-seed-guard';
 
 function arg(name:string){ const i=process.argv.indexOf(name); return i>-1?process.argv[i+1]:undefined; }
 const apply = process.argv.includes('--apply');
 const rawUserId = arg('--user-id') || arg('--workspace-id');
 const rawAccessCode = arg('--access-code');
 if(!rawUserId && !rawAccessCode){ console.error('Refusing to seed without --user-id/--workspace-id/--access-code target'); process.exit(1); }
+assertSeedingAllowed({ accessCode: rawAccessCode, userId: rawUserId, rawTargetOverride: process.argv.includes(RAW_TARGET_OVERRIDE_FLAG) });
 
 // Resolve --access-code → real shared workspace owner userId.
 // One access code maps to one shared herd; the workspace owner is the primary

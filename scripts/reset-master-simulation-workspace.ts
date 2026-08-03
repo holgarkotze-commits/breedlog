@@ -3,6 +3,7 @@ import { and, eq, like } from 'drizzle-orm';
 import { animals, breedingEvents, flockHealthEvents, flockHealthTreatments, healthRecords, inviteCodes, matingGroups, userActivations, users } from '../shared/schema';
 import { buildBreedLogSimulationDataset } from '../shared/breedlog-simulation';
 import { MASTER_SIMULATION_ACCESS_CODE, MASTER_SIMULATION_BATCH_MARKER } from '../shared/master-simulation';
+import { assertSeedingAllowed } from '../shared/simulation-seed-guard';
 
 function arg(name:string){ const i=process.argv.indexOf(name); return i>-1?process.argv[i+1]:undefined; }
 const accessCode = (arg('--access-code') || '').toUpperCase();
@@ -11,6 +12,7 @@ const apply = process.argv.includes('--apply');
 
 if (accessCode !== MASTER_SIMULATION_ACCESS_CODE) throw new Error('Refusing: script only supports U2A2ZAVQ');
 if (!confirm) throw new Error('Refusing without --confirm-master-simulation-reset');
+assertSeedingAllowed({ accessCode });
 
 async function resolveWorkspaceUserId(code: string): Promise<string> {
   const codeRows = await db.select().from(inviteCodes).where(eq(inviteCodes.code, code));
