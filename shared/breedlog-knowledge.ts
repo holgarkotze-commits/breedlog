@@ -1086,7 +1086,7 @@ If a follow-up date was set, BreedLog will remind you via the Dashboard alerts w
 Alerts are generated deterministically from your recorded data only:
 - Health follow-up alerts come from recorded health event follow-up dates.
 - Mating period alerts come from mating group end dates recorded in Breeding.
-- Lambing season alert comes from the calendar date (1 July – 31 August for the Kwantam/BreedLog field-test context).
+- Lambing season alert comes from the calendar date (1 July – 31 August for Southern Hemisphere operations).
 
 **No invented alerts:**
 BreedLog does not generate alerts from guessed or estimated data. If no follow-up dates are recorded, no follow-up alert will appear.

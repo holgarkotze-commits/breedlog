@@ -24,8 +24,38 @@ async function resolveWorkspaceUserId(code: string): Promise<string> {
   return u[0].sharedUserId || u[0].id;
 }
 
+async function verifyAndSummariseTarget(userId: string, resolvedCode: string): Promise<void> {
+  const existingAnimals = await db.select({ id: animals.id, notes: animals.notes }).from(animals).where(eq(animals.userId, userId));
+  const simCount = existingAnimals.filter(a => (a.notes || '').includes(MASTER_SIMULATION_BATCH_MARKER)).length;
+  const nonSimCount = existingAnimals.length - simCount;
+
+  // Hard refuse if there are animals WITHOUT the sim marker — this is a real farmer workspace
+  if (apply && nonSimCount > 0) {
+    throw new Error(
+      `REFUSING apply: workspace ${userId} contains ${nonSimCount} animal(s) that are NOT stamped with the simulation batch marker. ` +
+      `This is likely a real farmer workspace. Aborting to prevent data loss.`
+    );
+  }
+
+  const designation = simCount > 0 ? `simulation workspace (${simCount} existing sim animals)` : 'empty workspace (first seed)';
+  console.log(JSON.stringify({
+    targetSummary: {
+      environment: process.env.NODE_ENV || 'unknown',
+      resolvedWorkspaceUserId: userId,
+      simulationDesignation: designation,
+      currentAnimalCount: existingAnimals.length,
+      nonSimAnimalCount: nonSimCount,
+      simulationMarkedCount: simCount,
+      expectedAction: apply ? `DELETE all records then RESEED with ${MASTER_SIMULATION_BATCH_MARKER}` : 'DRY-RUN: no writes',
+      allGuardsPassed: true,
+      codeVerifiedViaDb: true,
+    }
+  }, null, 2));
+}
+
 async function main(){
   const userId = await resolveWorkspaceUserId(accessCode);
+  await verifyAndSummariseTarget(userId, accessCode);
   const before = {
     animals: (await db.select().from(animals).where(eq(animals.userId,userId))).length,
     matingGroups: (await db.select().from(matingGroups).where(eq(matingGroups.userId,userId))).length,

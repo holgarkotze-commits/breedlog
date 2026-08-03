@@ -1599,7 +1599,7 @@ export default function Settings() {
                   </Button>
                 )}
                 <p className="text-[10px] text-muted-foreground">
-                  Legal documents are implementation drafts and still require professional legal review before production launch.
+                  Legal documents are subject to ongoing review. Please read each policy before using the service.
                 </p>
              </div>
           </CardContent>}

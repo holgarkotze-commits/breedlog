@@ -149,7 +149,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                   id="farmName"
                   value={farmName}
                   onChange={(e) => setFarmName(e.target.value)}
-                  placeholder="e.g., Kwantam Meatmasters"
+                  placeholder="e.g., Sunrise Valley Farm"
                   data-testid="input-onboarding-farm-name"
                 />
               </div>

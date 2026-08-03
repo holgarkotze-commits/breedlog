@@ -19,6 +19,9 @@ export async function cleanupSimulationData(): Promise<void> {
   if (process.env.NODE_ENV !== "production") {
     return; // dev keeps simulation data for testing/certification
   }
+  if (!process.env.DATABASE_URL) {
+    return; // no real DB (in-memory mode) — nothing to clean
+  }
 
   const client = await pool.connect();
   try {
