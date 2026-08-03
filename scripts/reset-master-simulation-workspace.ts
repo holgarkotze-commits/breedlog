@@ -12,7 +12,7 @@ const apply = process.argv.includes('--apply');
 
 if (accessCode !== MASTER_SIMULATION_ACCESS_CODE) throw new Error('Refusing: script only supports U2A2ZAVQ');
 if (!confirm) throw new Error('Refusing without --confirm-master-simulation-reset');
-assertSeedingAllowed({ accessCode });
+assertSeedingAllowed({ accessCode, apply });
 
 async function resolveWorkspaceUserId(code: string): Promise<string> {
   const codeRows = await db.select().from(inviteCodes).where(eq(inviteCodes.code, code));

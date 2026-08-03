@@ -9,42 +9,42 @@ import { MASTER_SIMULATION_ACCESS_CODE } from '../shared/master-simulation';
 
 const devEnv = { NODE_ENV: 'development' };
 
-test('refuses to seed when NODE_ENV=production', () => {
+test('refuses even dry-runs when NODE_ENV=production', () => {
   assert.throws(
-    () => assertSeedingAllowed({ accessCode: MASTER_SIMULATION_ACCESS_CODE }, { NODE_ENV: 'production' }),
+    () => assertSeedingAllowed({ accessCode: MASTER_SIMULATION_ACCESS_CODE, apply: false }, { NODE_ENV: 'production' }),
     SeedGuardError,
   );
 });
 
-test('refuses to seed in a Replit deployment environment', () => {
+test('refuses writes in a Replit deployment environment', () => {
   assert.throws(
-    () => assertSeedingAllowed({ accessCode: MASTER_SIMULATION_ACCESS_CODE }, { NODE_ENV: 'development', REPLIT_DEPLOYMENT: '1' }),
+    () => assertSeedingAllowed({ accessCode: MASTER_SIMULATION_ACCESS_CODE, apply: true }, { NODE_ENV: 'development', REPLIT_DEPLOYMENT: '1' }),
     SeedGuardError,
   );
 });
 
-test('refuses real farmer access codes', () => {
+test('dry-runs are allowed for any target in development (read-only)', () => {
+  assert.doesNotThrow(() => assertSeedingAllowed({ accessCode: 'ANYCODE99', apply: false }, devEnv));
+  assert.doesNotThrow(() => assertSeedingAllowed({ userId: 'some-user-id', apply: false }, devEnv));
+});
+
+test('writes with a real farmer access code are refused — no override exists', () => {
   assert.throws(
-    () => assertSeedingAllowed({ accessCode: 'FARMCODE' }, devEnv),
+    () => assertSeedingAllowed({ accessCode: 'FARMCODE', apply: true }, devEnv),
     /not a dedicated simulation access code/,
   );
 });
 
-test('allows the dedicated simulation access code in development', () => {
-  assert.doesNotThrow(() => assertSeedingAllowed({ accessCode: MASTER_SIMULATION_ACCESS_CODE }, devEnv));
-  assert.doesNotThrow(() => assertSeedingAllowed({ accessCode: MASTER_SIMULATION_ACCESS_CODE.toLowerCase() }, devEnv));
-});
-
-test('refuses raw user-id targets without explicit override', () => {
+test('writes to raw user ids are always refused', () => {
   assert.throws(
-    () => assertSeedingAllowed({ userId: 'some-user-id' }, devEnv),
-    /cannot be verified as a simulation workspace/,
+    () => assertSeedingAllowed({ userId: 'some-user-id', apply: true }, devEnv),
+    /raw ids cannot be verified/,
   );
-  assert.doesNotThrow(() => assertSeedingAllowed({ userId: 'some-user-id', rawTargetOverride: true }, devEnv));
 });
 
-test('refuses when no target given', () => {
-  assert.throws(() => assertSeedingAllowed({}, devEnv), SeedGuardError);
+test('writes with the dedicated simulation access code are allowed in development', () => {
+  assert.doesNotThrow(() => assertSeedingAllowed({ accessCode: MASTER_SIMULATION_ACCESS_CODE, apply: true }, devEnv));
+  assert.doesNotThrow(() => assertSeedingAllowed({ accessCode: MASTER_SIMULATION_ACCESS_CODE.toLowerCase(), apply: true }, devEnv));
 });
 
 test('master simulation code is registered as a simulation code', () => {
