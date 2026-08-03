@@ -2,9 +2,9 @@
 
 Batch: BL-SIM-2025-RC1
 
-Resolved target userId: fa37446b-896b-4cc7-b769-6b9f8980f064
+Resolved target userId: 1d5330e0-35a0-444d-9a22-7ef8b00d12e2
 
-Resolved from: access-code (code CHN448CF)
+Resolved from: user-id
 
 Mode: dry-run
 
