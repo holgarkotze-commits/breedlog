@@ -19,7 +19,7 @@ import { format, differenceInDays } from "date-fns";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
-import { type PDFQuality, chunkGroupExportRows } from "@/lib/pdf-utils";
+import { type PDFQuality, chunkGroupExportRows, compressImage, PDF_QUALITY_SETTINGS } from "@/lib/pdf-utils";
 import { getCanonicalGroupCSS, renderExportHeader, renderExportFooter, wrapExportDocument, openExportPrintDialog, GROUP_ROWS_PER_PAGE } from "@/lib/export-template";
 import { buildLambBirthRows, buildLambPerformanceRows } from "@/lib/stamboek-export-fields";
 import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
@@ -75,6 +75,14 @@ export default function Lambs() {
     const fb = farmSettings;
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
 
+    // Compress farm logo at the chosen quality before embedding in HTML.
+    // For 'high' quality we skip compression and use the original URL.
+    const rawLogo = fb?.logoUrl;
+    const compressedLogoUrl = (rawLogo && quality !== 'high')
+      ? await compressImage(rawLogo, PDF_QUALITY_SETTINGS[quality])
+      : rawLogo;
+    const compressedFb = { ...fb, logoUrl: compressedLogoUrl ?? fb?.logoUrl };
+
     const eweLambs = lambs.filter(a => a.sex === "ewe");
     const ramLambs = lambs.filter(a => a.sex === "ram");
 
@@ -108,7 +116,7 @@ export default function Lambs() {
         </tr>`;
       }).join('');
       return `<div class="page">
-        ${renderExportHeader(fb, currentPage, totalPages, exportDate, 'BreedLog', `Ewe Lambs Register — ${eweLambs.length} lambs`)}
+        ${renderExportHeader(compressedFb, currentPage, totalPages, exportDate, 'BreedLog', `Ewe Lambs Register — ${eweLambs.length} lambs`)}
         <table class="export-table">
           <thead><tr>
             <th class="row-num">#</th>
@@ -146,7 +154,7 @@ export default function Lambs() {
         </tr>`;
       }).join('');
       return `<div class="page">
-        ${renderExportHeader(fb, currentPage, totalPages, exportDate, 'BreedLog', `Ram Lambs Register — ${ramLambs.length} lambs`)}
+        ${renderExportHeader(compressedFb, currentPage, totalPages, exportDate, 'BreedLog', `Ram Lambs Register — ${ramLambs.length} lambs`)}
         <table class="export-table">
           <thead><tr>
             <th class="row-num">#</th>
@@ -166,7 +174,7 @@ export default function Lambs() {
     });
 
     const html = wrapExportDocument(
-      `${fb?.studName || fb?.farmName || "BreedLog"} — Lambs Register`,
+      `${compressedFb?.studName || compressedFb?.farmName || "BreedLog"} — Lambs Register`,
       getCanonicalGroupCSS(),
       [...ewePages, ...ramPages].join('\n')
     );

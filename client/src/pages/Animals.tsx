@@ -32,7 +32,7 @@ import { format, differenceInDays } from "date-fns";
 import { Label } from "@/components/ui/label";
 import { DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import logo from "@/assets/breedlog-logo-mark.png";
-import type { PDFQuality } from "@/lib/pdf-utils";
+import { type PDFQuality, compressImage, PDF_QUALITY_SETTINGS } from "@/lib/pdf-utils";
 import { getHerdCounts, isActiveAnimal } from "@/lib/herd-counts";
 import { getRamProgenyMetrics } from "@/lib/animal-performance";
 import { getCanonicalGroupCSS, renderExportHeader, renderExportFooter, wrapExportDocument, sanitizePublicNote } from "@/lib/export-template";
@@ -181,7 +181,20 @@ export default function Animals() {
   const [bulkAction, setBulkAction] = useState<string>("");
   const [bulkValue, setBulkValue] = useState("");
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
+
+  // Holds a quality-compressed farm logo URL for the duration of one PDF export call.
+  // Export functions read this ref instead of farmSettings.logoUrl so they remain
+  // synchronous while handlePDFExport compresses the logo once upfront.
+  const pendingExportLogoRef = useRef<string | null | undefined>(undefined);
+
+  /** Returns an <img> tag using the compressed logo (if set) or the raw logo URL. */
+  const getExportLogoImg = (attrs: string = 'style="width:60px;height:60px;object-fit:contain;"') => {
+    const url = pendingExportLogoRef.current !== undefined
+      ? pendingExportLogoRef.current
+      : farmSettings?.logoUrl;
+    return url ? `<img src="${url}" ${attrs} />` : '';
+  };
+
   // PDF Export Dialog state
   const [isPdfExportDialogOpen, setIsPdfExportDialogOpen] = useState(false);
   const [pdfExportType, setPdfExportType] = useState<'fullHerd' | 'rams' | 'ewes' | 'lambs' | 'culled' | 'sold' | 'ramsRegister' | 'ewesRegister'>('fullHerd');
@@ -192,37 +205,45 @@ export default function Animals() {
     return `${identifier}_${type}_${date}.pdf`;
   };
   
-  // Unified PDF Export Handler with quality selection
+  // Unified PDF Export Handler with quality selection.
+  // Compresses the farm logo once at the requested quality level, stores it in
+  // pendingExportLogoRef, then delegates to the appropriate synchronous export
+  // function. Each export function reads getExportLogoImg() which reads the ref.
   const handlePDFExport = async (quality: PDFQuality): Promise<void> => {
-    // Store quality in a ref or call export functions directly
-    // For now, just call the existing functions - quality compression will be added
-    switch (pdfExportType) {
-      case 'fullHerd':
-        exportFullHerdPDF();
-        break;
-      case 'rams':
-        exportHerdPDF("rams");
-        break;
-      case 'ewes':
-        exportHerdPDF("ewes");
-        break;
-      case 'lambs':
-        exportHerdPDF("lambs");
-        break;
-      case 'culled':
-        exportCulledPDF();
-        break;
-      case 'sold':
-        exportSoldPDF();
-        break;
-      case 'ramsRegister':
-        exportRamsPDF();
-        break;
-      case 'ewesRegister':
-        exportEwesPDF();
-        break;
+    const rawLogo = farmSettings?.logoUrl;
+    pendingExportLogoRef.current = (rawLogo && quality !== 'high')
+      ? await compressImage(rawLogo, PDF_QUALITY_SETTINGS[quality])
+      : rawLogo;
+    try {
+      switch (pdfExportType) {
+        case 'fullHerd':
+          exportFullHerdPDF();
+          break;
+        case 'rams':
+          exportHerdPDF("rams");
+          break;
+        case 'ewes':
+          exportHerdPDF("ewes");
+          break;
+        case 'lambs':
+          exportHerdPDF("lambs");
+          break;
+        case 'culled':
+          exportCulledPDF();
+          break;
+        case 'sold':
+          exportSoldPDF();
+          break;
+        case 'ramsRegister':
+          exportRamsPDF();
+          break;
+        case 'ewesRegister':
+          exportEwesPDF();
+          break;
+      }
+    } finally {
+      pendingExportLogoRef.current = undefined;
     }
-    return Promise.resolve();
   };
 
   const handleRemoveFromHerd = () => {
@@ -342,7 +363,7 @@ export default function Animals() {
           <div class="page">
             <div class="header">
               <div class="header-left">
-                ${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" />` : ''}
+                ${getExportLogoImg('class="logo"')}
               </div>
               <div class="header-center">
                 <h1>${fb?.studName || fb?.farmName || "Full Herd Register"}</h1>
@@ -418,7 +439,7 @@ export default function Animals() {
           <div class="page">
             <div class="header">
               <div class="header-left">
-                ${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" />` : ''}
+                ${getExportLogoImg('class="logo"')}
               </div>
               <div class="header-center">
                 <h1>${fb?.studName || fb?.farmName || "Full Herd Register"}</h1>
@@ -495,7 +516,7 @@ export default function Animals() {
           <div class="page">
             <div class="header">
               <div class="header-left">
-                ${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" />` : ''}
+                ${getExportLogoImg('class="logo"')}
               </div>
               <div class="header-center">
                 <h1>${fb?.studName || fb?.farmName || "Full Herd Register"}</h1>
@@ -678,7 +699,7 @@ export default function Animals() {
           <div class="page">
             <div class="header">
               <div class="header-left">
-                ${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" />` : ''}
+                ${getExportLogoImg('class="logo"')}
               </div>
               <div class="header-center">
                 <h1>${fb?.studName || fb?.farmName || exportTitle}</h1>
@@ -822,7 +843,7 @@ export default function Animals() {
         <div class="page">
           <div class="header">
             <div class="header-left">
-              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+              ${getExportLogoImg()}
             </div>
             <div class="header-center">
               <h1>${fb?.studName || fb?.farmName || exportTitle}</h1>
@@ -977,7 +998,7 @@ export default function Animals() {
         <div class="page">
           <div class="header">
             <div class="header-left">
-              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+              ${getExportLogoImg()}
             </div>
             <div class="header-center">
               <h1>${fb?.studName || fb?.farmName || "Rams Register"}</h1>
@@ -1088,7 +1109,7 @@ export default function Animals() {
         <div class="page">
           <div class="header">
             <div class="header-left">
-              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+              ${getExportLogoImg()}
             </div>
             <div class="header-center">
               <h1>${fb?.studName || fb?.farmName || "Ewes Register"}</h1>
@@ -1236,7 +1257,7 @@ export default function Animals() {
         <div class="page">
           <div class="header">
             <div class="header-left">
-              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+              ${getExportLogoImg()}
             </div>
             <div class="header-center">
               <h1>${fb?.studName || fb?.farmName || "Culled Animals"}</h1>
@@ -1390,7 +1411,7 @@ export default function Animals() {
         <div class="page">
           <div class="header">
             <div class="header-left">
-              ${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;" />` : ''}
+              ${getExportLogoImg()}
             </div>
             <div class="header-center">
               <h1>${fb?.studName || fb?.farmName || "Sold Animals Register"}</h1>

@@ -13,6 +13,7 @@ import type {
   DataConfidence,
 } from "@/lib/animal-performance";
 import { sanitizePublicNote } from "@/lib/export-template";
+import { compressImage, PDF_QUALITY_SETTINGS, type PDFQuality } from "@/lib/pdf-utils";
 
 type FarmSettingsLike = {
   farmName?: string | null;
@@ -714,6 +715,23 @@ function AnimalProfilePdfDocument({
   );
 }
 
-export function buildAnimalProfilePdfBlob(props: AnimalProfilePdfDocumentProps) {
-  return pdf(<AnimalProfilePdfDocument {...props} />).toBlob();
+/**
+ * Build the individual animal PDF as a Blob.
+ *
+ * quality controls JPEG compression applied to the embedded animal photo:
+ *   high   → original resolution  (no compression; best for printing)
+ *   medium → 70% JPEG quality, max 800×800 px  (balanced; good for email)
+ *   low    → 50% JPEG quality, max 400×400 px  (smallest file; good for WhatsApp)
+ *
+ * Text, tables, and layout are vector-based and unaffected by quality.
+ */
+export async function buildAnimalProfilePdfBlob(
+  props: AnimalProfilePdfDocumentProps,
+  quality: PDFQuality = 'high',
+): Promise<Blob> {
+  let { photoBase64 } = props;
+  if (photoBase64 && quality !== 'high') {
+    photoBase64 = await compressImage(photoBase64, PDF_QUALITY_SETTINGS[quality]);
+  }
+  return pdf(<AnimalProfilePdfDocument {...props} photoBase64={photoBase64} />).toBlob();
 }

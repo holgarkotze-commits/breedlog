@@ -7,6 +7,8 @@ import { Layout } from "@/components/Layout";
 import { useNavigationHistory } from "@/lib/navigation-history-context";
 import { cn } from "@/lib/utils";
 import { buildAnimalProfilePdfBlob } from "@/lib/animal-profile-pdf";
+import { PDFExportDialog } from "@/components/PDFExportDialog";
+import { type PDFQuality } from "@/lib/pdf-utils";
 import { saveFileInNativeDownloads } from "@/lib/native-file-save";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1184,7 +1186,9 @@ ${data.notes || "No notes recorded."}
         toast({ title: "Word Document Exported", description: `${animal.tagId} profile downloaded as Word document` });
     };
     
-    const handleExportPDF = async () => {
+    const [isPdfExportOpen, setIsPdfExportOpen] = useState(false);
+
+    const handleExportPDF = async (quality: PDFQuality = 'high') => {
         toast({ title: "Preparing PDF...", description: "Building performance datasheet, please wait." });
 
         let nativePhotoBase64: string | null = null;
@@ -1219,7 +1223,7 @@ ${data.notes || "No notes recorded."}
             farmSettings,
             photoBase64: nativePhotoBase64,
             profile: nativeProfile,
-        });
+        }, quality);
         await createExportedDoc.mutateAsync({
             name: nativeFilename,
             documentType: "individual",
@@ -1715,24 +1719,34 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
     };
     
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-semibold" data-testid="button-export-profile">
-                    <Download className="w-3.5 h-3.5 mr-1.5" /> Export
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleExportPDF()} data-testid="export-pdf">
-                    <FileText className="w-4 h-4 mr-2" /> Export Individual (PDF)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportWord} data-testid="export-word">
-                    <FileText className="w-4 h-4 mr-2" /> Word Document
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportCSV} data-testid="export-csv">
-                    <FileText className="w-4 h-4 mr-2" /> CSV
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <>
+            <PDFExportDialog
+                open={isPdfExportOpen}
+                onOpenChange={setIsPdfExportOpen}
+                title="Export Animal PDF"
+                description="Choose quality to balance file size vs. image sharpness for the performance datasheet."
+                onExport={(quality) => handleExportPDF(quality)}
+                exportLabel="Download PDF"
+            />
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-semibold" data-testid="button-export-profile">
+                        <Download className="w-3.5 h-3.5 mr-1.5" /> Export
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setIsPdfExportOpen(true)} data-testid="export-pdf">
+                        <FileText className="w-4 h-4 mr-2" /> Export Individual (PDF)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportWord} data-testid="export-word">
+                        <FileText className="w-4 h-4 mr-2" /> Word Document
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportCSV} data-testid="export-csv">
+                        <FileText className="w-4 h-4 mr-2" /> CSV
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </>
     );
 }
 
