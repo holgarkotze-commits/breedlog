@@ -28,12 +28,28 @@ type FarmSettingsLike = {
   registrationNumber?: string | null;
 };
 
+/** One resolved ancestor node — used for the grandparent tier of the pedigree tree. */
+export type PedigreeAncestor = {
+  tagId: string;
+  breed?: string | null;
+};
+
+/** Resolved grandparent data to be passed into the PDF. */
+export type PedigreeGrandparents = {
+  paternalGrandsire: PedigreeAncestor | null;
+  paternalGranddam:  PedigreeAncestor | null;
+  maternalGrandsire: PedigreeAncestor | null;
+  maternalGranddam:  PedigreeAncestor | null;
+};
+
 type AnimalProfilePdfDocumentProps = {
   animal: AnimalWithRelations;
   farmSettings?: FarmSettingsLike | null;
   exportDate: string;
   photoBase64: string | null;
   profile: AnimalPerformanceProfile;
+  /** Resolved three-generation pedigree data. Null slots render as dashed "Unknown" nodes. */
+  grandparents?: PedigreeGrandparents | null;
 };
 
 const styles = StyleSheet.create({
@@ -498,6 +514,7 @@ function AnimalProfilePdfDocument({
   farmSettings,
   photoBase64,
   profile,
+  grandparents,
 }: AnimalProfilePdfDocumentProps) {
   const farmDisplayName = farmSettings?.studName || farmSettings?.farmName || "BreedLog";
   const contactLine = [farmSettings?.ownerName, farmSettings?.ownerPhone].filter(Boolean).join(" | ");
@@ -658,16 +675,33 @@ function AnimalProfilePdfDocument({
         {/* Tree: three columns — grandparents | parents | subject */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16 }}>
 
-          {/* Column 1: Grandparents (4 entries, paired 2+2) */}
+          {/* Column 1: Grandparents (4 entries, paired 2+2)
+              Resolved from workspace links first; falls back to external info text strings; null = Unknown */}
           <View style={{ flexDirection: "column", gap: 6, flex: 1 }}>
             {/* Paternal pair */}
-            <PedigreeBox label="Paternal Grandsire" tagId={animal.sire?.externalSireInfo || null} />
-            <PedigreeBox label="Paternal Granddam"  tagId={animal.sire?.externalDamInfo  || null} />
+            <PedigreeBox
+              label="Paternal Grandsire"
+              tagId={grandparents?.paternalGrandsire?.tagId ?? null}
+              breed={grandparents?.paternalGrandsire?.breed}
+            />
+            <PedigreeBox
+              label="Paternal Granddam"
+              tagId={grandparents?.paternalGranddam?.tagId ?? null}
+              breed={grandparents?.paternalGranddam?.breed}
+            />
             {/* Gap between paternal and maternal */}
             <View style={{ height: 12 }} />
             {/* Maternal pair */}
-            <PedigreeBox label="Maternal Grandsire" tagId={animal.dam?.externalSireInfo  || null} />
-            <PedigreeBox label="Maternal Granddam"  tagId={animal.dam?.externalDamInfo   || null} />
+            <PedigreeBox
+              label="Maternal Grandsire"
+              tagId={grandparents?.maternalGrandsire?.tagId ?? null}
+              breed={grandparents?.maternalGrandsire?.breed}
+            />
+            <PedigreeBox
+              label="Maternal Granddam"
+              tagId={grandparents?.maternalGranddam?.tagId ?? null}
+              breed={grandparents?.maternalGranddam?.breed}
+            />
           </View>
 
           {/* Connector 1 */}
@@ -706,9 +740,9 @@ function AnimalProfilePdfDocument({
         </View>
 
         <Text style={styles.pedigreeNote}>
-          Dashed nodes indicate animals not recorded in the workspace. Grandparent information is sourced from external sire/dam
-          import fields on the parent record. To expand the pedigree further, link parent animals to their own sires and dams in
-          the workspace. All recorded data is shown; unavailable entries are marked "Unknown".
+          Dashed nodes indicate animals whose parentage is not recorded in this workspace. Grandparents are resolved from linked
+          parent records first; if a parent animal is not linked to its own sire or dam in the workspace, the external sire/dam
+          info text is used. To complete the pedigree, link each parent animal to its own parents in the workspace.
         </Text>
       </Page>
     </Document>

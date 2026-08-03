@@ -6,7 +6,7 @@ import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import { Layout } from "@/components/Layout";
 import { useNavigationHistory } from "@/lib/navigation-history-context";
 import { cn } from "@/lib/utils";
-import { buildAnimalProfilePdfBlob } from "@/lib/animal-profile-pdf";
+import { buildAnimalProfilePdfBlob, type PedigreeGrandparents, type PedigreeAncestor } from "@/lib/animal-profile-pdf";
 import { PDFExportDialog } from "@/components/PDFExportDialog";
 import { type PDFQuality } from "@/lib/pdf-utils";
 import { saveFileInNativeDownloads } from "@/lib/native-file-save";
@@ -1216,6 +1216,34 @@ ${data.notes || "No notes recorded."}
             breedingEvents || [],
             healthRecords || []
         );
+
+        // Resolve three-generation grandparent data from the workspace animal list.
+        // For each grandparent slot we try, in order:
+        //   1. The parent's sireId / damId resolved from allAnimals (linked workspace record)
+        //   2. The parent's externalSireInfo / externalDamInfo text field (manual import string)
+        //   3. null → renders as a dashed "Unknown" node in the PDF
+        const resolveAncestor = (
+            parentAnimal: Animal | null | undefined,
+            idField: 'sireId' | 'damId',
+            externalField: 'externalSireInfo' | 'externalDamInfo',
+        ): PedigreeAncestor | null => {
+            if (!parentAnimal) return null;
+            const linkedId = parentAnimal[idField] as number | null | undefined;
+            if (linkedId) {
+                const found = (allAnimals || []).find((a: Animal) => a.id === linkedId);
+                if (found) return { tagId: found.tagId, breed: found.breed ?? null };
+            }
+            const externalText = parentAnimal[externalField] as string | null | undefined;
+            if (externalText) return { tagId: externalText };
+            return null;
+        };
+        const nativeGrandparents: PedigreeGrandparents = {
+            paternalGrandsire: resolveAncestor(animal.sire, 'sireId', 'externalSireInfo'),
+            paternalGranddam:  resolveAncestor(animal.sire, 'damId',  'externalDamInfo'),
+            maternalGrandsire: resolveAncestor(animal.dam,  'sireId', 'externalSireInfo'),
+            maternalGranddam:  resolveAncestor(animal.dam,  'damId',  'externalDamInfo'),
+        };
+
         const nativeFilename = getDocumentFileName("PerformanceDatasheet", animal.tagId || `ID${animal.id}`);
         const pdfBlob = await buildAnimalProfilePdfBlob({
             animal,
@@ -1223,6 +1251,7 @@ ${data.notes || "No notes recorded."}
             farmSettings,
             photoBase64: nativePhotoBase64,
             profile: nativeProfile,
+            grandparents: nativeGrandparents,
         }, quality);
         await createExportedDoc.mutateAsync({
             name: nativeFilename,
