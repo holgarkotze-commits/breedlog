@@ -368,7 +368,31 @@ function InfoRow({ label, value, testId }: { label: string, value: string, testI
 
 function PedigreeView({ animal }: { animal: any }) {
     const { data: tree } = useFamilyTree(animal.id);
+    const { data: allAnimals } = useAnimals({});
     const [scale, setScale] = useState(0.85);
+
+    // Resolve one grandparent slot: prefer a linked workspace record, then
+    // fall back to the externalSireInfo / externalDamInfo text field on the parent.
+    const resolveGrandparent = (
+        parentAnimal: any,
+        idField: 'sireId' | 'damId',
+        externalField: 'externalSireInfo' | 'externalDamInfo',
+    ): { tagId: string | null; breed: string | null; animalId: number | null } => {
+        if (!parentAnimal) return { tagId: null, breed: null, animalId: null };
+        const linkedId = parentAnimal[idField] as number | null | undefined;
+        if (linkedId) {
+            const found = (allAnimals || []).find((a: Animal) => a.id === linkedId);
+            if (found) return { tagId: found.tagId, breed: found.breed ?? null, animalId: found.id };
+        }
+        const ext = parentAnimal[externalField] as string | null | undefined;
+        if (ext) return { tagId: ext, breed: null, animalId: null };
+        return { tagId: null, breed: null, animalId: null };
+    };
+
+    const paternalGrandsire = resolveGrandparent(animal.sire, 'sireId', 'externalSireInfo');
+    const paternalGranddam  = resolveGrandparent(animal.sire, 'damId',  'externalDamInfo');
+    const maternalGrandsire = resolveGrandparent(animal.dam,  'sireId', 'externalSireInfo');
+    const maternalGranddam  = resolveGrandparent(animal.dam,  'damId',  'externalDamInfo');
     const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     
@@ -493,12 +517,24 @@ function PedigreeView({ animal }: { animal: any }) {
                                         <div className="absolute left-0 top-[20px] bottom-[20px] w-[2px] bg-primary/50"></div>
                                         <div className="flex items-center">
                                             <div className="w-3 h-[2px] bg-primary/50"></div>
-                                            <PedigreeNodeSmall label="GP Sire" sublabel="Sire's Father" />
+                                            <PedigreeNodeSmall
+                                                label="GP Sire"
+                                                sublabel="Sire's Father"
+                                                tagId={paternalGrandsire.tagId}
+                                                breed={paternalGrandsire.breed}
+                                                animalId={paternalGrandsire.animalId}
+                                            />
                                         </div>
                                         <div className="h-2"></div>
                                         <div className="flex items-center">
                                             <div className="w-3 h-[2px] bg-primary/50"></div>
-                                            <PedigreeNodeSmall label="GP Dam" sublabel="Sire's Mother" />
+                                            <PedigreeNodeSmall
+                                                label="GP Dam"
+                                                sublabel="Sire's Mother"
+                                                tagId={paternalGranddam.tagId}
+                                                breed={paternalGranddam.breed}
+                                                animalId={paternalGranddam.animalId}
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -523,12 +559,24 @@ function PedigreeView({ animal }: { animal: any }) {
                                         <div className="absolute left-0 top-[20px] bottom-[20px] w-[2px] bg-primary/50"></div>
                                         <div className="flex items-center">
                                             <div className="w-3 h-[2px] bg-primary/50"></div>
-                                            <PedigreeNodeSmall label="GP Sire" sublabel="Dam's Father" />
+                                            <PedigreeNodeSmall
+                                                label="GP Sire"
+                                                sublabel="Dam's Father"
+                                                tagId={maternalGrandsire.tagId}
+                                                breed={maternalGrandsire.breed}
+                                                animalId={maternalGrandsire.animalId}
+                                            />
                                         </div>
                                         <div className="h-2"></div>
                                         <div className="flex items-center">
                                             <div className="w-3 h-[2px] bg-primary/50"></div>
-                                            <PedigreeNodeSmall label="GP Dam" sublabel="Dam's Mother" />
+                                            <PedigreeNodeSmall
+                                                label="GP Dam"
+                                                sublabel="Dam's Mother"
+                                                tagId={maternalGranddam.tagId}
+                                                breed={maternalGranddam.breed}
+                                                animalId={maternalGranddam.animalId}
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -723,15 +771,53 @@ function PedigreeNode({ animal, label, isSubject, externalInfo }: {
     );
 }
 
-function PedigreeNodeSmall({ label, sublabel }: { label: string, sublabel: string }) {
+function PedigreeNodeSmall({
+    label,
+    sublabel,
+    tagId,
+    breed,
+    animalId,
+}: {
+    label: string;
+    sublabel: string;
+    tagId?: string | null;
+    breed?: string | null;
+    animalId?: number | null;
+}) {
+    const [, setLocation] = useLocation();
+    const hasData = !!tagId;
+    const isClickable = !!animalId;
+
     return (
-        <div className="flex items-center gap-2 p-2 rounded-lg border border-dashed border-muted-foreground/20 bg-secondary/30">
-            <div className="w-8 h-8 rounded-full bg-muted-foreground/10 border border-muted-foreground/20 flex items-center justify-center">
-                <img src={logo} alt="placeholder" className="w-4 h-4 opacity-20 grayscale" />
+        <div
+            className={cn(
+                "flex items-center gap-2 p-2 rounded-lg border transition-all",
+                hasData
+                    ? "border-primary/40 bg-card/60 hover:border-primary/70 hover:shadow-sm"
+                    : "border-dashed border-muted-foreground/20 bg-secondary/30",
+                isClickable && "cursor-pointer active:scale-95"
+            )}
+            onClick={() => isClickable && setLocation(`/animals/${animalId}`)}
+            data-testid={`pedigree-gp-node-${animalId ?? label.replace(/\s+/g, "-").toLowerCase()}`}
+        >
+            <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center border flex-shrink-0",
+                hasData ? "bg-primary/10 border-primary/30" : "bg-muted-foreground/10 border-muted-foreground/20"
+            )}>
+                <img src={logo} alt="placeholder" className={cn("w-4 h-4 grayscale", hasData ? "opacity-40" : "opacity-20")} />
             </div>
-            <div className="text-[9px] text-muted-foreground">
-                <div className="font-bold">{label}</div>
-                <div className="opacity-70">{sublabel}</div>
+            <div className="text-[9px] min-w-0">
+                <div className={cn("font-bold truncate", hasData ? "text-foreground" : "text-muted-foreground")}>
+                    {label}
+                </div>
+                {hasData ? (
+                    <>
+                        <div className="text-primary/90 font-semibold truncate">{tagId}</div>
+                        {breed && <div className="text-muted-foreground opacity-70 truncate">{breed}</div>}
+                    </>
+                ) : (
+                    <div className="text-muted-foreground opacity-70">{sublabel}</div>
+                )}
             </div>
         </div>
     );
