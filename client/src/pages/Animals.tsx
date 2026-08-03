@@ -300,6 +300,24 @@ export default function Animals() {
     }
   };
 
+  // Export all active animals as CSV
+  const handleExportHerdCsv = () => {
+    const activeAnimals = (allAnimals || []).filter(isActiveAnimal);
+    if (activeAnimals.length === 0) {
+      toast({ title: "No Animals", description: "No active animals to export", variant: "destructive" });
+      return;
+    }
+    const rows = buildBreedLogCsvRows(activeAnimals, undefined, allAnimals || []);
+    const csv = buildBreedLogCsvContent(rows);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `breedlog-herd-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Full Herd Export PDF with Rams, Ewes, Lambs sections
   const exportFullHerdPDF = () => {
     if (!allAnimals || !breedingEvents) return;
@@ -1066,6 +1084,7 @@ export default function Animals() {
     if (!allAnimals || !breedingEvents) return;
     const fb = farmSettings;
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    const compressedFb = { ...fb, logoUrl: pendingExportLogoRef.current ?? fb?.logoUrl ?? null };
     
     const ewes = allAnimals.filter(a => 
       a.sex?.toLowerCase() === "ewe" && 
@@ -1107,21 +1126,8 @@ export default function Animals() {
       
       pagesHtml += `
         <div class="page">
-          <div class="header">
-            <div class="header-left">
-              ${getExportLogoImg()}
-            </div>
-            <div class="header-center">
-              <h1>${fb?.studName || fb?.farmName || "Ewes Register"}</h1>
-              <p class="subtitle">Breeding Ewe Performance Report</p>
-            </div>
-            <div class="header-right">
-              <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
-              <p>${exportDate}</p>
-            </div>
-          </div>
-          
-          <table class="ewes-table">
+          ${renderExportHeader(compressedFb, page + 1, Math.max(1, totalPages), exportDate, fb?.studName || fb?.farmName || 'Ewes Register', 'Breeding Ewe Performance Report')}
+          <table class="export-table">
             <thead>
               <tr>
                 <th>Ewe ID</th>
@@ -1136,67 +1142,16 @@ export default function Animals() {
             </thead>
             <tbody>${tableRows}</tbody>
           </table>
-          
-          <div class="footer">
-            <div class="footer-info">
-              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-              <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
-            </div>
-            <div class="footer-branding">
-              <p class="breedlog-text">BREEDLOG</p>
-              <p class="tagline">Professional Livestock Management</p>
-            </div>
-          </div>
+          ${renderExportFooter(compressedFb)}
         </div>
       `;
     }
     
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Ewes Register - ${fb?.studName || fb?.farmName || "BreedLog"}</title>
-  <style>
-    @page { size: A4 landscape; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
-    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 30mm; margin: 0 auto; page-break-after: always; position: relative; }
-    .page:last-child { page-break-after: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
-    .header-left { width: 60px; flex-shrink: 0; }
-    .header-center { flex: 1; text-align: center; }
-    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
-    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
-    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
-    .ewes-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .ewes-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-    .ewes-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
-    .ewes-table tbody tr:nth-child(even) { background: #fafafa; }
-    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
-    .status-active { background: #22c55e20; color: #16a34a; }
-    .status-sold { background: #f59e0b20; color: #d97706; }
-    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
-    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
-    .footer-info { flex: 1; }
-    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
-    .footer-info p { font-size: 7pt; margin-top: 2px; color: #d8d8d8; }
-    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
-    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-    @media print {
-      .page { page-break-after: always; }
-      .page:last-child { page-break-after: avoid; }
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    }
-    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
-  </style>
-</head>
-<body>
-  ${pagesHtml}
-</body>
-</html>
-    `;
-    
+    const htmlContent = wrapExportDocument(
+      `${fb?.studName || fb?.farmName || "BreedLog"} - Ewes Register`,
+      getCanonicalGroupCSS(),
+      pagesHtml
+    );
     const printWindow = window.open("", "_blank");
     if (printWindow) {
       printWindow.document.write(htmlContent);
@@ -1219,6 +1174,7 @@ export default function Animals() {
     if (!allAnimals) return;
     const fb = farmSettings;
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    const compressedFb = { ...fb, logoUrl: pendingExportLogoRef.current ?? fb?.logoUrl ?? null };
 
     // Authoritative selector: only animals whose status is "culled"
     const culledAnimals = allAnimals.filter(a =>
@@ -1255,21 +1211,8 @@ export default function Animals() {
       
       pagesHtml += `
         <div class="page">
-          <div class="header">
-            <div class="header-left">
-              ${getExportLogoImg()}
-            </div>
-            <div class="header-center">
-              <h1>${fb?.studName || fb?.farmName || "Culled Animals"}</h1>
-              <p class="subtitle">Slaughter/Cull Register</p>
-            </div>
-            <div class="header-right">
-              <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
-              <p>${exportDate}</p>
-            </div>
-          </div>
-          
-          <table class="animals-table">
+          ${renderExportHeader(compressedFb, page + 1, Math.max(1, totalPages), exportDate, fb?.studName || fb?.farmName || 'Culled Animals', 'Slaughter/Cull Register')}
+          <table class="export-table">
             <thead>
               <tr>
                 <th>Animal ID</th>
@@ -1285,65 +1228,16 @@ export default function Animals() {
             </thead>
             <tbody>${tableRows}</tbody>
           </table>
-          
-          <div class="footer">
-            <div class="footer-info">
-              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-              <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
-            </div>
-            <div class="footer-branding">
-              <p class="breedlog-text">BREEDLOG</p>
-              <p class="tagline">Professional Livestock Management</p>
-            </div>
-          </div>
+          ${renderExportFooter(compressedFb)}
         </div>
       `;
     }
     
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${fb?.studName || fb?.farmName || "BreedLog"} - Culled Animals</title>
-  <style>
-    @page { size: A4 landscape; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
-    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 30mm; margin: 0 auto; page-break-after: always; position: relative; }
-    .page:last-child { page-break-after: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
-    .header-left { width: 60px; flex-shrink: 0; }
-    .header-center { flex: 1; text-align: center; }
-    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
-    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
-    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
-    .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-    .animals-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
-    .animals-table tbody tr:nth-child(even) { background: #fafafa; }
-    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
-    .status-active { background: #22c55e20; color: #16a34a; }
-    .status-culled { background: #ef444420; color: #dc2626; }
-    .status-sold { background: #f59e0b20; color: #d97706; }
-    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
-    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
-    .footer-info { flex: 1; }
-    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
-    .footer-info p { font-size: 7pt; margin-top: 2px; color: #d8d8d8; }
-    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
-    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-    @media print {
-      .page { page-break-after: always; }
-      .page:last-child { page-break-after: avoid; }
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    }
-    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
-  </style>
-</head>
-<body>${pagesHtml}</body>
-</html>`;
+    const htmlContent = wrapExportDocument(
+      `${fb?.studName || fb?.farmName || "BreedLog"} - Culled Animals`,
+      getCanonicalGroupCSS(),
+      pagesHtml
+    );
     
     const printWindow = window.open('', '_blank');
     if (printWindow) {
@@ -1642,29 +1536,41 @@ export default function Animals() {
           onToggle={() => setTotalHerdExpanded(!totalHerdExpanded)}
           testId="ribbon-total-herd"
           actions={
-            <Button
-              variant="default"
-              size="sm"
-              onClick={async (e) => {
-                e.stopPropagation();
-                const { isApiReachable } = await import("@/lib/queryClient");
-                const isOnline = await isApiReachable();
-                if (!isOnline) {
-                  toast({ 
-                    title: "Offline", 
-                    description: "You must be online to export PDF",
-                    variant: "destructive" 
-                  });
-                  return;
-                }
-                setPdfExportType('fullHerd');
-                setIsPdfExportDialogOpen(true);
-              }}
-              data-testid="btn-export-total-herd"
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Export PDF
-            </Button>
+            <div className="flex gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); handleExportHerdCsv(); }}
+                disabled={!herdCounts.activeHerdAnimals}
+                data-testid="btn-export-total-herd-csv"
+              >
+                <FileText className="w-4 h-4 mr-1" />
+                CSV
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const { isApiReachable } = await import("@/lib/queryClient");
+                  const isOnline = await isApiReachable();
+                  if (!isOnline) {
+                    toast({ 
+                      title: "Offline", 
+                      description: "You must be online to export PDF",
+                      variant: "destructive" 
+                    });
+                    return;
+                  }
+                  setPdfExportType('fullHerd');
+                  setIsPdfExportDialogOpen(true);
+                }}
+                data-testid="btn-export-total-herd"
+              >
+                <Download className="w-4 h-4 mr-1" />
+                PDF
+              </Button>
+            </div>
           }
         >
           {/* Search & Filters INSIDE the accordion */}
@@ -1886,7 +1792,7 @@ export default function Animals() {
         <RamsSection 
           allAnimals={allAnimals || []} 
           breedingEvents={breedingEvents || []} 
-          onExport={exportRamsPDF}
+          onExport={() => { setPdfExportType('ramsRegister'); setIsPdfExportDialogOpen(true); }}
           isLoading={isLoading}
           isExpanded={ramsExpanded}
           onToggle={() => setRamsExpanded(!ramsExpanded)}
@@ -1898,7 +1804,7 @@ export default function Animals() {
         <EwesSection 
           allAnimals={allAnimals || []} 
           breedingEvents={breedingEvents || []} 
-          onExport={exportEwesPDF}
+          onExport={() => { setPdfExportType('ewesRegister'); setIsPdfExportDialogOpen(true); }}
           isLoading={isLoading}
           isExpanded={ewesExpanded}
           onToggle={() => setEwesExpanded(!ewesExpanded)}
@@ -1913,7 +1819,7 @@ export default function Animals() {
           isLoading={isLoading}
           isExpanded={lambsExpanded}
           onToggle={() => setLambsExpanded(!lambsExpanded)}
-          onExport={() => exportHerdPDF("lambs")}
+          onExport={() => { setPdfExportType('lambs'); setIsPdfExportDialogOpen(true); }}
           classifyMutation={classifyMutation}
           confirmCullMutation={confirmCullMutation}
           moveToEwesMutation={moveToEwesMutation}
@@ -1927,7 +1833,7 @@ export default function Animals() {
           isLoading={isLoading}
           isExpanded={culledExpanded}
           onToggle={() => setCulledExpanded(!culledExpanded)}
-          onExport={exportCulledPDF}
+          onExport={() => { setPdfExportType('culled'); setIsPdfExportDialogOpen(true); }}
         />
 
         {/* Encouraging message */}

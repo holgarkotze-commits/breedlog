@@ -104,31 +104,27 @@ const styles = StyleSheet.create({
   },
   footer: {
     position: "absolute",
-    bottom: 16,
+    bottom: 14,
     left: 32,
     right: 32,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 4,
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingLeft: 12,
-    paddingRight: 12,
+    borderTop: "1.5 solid #FFC300",
+    paddingTop: 5,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   footerText: {
     fontSize: 7.5,
-    color: "#c8c8c8",
+    color: "#888",
   },
   footerBrand: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Helvetica-Bold",
-    color: "#FFC300",
+    color: "#102033",
   },
   footerCreator: {
-    fontSize: 7,
-    color: "#aaaaaa",
+    fontSize: 6,
+    color: "#aaa",
     marginTop: 2,
   },
   footerRight: {
@@ -672,11 +668,44 @@ function AnimalProfilePdfDocument({
           {animal.breed || "Breed not recorded"} · {roleLabel(profile.role)} · Three-generation pedigree from recorded workspace data
         </Text>
 
-        {/* Tree: three columns — grandparents | parents | subject */}
+        {/* Tree: Subject → Parents → Grandparents (matches in-app direction: left = subject, right = ancestors) */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16 }}>
 
-          {/* Column 1: Grandparents (4 entries, paired 2+2)
-              Resolved from workspace links first; falls back to external info text strings; null = Unknown */}
+          {/* Column 1: Subject */}
+          <View style={{ alignSelf: "center" }}>
+            <PedigreeBox
+              label="Subject"
+              tagId={animal.tagId}
+              breed={animal.breed}
+              isSubject
+            />
+          </View>
+
+          {/* Connector — horizontal bar + vertical fork */}
+          <View style={{ width: 18, alignSelf: "center" }}>
+            <View style={{ borderTop: "1 solid #bbb", width: 18 }} />
+          </View>
+
+          {/* Column 2: Parents */}
+          <View style={{ flexDirection: "column", gap: 20, alignItems: "flex-start" }}>
+            <PedigreeBox
+              label="Sire"
+              tagId={animal.sire?.tagId || animal.externalSireInfo}
+              breed={animal.sire?.breed}
+            />
+            <PedigreeBox
+              label="Dam"
+              tagId={animal.dam?.tagId || animal.externalDamInfo}
+              breed={animal.dam?.breed}
+            />
+          </View>
+
+          {/* Connector */}
+          <View style={{ width: 18, alignSelf: "center" }}>
+            <View style={{ borderTop: "1 solid #bbb", width: 18 }} />
+          </View>
+
+          {/* Column 3: Grandparents (4 entries, paired 2+2) */}
           <View style={{ flexDirection: "column", gap: 6, flex: 1 }}>
             {/* Paternal pair */}
             <PedigreeBox
@@ -701,40 +730,6 @@ function AnimalProfilePdfDocument({
               label="Maternal Granddam"
               tagId={grandparents?.maternalGranddam?.tagId ?? null}
               breed={grandparents?.maternalGranddam?.breed}
-            />
-          </View>
-
-          {/* Connector 1 */}
-          <View style={{ width: 14, alignSelf: "center" }}>
-            <View style={{ borderTop: "1 solid #ccc", width: 14 }} />
-          </View>
-
-          {/* Column 2: Parents */}
-          <View style={{ flexDirection: "column", gap: 20, alignItems: "flex-start" }}>
-            <PedigreeBox
-              label="Sire"
-              tagId={animal.sire?.tagId || animal.externalSireInfo}
-              breed={animal.sire?.breed}
-            />
-            <PedigreeBox
-              label="Dam"
-              tagId={animal.dam?.tagId || animal.externalDamInfo}
-              breed={animal.dam?.breed}
-            />
-          </View>
-
-          {/* Connector 2 */}
-          <View style={{ width: 14, alignSelf: "center" }}>
-            <View style={{ borderTop: "1 solid #ccc", width: 14 }} />
-          </View>
-
-          {/* Column 3: Subject */}
-          <View style={{ alignSelf: "center" }}>
-            <PedigreeBox
-              label="Subject"
-              tagId={animal.tagId}
-              breed={animal.breed}
-              isSubject
             />
           </View>
         </View>

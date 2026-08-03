@@ -299,15 +299,58 @@ export default function AnimalDetail() {
                 >
                     <img src={animal.photo || logo} className={animal.photo ? "w-full h-full object-cover" : "w-1/3 md:w-1/2 h-1/3 md:h-1/2 absolute top-1/3 md:top-1/4 left-1/3 md:left-1/4 opacity-20 grayscale"} />
                 </div>
-                <CardContent className="p-3 md:p-6 space-y-1 md:space-y-3">
+                <CardContent className="p-3 md:p-4 space-y-0">
+                    {/* Identification */}
                     <InfoRow label="Electronic ID" value={animal.electronicId || "N/A"} />
-                    <InfoRow label="Birth Date" value={animal.birthDate ? format(new Date(animal.birthDate), "dd MMM yyyy") : "N/A"} />
-                    <InfoRow label="Current Weight" value={animal.currentWeight ? `${animal.currentWeight} kg` : "N/A"} />
-                    <InfoRow label="Breeder" value={animal.breederName || "Self"} />
-                    <InfoRow label="Profile Entry" value={animal.createdAt ? format(new Date(animal.createdAt), "dd MMM yyyy") : "N/A"} testId="text-entry-date" />
-                    <div className="pt-2 md:pt-4 border-t border-border">
-                        <Label className="text-muted-foreground text-[10px] md:text-xs uppercase">Notes</Label>
-                        <p className="text-xs md:text-sm mt-1">{animal.notes || "No notes recorded."}</p>
+                    {animal.tattooId && <InfoRow label="Tattoo ID" value={animal.tattooId} />}
+                    {animal.studPrefix && <InfoRow label="Stud Prefix" value={animal.studPrefix} />}
+
+                    {/* Classification */}
+                    <div className="pt-1.5 border-t border-border/40 mt-1.5">
+                        <InfoRow label="Breed" value={animal.breed || "N/A"} />
+                        <InfoRow label="Classification" value={animal.classification?.replace(/_/g, ' ') || "N/A"} />
+                        {animal.animalSource && animal.animalSource !== 'unknown_not_recorded' && (
+                            <InfoRow label="Source" value={animal.animalSource.replace(/_/g, ' ')} />
+                        )}
+                        {animal.sex === 'ram' && animal.ramType && (
+                            <InfoRow label="Ram Type" value={animal.ramType.replace(/_/g, ' ')} />
+                        )}
+                        {animal.sex === 'ram' && animal.ramBreedingStatus && (
+                            <InfoRow label="Breeding Status" value={animal.ramBreedingStatus.replace(/_/g, ' ')} />
+                        )}
+                    </div>
+
+                    {/* Parentage & birth */}
+                    <div className="pt-1.5 border-t border-border/40 mt-1.5">
+                        <InfoRow label="Sire" value={animal.sire?.tagId || animal.externalSireInfo || "N/A"} />
+                        <InfoRow label="Dam" value={animal.dam?.tagId || animal.externalDamInfo || "N/A"} />
+                        <InfoRow label="Birth Date" value={animal.birthDate ? format(new Date(animal.birthDate), "dd MMM yyyy") : "N/A"} />
+                        {animal.birthStatus && <InfoRow label="Birth Status" value={animal.birthStatus} />}
+                        {animal.lambingSeason && <InfoRow label="Lambing Season" value={animal.lambingSeason} />}
+                    </div>
+
+                    {/* Weights */}
+                    <div className="pt-1.5 border-t border-border/40 mt-1.5">
+                        {animal.birthWeight && <InfoRow label="Birth Weight" value={`${animal.birthWeight} kg`} />}
+                        <InfoRow label="Current Weight" value={animal.currentWeight ? `${animal.currentWeight} kg` : "N/A"} />
+                        {animal.weight100Day && <InfoRow label="100-Day Weight" value={`${animal.weight100Day} kg`} />}
+                        {animal.weight270Day && <InfoRow label="270-Day Weight" value={`${animal.weight270Day} kg`} />}
+                    </div>
+
+                    {/* Farm & management */}
+                    <div className="pt-1.5 border-t border-border/40 mt-1.5">
+                        <InfoRow label="Breeder" value={animal.breederName || "Self"} />
+                        {animal.ownerName && <InfoRow label="Owner" value={animal.ownerName} />}
+                        {animal.environmentGroup && <InfoRow label="Env. Group" value={animal.environmentGroup} />}
+                        {animal.managementGroup && <InfoRow label="Mgmt Group" value={animal.managementGroup} />}
+                        {animal.location && <InfoRow label="Location" value={animal.location} />}
+                        <InfoRow label="Profile Entry" value={animal.createdAt ? format(new Date(animal.createdAt), "dd MMM yyyy") : "N/A"} testId="text-entry-date" />
+                    </div>
+
+                    {/* Notes */}
+                    <div className="pt-2 border-t border-border mt-1.5">
+                        <Label className="text-muted-foreground text-[10px] uppercase">Notes</Label>
+                        <p className="text-xs mt-1">{animal.notes || "No notes recorded."}</p>
                     </div>
                 </CardContent>
             </Card>
