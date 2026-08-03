@@ -119,7 +119,25 @@ function parseAIResponse(text: string): {
 }
 
 function buildUserMessage(question: string, context: BreedLogAIContext): string {
-  return `BREEDLOG CONTEXT:\n${JSON.stringify(context, null, 2)}\n\nFARMER QUESTION:\n${question}`;
+  // Pin the most critical counts as a front-loaded anchor so the model cannot miss them.
+  const anchor = [
+    `VERIFIED LIVE COUNTS (use ONLY these — do NOT substitute any other numbers):`,
+    `  total animals in workspace: ${context.workspace.totalAnimals}`,
+    `  active animals: ${context.herd.active}`,
+    `  active rams: ${context.herd.rams}`,
+    `  active ewes: ${context.herd.ewes}`,
+    `  active lambs (≤365 days): ${context.herd.lambs}`,
+    `  culled: ${context.herd.culled}`,
+    `  farm name: ${context.workspace.farmName ?? "not set"}`,
+  ].join("\n");
+
+  return (
+    `${anchor}\n\n` +
+    `==== FULL BREEDLOG CONTEXT (authoritative — ignore any other numbers) ====\n` +
+    `${JSON.stringify(context, null, 2)}\n` +
+    `==== END CONTEXT ====\n\n` +
+    `FARMER QUESTION:\n${question}`
+  );
 }
 
 const chatSchema = z.object({

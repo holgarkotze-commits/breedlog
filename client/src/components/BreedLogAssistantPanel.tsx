@@ -75,6 +75,7 @@ export function BreedLogAssistantPanel() {
   const [categories, setCategories] = useState<PromptCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("herd-overview");
   const [question, setQuestion] = useState("");
+  const [sentQuestion, setSentQuestion] = useState<string | null>(null);
   const [response, setResponse] = useState<AIResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +98,7 @@ export function BreedLogAssistantPanel() {
       if (initialOptions.prompt) setQuestion(initialOptions.prompt);
       if (!initialOptions.prompt) setQuestion("");
       setResponse(null);
+      setSentQuestion(null);
       setError(null);
       setShowControls(true);
       setShowDetails(false);
@@ -113,6 +115,7 @@ export function BreedLogAssistantPanel() {
   async function handleSend() {
     const q = question.trim();
     if (!q || loading) return;
+    setSentQuestion(q);
     setQuestion("");
     setLoading(true);
     setError(null);
@@ -151,6 +154,7 @@ export function BreedLogAssistantPanel() {
   function handleFollowUp(q: string) {
     setQuestion(q);
     setResponse(null);
+    setSentQuestion(null);
     setError(null);
     setShowControls(false);
     setShowDetails(false);
@@ -272,6 +276,18 @@ export function BreedLogAssistantPanel() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── Sent question bubble ── */}
+            {sentQuestion && (
+              <div
+                className="ml-8 flex justify-end"
+                data-testid="ai-sent-question"
+              >
+                <div className="rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground max-w-[90%] break-words shadow-sm">
+                  {sentQuestion}
+                </div>
               </div>
             )}
 
