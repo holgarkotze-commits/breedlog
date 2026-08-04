@@ -1342,25 +1342,30 @@ ${data.notes || "No notes recorded."}
             healthRecords || []
         );
 
-        // Grandparents are resolved server-side in GET /api/animals/:id.
-        // Fall back to externalSireInfo / externalDamInfo text on the parent when
-        // no linked Animal record is available.
+        // Resolve grandparents from the workspace allAnimals list using the parent's
+        // sireId / damId. Falls back to externalSireInfo / externalDamInfo text when
+        // no linked record is present. Matches the three-generation pedigree contract.
         const resolveAncestor = (
-            resolved: Animal | null | undefined,
             parent: Animal | null | undefined,
+            idField: 'sireId' | 'damId',
             externalField: 'externalSireInfo' | 'externalDamInfo',
+            animals: Animal[],
         ): PedigreeAncestor | null => {
-            if (resolved) return { tagId: resolved.tagId, breed: resolved.breed ?? null };
-            const externalText = parent?.[externalField] as string | null | undefined;
+            if (!parent) return null;
+            const linkedId = parent[idField] as number | null | undefined;
+            if (linkedId) {
+                const found = animals.find((a: Animal) => a.id === linkedId);
+                if (found) return { tagId: found.tagId, breed: found.breed ?? null };
+            }
+            const externalText = parent[externalField] as string | null | undefined;
             if (externalText) return { tagId: externalText };
             return null;
         };
-        const gp = animal.grandparents;
         const nativeGrandparents: PedigreeGrandparents = {
-            paternalGrandsire: resolveAncestor(gp?.paternalGrandsire, animal.sire, 'externalSireInfo'),
-            paternalGranddam:  resolveAncestor(gp?.paternalGranddam,  animal.sire, 'externalDamInfo'),
-            maternalGrandsire: resolveAncestor(gp?.maternalGrandsire, animal.dam,  'externalSireInfo'),
-            maternalGranddam:  resolveAncestor(gp?.maternalGranddam,  animal.dam,  'externalDamInfo'),
+            paternalGrandsire: resolveAncestor(animal.sire, 'sireId', 'externalSireInfo', allAnimals || []),
+            paternalGranddam:  resolveAncestor(animal.sire, 'damId',  'externalDamInfo',  allAnimals || []),
+            maternalGrandsire: resolveAncestor(animal.dam,  'sireId', 'externalSireInfo', allAnimals || []),
+            maternalGranddam:  resolveAncestor(animal.dam,  'damId',  'externalDamInfo',  allAnimals || []),
         };
 
         const nativeFilename = getDocumentFileName("PerformanceDatasheet", animal.tagId || `ID${animal.id}`);

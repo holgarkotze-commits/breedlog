@@ -119,7 +119,7 @@ const chatSchema = z.object({
 export function registerAIRoutes(app: Express): void {
 
   // ── GET /api/ai/health — honest provider status, no key leakage ─────────────
-  app.get("/api/ai/health", async (_req: Request, res: Response) => {
+  app.get("/api/ai/health", requireAuth, async (_req: Request, res: Response) => {
     const info = getHealthInfo();
     const configured = info.kimiConfigured || info.geminiConfigured;
     // Combined quota flag: true when every configured live provider is quota-exhausted
@@ -165,7 +165,9 @@ export function registerAIRoutes(app: Express): void {
   });
 
   // ── GET /api/ai/canary — actively probe the primary provider ────────────────
-  app.get("/api/ai/canary", async (_req: Request, res: Response) => {
+  // requireAuth runs BEFORE any provider call — unauthenticated requests never
+  // consume Kimi or Gemini quota.
+  app.get("/api/ai/canary", requireAuth, async (_req: Request, res: Response) => {
     if (!isKimiConfigured()) {
       // Check if Gemini is configured before reporting unconfigured
       const info = getHealthInfo();

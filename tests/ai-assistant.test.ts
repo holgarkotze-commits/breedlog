@@ -76,8 +76,8 @@ async function post(path: string, body: unknown, auth = true) {
 // ── Health ──────────────────────────────────────────────────────────────────
 
 describe("AI Assistant — /api/ai/health", () => {
-  test("returns 200 with configured field", async () => {
-    const res = await get("/api/ai/health", false);
+  test("returns 200 with configured field for authenticated users", async () => {
+    const res = await get("/api/ai/health");
     assert.equal(res.status, 200);
     const body = await res.json() as Record<string, unknown>;
     assert.ok("configured" in body, "response must have 'configured' field");
@@ -85,7 +85,7 @@ describe("AI Assistant — /api/ai/health", () => {
   });
 
   test("does NOT expose GEMINI_API_KEY value or name in response", async () => {
-    const res = await get("/api/ai/health", false);
+    const res = await get("/api/ai/health");
     const text = await res.text();
     const key = process.env.GEMINI_API_KEY || "";
     if (key.length > 4) {
@@ -94,9 +94,9 @@ describe("AI Assistant — /api/ai/health", () => {
     assert.ok(!text.includes("GEMINI_API_KEY"), "key env-var name must not be leaked");
   });
 
-  test("health endpoint does not require authentication", async () => {
+  test("health endpoint returns 401 for unauthenticated requests", async () => {
     const res = await get("/api/ai/health", false);
-    assert.notEqual(res.status, 401, "health must be publicly accessible");
+    assert.equal(res.status, 401, "health must require authentication");
   });
 });
 
@@ -269,7 +269,7 @@ describe("AI Assistant — /api/ai/chat", () => {
 
 describe("AI Assistant — /api/ai/health quota status fields", () => {
   test("health endpoint returns quotaExhausted and fallbackActive fields", async () => {
-    const res = await get("/api/ai/health", false);
+    const res = await get("/api/ai/health");
     assert.equal(res.status, 200);
     const body = await res.json() as Record<string, unknown>;
     assert.ok("quotaExhausted" in body, "must have quotaExhausted field");
@@ -285,7 +285,7 @@ describe("AI Assistant — /api/ai/health quota status fields", () => {
   });
 
   test("when quota is not exhausted, fallbackActive must be false (or AI not configured)", async () => {
-    const res = await get("/api/ai/health", false);
+    const res = await get("/api/ai/health");
     const body = await res.json() as { configured: boolean; quotaExhausted: boolean; fallbackActive: boolean };
     // fallbackActive should only be true when configured AND quota is exhausted
     if (!body.configured) {
@@ -621,7 +621,7 @@ describe("AI Config — model chain & shared config", () => {
 
 describe("AI Assistant — /api/ai/health model diagnostics", () => {
   test("health endpoint exposes modelChain and activeModel fields", async () => {
-    const res = await get("/api/ai/health", false);
+    const res = await get("/api/ai/health");
     const body = await res.json() as Record<string, unknown>;
     assert.ok("modelChain" in body, "must expose modelChain");
     assert.ok(Array.isArray(body.modelChain), "modelChain must be array");
@@ -633,8 +633,13 @@ describe("AI Assistant — /api/ai/health model diagnostics", () => {
 // ── Canary endpoint ──────────────────────────────────────────────────────────
 
 describe("AI Assistant — /api/ai/canary", () => {
-  test("canary endpoint returns honest provider reachability", async () => {
+  test("canary endpoint returns 401 for unauthenticated requests", async () => {
     const res = await get("/api/ai/canary", false);
+    assert.equal(res.status, 401, "canary must require authentication");
+  });
+
+  test("canary endpoint returns honest provider reachability for authenticated users", async () => {
+    const res = await get("/api/ai/canary");
     // 200 when configured (reachable or not), 503 when key missing
     assert.ok(res.status === 200 || res.status === 503, `expected 200 or 503, got ${res.status}`);
     const body = await res.json() as Record<string, unknown>;

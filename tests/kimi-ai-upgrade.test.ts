@@ -564,6 +564,71 @@ describe("Chat UI source checks", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// 11. AI ENDPOINT SECURITY — authentication required on health and canary
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("AI endpoint security", () => {
+  const routesSrc = fs.readFileSync("server/ai/breedlog-ai-routes.ts", "utf8");
+
+  test("/api/ai/health route has requireAuth middleware", () => {
+    // The route registration must include requireAuth before the handler
+    assert.match(
+      routesSrc,
+      /app\.get\(['""]\/api\/ai\/health["']\s*,\s*requireAuth/,
+      "/api/ai/health must use requireAuth middleware",
+    );
+  });
+
+  test("/api/ai/canary route has requireAuth middleware", () => {
+    assert.match(
+      routesSrc,
+      /app\.get\(['""]\/api\/ai\/canary["']\s*,\s*requireAuth/,
+      "/api/ai/canary must use requireAuth middleware",
+    );
+  });
+
+  test("requireAuth is defined before the route registrations", () => {
+    // The alias 'const requireAuth = requireDeviceAuth' must precede route use
+    assert.match(routesSrc, /const requireAuth\s*=\s*requireDeviceAuth/);
+  });
+
+  test("canary requireAuth comment explains quota protection", () => {
+    // Must document that auth runs before provider invocation
+    assert.match(
+      routesSrc,
+      /requireAuth.*quota|quota.*requireAuth|auth.*before.*provider|unauthenticated.*quota/is,
+      "canary must document that auth prevents quota consumption",
+    );
+  });
+
+  test("health and canary routes never read or forward raw API key values", () => {
+    // The handlers must not use process.env.KIMI_K3_API or process.env.GEMINI_API_KEY
+    // directly in the route body (those reads belong only in provider modules).
+    // User-facing hint strings like "Add KIMI_K3_API" are acceptable; raw reads are not.
+    const routeBody = routesSrc
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("//") && !line.trim().startsWith("*"))
+      .join("\n");
+    assert.ok(
+      !routeBody.includes("process.env.KIMI_K3_API"),
+      "health/canary handlers must not read KIMI_K3_API directly — use ai-provider helpers",
+    );
+    assert.ok(
+      !routeBody.includes("process.env.GEMINI_API_KEY"),
+      "health/canary handlers must not read GEMINI_API_KEY directly — use ai-provider helpers",
+    );
+    assert.ok(!routeBody.includes("rawError"), "routes must not surface rawError to clients");
+  });
+
+  test("canary route exposes no secret names or raw provider errors", () => {
+    const canaryHandlerStart = routesSrc.indexOf("GET /api/ai/canary");
+    const canaryBlock = routesSrc.slice(canaryHandlerStart);
+    assert.ok(!canaryBlock.includes("process.env.KIMI_K3_API"), "canary handler must not read KIMI_K3_API directly");
+    assert.ok(!canaryBlock.includes("process.env.GEMINI_API_KEY"), "canary handler must not read GEMINI_API_KEY directly");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // Helper
 // ────────────────────────────────────────────────────────────────────────────
 
