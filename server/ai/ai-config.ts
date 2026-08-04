@@ -1,20 +1,43 @@
 /**
  * Single source of truth for the BreedLog AI provider configuration.
  *
- * Primary provider: Kimi K3 (Moonshot AI)  — KIMI_K3_API secret
- * Secondary provider: Gemini               — GEMINI_API_KEY secret
+ * Primary provider: Groq GPT-OSS 120B   — GROQ_API_KEY or Groq_api_key secret
+ * Secondary provider: Gemini             — GEMINI_API_KEY secret
  * Tertiary: deterministic local BreedLog fallback (always available)
  *
- * Provider order: Kimi → Gemini → local fallback
+ * Provider order: Groq → Gemini → local fallback
+ *
+ * Kimi K3 configuration is retained below but Kimi is NOT in the active provider chain.
+ * The Kimi source files are preserved for history; they are not called at runtime.
  *
  * Optional server-side overrides:
+ *   GROQ_BASE_URL  — default https://api.groq.com/openai/v1
+ *   GROQ_MODEL     — default openai/gpt-oss-120b
  *   KIMI_BASE_URL  — default https://api.moonshot.ai/v1
  *   KIMI_MODEL     — default kimi-k3
  *   GEMINI_MODEL   — default gemini-2.5-flash-lite
  *   GEMINI_FALLBACK_MODELS — comma-separated chain
  */
 
-// ── Kimi (primary) ────────────────────────────────────────────────────────────
+// ── Groq (primary) ────────────────────────────────────────────────────────────
+
+export const GROQ_CONFIG = {
+  provider: "groq" as const,
+  /**
+   * Standard uppercase alias takes precedence; Replit-named secret (Groq_api_key) is fallback.
+   * Never log or return the key.
+   */
+  apiKey: process.env.GROQ_API_KEY || process.env.Groq_api_key || "",
+  baseURL: process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1",
+  model: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
+  maxCompletionTokens: 4096,
+};
+
+export function isGroqConfigured(): boolean {
+  return GROQ_CONFIG.apiKey.length > 0;
+}
+
+// ── Kimi K3 (inactive — retained for source history) ─────────────────────────
 
 export const KIMI_CONFIG = {
   provider: "kimi" as const,
@@ -67,5 +90,5 @@ export function isAIConfigured(): boolean {
 
 /** True when at least one live provider is configured. */
 export function isAnyProviderConfigured(): boolean {
-  return isKimiConfigured() || isGeminiConfigured();
+  return isGroqConfigured() || isKimiConfigured() || isGeminiConfigured();
 }

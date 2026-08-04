@@ -8,7 +8,7 @@ import {
   getHealthInfo,
   getCanaryStatus,
 } from "./ai-provider";
-import { isKimiConfigured } from "./ai-config";
+import { isGroqConfigured } from "./ai-config";
 import { buildBreedLogAIContext, type BreedLogAIContext } from "./breedlog-ai-context";
 import { SYSTEM_PROMPT } from "./breedlog-ai-rules";
 import { PROMPT_CATEGORIES, CATEGORY_KEYS } from "./breedlog-ai-prompts";
@@ -121,9 +121,9 @@ export function registerAIRoutes(app: Express): void {
   // ── GET /api/ai/health — honest provider status, no key leakage ─────────────
   app.get("/api/ai/health", requireAuth, async (_req: Request, res: Response) => {
     const info = getHealthInfo();
-    const configured = info.kimiConfigured || info.geminiConfigured;
+    const configured = info.groqConfigured || info.geminiConfigured;
     // Combined quota flag: true when every configured live provider is quota-exhausted
-    const quotaExhausted = configured && info.kimiQuotaExhausted && (!info.geminiConfigured || info.geminiQuotaExhausted);
+    const quotaExhausted = configured && info.groqQuotaExhausted && (!info.geminiConfigured || info.geminiQuotaExhausted);
     // fallbackActive = local (deterministic) fallback is active.
     // Must be false whenever quotaExhausted is false — the test invariant.
     const fallbackActive = quotaExhausted;
@@ -137,9 +137,10 @@ export function registerAIRoutes(app: Express): void {
       configured,
       primaryProvider: info.primaryProvider,
       primaryModel: info.primaryModel,
-      kimiConfigured: info.kimiConfigured,
+      groqConfigured: info.groqConfigured,
       geminiConfigured: info.geminiConfigured,
       // Backwards-compat fields expected by existing tests
+      kimiConfigured: false,
       quotaExhausted,
       fallbackActive,
       providerStatus,
@@ -149,7 +150,8 @@ export function registerAIRoutes(app: Express): void {
       localFallbackActive: info.localFallbackActive,
       activeProvider: info.activeProvider,
       geminiModelChain: info.geminiModelChain,
-      kimiQuotaExhausted: info.kimiQuotaExhausted,
+      groqQuotaExhausted: info.groqQuotaExhausted,
+      kimiQuotaExhausted: false,
       geminiQuotaExhausted: info.geminiQuotaExhausted,
       status: !configured
         ? "not_configured"
@@ -157,18 +159,18 @@ export function registerAIRoutes(app: Express): void {
           ? "fallback"
           : "ready",
       message: !configured
-        ? "No AI provider configured. Add KIMI_K3_API or GEMINI_API_KEY."
-        : info.kimiConfigured
-          ? "BreedLog AI ready — Kimi K3 primary."
+        ? "No AI provider configured. Add GROQ_API_KEY or GEMINI_API_KEY."
+        : info.groqConfigured
+          ? "BreedLog AI ready — Groq GPT-OSS 120B primary."
           : "BreedLog AI ready — Gemini fallback.",
     });
   });
 
   // ── GET /api/ai/canary — actively probe the primary provider ────────────────
   // requireAuth runs BEFORE any provider call — unauthenticated requests never
-  // consume Kimi or Gemini quota.
+  // consume Groq or Gemini quota.
   app.get("/api/ai/canary", requireAuth, async (_req: Request, res: Response) => {
-    if (!isKimiConfigured()) {
+    if (!isGroqConfigured()) {
       // Check if Gemini is configured before reporting unconfigured
       const info = getHealthInfo();
       if (!info.geminiConfigured) {
@@ -351,7 +353,7 @@ export function registerAIRoutes(app: Express): void {
     const priorExchanges = await loadMemory(storage, userId);
     const historyMessages = buildHistoryMessages(priorExchanges);
 
-    // Assemble full Kimi messages array:
+    // Assemble full provider messages array:
     // 1. System prompt
     // 2. Prior exchanges (up to 5)
     // 3. Current user message (with fresh farm context)

@@ -346,10 +346,12 @@ describe("Provider fallback chain", () => {
   const orchestratorSrc = fs.readFileSync("server/ai/ai-provider.ts", "utf8");
   const routesSrc = fs.readFileSync("server/ai/breedlog-ai-routes.ts", "utf8");
 
-  test("orchestrator tries Kimi before Gemini", () => {
-    const kimiPos = orchestratorSrc.indexOf("askKimi(");
+  test("orchestrator tries Groq before Gemini", () => {
+    // Groq is now primary; Kimi is no longer in the active routing path.
+    const groqPos = orchestratorSrc.indexOf("askGroq(");
     const geminiPos = orchestratorSrc.indexOf("generateGeminiContent(");
-    assert.ok(kimiPos < geminiPos, "Kimi call must appear before Gemini call in orchestrator");
+    assert.ok(groqPos !== -1, "orchestrator must contain askGroq(");
+    assert.ok(groqPos < geminiPos, "Groq call must appear before Gemini call in orchestrator");
   });
 
   test("orchestrator has a local-fallback path", () => {
@@ -378,13 +380,13 @@ describe("Provider fallback chain", () => {
     assert.doesNotMatch(routesSrc, /res\.json\(.*apiKey/);
   });
 
-  test("Kimi success prevents Gemini fallback (code path)", () => {
-    // When Kimi returns ok:true the orchestrator returns immediately
-    const afterKimiOk = orchestratorSrc.slice(
+  test("Groq success prevents Gemini fallback (code path)", () => {
+    // When Groq returns ok:true the orchestrator returns immediately
+    const afterGroqOk = orchestratorSrc.slice(
       orchestratorSrc.indexOf("result.ok") + 1,
       orchestratorSrc.indexOf("result.ok") + 300,
     );
-    assert.match(afterKimiOk, /return\s*\{/, "should return immediately on Kimi success");
+    assert.match(afterGroqOk, /return\s*\{/, "should return immediately on Groq success");
   });
 });
 

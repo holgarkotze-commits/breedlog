@@ -1,30 +1,33 @@
 /**
  * BreedLog AI provider orchestrator.
  *
- * Provider chain: Kimi K3 → Gemini → deterministic local fallback
+ * Provider chain: Groq GPT-OSS 120B → Gemini → deterministic local fallback
  *
  * Responsibilities:
- *  - Route requests to the configured primary provider (Kimi).
- *  - Fall back to Gemini if Kimi fails.
+ *  - Route requests to the configured primary provider (Groq).
+ *  - Fall back to Gemini if Groq fails.
  *  - Expose a uniform result type to the route handler.
  *  - Never expose raw provider errors, request bodies, or secrets to callers.
  *  - Log only: provider name, model, failure category, status code.
+ *
+ * Kimi K3 is NOT in the active provider chain (the API account has no usable free quota).
+ * Kimi source files are retained for history; kimi-provider.ts is not imported here.
  */
 
-import { askKimi, runKimiCanary, type KimiReasoningEffort, type KimiAssistantMessage } from "./kimi-provider";
+import { askGroq, runGroqCanary, type GroqReasoningEffort, type GroqAssistantMessage } from "./groq-provider";
 import { generateContent as generateGeminiContent, runCanary as runGeminiCanary, getConfiguredModelChain } from "./gemini-provider";
-import { isKimiConfigured, isGeminiConfigured } from "./ai-config";
+import { isGroqConfigured, isGeminiConfigured, GROQ_CONFIG } from "./ai-config";
 import { SYSTEM_PROMPT } from "./breedlog-ai-rules";
 
 // ── Result types ──────────────────────────────────────────────────────────────
 
-export type ActiveProvider = "kimi" | "gemini" | "local";
+export type ActiveProvider = "groq" | "gemini" | "local";
 
 export interface ProviderResult {
   ok: true;
   rawText: string;
   /** Full provider message — stored in memory server-side, never returned to client. */
-  providerMessage: KimiAssistantMessage;
+  providerMessage: GroqAssistantMessage;
   provider: ActiveProvider;
   model: string;
 }
@@ -40,24 +43,26 @@ export type ProviderResponse = ProviderResult | ProviderFailure;
 // ── Reasoning effort selection ────────────────────────────────────────────────
 
 /**
- * Select reasoning effort for Kimi K3.
- * App-help / navigation questions use "low" to reduce latency and cost.
- * All farm-data, health, breeding, and genetics questions use "high".
+ * Select reasoning effort for Groq GPT-OSS 120B.
+ *  "low"    — app-help / navigation (fast, low cost)
+ *  "medium" — general summaries, records explanations (balanced)
+ *  "high"   — farm data, health, breeding, genetics, multi-record analysis (thorough)
  */
-export function selectReasoningEffort(category?: string | null): KimiReasoningEffort {
+export function selectReasoningEffort(category?: string | null): GroqReasoningEffort {
   if (category === "app-help") return "low";
+  if (category === "general" || category === "records-summary") return "medium";
   return "high";
 }
 
 // ── Provider state ────────────────────────────────────────────────────────────
 
-let _kimiQuotaAt: number | null = null;
+let _groqQuotaAt: number | null = null;
 let _geminiQuotaAt: number | null = null;
 const QUOTA_COOLDOWN_MS = 5 * 60_000;
 
-function isKimiQuotaExhausted(): boolean {
-  if (!_kimiQuotaAt) return false;
-  if (Date.now() - _kimiQuotaAt > QUOTA_COOLDOWN_MS) { _kimiQuotaAt = null; return false; }
+function isGroqQuotaExhausted(): boolean {
+  if (!_groqQuotaAt) return false;
+  if (Date.now() - _groqQuotaAt > QUOTA_COOLDOWN_MS) { _groqQuotaAt = null; return false; }
   return true;
 }
 
@@ -67,9 +72,9 @@ function isGeminiQuotaExhausted(): boolean {
   return true;
 }
 
-export function markKimiQuotaExhausted(): void { _kimiQuotaAt = Date.now(); }
+export function markGroqQuotaExhausted(): void { _groqQuotaAt = Date.now(); }
 export function markGeminiQuotaExhausted(): void { _geminiQuotaAt = Date.now(); }
-export function clearKimiQuota(): void { _kimiQuotaAt = null; }
+export function clearGroqQuota(): void { _groqQuotaAt = null; }
 export function clearGeminiQuota(): void { _geminiQuotaAt = null; }
 
 // ── Last working state (for health endpoint) ──────────────────────────────────
@@ -95,12 +100,12 @@ export async function getCanaryStatus() {
   if (_lastCanary && Date.now() - _lastCanary.at < CANARY_CACHE_MS) {
     return _lastCanary;
   }
-  // Try Kimi first
-  if (isKimiConfigured()) {
-    const r = await runKimiCanary(10_000);
-    _lastCanary = { at: Date.now(), reachable: r.reachable, provider: "kimi", model: r.model, category: r.category };
+  // Try Groq first (primary provider)
+  if (isGroqConfigured()) {
+    const r = await runGroqCanary(10_000);
+    _lastCanary = { at: Date.now(), reachable: r.reachable, provider: "groq", model: r.model, category: r.category };
     if (r.reachable) {
-      _lastWorkingProvider = "kimi";
+      _lastWorkingProvider = "groq";
       _lastWorkingModel = r.model;
     }
     return _lastCanary;
@@ -124,42 +129,41 @@ export async function getCanaryStatus() {
 /**
  * Ask the AI provider chain.
  *
- * @param messages  Complete ordered messages array ready for Kimi
+ * @param messages  Complete ordered messages array ready for Groq
  *                  (system message INCLUDED — caller builds full array).
- * @param systemPrompt  Plain system prompt text for Gemini fallback (Gemini uses its own interface).
+ * @param systemPrompt  Plain system prompt text for Gemini fallback.
  * @param userMessageText  Plain current question text for Gemini fallback.
- * @param effort    Kimi reasoning effort level.
+ * @param effort    Groq reasoning effort level.
  */
 export async function askProviders(
   messages: Array<{ role: "system" | "user" | "assistant"; content: string | null; [key: string]: unknown }>,
   systemPrompt: string,
   userMessageText: string,
-  effort: KimiReasoningEffort,
+  effort: GroqReasoningEffort,
 ): Promise<ProviderResponse> {
 
-  // ── 1. Kimi ──────────────────────────────────────────────────────────────────
-  if (isKimiConfigured() && !isKimiQuotaExhausted()) {
-    const result = await askKimi(messages, effort, 35_000);
+  // ── 1. Groq ──────────────────────────────────────────────────────────────────
+  if (isGroqConfigured() && !isGroqQuotaExhausted()) {
+    const result = await askGroq(messages, effort, 35_000);
     if (result.ok) {
-      clearKimiQuota();
-      _lastWorkingProvider = "kimi";
+      clearGroqQuota();
+      _lastWorkingProvider = "groq";
       _lastWorkingModel = result.model;
       return {
         ok: true,
         rawText: result.message.content ?? "",
         providerMessage: result.message,
-        provider: "kimi",
+        provider: "groq",
         model: result.model,
       };
     }
     // Quota / rate-limit → mark and fall through
     if (result.category === "quota") {
-      markKimiQuotaExhausted();
+      markGroqQuotaExhausted();
     }
-    // Auth / notfound → fail fast (Gemini won't fix this)
+    // Auth / notfound → log and fall through to Gemini
     if (result.category === "auth" || result.category === "notfound") {
-      console.error(`[BreedLog AI] kimi hard failure: ${result.category}`);
-      // Fall through to Gemini anyway
+      console.error(`[BreedLog AI] groq hard failure: ${result.category}`);
     }
   }
 
@@ -174,7 +178,7 @@ export async function askProviders(
       return {
         ok: true,
         rawText: text,
-        // Gemini: wrap in content-only message (no reasoning_content)
+        // Gemini: wrap in content-only message (no reasoning)
         providerMessage: { role: "assistant", content: text },
         provider: "gemini",
         model: geminiResult.modelUsed ?? "gemini",
@@ -187,8 +191,8 @@ export async function askProviders(
   }
 
   // ── 3. Both failed ───────────────────────────────────────────────────────────
-  const bothQuota = isKimiQuotaExhausted() && isGeminiQuotaExhausted();
-  if (!isKimiConfigured() && !isGeminiConfigured()) {
+  const bothQuota = isGroqQuotaExhausted() && isGeminiQuotaExhausted();
+  if (!isGroqConfigured() && !isGeminiConfigured()) {
     return { ok: false, safeReason: "not_configured" };
   }
   return { ok: false, safeReason: bothQuota ? "quota" : "unavailable" };
@@ -197,20 +201,23 @@ export async function askProviders(
 // ── Health info ───────────────────────────────────────────────────────────────
 
 export function getHealthInfo() {
-  const kimiConfigured = isKimiConfigured();
+  const groqConfigured = isGroqConfigured();
   const geminiConfigured = isGeminiConfigured();
-  const kimiQuota = isKimiQuotaExhausted();
+  const groqQuota = isGroqQuotaExhausted();
   const geminiQuota = isGeminiQuotaExhausted();
 
   return {
-    primaryProvider: "kimi",
-    primaryModel: kimiConfigured ? (process.env.KIMI_MODEL || "kimi-k3") : null,
-    kimiConfigured,
+    primaryProvider: "groq",
+    primaryModel: groqConfigured ? GROQ_CONFIG.model : null,
+    groqConfigured,
     geminiConfigured,
-    kimiQuotaExhausted: kimiQuota,
+    // Backwards-compat fields (previously kimi*)
+    kimiConfigured: false,
+    kimiQuotaExhausted: false,
+    groqQuotaExhausted: groqQuota,
     geminiQuotaExhausted: geminiQuota,
-    fallbackActive: kimiConfigured && kimiQuota && geminiConfigured,
-    localFallbackActive: !kimiConfigured && !geminiConfigured,
+    fallbackActive: groqConfigured && groqQuota && geminiConfigured,
+    localFallbackActive: !groqConfigured && !geminiConfigured,
     activeProvider: _lastWorkingProvider,
     activeModel: _lastWorkingModel,
     geminiModelChain: getConfiguredModelChain(),
