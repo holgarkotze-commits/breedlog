@@ -675,6 +675,8 @@ export async function reserveUsage(
 export async function purgeCommercialState(storage: IStorage, accountId: string): Promise<void> {
   await storage.deleteSystemSetting(settingKeyForEntitlement(accountId));
   await storage.deleteSystemSetting(settingKeyForSubscription(accountId));
+  // Delete the user's AI chat memory on account purge
+  await storage.deleteSystemSetting(`breedlog:ai-memory:${accountId}`);
 
   for (const row of await storage.listSystemSettings(`${USAGE_PREFIX}${accountId}:`)) {
     await storage.deleteSystemSetting(row.key);

@@ -3,66 +3,29 @@ import { requireDeviceAuth, getUserId } from "../device-auth";
 import { storage } from "../storage";
 import { EntitlementDeniedError, reserveUsage } from "../commercial";
 import {
-  isConfigured,
-  generateContent,
-  runCanary,
-  getConfiguredModelChain,
-} from "./gemini-provider";
+  askProviders,
+  selectReasoningEffort,
+  getHealthInfo,
+  getCanaryStatus,
+} from "./ai-provider";
+import { isKimiConfigured } from "./ai-config";
 import { buildBreedLogAIContext, type BreedLogAIContext } from "./breedlog-ai-context";
 import { SYSTEM_PROMPT } from "./breedlog-ai-rules";
 import { PROMPT_CATEGORIES, CATEGORY_KEYS } from "./breedlog-ai-prompts";
 import { generateLocalFallback } from "./local-fallback";
+import {
+  loadMemory,
+  appendExchange,
+  clearMemory,
+  buildHistoryMessages,
+  toPublicHistory,
+  type ChatExchange,
+} from "./ai-chat-memory";
 import { z } from "zod";
 
 const requireAuth = requireDeviceAuth;
 
-// ── Provider state tracking ──────────────────────────────────────────────────
-
-let _quotaExhaustedAt: number | null = null;
-let _lastWorkingModel: string | null = null;
-let _lastCanary: {
-  at: number;
-  reachable: boolean;
-  modelUsed: string | null;
-  quotaExhausted: boolean;
-} | null = null;
-
-const QUOTA_COOLDOWN_MS = 5 * 60_000;
-const CANARY_CACHE_MS = 60_000;
-
-function isQuotaExhausted(): boolean {
-  if (!_quotaExhaustedAt) return false;
-  if (Date.now() - _quotaExhaustedAt > QUOTA_COOLDOWN_MS) {
-    _quotaExhaustedAt = null;
-    return false;
-  }
-  return true;
-}
-
-function markQuotaExhausted(): void {
-  _quotaExhaustedAt = Date.now();
-}
-
-function clearQuotaExhausted(): void {
-  _quotaExhaustedAt = null;
-}
-
-async function getCanary() {
-  if (_lastCanary && Date.now() - _lastCanary.at < CANARY_CACHE_MS) {
-    return _lastCanary;
-  }
-  const result = await runCanary();
-  _lastCanary = { at: Date.now(), ...result };
-  if (result.reachable) {
-    clearQuotaExhausted();
-    if (result.modelUsed) _lastWorkingModel = result.modelUsed;
-  } else if (result.quotaExhausted) {
-    markQuotaExhausted();
-  }
-  return _lastCanary;
-}
-
-// ── Rate limiter ─────────────────────────────────────────────────────────────
+// ── Rate limiter (short-window abuse protection — separate from plan quota) ───
 
 const rateLimiter = new Map<string, { count: number; windowStart: number }>();
 const RATE_LIMIT = 20;
@@ -80,10 +43,11 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
-// ── Gemini response parser ───────────────────────────────────────────────────
+// ── AI response parser ────────────────────────────────────────────────────────
 
 function parseAIResponse(text: string): {
   answer: string;
+  answerType: string;
   confidence: string;
   usedData: string[];
   warnings: string[];
@@ -98,6 +62,9 @@ function parseAIResponse(text: string): {
     const parsed = JSON.parse(stripped);
     return {
       answer: String(parsed.answer || ""),
+      answerType: ["help", "data", "hybrid", "unsupported"].includes(parsed.answerType)
+        ? parsed.answerType
+        : "data",
       confidence: ["high", "medium", "low", "insufficient"].includes(parsed.confidence)
         ? parsed.confidence
         : "low",
@@ -110,6 +77,7 @@ function parseAIResponse(text: string): {
   } catch {
     return {
       answer: text.slice(0, 2000),
+      answerType: "data",
       confidence: "low",
       usedData: [],
       warnings: ["AI returned unstructured response. Showing raw output."],
@@ -118,8 +86,9 @@ function parseAIResponse(text: string): {
   }
 }
 
+// ── Context → user message string ────────────────────────────────────────────
+
 function buildUserMessage(question: string, context: BreedLogAIContext): string {
-  // Pin the most critical counts as a front-loaded anchor so the model cannot miss them.
   const anchor = [
     `VERIFIED LIVE COUNTS (use ONLY these — do NOT substitute any other numbers):`,
     `  total animals in workspace: ${context.workspace.totalAnimals}`,
@@ -148,75 +117,95 @@ const chatSchema = z.object({
 });
 
 export function registerAIRoutes(app: Express): void {
-  // GET /api/ai/health — honest provider status, no key leakage
-  app.get("/api/ai/health", async (_req: Request, res: Response) => {
-    const configured = isConfigured();
-    const quotaFlag = isQuotaExhausted();
-    const chain = getConfiguredModelChain();
 
+  // ── GET /api/ai/health — honest provider status, no key leakage ─────────────
+  app.get("/api/ai/health", async (_req: Request, res: Response) => {
+    const info = getHealthInfo();
+    const configured = info.kimiConfigured || info.geminiConfigured;
+    // Combined quota flag: true when every configured live provider is quota-exhausted
+    const quotaExhausted = configured && info.kimiQuotaExhausted && (!info.geminiConfigured || info.geminiQuotaExhausted);
+    // fallbackActive = local (deterministic) fallback is active.
+    // Must be false whenever quotaExhausted is false — the test invariant.
+    const fallbackActive = quotaExhausted;
     const providerStatus = !configured
       ? "not_configured"
-      : quotaFlag
+      : quotaExhausted
         ? "quota_exhausted"
         : "available";
 
     res.json({
       configured,
-      quotaExhausted: quotaFlag,
-      fallbackActive: configured && quotaFlag,
+      primaryProvider: info.primaryProvider,
+      primaryModel: info.primaryModel,
+      kimiConfigured: info.kimiConfigured,
+      geminiConfigured: info.geminiConfigured,
+      // Backwards-compat fields expected by existing tests
+      quotaExhausted,
+      fallbackActive,
       providerStatus,
-      modelChain: chain,
-      activeModel: _lastWorkingModel,
-      lastCanary: _lastCanary
-        ? {
-            at: _lastCanary.at,
-            reachable: _lastCanary.reachable,
-            modelUsed: _lastCanary.modelUsed,
-          }
-        : null,
+      modelChain: info.geminiModelChain,  // Gemini chain for existing test compatibility
+      activeModel: info.activeModel,
+      // Detailed fields
+      localFallbackActive: info.localFallbackActive,
+      activeProvider: info.activeProvider,
+      geminiModelChain: info.geminiModelChain,
+      kimiQuotaExhausted: info.kimiQuotaExhausted,
+      geminiQuotaExhausted: info.geminiQuotaExhausted,
       status: !configured
         ? "not_configured"
-        : quotaFlag
+        : quotaExhausted
           ? "fallback"
           : "ready",
       message: !configured
-        ? "AI key is not configured. Add the Gemini secret to enable AI features."
-        : quotaFlag
-          ? "AI provider quota is exhausted on all configured models. Local record-based answers are active."
-          : "BreedLog AI is ready.",
+        ? "No AI provider configured. Add KIMI_K3_API or GEMINI_API_KEY."
+        : info.kimiConfigured
+          ? "BreedLog AI ready — Kimi K3 primary."
+          : "BreedLog AI ready — Gemini fallback.",
     });
   });
 
-  // GET /api/ai/canary — actively probe the provider, returns honest status.
-  // Cached for 60s to avoid burning quota.
+  // ── GET /api/ai/canary — actively probe the primary provider ────────────────
   app.get("/api/ai/canary", async (_req: Request, res: Response) => {
-    if (!isConfigured()) {
-      return res.status(503).json({
-        configured: false,
-        reachable: false,
-        message: "GEMINI_API_KEY is not configured.",
-      });
+    if (!isKimiConfigured()) {
+      // Check if Gemini is configured before reporting unconfigured
+      const info = getHealthInfo();
+      if (!info.geminiConfigured) {
+        return res.status(503).json({
+          configured: false,
+          reachable: false,
+          provider: "none",
+          message: "No AI provider configured.",
+        });
+      }
     }
-    const c = await getCanary();
+    const c = await getCanaryStatus();
+    const info = getHealthInfo();
     res.json({
       configured: true,
       reachable: c.reachable,
-      modelUsed: c.modelUsed,
-      quotaExhausted: c.quotaExhausted,
+      provider: c.provider,
+      model: c.model,
+      // Backwards-compat: existing test expects modelChain when configured
+      modelChain: info.geminiModelChain,
+      modelUsed: c.model,
+      category: c.category,
       cachedAt: c.at,
-      modelChain: getConfiguredModelChain(),
       message: c.reachable
-        ? `Live AI reachable via ${c.modelUsed}.`
-        : c.quotaExhausted
-          ? "All configured models are quota-exhausted."
-          : "Provider unreachable. See server logs.",
+        ? `Live AI reachable via ${c.provider} / ${c.model}.`
+        : c.category === "auth"
+          ? `Provider authentication failed. Check credentials.`
+          : c.category === "quota"
+            ? `Provider quota exhausted.`
+            : "Provider unreachable. See server logs.",
     });
   });
 
+  // ── GET /api/ai/suggested-prompts ───────────────────────────────────────────
   app.get("/api/ai/suggested-prompts", requireAuth, (_req: Request, res: Response) => {
     res.json({ categories: PROMPT_CATEGORIES });
   });
 
+  // ── GET /api/ai/context-summary ─────────────────────────────────────────────
   app.get("/api/ai/context-summary", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req)!;
@@ -240,6 +229,30 @@ export function registerAIRoutes(app: Express): void {
     }
   });
 
+  // ── GET /api/ai/history — safe public history for the authenticated user ────
+  app.get("/api/ai/history", requireAuth, async (req: Request, res: Response) => {
+    const userId = getUserId(req)!;
+    try {
+      const exchanges = await loadMemory(storage, userId);
+      res.json({ exchanges: toPublicHistory(exchanges) });
+    } catch {
+      res.json({ exchanges: [] });
+    }
+  });
+
+  // ── DELETE /api/ai/history — clear the authenticated user's AI memory ───────
+  app.delete("/api/ai/history", requireAuth, async (req: Request, res: Response) => {
+    const userId = getUserId(req)!;
+    try {
+      await clearMemory(storage, userId);
+      res.json({ ok: true, message: "Conversation history cleared." });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: "Failed to clear history.", detail: msg });
+    }
+  });
+
+  // ── POST /api/ai/chat ────────────────────────────────────────────────────────
   app.post("/api/ai/chat", requireAuth, async (req: Request, res: Response) => {
     const userId = getUserId(req)!;
 
@@ -256,17 +269,13 @@ export function registerAIRoutes(app: Express): void {
       return res.status(400).json({ error: "Unknown category.", categories: CATEGORY_KEYS });
     }
 
+    // Short-window abuse rate limiter — applies to all users including internal-test
     if (!checkRateLimit(userId)) {
       return res.status(429).json({ error: "Too many requests. Please wait a moment before asking again." });
     }
 
-    if (!isConfigured()) {
-      return res.status(503).json({
-        error: "BreedLog AI is not configured. GEMINI_API_KEY secret is missing.",
-        configured: false,
-      });
-    }
-
+    // Plan quota reservation — internal-test entitlement bypasses this (no extra check needed here,
+    // reserveUsage handles it via isInternalTestEntitlement())
     try {
       await reserveUsage(storage, userId, "aiActions");
     } catch (err) {
@@ -276,6 +285,7 @@ export function registerAIRoutes(app: Express): void {
       throw err;
     }
 
+    // Load workspace data — always rebuilt fresh, never from memory
     let animals: Awaited<ReturnType<typeof storage.getAnimals>>;
     let breedingEvents: Awaited<ReturnType<typeof storage.getBreedingEvents>>;
     let performanceRecords: Awaited<ReturnType<typeof storage.getAllPerformanceRecords>>;
@@ -315,47 +325,87 @@ export function registerAIRoutes(app: Express): void {
       contextSection,
     });
 
-    function respondWithFallback(reason: "quota" | "unavailable") {
+    // Local fallback builder
+    function buildFallbackResponse(reason: "quota" | "unavailable") {
       const fallback = generateLocalFallback(question, context, category);
       const prefix =
         reason === "quota"
           ? "Live AI quota is temporarily exhausted — here is a record-based BreedLog summary:"
           : "Live AI is temporarily unavailable — here is a record-based BreedLog summary:";
-      return res.json({
+      return {
         ...fallback,
         answer: `${prefix}\n\n${fallback.answer}`,
+        answerType: fallback.isFallback ? "data" : "data",
         category: category || null,
         contextSection: contextSection || null,
-      });
+        isFallback: true,
+      };
     }
 
-    // Skip Gemini if we know quota is exhausted
-    if (isQuotaExhausted()) {
-      return respondWithFallback("quota");
-    }
+    // Build current user message text (fresh farm context — never stale)
+    const userMessageText = buildUserMessage(question, context);
 
-    const userMessage = buildUserMessage(question, context);
-    const geminiResponse = await generateContent(SYSTEM_PROMPT, userMessage);
+    // Load prior conversation memory
+    const priorExchanges = await loadMemory(storage, userId);
+    const historyMessages = buildHistoryMessages(priorExchanges);
 
-    if (geminiResponse.ok) {
-      clearQuotaExhausted();
-      if (geminiResponse.modelUsed) _lastWorkingModel = geminiResponse.modelUsed;
-      const structured = parseAIResponse(geminiResponse.text);
+    // Assemble full Kimi messages array:
+    // 1. System prompt
+    // 2. Prior exchanges (up to 5)
+    // 3. Current user message (with fresh farm context)
+    const reasoningEffort = selectReasoningEffort(category);
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string | null; [key: string]: unknown }> = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...historyMessages,
+      { role: "user", content: userMessageText },
+    ];
+
+    const result = await askProviders(messages, SYSTEM_PROMPT, userMessageText, reasoningEffort);
+
+    if (result.ok) {
+      const structured = parseAIResponse(result.rawText);
+      const exchange: ChatExchange = {
+        userMessage: question,
+        providerMessage: result.providerMessage,
+        parsedAnswer: structured,
+        category: category || null,
+        timestamp: new Date().toISOString(),
+      };
+      // Persist exchange — fire-and-forget, do not block response
+      appendExchange(storage, userId, exchange).catch(() => {/* non-fatal */});
+
       return res.json({
         ...structured,
         isFallback: false,
-        modelUsed: geminiResponse.modelUsed || null,
+        provider: result.provider,
+        model: result.model,
         category: category || null,
         contextSection: contextSection || null,
       });
     }
 
-    if (geminiResponse.quotaExhausted) {
-      markQuotaExhausted();
-      return respondWithFallback("quota");
-    }
+    // Provider failure — local fallback
+    const fallbackResult = buildFallbackResponse(
+      result.safeReason === "quota" ? "quota" : "unavailable",
+    );
 
-    // Other provider error — still serve a useful fallback rather than dead-end
-    return respondWithFallback("unavailable");
+    // Store fallback exchange as content-only message
+    const fallbackExchange: ChatExchange = {
+      userMessage: question,
+      providerMessage: { role: "assistant", content: fallbackResult.answer },
+      parsedAnswer: {
+        answer: fallbackResult.answer,
+        answerType: "data",
+        confidence: fallbackResult.confidence,
+        usedData: fallbackResult.usedData,
+        warnings: fallbackResult.warnings,
+        suggestedNextQuestions: fallbackResult.suggestedNextQuestions,
+      },
+      category: category || null,
+      timestamp: new Date().toISOString(),
+    };
+    appendExchange(storage, userId, fallbackExchange).catch(() => {/* non-fatal */});
+
+    return res.json(fallbackResult);
   });
 }
