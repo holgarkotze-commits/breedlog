@@ -55,7 +55,7 @@ export type EntitlementState = {
   accountId: string;
   planId: BreedLogPlanId;
   status: "active" | "grace_period" | "cancelled" | "payment_failed" | "refunded" | "expired";
-  source: "default_free" | "billing_event" | "manual_admin";
+  source: "default_free" | "billing_event" | "manual_admin" | "internal_test";
   pricingVersion: string;
   subscriptionId?: string;
   customerId?: string;
@@ -501,8 +501,43 @@ export async function simulateBillingProviderEvent(
   return { entitlement, subscription: nextSubscription };
 }
 
+/**
+ * Returns true when the account is the internal BreedLog test account.
+ * Internal test accounts bypass all plan-based product limits but remain
+ * fully user-isolated (no access to other workspaces, no admin authority).
+ */
+export function isInternalTestEntitlement(entitlement: EntitlementState): boolean {
+  return entitlement.source === "internal_test";
+}
+
+/**
+ * Grants internal_test entitlement to an account.
+ * Must only be called server-side from the device-activation path after
+ * isMasterSimulationCode() confirms the access code.
+ * Does NOT create a billing subscription or admin record.
+ */
+export async function setInternalTestEntitlement(storage: IStorage, accountId: string): Promise<EntitlementState> {
+  const now = new Date().toISOString();
+  const state: EntitlementState = {
+    accountId,
+    planId: "free",          // not a paid account — limits bypassed by source check
+    status: "active",
+    source: "internal_test",
+    pricingVersion: BREEDLOG_PRICING_VERSION,
+    effectiveAt: now,
+    updatedAt: now,
+  };
+  await storage.setSystemSetting(
+    settingKeyForEntitlement(accountId),
+    JSON.stringify(state),
+    "Internal test entitlement — all product limits bypassed, no billing",
+  );
+  return state;
+}
+
 export async function assertCanCreateAnimal(storage: IStorage, accountId: string): Promise<void> {
   const entitlement = await getEntitlementState(storage, accountId);
+  if (isInternalTestEntitlement(entitlement)) return; // internal test — unlimited animals
   const plan = getBreedLogPlan(entitlement.planId);
   const activeLimit = plan.limits.activeAnimals;
   if (activeLimit === "unlimited") return;
@@ -546,6 +581,10 @@ export async function reserveUsage(
   now = new Date(),
 ): Promise<UsageState> {
   const entitlement = await getEntitlementState(storage, accountId);
+  if (isInternalTestEntitlement(entitlement)) {
+    // Internal test — tracking only, no quota enforcement
+    return getUsageState(storage, accountId, now);
+  }
   const plan = getBreedLogPlan(entitlement.planId);
   const usage = await getUsageState(storage, accountId, now);
   const subscription = entitlement.planId === "premium" ? await getBillingSubscriptionState(storage, accountId) : null;

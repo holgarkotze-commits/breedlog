@@ -288,17 +288,31 @@ test("Existing flock health export (Health.tsx) is intact", () => {
 // 7 — PRODUCTION PDF TEMPLATE: Records exports use production-style CSS
 // ════════════════════════════════════════════════════════════════════════════
 
-test("Records.tsx PDF CSS uses A4 landscape orientation", () => {
-  assert.match(records, /size:\s*A4 landscape/);
+test("Records.tsx PDF CSS uses A4 landscape orientation (via canonical template)", () => {
+  // After canonical migration, Records.tsx delegates CSS to getCanonicalGroupCSS()
+  // from export-template.ts which provides A4 landscape. The template itself holds
+  // the @page rule; Records.tsx invokes the function instead of embedding inline CSS.
+  assert.match(records, /getCanonicalGroupCSS/);
+  // Verify the canonical template itself provides A4 landscape (the true source of truth)
+  const exportTemplate = fs.readFileSync("client/src/lib/export-template.ts", "utf8");
+  assert.match(exportTemplate, /size:\s*A4 landscape/);
 });
 
-test("Records.tsx PDF footer uses dark navy gradient (production style)", () => {
-  assert.match(records, /linear-gradient\(135deg, #003366, #1a5276\)/);
+test("Records.tsx PDF footer uses canonical dark gradient (via export-template.ts)", () => {
+  // After canonical migration, footer CSS is in export-template.ts, not inline.
+  // Records.tsx calls renderExportFooter() which outputs the canonical dark gradient.
+  assert.match(records, /renderExportFooter/);
+  const exportTemplate = fs.readFileSync("client/src/lib/export-template.ts", "utf8");
+  assert.match(exportTemplate, /linear-gradient\(135deg/);
 });
 
-test("Records.tsx PDF footer contains BREEDLOG brand text", () => {
-  assert.match(records, /BREEDLOG/);
-  assert.match(records, /Professional Livestock Management/);
+test("Records.tsx PDF footer contains BREEDLOG brand text (via canonical footer)", () => {
+  // After canonical migration the brand text is rendered by renderExportFooter() in
+  // export-template.ts. Records.tsx references that function; the text lives in the template.
+  assert.match(records, /renderExportFooter/);
+  const exportTemplate = fs.readFileSync("client/src/lib/export-template.ts", "utf8");
+  assert.match(exportTemplate, /BREEDLOG/);
+  assert.match(exportTemplate, /Professional Livestock Management/);
 });
 
 test("Records.tsx culled PDF export includes active-filter metadata in log entry", () => {

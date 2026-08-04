@@ -73,7 +73,7 @@ const CANONICAL_SHARED_CSS = `
   .status-culled { background: #ef444420; color: #dc2626; }
   .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
   .zero-state { text-align: center; padding: 20mm 10mm; color: #888; font-size: 10pt; font-style: italic; }
-  .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 4mm; left: 0; right: 0; }
+  .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 0; right: 0; }
   .footer-info { flex: 1; }
   .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
   .footer-info p { font-size: 7pt; margin-top: 2px; color: #d8d8d8; }
@@ -108,7 +108,7 @@ export function getCanonicalGroupCSS(): string {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { background: white; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; margin: 10mm; }
-    .page { width: 277mm; height: 190mm; padding: 6mm 6mm 30mm 6mm; margin: 0 auto; page-break-after: always; position: relative; overflow: hidden; }
+    .page { width: 277mm; height: 190mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; overflow: hidden; }
     .page:last-child { page-break-after: avoid; }
     ${CANONICAL_SHARED_CSS}
   `;
@@ -121,7 +121,7 @@ export function getCanonicalPortraitCSS(): string {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { background: white; }
     body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; margin: 10mm; }
-    .page { width: 190mm; height: 277mm; padding: 6mm 6mm 30mm 6mm; margin: 0 auto; page-break-after: always; position: relative; overflow: hidden; }
+    .page { width: 190mm; height: 277mm; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; overflow: hidden; }
     .page:last-child { page-break-after: avoid; }
     ${CANONICAL_SHARED_CSS}
   `;

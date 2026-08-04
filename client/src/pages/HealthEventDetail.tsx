@@ -1,3 +1,13 @@
+import {
+  getCanonicalPortraitCSS,
+  renderExportHeader,
+  renderExportFooter,
+  wrapExportDocument,
+  openExportPrintDialog,
+  sanitizePublicNote,
+} from "@/lib/export-template";
+import { PDFExportDialog } from "@/components/PDFExportDialog";
+import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useAnimals } from "@/hooks/use-animals";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
@@ -17,6 +27,7 @@ export default function HealthEventDetail() {
   const [, params] = useRoute("/health/:id");
   const eventId = params?.id ? parseInt(params.id) : 0;
   const { data: event, isLoading } = useFlockHealthEvent(eventId);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const { data: animals } = useAnimals({});
   const { data: farmSettings } = useFarmSettings();
   const displayName = farmSettings?.studName || farmSettings?.farmName;
@@ -33,122 +44,71 @@ export default function HealthEventDetail() {
   const exportPDF = () => {
     if (!event) return;
     
-    const content = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-@page { size: A4 portrait; margin: 10mm; }
-body { font-family: Arial, sans-serif; font-size: 10pt; color: #333; margin: 0; padding: 0; }
-.header { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 2px solid #FFC300; margin-bottom: 15px; }
-.header-left { flex: 1; }
-.header-center { flex: 2; text-align: center; }
-.header-right { flex: 1; text-align: right; font-size: 9pt; }
-h1 { margin: 0; font-size: 16pt; color: #FFC300; }
-.summary { background: #f5f5f5; padding: 12px; margin-bottom: 15px; border-radius: 4px; }
-.summary p { margin: 4px 0; }
-.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-th { background: #FFC300; color: #000; padding: 8px; text-align: left; font-weight: bold; }
-td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
-tr:nth-child(even) { background: #f9f9f9; }
-.notes-section { margin-top: 15px; padding: 10px; background: #fff8e1; border-left: 3px solid #FFC300; }
-.footer { position: fixed; bottom: 10mm; left: 10mm; right: 10mm; text-align: center; padding: 8px; background: #1a1a1a; color: #FFC300; }
-.footer-brand { font-weight: bold; }
-.footer-tagline { font-size: 8pt; color: #aaa; }
-</style>
-</head>
-<body>
-<div class="header">
-<div class="header-left">
-${farmSettings?.logoUrl ? `<img src="${farmSettings.logoUrl}" style="width: 50px; height: 50px; object-fit: contain;" alt="Logo" />` : ''}
-</div>
-<div class="header-center">
-<h1>Health Event Record</h1>
-<p>${displayName || "BreedLog"}</p>
-</div>
-<div class="header-right">
-<div>Exported: ${format(new Date(), "dd MMM yyyy")}</div>
-</div>
-</div>
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    const fb = farmSettings ?? null;
+    const title = event.eventName || "Health Event Record";
+    const subtitle = `${displayName || "BreedLog"} — Health`;
 
-<div class="summary">
-<h2 style="margin: 0 0 10px 0; font-size: 14pt;">${event.eventName || "Health Treatment"}</h2>
-<div class="summary-grid">
-<p><strong>Event Date:</strong> ${format(new Date(event.eventDate), "dd MMMM yyyy")}</p>
-<p><strong>Treatment/Product:</strong> ${event.productName}</p>
-<p><strong>Event Type:</strong> ${event.eventType || "observation_symptom"}</p>
-<p><strong>Route:</strong> ${event.route}</p>
-<p><strong>Animals Treated:</strong> ${event.treatAllAnimals ? `All Active (${eventAnimals.length})` : `Selected (${eventAnimals.length})`}</p>
-</div>
-</div>
+    // Canonical portrait CSS + health-specific detail styles
+    const css = getCanonicalPortraitCSS() + `
+      .health-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin: 6mm 0; font-size: 8.5pt; }
+      .health-field label { font-weight: 700; color: #444; display: block; }
+      .health-field span { color: #111; }
+      .section-title { font-size: 9pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #003366; border-bottom: 1px solid #ddd; margin: 5mm 0 3mm; padding-bottom: 1mm; }
+      .notes-box { background: #fffbea; border-left: 3px solid #FFC300; padding: 4px 8px; margin: 4px 0; font-size: 8pt; border-radius: 2px; }
+      .animal-table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
+      .animal-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 6px 6px; text-align: left; text-transform: uppercase; }
+      .animal-table td { padding: 5px 6px; border-bottom: 1px solid #eee; font-size: 7.5pt; }
+      .animal-table tbody tr:nth-child(even) { background: #fafafa; }
+    `;
 
-${event.dose ? `
-<div class="notes-section">
-<strong>Dose:</strong> ${event.dose}
-</div>
-` : ''}
+    const field = (label: string, value: string | null | undefined) =>
+      `<div class="health-field"><label>${label}</label><span>${value || "Not recorded"}</span></div>`;
 
-${event.nextFollowUpDate ? `
-<div class="notes-section">
-<strong>Next Follow-up:</strong> ${event.nextFollowUpDate}
-</div>
-` : ''}
+    const body = `
+      <div class="health-grid">
+        ${field("Event Name", event.eventName)}
+        ${field("Event Date", format(new Date(event.eventDate), "dd MMMM yyyy"))}
+        ${field("Category / Type", event.eventType || "Not recorded")}
+        ${field("Treatment / Product", event.productName)}
+        ${field("Dosage", event.dose)}
+        ${field("Route", event.route)}
+        ${field("Administrator", (event as any).administrator)}
+        ${field("Animals Treated", event.treatAllAnimals ? `All active (${eventAnimals.length})` : `${eventAnimals.length} selected`)}
+        ${field("Withdrawal Date", (event as any).withdrawalDate)}
+        ${field("Follow-up Date", event.nextFollowUpDate ? format(new Date(event.nextFollowUpDate), "dd/MM/yyyy") : null)}
+      </div>
+      ${event.withdrawalPeriodNotes ? `<div class="notes-box"><strong>Withdrawal notes:</strong> ${sanitizePublicNote(event.withdrawalPeriodNotes)}</div>` : ""}
+      ${event.notes ? `<div class="notes-box"><strong>Clinical notes:</strong> ${sanitizePublicNote(event.notes)}</div>` : ""}
+      <p class="section-title">Animals Treated (${eventAnimals.length})</p>
+      <table class="animal-table">
+        <thead><tr><th>#</th><th>Tag ID</th><th>Name</th><th>Sex</th><th>Breed</th></tr></thead>
+        <tbody>
+          ${eventAnimals.map((animal, idx) => `<tr>
+            <td>${idx + 1}</td>
+            <td><strong>${animal?.tagId || "—"}</strong></td>
+            <td>${animal?.name || "—"}</td>
+            <td style="text-transform:capitalize">${animal?.sex || "—"}</td>
+            <td>${animal?.breed || "—"}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>`;
 
-${event.withdrawalPeriodNotes ? `
-<div class="notes-section">
-<strong>Withdrawal Notes:</strong> ${event.withdrawalPeriodNotes}
-</div>
-` : ''}
+    const pageHtml = `<div class="page">
+      ${renderExportHeader(fb, 1, 1, exportDate, title, subtitle)}
+      ${body}
+      ${renderExportFooter(fb)}
+    </div>`;
 
-${event.notes ? `
-<div class="notes-section">
-<strong>Notes:</strong> ${event.notes}
-</div>
-` : ''}
+    const html = wrapExportDocument(title, css, pageHtml);
+    openExportPrintDialog(html);
 
-<h3 style="margin-top: 20px;">Animals Treated (${eventAnimals.length})</h3>
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>Tag ID</th>
-<th>Name</th>
-<th>Sex</th>
-<th>Breed</th>
-</tr>
-</thead>
-<tbody>
-${eventAnimals.map((animal, idx) => `<tr>
-<td>${idx + 1}</td>
-<td>${animal?.tagId || "—"}</td>
-<td>${animal?.name || "—"}</td>
-<td style="text-transform: capitalize;">${animal?.sex || "—"}</td>
-<td>${animal?.breed || "Meatmaster"}</td>
-</tr>`).join("")}
-</tbody>
-</table>
-
-<div class="footer">
-<div class="footer-brand">BREEDLOG</div>
-<div class="footer-tagline">Professional Livestock Management</div>
-</div>
-</body>
-</html>`;
-    
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(content);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 250);
-    }
-    
     createExportedDoc.mutate({
       name: `Health Event PDF - ${event.eventName || event.productName} - ${format(new Date(event.eventDate), "dd MMM yyyy")}`,
       documentType: "productivity",
       subfolder: "flock-health"
     });
-    
+
     toast({ title: "PDF Exported", description: "Health event PDF opened for printing" });
   };
 
@@ -202,7 +162,7 @@ ${eventAnimals.map((animal, idx) => `<tr>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportPDF} className="cursor-pointer" data-testid="menu-export-pdf">
+              <DropdownMenuItem onClick={() => setPdfDialogOpen(true)} className="cursor-pointer" data-testid="menu-export-pdf">
                 <FileText className="w-4 h-4 mr-2" /> Export PDF
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -308,6 +268,18 @@ ${eventAnimals.map((animal, idx) => `<tr>
           </CardContent>
         </Card>
       </div>
+      {/* PDF quality dialog */}
+      <PDFExportDialog
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+        title="Export Health Event PDF"
+        description="Choose export quality. Data, text, and counts are identical at all quality levels."
+        exportLabel="Export PDF"
+        onExport={async (_quality) => {
+          exportPDF();
+          setPdfDialogOpen(false);
+        }}
+      />
     </Layout>
   );
 }

@@ -24,9 +24,11 @@ import {
   getDowngradeVisibleAnimalIdSet,
   getBillingSubscriptionState,
   getEntitlementState,
+  isInternalTestEntitlement,
   listBillingAuditEntries,
   projectDowngradedAnimalVisibility,
   reserveUsage,
+  setInternalTestEntitlement,
   simulateBillingProviderEvent,
   verifyBillingSignature,
 } from "./commercial";
@@ -127,8 +129,8 @@ type DowngradeVisibilityContext = {
 
 async function getDowngradeVisibilityContext(userId: string): Promise<DowngradeVisibilityContext | null> {
   const entitlement = await getEntitlementState(storage, userId);
-  if (entitlement.planId !== "free") {
-    return null;
+  if (entitlement.planId !== "free" || isInternalTestEntitlement(entitlement)) {
+    return null; // premium or internal test — no downgrade hiding
   }
   const allAnimals = await storage.getAnimals(userId, {});
   const visibleAnimalIds = getDowngradeVisibleAnimalIdSet(allAnimals);
@@ -2132,6 +2134,9 @@ export async function registerRoutes(
           // Use the effective userId (sharedUserId takes priority) for the session
           const effectiveUserId = user.sharedUserId || userId;
           await seedMasterSimulationIfNeeded(effectiveUserId, inviteCode!.code);
+          if (isMasterSimulationCode(inviteCode!.code)) {
+            await setInternalTestEntitlement(storage, effectiveUserId);
+          }
           req.session.deviceId = deviceId;
           req.session.userId = effectiveUserId;
           return res.json({ 
@@ -2234,6 +2239,9 @@ export async function registerRoutes(
         req.session.deviceId = deviceId;
         req.session.userId = switchEffectiveUserId;
         await seedMasterSimulationIfNeeded(switchEffectiveUserId, inviteCode!.code);
+        if (isMasterSimulationCode(inviteCode!.code)) {
+          await setInternalTestEntitlement(storage, switchEffectiveUserId);
+        }
 
         console.log(`[Beta Validate] Workspace switched: device ${deviceId} now on code ${inviteCode!.code}, workspace ${switchEffectiveUserId}`);
 
@@ -2330,6 +2338,9 @@ export async function registerRoutes(
       req.session.deviceId = deviceId;
       req.session.userId = effectiveUserId;
       await seedMasterSimulationIfNeeded(effectiveUserId, inviteCode!.code);
+      if (isMasterSimulationCode(inviteCode!.code)) {
+        await setInternalTestEntitlement(storage, effectiveUserId);
+      }
       
       // STEP 3: Upsert activation (atomic — only after all checks pass).
       // CRITICAL: user_activations has UNIQUE(userId), so if this user already

@@ -1,4 +1,15 @@
 import { useState } from "react";
+import {
+  getCanonicalGroupCSS,
+  renderExportHeader,
+  renderExportFooter,
+  wrapExportDocument,
+  openExportPrintDialog,
+  sanitizePublicNote,
+  GROUP_ROWS_PER_PAGE,
+} from "@/lib/export-template";
+import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
+import type { PDFQuality } from "@/lib/pdf-utils";
 import { Layout } from "@/components/Layout";
 import { useAnimals } from "@/hooks/use-animals";
 import { useBreedingEvents } from "@/hooks/use-breeding";
@@ -44,22 +55,13 @@ type FolderType = "culled" | "sold" | "deceased" | "documents" | "productivity" 
 type DocumentSubfolder = "herd" | "individual" | "breeding" | "flock-health" | "culled" | "sold" | "deceased" | "productivity" | null;
 type ProdTab = "lambing" | "mating";
 
-const PDF_CSS = `
-  @page { size: A4 landscape; margin: 10mm; }
-  * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
-  body { background: white; color: #1a1a1a; font-size: 8.5pt; }
-  .page { width: 277mm; min-height: 190mm; position: relative; padding-bottom: 22mm; }
-  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2.5px solid #FFC300; }
-  .header-title { font-size: 15pt; font-weight: bold; }
-  .header-right { text-align: right; font-size: 8pt; color: #555; }
-  .meta { font-size: 8pt; color: #555; margin-bottom: 10px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th { background: #FFC300; color: #1a1a1a; font-weight: bold; padding: 7px 9px; text-align: left; font-size: 8pt; }
-  td { padding: 7px 9px; text-align: left; font-size: 7.5pt; border-bottom: 1px solid #e0e0e0; }
-  tr:nth-child(even) { background: #f8f8f8; }
-  .footer { position: absolute; bottom: 5mm; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 5px 15px; background: linear-gradient(135deg, #003366, #1a5276); color: white; }
-  .footer-brand { font-weight: bold; font-size: 10pt; letter-spacing: 2px; }
-  .footer-tagline { font-size: 7.5pt; opacity: 0.85; }
+// Records-tab extra table CSS (appended to canonical group CSS)
+const RECORDS_TABLE_CSS = `
+  .records-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .records-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
+  .records-table td { padding: 5px 6px; border-bottom: 1px solid #e0e0e0; font-size: 7.5pt; vertical-align: middle; text-align: left; }
+  .records-table tbody tr:nth-child(even) { background: #fafafa; }
+  .meta-line { font-size: 7pt; color: #666; margin-bottom: 4mm; }
 `;
 
 export default function Records() {
@@ -203,38 +205,56 @@ export default function Records() {
     });
   };
 
-  // ── PDF helpers ───────────────────────────────────────────────────────────
-  const openPrintWindow = (html: string) => {
-    const w = window.open("", "_blank");
-    if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500); }
-  };
+  // ── PDF export state ──────────────────────────────────────────────────────
+  const { isOpen: isPdfOpen, exportType: pdfExportType, openDialog: openPdfDialog, closeDialog: closePdfDialog, setIsOpen: setPdfIsOpen } = usePDFExportDialog();
 
-  const makeHeader = (title: string) => {
+  // ── Canonical PDF builder helpers ─────────────────────────────────────────
+  const fb = farmSettings ?? null;
+  const css = getCanonicalGroupCSS() + RECORDS_TABLE_CSS;
+
+  const buildPagedPdf = (
+    title: string,
+    subtitle: string,
+    headerRow: string,
+    dataRows: string[],
+    metaLine: string,
+  ): string => {
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    return `<div class="header"><span class="header-title">${farmLabel} — ${title}</span><div class="header-right"><div>Generated: ${exportDate}</div></div></div>`;
+    const rowsPerPage = GROUP_ROWS_PER_PAGE;
+    const totalPages = Math.max(1, Math.ceil(dataRows.length / rowsPerPage));
+    let pagesHtml = "";
+    for (let p = 0; p < totalPages; p++) {
+      const slice = dataRows.slice(p * rowsPerPage, (p + 1) * rowsPerPage).join("");
+      pagesHtml += `<div class="page">
+        ${renderExportHeader(fb, p + 1, totalPages, exportDate, title, subtitle)}
+        ${p === 0 ? `<p class="meta-line">${metaLine}</p>` : ""}
+        <table class="records-table">
+          <thead><tr>${headerRow}</tr></thead>
+          <tbody>${slice}</tbody>
+        </table>
+        ${renderExportFooter(fb)}
+      </div>`;
+    }
+    return wrapExportDocument(title, css, pagesHtml);
   };
-
-  const makeFooter = () =>
-    `<div class="footer"><span class="footer-brand">BREEDLOG</span><span class="footer-tagline">Professional Livestock Management</span></div>`;
 
   // ── Export: Culled ────────────────────────────────────────────────────────
-  const exportCulledPDF = () => {
+  const exportCulledPDF = (_quality?: PDFQuality) => {
     const animals = filterAnimals(culledAnimals, "culled");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching culled animals to export", variant: "destructive" }); return; }
     const rows = animals.map(a => `<tr>
       <td><strong>${a.tagId}</strong></td>
-      <td>${a.sex || "—"}</td>
-      <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : "—"}</td>
-      <td>${a.cullDate ? format(new Date(a.cullDate), "dd/MM/yyyy") : "—"}</td>
-      <td>${a.cullReason || "—"}</td>
-      <td>${a.notes || "—"}</td>
-    </tr>`).join("");
-    openPrintWindow(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Culled Animals</title><style>${PDF_CSS}</style></head><body><div class="page">
-      ${makeHeader("Culled Animals Report")}
-      <p class="meta">Total records: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}${reasonFilter !== "all" ? ` | Reason: ${reasonFilter}` : ""}${dateFrom || dateTo ? ` | Period: ${dateFrom || "—"} to ${dateTo || "—"}` : ""}</p>
-      <table><thead><tr><th>Animal ID</th><th>Sex</th><th>DOB</th><th>Cull Date</th><th>Cull Reason</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
-      ${makeFooter()}</div></body></html>`);
-    createExportedDoc.mutate({ name: `CulledReport_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "culled", subfolder: "culled", metadata: { exportType: "pdf", category: "culled", sourceSection: "records-culled", animalCount: animals.length, pageCount: 1, status: "success", filters: { sex: sexFilter, reason: reasonFilter, dateFrom, dateTo } } });
+      <td>${a.sex || "Not recorded"}</td>
+      <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : "Not recorded"}</td>
+      <td>${(a as any).cullDate ? format(new Date((a as any).cullDate), "dd/MM/yyyy") : "Not recorded"}</td>
+      <td>${(a as any).cullReason || "Not recorded"}</td>
+      <td>${sanitizePublicNote(a.notes) || "Not recorded"}</td>
+    </tr>`);
+    const meta = `Total: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}${reasonFilter !== "all" ? ` | Reason: ${reasonFilter}` : ""}${dateFrom || dateTo ? ` | Period: ${dateFrom || "—"} to ${dateTo || "—"}` : ""}`;
+    const html = buildPagedPdf("Culled Animals Report", `${farmLabel} — Records`, "<th>Animal ID</th><th>Sex</th><th>DOB</th><th>Cull Date</th><th>Cull Reason</th><th>Notes</th>", rows, meta);
+    openExportPrintDialog(html);
+    const totalPages = Math.max(1, Math.ceil(animals.length / GROUP_ROWS_PER_PAGE));
+    createExportedDoc.mutate({ name: `CulledReport_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "culled", subfolder: "culled", metadata: { exportType: "pdf", category: "culled", sourceSection: "records-culled", animalCount: animals.length, pageCount: totalPages, status: "success", filters: { sex: sexFilter, reason: reasonFilter, dateFrom, dateTo } } });
     toast({ title: "PDF Ready", description: `Culled report (${animals.length} animals) opened for printing` });
   };
 
@@ -251,22 +271,21 @@ export default function Records() {
   };
 
   // ── Export: Sold ──────────────────────────────────────────────────────────
-  const exportSoldPDF = () => {
+  const exportSoldPDF = (_quality?: PDFQuality) => {
     const animals = filterAnimals(soldAnimals, "sold");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching sold/removed animals to export", variant: "destructive" }); return; }
     const rows = animals.map(a => `<tr>
       <td><strong>${a.tagId}</strong></td>
-      <td>${a.sex || "—"}</td>
-      <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : "—"}</td>
-      <td>${a.status || "—"}</td>
-      <td>${a.notes || "—"}</td>
-    </tr>`).join("");
-    openPrintWindow(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sold/Removed Animals</title><style>${PDF_CSS}</style></head><body><div class="page">
-      ${makeHeader("Sold / Removed Animals Report")}
-      <p class="meta">Total records: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}${statusFilter !== "all" ? ` | Status: ${statusFilter}` : ""}</p>
-      <table><thead><tr><th>Animal ID</th><th>Sex</th><th>DOB</th><th>Status</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
-      ${makeFooter()}</div></body></html>`);
-    createExportedDoc.mutate({ name: `SoldReport_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "sold", subfolder: "sold", metadata: { exportType: "pdf", category: "sold", sourceSection: "records-sold", animalCount: animals.length, pageCount: 1, status: "success", filters: { sex: sexFilter, status: statusFilter } } });
+      <td>${a.sex || "Not recorded"}</td>
+      <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : "Not recorded"}</td>
+      <td>${a.status || "Not recorded"}</td>
+      <td>${sanitizePublicNote(a.notes) || "Not recorded"}</td>
+    </tr>`);
+    const meta = `Total: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}${statusFilter !== "all" ? ` | Status: ${statusFilter}` : ""}`;
+    const html = buildPagedPdf("Sold / Removed Animals Report", `${farmLabel} — Records`, "<th>Animal ID</th><th>Sex</th><th>DOB</th><th>Status</th><th>Notes</th>", rows, meta);
+    openExportPrintDialog(html);
+    const totalPages = Math.max(1, Math.ceil(animals.length / GROUP_ROWS_PER_PAGE));
+    createExportedDoc.mutate({ name: `SoldReport_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "sold", subfolder: "sold", metadata: { exportType: "pdf", category: "sold", sourceSection: "records-sold", animalCount: animals.length, pageCount: totalPages, status: "success", filters: { sex: sexFilter, status: statusFilter } } });
     toast({ title: "PDF Ready", description: `Sold/Removed report (${animals.length} animals) opened for printing` });
   };
 
@@ -282,21 +301,20 @@ export default function Records() {
   };
 
   // ── Export: Deceased ──────────────────────────────────────────────────────
-  const exportDeceasedPDF = () => {
+  const exportDeceasedPDF = (_quality?: PDFQuality) => {
     const animals = filterAnimals(deceasedAnimals, "deceased");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching deceased animals to export", variant: "destructive" }); return; }
     const rows = animals.map(a => `<tr>
       <td><strong>${a.tagId}</strong></td>
-      <td>${a.sex || "—"}</td>
-      <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : "—"}</td>
-      <td>${a.notes || "—"}</td>
-    </tr>`).join("");
-    openPrintWindow(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Deceased Animals</title><style>${PDF_CSS}</style></head><body><div class="page">
-      ${makeHeader("Deceased Animals Report")}
-      <p class="meta">Total records: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}</p>
-      <table><thead><tr><th>Animal ID</th><th>Sex</th><th>DOB</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
-      ${makeFooter()}</div></body></html>`);
-    createExportedDoc.mutate({ name: `DeceasedReport_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "deceased", subfolder: "deceased", metadata: { exportType: "pdf", category: "deceased", sourceSection: "records-deceased", animalCount: animals.length, pageCount: 1, status: "success", filters: { sex: sexFilter } } });
+      <td>${a.sex || "Not recorded"}</td>
+      <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : "Not recorded"}</td>
+      <td>${sanitizePublicNote(a.notes) || "Not recorded"}</td>
+    </tr>`);
+    const meta = `Total: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}`;
+    const html = buildPagedPdf("Deceased Animals Report", `${farmLabel} — Records`, "<th>Animal ID</th><th>Sex</th><th>DOB</th><th>Notes</th>", rows, meta);
+    openExportPrintDialog(html);
+    const totalPages = Math.max(1, Math.ceil(animals.length / GROUP_ROWS_PER_PAGE));
+    createExportedDoc.mutate({ name: `DeceasedReport_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "deceased", subfolder: "deceased", metadata: { exportType: "pdf", category: "deceased", sourceSection: "records-deceased", animalCount: animals.length, pageCount: totalPages, status: "success", filters: { sex: sexFilter } } });
     toast({ title: "PDF Ready", description: `Deceased report (${animals.length} animals) opened for printing` });
   };
 
@@ -314,7 +332,7 @@ export default function Records() {
   // ── Export: Productivity — Lambing ────────────────────────────────────────
   const filteredLambingEvents = lambingEvents.filter(e => inDateRange(e.lambingDate, prodDateFrom, prodDateTo));
 
-  const exportLambingPDF = () => {
+  const exportLambingPDF = (_quality?: PDFQuality) => {
     if (filteredLambingEvents.length === 0) { toast({ title: "No Data", description: "No lambing events match the current filters", variant: "destructive" }); return; }
     const rows = filteredLambingEvents.map(e => {
       const ewe = allAnimals?.find(a => a.id === e.eweId);
@@ -322,17 +340,16 @@ export default function Records() {
       return `<tr>
         <td><strong>${ewe?.tagId || `Ewe #${e.eweId}`}</strong></td>
         <td>${ram?.tagId || `Ram #${e.ramId}`}</td>
-        <td>${e.lambingDate ? format(new Date(e.lambingDate), "dd/MM/yyyy") : "—"}</td>
-        <td>${e.lambCount ?? "—"}</td>
-        <td>${e.notes || "—"}</td>
+        <td>${e.lambingDate ? format(new Date(e.lambingDate), "dd/MM/yyyy") : "Not recorded"}</td>
+        <td>${e.lambCount ?? "Not recorded"}</td>
+        <td>${sanitizePublicNote(e.notes) || "Not recorded"}</td>
       </tr>`;
-    }).join("");
-    openPrintWindow(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Lambing Outcomes</title><style>${PDF_CSS}</style></head><body><div class="page">
-      ${makeHeader("Lambing Outcomes Report")}
-      <p class="meta">Total lambing events: ${filteredLambingEvents.length}${prodDateFrom || prodDateTo ? ` | Period: ${prodDateFrom || "—"} to ${prodDateTo || "—"}` : ""}</p>
-      <table><thead><tr><th>Ewe ID</th><th>Ram ID</th><th>Lambing Date</th><th>Lamb Count</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
-      ${makeFooter()}</div></body></html>`);
-    createExportedDoc.mutate({ name: `LambingOutcomes_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "productivity", subfolder: "productivity", metadata: { exportType: "pdf", category: "lambing", sourceSection: "records-productivity", animalCount: filteredLambingEvents.length, pageCount: 1, status: "success" } });
+    });
+    const meta = `Total lambing events: ${filteredLambingEvents.length}${prodDateFrom || prodDateTo ? ` | Period: ${prodDateFrom || "—"} to ${prodDateTo || "—"}` : ""}`;
+    const html = buildPagedPdf("Lambing Outcomes Report", `${farmLabel} — Productivity`, "<th>Ewe ID</th><th>Ram ID</th><th>Lambing Date</th><th>Lamb Count</th><th>Notes</th>", rows, meta);
+    openExportPrintDialog(html);
+    const totalPages = Math.max(1, Math.ceil(filteredLambingEvents.length / GROUP_ROWS_PER_PAGE));
+    createExportedDoc.mutate({ name: `LambingOutcomes_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "productivity", subfolder: "productivity", metadata: { exportType: "pdf", category: "lambing", sourceSection: "records-productivity", animalCount: filteredLambingEvents.length, pageCount: totalPages, status: "success" } });
     toast({ title: "PDF Ready", description: `Lambing report (${filteredLambingEvents.length} events) opened for printing` });
   };
 
@@ -356,27 +373,26 @@ export default function Records() {
     return true;
   });
 
-  const exportMatingPDF = () => {
+  const exportMatingPDF = (_quality?: PDFQuality) => {
     if (filteredMatingGroups.length === 0) { toast({ title: "No Data", description: "No mating groups match the current filters", variant: "destructive" }); return; }
     const rows = filteredMatingGroups.map(g => {
       const ram = allAnimals?.find(a => a.id === g.ramId);
       return `<tr>
         <td><strong>${g.name}</strong></td>
         <td>${ram?.tagId || `Ram #${g.ramId}`}</td>
-        <td>${g.eweIds?.length ?? "—"} ewes</td>
-        <td>${g.dateIn ? format(new Date(g.dateIn), "dd/MM/yyyy") : "—"}</td>
-        <td>${g.dateOut ? format(new Date(g.dateOut), "dd/MM/yyyy") : "—"}</td>
-        <td>${g.lambingSeason || "—"}</td>
-        <td><span style="font-weight:bold;color:${g.status === "active" ? "#2e7d32" : "#555"}">${g.status || "—"}</span></td>
-        <td>${g.notes || "—"}</td>
+        <td>${g.eweIds?.length ?? 0} ewes</td>
+        <td>${g.dateIn ? format(new Date(g.dateIn), "dd/MM/yyyy") : "Not recorded"}</td>
+        <td>${g.dateOut ? format(new Date(g.dateOut), "dd/MM/yyyy") : "Not recorded"}</td>
+        <td>${g.lambingSeason || "Not recorded"}</td>
+        <td>${g.status || "Not recorded"}</td>
+        <td>${sanitizePublicNote(g.notes) || "Not recorded"}</td>
       </tr>`;
-    }).join("");
-    openPrintWindow(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Mating Groups</title><style>${PDF_CSS}</style></head><body><div class="page">
-      ${makeHeader("Mating Groups Report")}
-      <p class="meta">Total groups: ${filteredMatingGroups.length}${prodDateFrom || prodDateTo ? ` | Date In range: ${prodDateFrom || "—"} to ${prodDateTo || "—"}` : ""}</p>
-      <table><thead><tr><th>Group Name</th><th>Ram</th><th>Ewes</th><th>Date In</th><th>Date Out</th><th>Season</th><th>Status</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table>
-      ${makeFooter()}</div></body></html>`);
-    createExportedDoc.mutate({ name: `MatingGroups_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "productivity", subfolder: "productivity", metadata: { exportType: "pdf", category: "mating-groups", sourceSection: "records-productivity", animalCount: filteredMatingGroups.length, pageCount: 1, status: "success" } });
+    });
+    const meta = `Total groups: ${filteredMatingGroups.length}${prodDateFrom || prodDateTo ? ` | Date In: ${prodDateFrom || "—"} to ${prodDateTo || "—"}` : ""}`;
+    const html = buildPagedPdf("Mating Groups Report", `${farmLabel} — Productivity`, "<th>Group Name</th><th>Ram</th><th>Ewes</th><th>Date In</th><th>Date Out</th><th>Season</th><th>Status</th><th>Notes</th>", rows, meta);
+    openExportPrintDialog(html);
+    const totalPages = Math.max(1, Math.ceil(filteredMatingGroups.length / GROUP_ROWS_PER_PAGE));
+    createExportedDoc.mutate({ name: `MatingGroups_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "productivity", subfolder: "productivity", metadata: { exportType: "pdf", category: "mating-groups", sourceSection: "records-productivity", animalCount: filteredMatingGroups.length, pageCount: totalPages, status: "success" } });
     toast({ title: "PDF Ready", description: `Mating groups report (${filteredMatingGroups.length} groups) opened for printing` });
   };
 
@@ -469,7 +485,7 @@ export default function Records() {
             {isFiltered ? `${filteredCount} of ${totalCount} records` : `${totalCount} total records`}
           </span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={type === "culled" ? exportCulledPDF : type === "sold" ? exportSoldPDF : exportDeceasedPDF} data-testid="button-export-folder">
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => openPdfDialog(type)} data-testid="button-export-folder">
               <Download className="w-3.5 h-3.5" /> PDF
             </Button>
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={type === "culled" ? exportCulledCSV : type === "sold" ? exportSoldCSV : exportDeceasedCSV} data-testid="button-export-csv">
@@ -555,7 +571,7 @@ export default function Records() {
             <div className="flex items-center justify-between text-xs text-muted-foreground px-0.5">
               <span>{filteredLambingEvents.length} of {lambingEvents.length} lambing events</span>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={exportLambingPDF} data-testid="button-export-lambing-pdf">
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => openPdfDialog("lambing")} data-testid="button-export-lambing-pdf">
                   <Download className="w-3.5 h-3.5" /> PDF
                 </Button>
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={exportLambingCSV} data-testid="button-export-lambing-csv">
@@ -622,7 +638,7 @@ export default function Records() {
             <div className="flex items-center justify-between text-xs text-muted-foreground px-0.5">
               <span>{filteredMatingGroups.length} of {matingGroups?.length || 0} mating groups</span>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={exportMatingPDF} data-testid="button-export-mating-pdf">
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={() => openPdfDialog("mating")} data-testid="button-export-mating-pdf">
                   <Download className="w-3.5 h-3.5" /> PDF
                 </Button>
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5" onClick={exportMatingCSV} data-testid="button-export-mating-csv">
@@ -921,6 +937,23 @@ export default function Records() {
           </div>
         )}
       </div>
+
+      {/* Shared PDF quality dialog for all Records exports */}
+      <PDFExportDialog
+        open={isPdfOpen}
+        onOpenChange={setPdfIsOpen}
+        title="Export PDF"
+        description="Choose export quality. Quality affects embedded image resolution only — data, text and counts are unchanged."
+        exportLabel="Export PDF"
+        onExport={async (quality) => {
+          if (pdfExportType === "culled") exportCulledPDF(quality);
+          else if (pdfExportType === "sold") exportSoldPDF(quality);
+          else if (pdfExportType === "deceased") exportDeceasedPDF(quality);
+          else if (pdfExportType === "lambing") exportLambingPDF(quality);
+          else if (pdfExportType === "mating") exportMatingPDF(quality);
+          closePdfDialog();
+        }}
+      />
     </Layout>
   );
 }
