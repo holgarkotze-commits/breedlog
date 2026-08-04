@@ -12,6 +12,8 @@ import type {
   AnimalPerformanceProfile,
   DataConfidence,
 } from "@/lib/animal-performance";
+import { sanitizePublicNote } from "@/lib/export-template";
+import { compressImage, PDF_QUALITY_SETTINGS, type PDFQuality } from "@/lib/pdf-utils";
 
 type FarmSettingsLike = {
   farmName?: string | null;
@@ -26,12 +28,28 @@ type FarmSettingsLike = {
   registrationNumber?: string | null;
 };
 
+/** One resolved ancestor node — used for the grandparent tier of the pedigree tree. */
+export type PedigreeAncestor = {
+  tagId: string;
+  breed?: string | null;
+};
+
+/** Resolved grandparent data to be passed into the PDF. */
+export type PedigreeGrandparents = {
+  paternalGrandsire: PedigreeAncestor | null;
+  paternalGranddam:  PedigreeAncestor | null;
+  maternalGrandsire: PedigreeAncestor | null;
+  maternalGranddam:  PedigreeAncestor | null;
+};
+
 type AnimalProfilePdfDocumentProps = {
   animal: AnimalWithRelations;
   farmSettings?: FarmSettingsLike | null;
   exportDate: string;
   photoBase64: string | null;
   profile: AnimalPerformanceProfile;
+  /** Resolved three-generation pedigree data. Null slots render as dashed "Unknown" nodes. */
+  grandparents?: PedigreeGrandparents | null;
 };
 
 const styles = StyleSheet.create({
@@ -50,7 +68,7 @@ const styles = StyleSheet.create({
     top: 24,
     left: 32,
     right: 32,
-    borderBottom: "1 solid #9aa7b4",
+    borderBottom: "2 solid #FFC300",
     paddingBottom: 10,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -63,11 +81,11 @@ const styles = StyleSheet.create({
   brandName: {
     fontSize: 19,
     fontFamily: "Helvetica-Bold",
-    color: "#16324f",
+    color: "#1a1a1a",
   },
   brandTagline: {
     fontSize: 9,
-    color: "#546476",
+    color: "#444",
   },
   farmStack: {
     gap: 2,
@@ -78,26 +96,40 @@ const styles = StyleSheet.create({
   farmName: {
     fontSize: 12,
     fontFamily: "Helvetica-Bold",
-    color: "#16324f",
+    color: "#1a1a1a",
   },
   farmMeta: {
     fontSize: 8.5,
-    color: "#546476",
+    color: "#555",
   },
   footer: {
     position: "absolute",
-    top: 804,
+    bottom: 14,
     left: 32,
     right: 32,
-    borderTop: "1 solid #d5dce3",
-    paddingTop: 8,
+    borderTop: "1.5 solid #FFC300",
+    paddingTop: 5,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   footerText: {
-    fontSize: 8,
-    color: "#627384",
+    fontSize: 7.5,
+    color: "#888",
+  },
+  footerBrand: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    color: "#102033",
+  },
+  footerCreator: {
+    fontSize: 6,
+    color: "#aaa",
+    marginTop: 2,
+  },
+  footerRight: {
+    alignItems: "flex-end",
+    gap: 2,
   },
   hero: {
     flexDirection: "row",
@@ -179,8 +211,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 11.5,
     fontFamily: "Helvetica-Bold",
-    color: "#16324f",
+    color: "#1a1a1a",
     textTransform: "uppercase",
+    borderBottom: "1.5 solid #FFC300",
+    paddingBottom: 3,
+    marginBottom: 2,
   },
   sectionHint: {
     fontSize: 8.5,
@@ -221,6 +256,106 @@ const styles = StyleSheet.create({
   listItem: {
     fontSize: 9.5,
     color: "#1f2d3d",
+  },
+  // Pedigree page styles
+  pedigreePage: {
+    backgroundColor: "#ffffff",
+    color: "#1a1a1a",
+    fontFamily: "Helvetica",
+    fontSize: 10,
+    paddingTop: 80,
+    paddingBottom: 80,
+    paddingHorizontal: 32,
+  },
+  pedigreeTitle: {
+    fontSize: 16,
+    fontFamily: "Helvetica-Bold",
+    color: "#1a1a1a",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 4,
+    borderBottom: "2 solid #FFC300",
+    paddingBottom: 6,
+  },
+  pedigreeSubtitle: {
+    fontSize: 9,
+    color: "#666",
+    marginBottom: 20,
+  },
+  pedigreeTree: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 0,
+    marginTop: 8,
+  },
+  pedigreeColumn: {
+    flexDirection: "column",
+    gap: 8,
+  },
+  pedigreeBox: {
+    border: "1 solid #d9e1e8",
+    borderRadius: 6,
+    padding: 8,
+    backgroundColor: "#f9f9f9",
+    minWidth: 130,
+    maxWidth: 150,
+    gap: 2,
+  },
+  pedigreeBoxSubject: {
+    border: "2 solid #FFC300",
+    borderRadius: 6,
+    padding: 10,
+    backgroundColor: "#fff9e6",
+    minWidth: 130,
+    gap: 3,
+  },
+  pedigreeBoxUnknown: {
+    border: "1 dashed #ccc",
+    borderRadius: 6,
+    padding: 8,
+    backgroundColor: "#fafafa",
+    minWidth: 130,
+    maxWidth: 150,
+    gap: 2,
+  },
+  pedigreeBoxLabel: {
+    fontSize: 7.5,
+    fontFamily: "Helvetica-Bold",
+    color: "#888",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  pedigreeBoxId: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    color: "#1a1a1a",
+  },
+  pedigreeBoxIdUnknown: {
+    fontSize: 9.5,
+    color: "#aaa",
+    fontFamily: "Helvetica-Oblique",
+  },
+  pedigreeBoxBreed: {
+    fontSize: 8,
+    color: "#666",
+  },
+  pedigreeConnector: {
+    width: 20,
+    borderTop: "1 solid #d9e1e8",
+    marginTop: 10,
+    alignSelf: "center",
+  },
+  pedigreeConnectorBlock: {
+    width: 20,
+    flexDirection: "column",
+    justifyContent: "center",
+    gap: 0,
+  },
+  pedigreeNote: {
+    fontSize: 8,
+    color: "#888",
+    fontFamily: "Helvetica-Oblique",
+    marginTop: 16,
   },
 });
 
@@ -350,12 +485,32 @@ function buildRoleMetrics(profile: AnimalPerformanceProfile) {
   ];
 }
 
+// Render a pedigree entry box — dashed border when unknown
+function PedigreeBox({ label, tagId, breed, isSubject = false }: {
+  label: string;
+  tagId: string | null | undefined;
+  breed?: string | null;
+  isSubject?: boolean;
+}) {
+  const isUnknown = !tagId;
+  const boxStyle = isSubject ? styles.pedigreeBoxSubject : isUnknown ? styles.pedigreeBoxUnknown : styles.pedigreeBox;
+  const idStyle = isUnknown ? styles.pedigreeBoxIdUnknown : styles.pedigreeBoxId;
+  return (
+    <View style={boxStyle}>
+      <Text style={styles.pedigreeBoxLabel}>{label}</Text>
+      <Text style={idStyle}>{tagId || "Unknown"}</Text>
+      {breed && !isUnknown ? <Text style={styles.pedigreeBoxBreed}>{breed}</Text> : null}
+    </View>
+  );
+}
+
 function AnimalProfilePdfDocument({
   animal,
   exportDate,
   farmSettings,
   photoBase64,
   profile,
+  grandparents,
 }: AnimalProfilePdfDocumentProps) {
   const farmDisplayName = farmSettings?.studName || farmSettings?.farmName || "BreedLog";
   const contactLine = [farmSettings?.ownerName, farmSettings?.ownerPhone].filter(Boolean).join(" | ");
@@ -389,11 +544,18 @@ function AnimalProfilePdfDocument({
         </View>
 
         <View fixed style={styles.footer}>
-          <Text style={styles.footerText}>Exported {exportDate}</Text>
-          <Text
-            style={styles.footerText}
-            render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
-          />
+          <View>
+            <Text style={styles.footerText}>Exported {exportDate}</Text>
+            {contactLine ? <Text style={styles.footerText}>{contactLine}</Text> : null}
+          </View>
+          <View style={styles.footerRight}>
+            <Text style={styles.footerBrand}>BREEDLOG</Text>
+            <Text style={styles.footerCreator}>A STITCH WORX Product</Text>
+            <Text
+              style={styles.footerText}
+              render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+            />
+          </View>
         </View>
 
         <View style={styles.hero}>
@@ -469,14 +631,136 @@ function AnimalProfilePdfDocument({
             ) : (
               <Text style={styles.listItem}>- No recent health notes recorded.</Text>
             )}
-            <Text style={styles.listItem}>- General notes: {animal.notes || "No notes recorded."}</Text>
+            <Text style={styles.listItem}>- General notes: {sanitizePublicNote(animal.notes) || "No notes recorded."}</Text>
           </View>
         </View>
+      </Page>
+
+      {/* Page 2 — Pedigree Tree */}
+      <Page size="A4" style={styles.pedigreePage}>
+        <View fixed style={styles.header}>
+          <View style={styles.brandStack}>
+            <Text style={styles.brandName}>BREEDLOG</Text>
+            <Text style={styles.brandTagline}>Animal Pedigree Record</Text>
+          </View>
+          <View style={styles.farmStack}>
+            <Text style={styles.farmName}>{farmDisplayName}</Text>
+            {contactLine ? <Text style={styles.farmMeta}>{contactLine}</Text> : null}
+          </View>
+        </View>
+
+        <View fixed style={styles.footer}>
+          <View>
+            <Text style={styles.footerText}>Exported {exportDate}</Text>
+          </View>
+          <View style={styles.footerRight}>
+            <Text style={styles.footerBrand}>BREEDLOG</Text>
+            <Text style={styles.footerCreator}>A STITCH WORX Product</Text>
+            <Text
+              style={styles.footerText}
+              render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+            />
+          </View>
+        </View>
+
+        <Text style={styles.pedigreeTitle}>Pedigree — {animal.tagId}</Text>
+        <Text style={styles.pedigreeSubtitle}>
+          {animal.breed || "Breed not recorded"} · {roleLabel(profile.role)} · Three-generation pedigree from recorded workspace data
+        </Text>
+
+        {/* Tree: Subject → Parents → Grandparents (matches in-app direction: left = subject, right = ancestors) */}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 16 }}>
+
+          {/* Column 1: Subject */}
+          <View style={{ alignSelf: "center" }}>
+            <PedigreeBox
+              label="Subject"
+              tagId={animal.tagId}
+              breed={animal.breed}
+              isSubject
+            />
+          </View>
+
+          {/* Connector — horizontal bar + vertical fork */}
+          <View style={{ width: 18, alignSelf: "center" }}>
+            <View style={{ borderTop: "1 solid #bbb", width: 18 }} />
+          </View>
+
+          {/* Column 2: Parents */}
+          <View style={{ flexDirection: "column", gap: 20, alignItems: "flex-start" }}>
+            <PedigreeBox
+              label="Sire"
+              tagId={animal.sire?.tagId || animal.externalSireInfo}
+              breed={animal.sire?.breed}
+            />
+            <PedigreeBox
+              label="Dam"
+              tagId={animal.dam?.tagId || animal.externalDamInfo}
+              breed={animal.dam?.breed}
+            />
+          </View>
+
+          {/* Connector */}
+          <View style={{ width: 18, alignSelf: "center" }}>
+            <View style={{ borderTop: "1 solid #bbb", width: 18 }} />
+          </View>
+
+          {/* Column 3: Grandparents (4 entries, paired 2+2) */}
+          <View style={{ flexDirection: "column", gap: 6, flex: 1 }}>
+            {/* Paternal pair */}
+            <PedigreeBox
+              label="Paternal Grandsire"
+              tagId={grandparents?.paternalGrandsire?.tagId ?? null}
+              breed={grandparents?.paternalGrandsire?.breed}
+            />
+            <PedigreeBox
+              label="Paternal Granddam"
+              tagId={grandparents?.paternalGranddam?.tagId ?? null}
+              breed={grandparents?.paternalGranddam?.breed}
+            />
+            {/* Gap between paternal and maternal */}
+            <View style={{ height: 12 }} />
+            {/* Maternal pair */}
+            <PedigreeBox
+              label="Maternal Grandsire"
+              tagId={grandparents?.maternalGrandsire?.tagId ?? null}
+              breed={grandparents?.maternalGrandsire?.breed}
+            />
+            <PedigreeBox
+              label="Maternal Granddam"
+              tagId={grandparents?.maternalGranddam?.tagId ?? null}
+              breed={grandparents?.maternalGranddam?.breed}
+            />
+          </View>
+        </View>
+
+        <Text style={styles.pedigreeNote}>
+          Dashed nodes indicate animals whose parentage is not recorded in this workspace. Grandparents are resolved from linked
+          parent records first; if a parent animal is not linked to its own sire or dam in the workspace, the external sire/dam
+          info text is used. To complete the pedigree, link each parent animal to its own parents in the workspace.
+        </Text>
       </Page>
     </Document>
   );
 }
 
-export function buildAnimalProfilePdfBlob(props: AnimalProfilePdfDocumentProps) {
-  return pdf(<AnimalProfilePdfDocument {...props} />).toBlob();
+/**
+ * Build the individual animal PDF as a Blob.
+ *
+ * quality controls JPEG compression applied to the embedded animal photo:
+ *   high   → original resolution  (no compression; best for printing)
+ *   medium → 70% JPEG quality, max 800×800 px  (balanced; good for email)
+ *   low    → 50% JPEG quality, max 400×400 px  (smallest file; good for WhatsApp)
+ *
+ * Text, tables, and layout are vector-based and unaffected by quality.
+ */
+export async function buildAnimalProfilePdfBlob(
+  props: AnimalProfilePdfDocumentProps,
+  quality: PDFQuality = 'high',
+): Promise<Blob> {
+  let { photoBase64 } = props;
+  if (photoBase64 && quality !== 'high') {
+    photoBase64 = await compressImage(photoBase64, PDF_QUALITY_SETTINGS[quality]);
+  }
+  return pdf(<AnimalProfilePdfDocument {...props} photoBase64={photoBase64} />).toBlob();
 }

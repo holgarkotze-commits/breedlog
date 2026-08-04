@@ -24,9 +24,11 @@ import {
   getDowngradeVisibleAnimalIdSet,
   getBillingSubscriptionState,
   getEntitlementState,
+  isInternalTestEntitlement,
   listBillingAuditEntries,
   projectDowngradedAnimalVisibility,
   reserveUsage,
+  setInternalTestEntitlement,
   simulateBillingProviderEvent,
   verifyBillingSignature,
 } from "./commercial";
@@ -127,8 +129,8 @@ type DowngradeVisibilityContext = {
 
 async function getDowngradeVisibilityContext(userId: string): Promise<DowngradeVisibilityContext | null> {
   const entitlement = await getEntitlementState(storage, userId);
-  if (entitlement.planId !== "free") {
-    return null;
+  if (entitlement.planId !== "free" || isInternalTestEntitlement(entitlement)) {
+    return null; // premium or internal test — no downgrade hiding
   }
   const allAnimals = await storage.getAnimals(userId, {});
   const visibleAnimalIds = getDowngradeVisibleAnimalIdSet(allAnimals);
@@ -625,7 +627,21 @@ export async function registerRoutes(
     const offspringAsDam = animal.sex === "ewe" ? allAnimals.filter(a => a.damId === animal.id) : [];
     const offspringAsSire = animal.sex === "ram" ? allAnimals.filter(a => a.sireId === animal.id) : [];
 
-    res.json({ ...animal, dam, sire, offspringAsDam, offspringAsSire });
+    // Resolve grandparents via targeted lookups — no full-list scan needed here.
+    const [paternalGrandsire, paternalGranddam, maternalGrandsire, maternalGranddam] = await Promise.all([
+      sire?.sireId && isAnimalVisible(visibility, sire.sireId) ? storage.getAnimal(userId, sire.sireId) : null,
+      sire?.damId  && isAnimalVisible(visibility, sire.damId)  ? storage.getAnimal(userId, sire.damId)  : null,
+      dam?.sireId  && isAnimalVisible(visibility, dam.sireId)  ? storage.getAnimal(userId, dam.sireId)  : null,
+      dam?.damId   && isAnimalVisible(visibility, dam.damId)   ? storage.getAnimal(userId, dam.damId)   : null,
+    ]);
+    const grandparents = {
+      paternalGrandsire: paternalGrandsire ?? null,
+      paternalGranddam:  paternalGranddam  ?? null,
+      maternalGrandsire: maternalGrandsire ?? null,
+      maternalGranddam:  maternalGranddam  ?? null,
+    };
+
+    res.json({ ...animal, dam, sire, offspringAsDam, offspringAsSire, grandparents });
   });
 
   app.get(api.animals.familyTree.path, requireAuth, async (req, res) => {
@@ -2118,6 +2134,9 @@ export async function registerRoutes(
           // Use the effective userId (sharedUserId takes priority) for the session
           const effectiveUserId = user.sharedUserId || userId;
           await seedMasterSimulationIfNeeded(effectiveUserId, inviteCode!.code);
+          if (isMasterSimulationCode(inviteCode!.code)) {
+            await setInternalTestEntitlement(storage, effectiveUserId);
+          }
           req.session.deviceId = deviceId;
           req.session.userId = effectiveUserId;
           return res.json({ 
@@ -2220,6 +2239,9 @@ export async function registerRoutes(
         req.session.deviceId = deviceId;
         req.session.userId = switchEffectiveUserId;
         await seedMasterSimulationIfNeeded(switchEffectiveUserId, inviteCode!.code);
+        if (isMasterSimulationCode(inviteCode!.code)) {
+          await setInternalTestEntitlement(storage, switchEffectiveUserId);
+        }
 
         console.log(`[Beta Validate] Workspace switched: device ${deviceId} now on code ${inviteCode!.code}, workspace ${switchEffectiveUserId}`);
 
@@ -2316,6 +2338,9 @@ export async function registerRoutes(
       req.session.deviceId = deviceId;
       req.session.userId = effectiveUserId;
       await seedMasterSimulationIfNeeded(effectiveUserId, inviteCode!.code);
+      if (isMasterSimulationCode(inviteCode!.code)) {
+        await setInternalTestEntitlement(storage, effectiveUserId);
+      }
       
       // STEP 3: Upsert activation (atomic — only after all checks pass).
       // CRITICAL: user_activations has UNIQUE(userId), so if this user already

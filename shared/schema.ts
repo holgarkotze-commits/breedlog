@@ -373,6 +373,13 @@ export type AnimalWithRelations = Animal & {
   offspringAsDam?: Animal[];
   offspringAsSire?: Animal[];
   evaluations?: Evaluation[];
+  /** Resolved grandparent records — populated by GET /api/animals/:id server-side join. */
+  grandparents?: {
+    paternalGrandsire?: Animal | null;
+    paternalGranddam?: Animal | null;
+    maternalGrandsire?: Animal | null;
+    maternalGranddam?: Animal | null;
+  } | null;
 };
 
 // === FARM SETTINGS ===

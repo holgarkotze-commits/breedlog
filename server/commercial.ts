@@ -16,6 +16,12 @@ const BILLING_SUBSCRIPTION_PREFIX = "commercial:subscription:";
 const BILLING_CHECKOUT_PREFIX = "commercial:checkout:";
 const BILLING_PORTAL_PREFIX = "commercial:portal:";
 const BILLING_AUDIT_PREFIX = "commercial:audit:";
+// Separate permanent marker for master-simulation workspaces.
+// This key is written by setInternalTestEntitlement and is never overwritten
+// by billing events or normal entitlement updates.  getEntitlementState checks
+// it first so the internal-test bypass survives server restarts and billing
+// event replay without depending on the billing entitlement key.
+const MASTER_WORKSPACE_PREFIX = "commercial:master_workspace:";
 
 export class EntitlementDeniedError extends Error {
   constructor(
@@ -55,7 +61,7 @@ export type EntitlementState = {
   accountId: string;
   planId: BreedLogPlanId;
   status: "active" | "grace_period" | "cancelled" | "payment_failed" | "refunded" | "expired";
-  source: "default_free" | "billing_event" | "manual_admin";
+  source: "default_free" | "billing_event" | "manual_admin" | "internal_test";
   pricingVersion: string;
   subscriptionId?: string;
   customerId?: string;
@@ -180,6 +186,10 @@ function settingKeyForEntitlement(accountId: string): string {
   return `${ENTITLEMENT_PREFIX}${accountId}`;
 }
 
+function settingKeyForMasterWorkspace(accountId: string): string {
+  return `${MASTER_WORKSPACE_PREFIX}${accountId}`;
+}
+
 function settingKeyForUsage(accountId: string, month: string): string {
   return `${USAGE_PREFIX}${accountId}:${month}`;
 }
@@ -230,6 +240,35 @@ async function createBillingAuditEntry(storage: IStorage, accountId: string, eve
 }
 
 export async function getEntitlementState(storage: IStorage, accountId: string): Promise<EntitlementState> {
+  // Check the permanent master-workspace marker first.  This key is written by
+  // setInternalTestEntitlement at activation time and is never overwritten by
+  // billing events.  Checking it here makes internal-test bypass survive server
+  // restarts, billing event replay, and account state resets.
+  const masterMarker = await storage.getSystemSetting(settingKeyForMasterWorkspace(accountId));
+  if (masterMarker === "1") {
+    const stored = await storage.getSystemSetting(settingKeyForEntitlement(accountId));
+    const existing = stored ? (JSON.parse(stored) as EntitlementState) : null;
+    // If stored entitlement is already internal_test return it unchanged.
+    if (existing?.source === "internal_test") return existing;
+    // Otherwise rebuild it now (e.g. after a billing event overwrote the key).
+    const now = new Date().toISOString();
+    const rebuilt: EntitlementState = {
+      accountId,
+      planId: "free",
+      status: "active",
+      source: "internal_test",
+      pricingVersion: BREEDLOG_PRICING_VERSION,
+      effectiveAt: existing?.effectiveAt ?? now,
+      updatedAt: now,
+    };
+    await storage.setSystemSetting(
+      settingKeyForEntitlement(accountId),
+      JSON.stringify(rebuilt),
+      "Internal test entitlement — rebuilt from master-workspace marker",
+    );
+    return rebuilt;
+  }
+
   const raw = await storage.getSystemSetting(settingKeyForEntitlement(accountId));
   if (raw) return JSON.parse(raw) as EntitlementState;
   const now = new Date().toISOString();
@@ -501,8 +540,53 @@ export async function simulateBillingProviderEvent(
   return { entitlement, subscription: nextSubscription };
 }
 
+/**
+ * Returns true when the account is the internal BreedLog test account.
+ * Internal test accounts bypass all plan-based product limits but remain
+ * fully user-isolated (no access to other workspaces, no admin authority).
+ */
+export function isInternalTestEntitlement(entitlement: EntitlementState): boolean {
+  return entitlement.source === "internal_test";
+}
+
+/**
+ * Grants internal_test entitlement to an account.
+ * Must only be called server-side from the device-activation path after
+ * isMasterSimulationCode() confirms the access code.
+ * Does NOT create a billing subscription or admin record.
+ */
+export async function setInternalTestEntitlement(storage: IStorage, accountId: string): Promise<EntitlementState> {
+  const now = new Date().toISOString();
+  const state: EntitlementState = {
+    accountId,
+    planId: "free",          // not a paid account — limits bypassed by source check
+    status: "active",
+    source: "internal_test",
+    pricingVersion: BREEDLOG_PRICING_VERSION,
+    effectiveAt: now,
+    updatedAt: now,
+  };
+  // Write the entitlement key (same as normal entitlements).
+  await storage.setSystemSetting(
+    settingKeyForEntitlement(accountId),
+    JSON.stringify(state),
+    "Internal test entitlement — all product limits bypassed, no billing",
+  );
+  // Write a SEPARATE permanent marker key that is never overwritten by billing
+  // events or account resets.  getEntitlementState checks this key first so
+  // the internal-test bypass is re-derived reliably after a server restart or
+  // if a billing event has accidentally overwritten the entitlement key.
+  await storage.setSystemSetting(
+    settingKeyForMasterWorkspace(accountId),
+    "1",
+    "Permanent master-workspace identity marker — do not delete",
+  );
+  return state;
+}
+
 export async function assertCanCreateAnimal(storage: IStorage, accountId: string): Promise<void> {
   const entitlement = await getEntitlementState(storage, accountId);
+  if (isInternalTestEntitlement(entitlement)) return; // internal test — unlimited animals
   const plan = getBreedLogPlan(entitlement.planId);
   const activeLimit = plan.limits.activeAnimals;
   if (activeLimit === "unlimited") return;
@@ -546,6 +630,10 @@ export async function reserveUsage(
   now = new Date(),
 ): Promise<UsageState> {
   const entitlement = await getEntitlementState(storage, accountId);
+  if (isInternalTestEntitlement(entitlement)) {
+    // Internal test — tracking only, no quota enforcement
+    return getUsageState(storage, accountId, now);
+  }
   const plan = getBreedLogPlan(entitlement.planId);
   const usage = await getUsageState(storage, accountId, now);
   const subscription = entitlement.planId === "premium" ? await getBillingSubscriptionState(storage, accountId) : null;
@@ -587,6 +675,8 @@ export async function reserveUsage(
 export async function purgeCommercialState(storage: IStorage, accountId: string): Promise<void> {
   await storage.deleteSystemSetting(settingKeyForEntitlement(accountId));
   await storage.deleteSystemSetting(settingKeyForSubscription(accountId));
+  // Delete the user's AI chat memory on account purge
+  await storage.deleteSystemSetting(`breedlog:ai-memory:${accountId}`);
 
   for (const row of await storage.listSystemSettings(`${USAGE_PREFIX}${accountId}:`)) {
     await storage.deleteSystemSetting(row.key);
@@ -640,6 +730,13 @@ export async function applyBillingEvent(storage: IStorage, event: BillingEvent):
   const existing = await storage.getSystemSetting(eventKey);
   if (existing) {
     return { idempotent: true, entitlement: await getEntitlementState(storage, event.accountId) };
+  }
+
+  // Never let a billing event overwrite an internal-test workspace.
+  const masterMarkerKey = settingKeyForMasterWorkspace(event.accountId);
+  const masterMarker = await storage.getSystemSetting(masterMarkerKey);
+  if (masterMarker === "1") {
+    return { idempotent: false, entitlement: await getEntitlementState(storage, event.accountId) };
   }
 
   const now = new Date().toISOString();

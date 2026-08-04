@@ -39,9 +39,9 @@ export function PDFQualitySelector({ value, onChange, className }: PDFQualitySel
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground mt-1">
-        {value === 'low' && 'Smaller file size, faster export. Good for quick sharing.'}
-        {value === 'medium' && 'Balanced quality and file size. Recommended for most uses.'}
-        {value === 'high' && 'Best image quality, larger file size. Good for printing.'}
+        {value === 'low' && 'Compresses embedded images to ~50% JPEG quality. Smallest file — ideal for WhatsApp or quick sharing.'}
+        {value === 'medium' && 'Compresses images to ~70% JPEG quality. Good balance of file size and clarity for email sharing.'}
+        {value === 'high' && 'Full image resolution, no compression. Largest file — best for printing or archiving.'}
       </p>
     </div>
   );

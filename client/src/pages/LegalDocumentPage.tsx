@@ -1,4 +1,4 @@
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,12 +64,6 @@ export default function LegalDocumentPage() {
                 <p className="text-sm text-muted-foreground">{document.subtitle}</p>
               </div>
               <Badge variant="outline">{document.lastUpdated}</Badge>
-            </div>
-            <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-300">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>{document.reviewStatus}</p>
-              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">

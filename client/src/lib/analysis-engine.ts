@@ -450,7 +450,14 @@ export function getFlockOverview(input: AnalysisDataInput) {
 
 export function getGrowthAnalysis(input: AnalysisDataInput) {
   const { today, animals, byAnimal, perfByAnimal } = buildDataset(input);
-  const lambs = animals.filter((animal) => isLamb(animal, today));
+  // Growth analysis uses an 18-month (540-day) window so year-old lambs still in
+  // the growth phase are included. The 365-day isLamb cutoff is for live UI
+  // classification only and would exclude legitimate young stock from ranking.
+  const GROWTH_ANALYSIS_MAX_AGE_DAYS = 540;
+  const lambs = animals.filter((animal) => {
+    const age = getAgeInDaysAt(animal.birthDate, today);
+    return age !== null && age <= GROWTH_ANALYSIS_MAX_AGE_DAYS && isActive(animal);
+  });
 
   const rows: RankedAnimal[] = lambs.map((lamb) => {
     const points = getWeightPointsForAnimal(lamb, perfByAnimal.get(lamb.id) || []);

@@ -10,3 +10,5 @@ test-results/
 cookies.txt
 .canvas/
 attached_assets/
+.cache/
+.upm/

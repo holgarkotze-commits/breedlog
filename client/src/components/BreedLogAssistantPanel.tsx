@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Bot, Send, X, AlertCircle, Sparkles, Lightbulb, Database, Info, ChevronDown, ChevronUp, Settings2 } from "lucide-react";
+import { Bot, Send, X, AlertCircle, Sparkles, Lightbulb, Database, Info, Settings2, Trash2, Clock } from "lucide-react";
 import { Sheet, SheetContent, SheetTitle, SheetClose } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,12 +17,26 @@ interface PromptCategory {
 
 interface AIResponse {
   answer: string;
+  answerType?: string;
   confidence: "high" | "medium" | "low" | "insufficient";
   usedData: string[];
   warnings: string[];
   suggestedNextQuestions: string[];
   category: string | null;
   contextSection: string | null;
+  provider?: string;
+  model?: string;
+}
+
+interface HistoryExchange {
+  question: string;
+  answer: string;
+  answerType: string;
+  confidence: string;
+  usedData: string[];
+  warnings: string[];
+  suggestedNextQuestions: string[];
+  timestamp: string;
 }
 
 const CONFIDENCE_STYLE: Record<string, string> = {
@@ -32,17 +46,40 @@ const CONFIDENCE_STYLE: Record<string, string> = {
   insufficient: "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
 };
 
+function authHeaders(): Record<string, string> {
+  const token = getDeviceToken();
+  if (token) return { Authorization: `Bearer ${token}` };
+  return {};
+}
+
 async function fetchPromptCategories(): Promise<PromptCategory[]> {
   try {
-    const token = getDeviceToken();
-    const res = await fetch("/api/ai/suggested-prompts", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await fetch("/api/ai/suggested-prompts", { headers: authHeaders() });
     if (!res.ok) return [];
     const data = await res.json();
     return data.categories || [];
   } catch {
     return [];
+  }
+}
+
+async function fetchHistory(): Promise<HistoryExchange[]> {
+  try {
+    const res = await fetch("/api/ai/history", { headers: authHeaders() });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.exchanges) ? data.exchanges : [];
+  } catch {
+    return [];
+  }
+}
+
+async function deleteHistory(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/ai/history", { method: "DELETE", headers: authHeaders() });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -52,13 +89,9 @@ async function sendAIChat(opts: {
   contextSection?: string;
   animalId?: number;
 }): Promise<AIResponse> {
-  const token = getDeviceToken();
   const res = await fetch("/api/ai/chat", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(opts),
   });
   if (!res.ok) {
@@ -75,21 +108,30 @@ export function BreedLogAssistantPanel() {
   const [categories, setCategories] = useState<PromptCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("herd-overview");
   const [question, setQuestion] = useState("");
+  const [sentQuestion, setSentQuestion] = useState<string | null>(null);
   const [response, setResponse] = useState<AIResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Controls area (category + suggested questions) collapsed when an answer is showing
   const [showControls, setShowControls] = useState(true);
-  // Details panel (Data used / caveats / warnings) — collapsed by default
   const [showDetails, setShowDetails] = useState(false);
-  // Follow-up questions — show only first MAX_VISIBLE_FOLLOWUPS by default
   const [showAllFollowUp, setShowAllFollowUp] = useState(false);
+  // Chat history loaded from server
+  const [history, setHistory] = useState<HistoryExchange[]>([]);
+  const [clearingHistory, setClearingHistory] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const answerRef = useRef<HTMLDivElement>(null);
 
+  // Load categories once
   useEffect(() => {
     fetchPromptCategories().then(setCategories);
   }, []);
+
+  // Load history when panel opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchHistory().then(setHistory);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && initialOptions) {
@@ -97,6 +139,7 @@ export function BreedLogAssistantPanel() {
       if (initialOptions.prompt) setQuestion(initialOptions.prompt);
       if (!initialOptions.prompt) setQuestion("");
       setResponse(null);
+      setSentQuestion(null);
       setError(null);
       setShowControls(true);
       setShowDetails(false);
@@ -113,6 +156,7 @@ export function BreedLogAssistantPanel() {
   async function handleSend() {
     const q = question.trim();
     if (!q || loading) return;
+    setSentQuestion(q);
     setQuestion("");
     setLoading(true);
     setError(null);
@@ -127,9 +171,21 @@ export function BreedLogAssistantPanel() {
         animalId: initialOptions.animalId,
       });
       setResponse(result);
-      // Auto-collapse controls so the answer is the first thing visible
       setShowControls(false);
-      // Scroll answer into view after a tick
+      // Append to local history view (optimistic — server persists it)
+      setHistory((prev) => [
+        ...prev,
+        {
+          question: q,
+          answer: result.answer,
+          answerType: result.answerType ?? "data",
+          confidence: result.confidence,
+          usedData: result.usedData,
+          warnings: result.warnings,
+          suggestedNextQuestions: result.suggestedNextQuestions,
+          timestamp: new Date().toISOString(),
+        },
+      ]);
       setTimeout(() => answerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
@@ -139,6 +195,18 @@ export function BreedLogAssistantPanel() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleClearHistory() {
+    setClearingHistory(true);
+    const ok = await deleteHistory();
+    if (ok) {
+      setHistory([]);
+      setResponse(null);
+      setSentQuestion(null);
+      setError(null);
+    }
+    setClearingHistory(false);
   }
 
   function handlePromptChip(prompt: string) {
@@ -151,6 +219,7 @@ export function BreedLogAssistantPanel() {
   function handleFollowUp(q: string) {
     setQuestion(q);
     setResponse(null);
+    setSentQuestion(null);
     setError(null);
     setShowControls(false);
     setShowDetails(false);
@@ -164,20 +233,19 @@ export function BreedLogAssistantPanel() {
     : visibleFollowUps.slice(0, MAX_VISIBLE_FOLLOWUPS);
   const hiddenFollowUpCount = visibleFollowUps.length - shownFollowUps.length;
 
+  // Prior exchanges: all except the most recent (which is shown as the current response)
+  const priorHistory = response ? history.slice(0, -1) : history;
+
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) closePanel(); }}>
       <SheetContent
         side="bottom"
         className={cn(
-          // Full-screen on mobile — no wasted gap at top
           "grid grid-rows-[auto_minmax(0,1fr)_auto] p-0",
           "h-[100dvh] max-h-[100dvh]",
           "w-full max-w-full overflow-hidden",
-          // Rounded top corners for aesthetics
           "rounded-t-2xl",
-          // Hide the Sheet's built-in absolute close button — we render our own
           "[&>button.absolute]:hidden",
-          // Desktop: side drawer — compact height so it doesn't fill desktop screen
           "md:right-4 md:top-4 md:h-[calc(100dvh-2rem)] md:max-h-none md:w-[440px] md:max-w-[440px] md:rounded-2xl md:border md:border-border/70",
         )}
         data-testid="ai-assistant-panel"
@@ -189,9 +257,26 @@ export function BreedLogAssistantPanel() {
           </div>
           <div className="min-w-0 flex-1">
             <SheetTitle className="text-base font-bold leading-tight">BreedLog Assistant</SheetTitle>
-            <p className="text-[11px] text-muted-foreground">Answers from your BreedLog records</p>
+            <p className="text-[11px] text-muted-foreground">
+              Answers from your BreedLog records
+            </p>
           </div>
-          {/* Controls toggle button — compact, always visible */}
+          {/* Clear conversation */}
+          {history.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 flex-none text-muted-foreground"
+              onClick={handleClearHistory}
+              disabled={clearingHistory}
+              data-testid="button-clear-history"
+              aria-label="Clear conversation"
+              title="Clear conversation"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+          {/* Controls toggle */}
           <Button
             variant="ghost"
             size="icon"
@@ -224,13 +309,51 @@ export function BreedLogAssistantPanel() {
         >
           <div className="space-y-3 p-4 pb-6">
 
+            {/* ── Prior conversation history (up to 5 exchanges) ── */}
+            {priorHistory.length > 0 && (
+              <div className="space-y-2" data-testid="ai-history-section">
+                <div className="flex items-center gap-1.5 px-0.5">
+                  <Clock className="h-3 w-3 text-muted-foreground/60" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                    Previous exchanges
+                  </span>
+                </div>
+                {priorHistory.slice(-4).map((ex, i) => (
+                  <div key={i} className="rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 space-y-1.5">
+                    <p className="text-[11px] font-medium text-foreground/70 break-words">{ex.question}</p>
+                    <p
+                      className="text-[11px] text-muted-foreground break-words leading-relaxed"
+                      data-testid="ai-history-answer"
+                    >
+                      {ex.answer.slice(0, 200)}{ex.answer.length > 200 ? "…" : ""}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <Badge
+                        variant="secondary"
+                        className={cn("text-[9px] px-1.5 py-0", CONFIDENCE_STYLE[ex.confidence] || CONFIDENCE_STYLE.low)}
+                      >
+                        {ex.confidence}
+                      </Badge>
+                      {ex.suggestedNextQuestions?.[0] && (
+                        <button
+                          onClick={() => handleFollowUp(ex.suggestedNextQuestions[0])}
+                          className="text-[10px] text-primary/70 underline-offset-2 hover:underline hover:text-primary"
+                        >
+                          Ask follow-up
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* ── Collapsible controls: category + suggested questions ── */}
             {showControls && (
               <div
                 className="space-y-3 rounded-xl border border-border/60 bg-muted/30 p-3"
                 data-testid="ai-controls-area"
               >
-                {/* Category selector */}
                 <div>
                   <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Category
@@ -247,7 +370,6 @@ export function BreedLogAssistantPanel() {
                   </Select>
                 </div>
 
-                {/* Suggested prompts — wrap cleanly */}
                 {currentCategory && currentCategory.prompts.length > 0 && !loading && (
                   <div>
                     <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -275,6 +397,15 @@ export function BreedLogAssistantPanel() {
               </div>
             )}
 
+            {/* ── Current sent question bubble ── */}
+            {sentQuestion && (
+              <div className="ml-8 flex justify-end" data-testid="ai-sent-question">
+                <div className="rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground max-w-[90%] break-words shadow-sm">
+                  {sentQuestion}
+                </div>
+              </div>
+            )}
+
             {/* ── Answer card ── */}
             {response && (
               <div
@@ -286,6 +417,14 @@ export function BreedLogAssistantPanel() {
                 <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
                   <Sparkles className="h-3.5 w-3.5 flex-none text-primary" />
                   <span className="flex-1 text-xs font-semibold text-foreground">Assistant</span>
+                  {response.model && (
+                    <span
+                      className="text-[10px] text-muted-foreground/70 font-mono"
+                      data-testid="ai-model-label"
+                    >
+                      {response.model}
+                    </span>
+                  )}
                   <Badge
                     variant="secondary"
                     className={cn("flex-none text-[10px]", CONFIDENCE_STYLE[response.confidence])}
@@ -310,7 +449,7 @@ export function BreedLogAssistantPanel() {
                   )}
                 </div>
 
-                {/* Main answer — always visible, prominent */}
+                {/* Main answer */}
                 <div className="px-3 py-3">
                   <p
                     className="break-words text-sm leading-relaxed text-foreground"
@@ -320,7 +459,7 @@ export function BreedLogAssistantPanel() {
                   </p>
                 </div>
 
-                {/* Details section — Data used + Caveats — collapsed by default */}
+                {/* Details section */}
                 {showDetails && hasDetails && (
                   <div
                     className="space-y-2 border-t border-border/40 px-3 pb-3 pt-2"
@@ -368,7 +507,7 @@ export function BreedLogAssistantPanel() {
                   </div>
                 )}
 
-                {/* Follow-up questions — compact chips, max 2 visible by default */}
+                {/* Follow-up questions */}
                 {visibleFollowUps.length > 0 && (
                   <div
                     className="border-t border-border/40 px-3 pb-3 pt-2"
@@ -449,7 +588,7 @@ export function BreedLogAssistantPanel() {
           </div>
         </div>
 
-        {/* ── Row 3: Input composer — always visible, never clipped ── */}
+        {/* ── Row 3: Input composer ── */}
         <div
           className="flex-none border-t border-border/60 bg-background px-3 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] pt-3"
         >
@@ -487,7 +626,7 @@ export function BreedLogAssistantPanel() {
             </button>
           </div>
           <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-            Read-only · Answers from your records only
+            Read-only · BreedLog remembers your last 5 exchanges
           </p>
         </div>
       </SheetContent>

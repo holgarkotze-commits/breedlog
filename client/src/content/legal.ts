@@ -13,7 +13,6 @@ export type LegalDocument = {
   key: LegalDocumentKey;
   title: string;
   subtitle: string;
-  reviewStatus: string;
   lastUpdated: string;
   sections: LegalDocumentSection[];
 };
@@ -23,14 +22,13 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
     key: "privacy",
     title: "Privacy Policy",
     subtitle: "How BreedLog handles account, herd, backup, export, and support data.",
-    reviewStatus: "Draft for professional legal review before production activation.",
     lastUpdated: "2026-07-13",
     sections: [
       {
         heading: "What BreedLog Stores",
         body: [
           "BreedLog stores account identity, device registration records, farm profile details, animal records, parentage, mating, lambing, health, weight, performance, genetics, documents, images, export history, backup metadata, subscription state, support requests, and audit events needed to operate the service.",
-          "Workspace data is scoped to the authenticated account. Ordinary commercial accounts must not receive Haka's controlled U2A2ZAVQ Kwantam simulation workspace.",
+          "Workspace data is scoped to the authenticated account. Each user's records are isolated and are not shared with or visible to other accounts.",
         ],
       },
       {
@@ -53,7 +51,6 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
     key: "terms",
     title: "Terms of Service",
     subtitle: "Core service terms for using BreedLog.",
-    reviewStatus: "Draft for professional legal review before production activation.",
     lastUpdated: "2026-07-13",
     sections: [
       {
@@ -82,8 +79,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
   subscription: {
     key: "subscription",
     title: "Subscription Terms",
-    subtitle: "Locked Free and Premium plan rules for BreedLog.",
-    reviewStatus: "Draft for professional legal and tax review before production activation.",
+    subtitle: "Free and Premium plan rules for BreedLog.",
     lastUpdated: "2026-07-13",
     sections: [
       {
@@ -113,7 +109,6 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
     key: "account-deletion",
     title: "Account Deletion Policy",
     subtitle: "How BreedLog handles requested deletion and the recovery window.",
-    reviewStatus: "Draft for professional legal review before production activation.",
     lastUpdated: "2026-07-13",
     sections: [
       {

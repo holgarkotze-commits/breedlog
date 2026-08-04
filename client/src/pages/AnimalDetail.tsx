@@ -6,7 +6,9 @@ import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import { Layout } from "@/components/Layout";
 import { useNavigationHistory } from "@/lib/navigation-history-context";
 import { cn } from "@/lib/utils";
-import { buildAnimalProfilePdfBlob } from "@/lib/animal-profile-pdf";
+import { buildAnimalProfilePdfBlob, type PedigreeGrandparents, type PedigreeAncestor } from "@/lib/animal-profile-pdf";
+import { PDFExportDialog } from "@/components/PDFExportDialog";
+import { type PDFQuality } from "@/lib/pdf-utils";
 import { saveFileInNativeDownloads } from "@/lib/native-file-save";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -297,15 +299,58 @@ export default function AnimalDetail() {
                 >
                     <img src={animal.photo || logo} className={animal.photo ? "w-full h-full object-cover" : "w-1/3 md:w-1/2 h-1/3 md:h-1/2 absolute top-1/3 md:top-1/4 left-1/3 md:left-1/4 opacity-20 grayscale"} />
                 </div>
-                <CardContent className="p-3 md:p-6 space-y-1 md:space-y-3">
+                <CardContent className="p-3 md:p-4 space-y-0">
+                    {/* Identification */}
                     <InfoRow label="Electronic ID" value={animal.electronicId || "N/A"} />
-                    <InfoRow label="Birth Date" value={animal.birthDate ? format(new Date(animal.birthDate), "dd MMM yyyy") : "N/A"} />
-                    <InfoRow label="Current Weight" value={animal.currentWeight ? `${animal.currentWeight} kg` : "N/A"} />
-                    <InfoRow label="Breeder" value={animal.breederName || "Self"} />
-                    <InfoRow label="Profile Entry" value={animal.createdAt ? format(new Date(animal.createdAt), "dd MMM yyyy") : "N/A"} testId="text-entry-date" />
-                    <div className="pt-2 md:pt-4 border-t border-border">
-                        <Label className="text-muted-foreground text-[10px] md:text-xs uppercase">Notes</Label>
-                        <p className="text-xs md:text-sm mt-1">{animal.notes || "No notes recorded."}</p>
+                    {animal.tattooId && <InfoRow label="Tattoo ID" value={animal.tattooId} />}
+                    {animal.studPrefix && <InfoRow label="Stud Prefix" value={animal.studPrefix} />}
+
+                    {/* Classification */}
+                    <div className="pt-1.5 border-t border-border/40 mt-1.5">
+                        <InfoRow label="Breed" value={animal.breed || "N/A"} />
+                        <InfoRow label="Classification" value={animal.classification?.replace(/_/g, ' ') || "N/A"} />
+                        {animal.animalSource && animal.animalSource !== 'unknown_not_recorded' && (
+                            <InfoRow label="Source" value={animal.animalSource.replace(/_/g, ' ')} />
+                        )}
+                        {animal.sex === 'ram' && animal.ramType && (
+                            <InfoRow label="Ram Type" value={animal.ramType.replace(/_/g, ' ')} />
+                        )}
+                        {animal.sex === 'ram' && animal.ramBreedingStatus && (
+                            <InfoRow label="Breeding Status" value={animal.ramBreedingStatus.replace(/_/g, ' ')} />
+                        )}
+                    </div>
+
+                    {/* Parentage & birth */}
+                    <div className="pt-1.5 border-t border-border/40 mt-1.5">
+                        <InfoRow label="Sire" value={animal.sire?.tagId || animal.externalSireInfo || "N/A"} />
+                        <InfoRow label="Dam" value={animal.dam?.tagId || animal.externalDamInfo || "N/A"} />
+                        <InfoRow label="Birth Date" value={animal.birthDate ? format(new Date(animal.birthDate), "dd MMM yyyy") : "N/A"} />
+                        {animal.birthStatus && <InfoRow label="Birth Status" value={animal.birthStatus} />}
+                        {animal.lambingSeason && <InfoRow label="Lambing Season" value={animal.lambingSeason} />}
+                    </div>
+
+                    {/* Weights */}
+                    <div className="pt-1.5 border-t border-border/40 mt-1.5">
+                        {animal.birthWeight && <InfoRow label="Birth Weight" value={`${animal.birthWeight} kg`} />}
+                        <InfoRow label="Current Weight" value={animal.currentWeight ? `${animal.currentWeight} kg` : "N/A"} />
+                        {animal.weight100Day && <InfoRow label="100-Day Weight" value={`${animal.weight100Day} kg`} />}
+                        {animal.weight270Day && <InfoRow label="270-Day Weight" value={`${animal.weight270Day} kg`} />}
+                    </div>
+
+                    {/* Farm & management */}
+                    <div className="pt-1.5 border-t border-border/40 mt-1.5">
+                        <InfoRow label="Breeder" value={animal.breederName || "Self"} />
+                        {animal.ownerName && <InfoRow label="Owner" value={animal.ownerName} />}
+                        {animal.environmentGroup && <InfoRow label="Env. Group" value={animal.environmentGroup} />}
+                        {animal.managementGroup && <InfoRow label="Mgmt Group" value={animal.managementGroup} />}
+                        {animal.location && <InfoRow label="Location" value={animal.location} />}
+                        <InfoRow label="Profile Entry" value={animal.createdAt ? format(new Date(animal.createdAt), "dd MMM yyyy") : "N/A"} testId="text-entry-date" />
+                    </div>
+
+                    {/* Notes */}
+                    <div className="pt-2 border-t border-border mt-1.5">
+                        <Label className="text-muted-foreground text-[10px] uppercase">Notes</Label>
+                        <p className="text-xs mt-1">{animal.notes || "No notes recorded."}</p>
                     </div>
                 </CardContent>
             </Card>
@@ -364,9 +409,29 @@ function InfoRow({ label, value, testId }: { label: string, value: string, testI
     )
 }
 
-function PedigreeView({ animal }: { animal: any }) {
+function PedigreeView({ animal }: { animal: AnimalWithRelations }) {
     const { data: tree } = useFamilyTree(animal.id);
     const [scale, setScale] = useState(0.85);
+
+    // Grandparents are resolved server-side in GET /api/animals/:id.
+    // Fall back to externalSireInfo / externalDamInfo text on the parent when
+    // no linked Animal record exists (e.g. bought-in sire not in workspace).
+    const resolveGrandparent = (
+        resolved: Animal | null | undefined,
+        parent: Animal | null | undefined,
+        externalField: 'externalSireInfo' | 'externalDamInfo',
+    ): { tagId: string | null; breed: string | null; animalId: number | null } => {
+        if (resolved) return { tagId: resolved.tagId, breed: resolved.breed ?? null, animalId: resolved.id };
+        const ext = parent?.[externalField] as string | null | undefined;
+        if (ext) return { tagId: ext, breed: null, animalId: null };
+        return { tagId: null, breed: null, animalId: null };
+    };
+
+    const gp = animal.grandparents;
+    const paternalGrandsire = resolveGrandparent(gp?.paternalGrandsire, animal.sire, 'externalSireInfo');
+    const paternalGranddam  = resolveGrandparent(gp?.paternalGranddam,  animal.sire, 'externalDamInfo');
+    const maternalGrandsire = resolveGrandparent(gp?.maternalGrandsire, animal.dam,  'externalSireInfo');
+    const maternalGranddam  = resolveGrandparent(gp?.maternalGranddam,  animal.dam,  'externalDamInfo');
     const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     
@@ -491,12 +556,24 @@ function PedigreeView({ animal }: { animal: any }) {
                                         <div className="absolute left-0 top-[20px] bottom-[20px] w-[2px] bg-primary/50"></div>
                                         <div className="flex items-center">
                                             <div className="w-3 h-[2px] bg-primary/50"></div>
-                                            <PedigreeNodeSmall label="GP Sire" sublabel="Sire's Father" />
+                                            <PedigreeNodeSmall
+                                                label="GP Sire"
+                                                sublabel="Sire's Father"
+                                                tagId={paternalGrandsire.tagId}
+                                                breed={paternalGrandsire.breed}
+                                                animalId={paternalGrandsire.animalId}
+                                            />
                                         </div>
                                         <div className="h-2"></div>
                                         <div className="flex items-center">
                                             <div className="w-3 h-[2px] bg-primary/50"></div>
-                                            <PedigreeNodeSmall label="GP Dam" sublabel="Sire's Mother" />
+                                            <PedigreeNodeSmall
+                                                label="GP Dam"
+                                                sublabel="Sire's Mother"
+                                                tagId={paternalGranddam.tagId}
+                                                breed={paternalGranddam.breed}
+                                                animalId={paternalGranddam.animalId}
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -521,12 +598,24 @@ function PedigreeView({ animal }: { animal: any }) {
                                         <div className="absolute left-0 top-[20px] bottom-[20px] w-[2px] bg-primary/50"></div>
                                         <div className="flex items-center">
                                             <div className="w-3 h-[2px] bg-primary/50"></div>
-                                            <PedigreeNodeSmall label="GP Sire" sublabel="Dam's Father" />
+                                            <PedigreeNodeSmall
+                                                label="GP Sire"
+                                                sublabel="Dam's Father"
+                                                tagId={maternalGrandsire.tagId}
+                                                breed={maternalGrandsire.breed}
+                                                animalId={maternalGrandsire.animalId}
+                                            />
                                         </div>
                                         <div className="h-2"></div>
                                         <div className="flex items-center">
                                             <div className="w-3 h-[2px] bg-primary/50"></div>
-                                            <PedigreeNodeSmall label="GP Dam" sublabel="Dam's Mother" />
+                                            <PedigreeNodeSmall
+                                                label="GP Dam"
+                                                sublabel="Dam's Mother"
+                                                tagId={maternalGranddam.tagId}
+                                                breed={maternalGranddam.breed}
+                                                animalId={maternalGranddam.animalId}
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -721,15 +810,53 @@ function PedigreeNode({ animal, label, isSubject, externalInfo }: {
     );
 }
 
-function PedigreeNodeSmall({ label, sublabel }: { label: string, sublabel: string }) {
+function PedigreeNodeSmall({
+    label,
+    sublabel,
+    tagId,
+    breed,
+    animalId,
+}: {
+    label: string;
+    sublabel: string;
+    tagId?: string | null;
+    breed?: string | null;
+    animalId?: number | null;
+}) {
+    const [, setLocation] = useLocation();
+    const hasData = !!tagId;
+    const isClickable = !!animalId;
+
     return (
-        <div className="flex items-center gap-2 p-2 rounded-lg border border-dashed border-muted-foreground/20 bg-secondary/30">
-            <div className="w-8 h-8 rounded-full bg-muted-foreground/10 border border-muted-foreground/20 flex items-center justify-center">
-                <img src={logo} alt="placeholder" className="w-4 h-4 opacity-20 grayscale" />
+        <div
+            className={cn(
+                "flex items-center gap-2 p-2 rounded-lg border transition-all",
+                hasData
+                    ? "border-primary/40 bg-card/60 hover:border-primary/70 hover:shadow-sm"
+                    : "border-dashed border-muted-foreground/20 bg-secondary/30",
+                isClickable && "cursor-pointer active:scale-95"
+            )}
+            onClick={() => isClickable && setLocation(`/animals/${animalId}`)}
+            data-testid={`pedigree-gp-node-${animalId ?? label.replace(/\s+/g, "-").toLowerCase()}`}
+        >
+            <div className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center border flex-shrink-0",
+                hasData ? "bg-primary/10 border-primary/30" : "bg-muted-foreground/10 border-muted-foreground/20"
+            )}>
+                <img src={logo} alt="placeholder" className={cn("w-4 h-4 grayscale", hasData ? "opacity-40" : "opacity-20")} />
             </div>
-            <div className="text-[9px] text-muted-foreground">
-                <div className="font-bold">{label}</div>
-                <div className="opacity-70">{sublabel}</div>
+            <div className="text-[9px] min-w-0">
+                <div className={cn("font-bold truncate", hasData ? "text-foreground" : "text-muted-foreground")}>
+                    {label}
+                </div>
+                {hasData ? (
+                    <>
+                        <div className="text-primary/90 font-semibold truncate">{tagId}</div>
+                        {breed && <div className="text-muted-foreground opacity-70 truncate">{breed}</div>}
+                    </>
+                ) : (
+                    <div className="text-muted-foreground opacity-70">{sublabel}</div>
+                )}
             </div>
         </div>
     );
@@ -1184,7 +1311,9 @@ ${data.notes || "No notes recorded."}
         toast({ title: "Word Document Exported", description: `${animal.tagId} profile downloaded as Word document` });
     };
     
-    const handleExportPDF = async () => {
+    const [isPdfExportOpen, setIsPdfExportOpen] = useState(false);
+
+    const handleExportPDF = async (quality: PDFQuality = 'high') => {
         toast({ title: "Preparing PDF...", description: "Building performance datasheet, please wait." });
 
         let nativePhotoBase64: string | null = null;
@@ -1212,6 +1341,33 @@ ${data.notes || "No notes recorded."}
             breedingEvents || [],
             healthRecords || []
         );
+
+        // Resolve grandparents from the workspace allAnimals list using the parent's
+        // sireId / damId. Falls back to externalSireInfo / externalDamInfo text when
+        // no linked record is present. Matches the three-generation pedigree contract.
+        const resolveAncestor = (
+            parent: Animal | null | undefined,
+            idField: 'sireId' | 'damId',
+            externalField: 'externalSireInfo' | 'externalDamInfo',
+            animals: Animal[],
+        ): PedigreeAncestor | null => {
+            if (!parent) return null;
+            const linkedId = parent[idField] as number | null | undefined;
+            if (linkedId) {
+                const found = animals.find((a: Animal) => a.id === linkedId);
+                if (found) return { tagId: found.tagId, breed: found.breed ?? null };
+            }
+            const externalText = parent[externalField] as string | null | undefined;
+            if (externalText) return { tagId: externalText };
+            return null;
+        };
+        const nativeGrandparents: PedigreeGrandparents = {
+            paternalGrandsire: resolveAncestor(animal.sire, 'sireId', 'externalSireInfo', allAnimals || []),
+            paternalGranddam:  resolveAncestor(animal.sire, 'damId',  'externalDamInfo',  allAnimals || []),
+            maternalGrandsire: resolveAncestor(animal.dam,  'sireId', 'externalSireInfo', allAnimals || []),
+            maternalGranddam:  resolveAncestor(animal.dam,  'damId',  'externalDamInfo',  allAnimals || []),
+        };
+
         const nativeFilename = getDocumentFileName("PerformanceDatasheet", animal.tagId || `ID${animal.id}`);
         const pdfBlob = await buildAnimalProfilePdfBlob({
             animal,
@@ -1219,7 +1375,8 @@ ${data.notes || "No notes recorded."}
             farmSettings,
             photoBase64: nativePhotoBase64,
             profile: nativeProfile,
-        });
+            grandparents: nativeGrandparents,
+        }, quality);
         await createExportedDoc.mutateAsync({
             name: nativeFilename,
             documentType: "individual",
@@ -1715,24 +1872,34 @@ body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8.5pt; color: #1a1
     };
     
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-semibold" data-testid="button-export-profile">
-                    <Download className="w-3.5 h-3.5 mr-1.5" /> Export
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleExportPDF()} data-testid="export-pdf">
-                    <FileText className="w-4 h-4 mr-2" /> Export Individual (PDF)
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportWord} data-testid="export-word">
-                    <FileText className="w-4 h-4 mr-2" /> Word Document
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleExportCSV} data-testid="export-csv">
-                    <FileText className="w-4 h-4 mr-2" /> CSV
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <>
+            <PDFExportDialog
+                open={isPdfExportOpen}
+                onOpenChange={setIsPdfExportOpen}
+                title="Export Animal PDF"
+                description="Choose quality to balance file size vs. image sharpness for the performance datasheet."
+                onExport={(quality) => handleExportPDF(quality)}
+                exportLabel="Download PDF"
+            />
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 px-3 text-xs font-semibold" data-testid="button-export-profile">
+                        <Download className="w-3.5 h-3.5 mr-1.5" /> Export
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setIsPdfExportOpen(true)} data-testid="export-pdf">
+                        <FileText className="w-4 h-4 mr-2" /> Export Individual (PDF)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportWord} data-testid="export-word">
+                        <FileText className="w-4 h-4 mr-2" /> Word Document
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportCSV} data-testid="export-csv">
+                        <FileText className="w-4 h-4 mr-2" /> CSV
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </>
     );
 }
 
