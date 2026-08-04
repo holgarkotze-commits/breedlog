@@ -16,6 +16,12 @@ const BILLING_SUBSCRIPTION_PREFIX = "commercial:subscription:";
 const BILLING_CHECKOUT_PREFIX = "commercial:checkout:";
 const BILLING_PORTAL_PREFIX = "commercial:portal:";
 const BILLING_AUDIT_PREFIX = "commercial:audit:";
+// Separate permanent marker for master-simulation workspaces.
+// This key is written by setInternalTestEntitlement and is never overwritten
+// by billing events or normal entitlement updates.  getEntitlementState checks
+// it first so the internal-test bypass survives server restarts and billing
+// event replay without depending on the billing entitlement key.
+const MASTER_WORKSPACE_PREFIX = "commercial:master_workspace:";
 
 export class EntitlementDeniedError extends Error {
   constructor(
@@ -180,6 +186,10 @@ function settingKeyForEntitlement(accountId: string): string {
   return `${ENTITLEMENT_PREFIX}${accountId}`;
 }
 
+function settingKeyForMasterWorkspace(accountId: string): string {
+  return `${MASTER_WORKSPACE_PREFIX}${accountId}`;
+}
+
 function settingKeyForUsage(accountId: string, month: string): string {
   return `${USAGE_PREFIX}${accountId}:${month}`;
 }
@@ -230,6 +240,35 @@ async function createBillingAuditEntry(storage: IStorage, accountId: string, eve
 }
 
 export async function getEntitlementState(storage: IStorage, accountId: string): Promise<EntitlementState> {
+  // Check the permanent master-workspace marker first.  This key is written by
+  // setInternalTestEntitlement at activation time and is never overwritten by
+  // billing events.  Checking it here makes internal-test bypass survive server
+  // restarts, billing event replay, and account state resets.
+  const masterMarker = await storage.getSystemSetting(settingKeyForMasterWorkspace(accountId));
+  if (masterMarker === "1") {
+    const stored = await storage.getSystemSetting(settingKeyForEntitlement(accountId));
+    const existing = stored ? (JSON.parse(stored) as EntitlementState) : null;
+    // If stored entitlement is already internal_test return it unchanged.
+    if (existing?.source === "internal_test") return existing;
+    // Otherwise rebuild it now (e.g. after a billing event overwrote the key).
+    const now = new Date().toISOString();
+    const rebuilt: EntitlementState = {
+      accountId,
+      planId: "free",
+      status: "active",
+      source: "internal_test",
+      pricingVersion: BREEDLOG_PRICING_VERSION,
+      effectiveAt: existing?.effectiveAt ?? now,
+      updatedAt: now,
+    };
+    await storage.setSystemSetting(
+      settingKeyForEntitlement(accountId),
+      JSON.stringify(rebuilt),
+      "Internal test entitlement — rebuilt from master-workspace marker",
+    );
+    return rebuilt;
+  }
+
   const raw = await storage.getSystemSetting(settingKeyForEntitlement(accountId));
   if (raw) return JSON.parse(raw) as EntitlementState;
   const now = new Date().toISOString();
@@ -527,10 +566,20 @@ export async function setInternalTestEntitlement(storage: IStorage, accountId: s
     effectiveAt: now,
     updatedAt: now,
   };
+  // Write the entitlement key (same as normal entitlements).
   await storage.setSystemSetting(
     settingKeyForEntitlement(accountId),
     JSON.stringify(state),
     "Internal test entitlement — all product limits bypassed, no billing",
+  );
+  // Write a SEPARATE permanent marker key that is never overwritten by billing
+  // events or account resets.  getEntitlementState checks this key first so
+  // the internal-test bypass is re-derived reliably after a server restart or
+  // if a billing event has accidentally overwritten the entitlement key.
+  await storage.setSystemSetting(
+    settingKeyForMasterWorkspace(accountId),
+    "1",
+    "Permanent master-workspace identity marker — do not delete",
   );
   return state;
 }
@@ -679,6 +728,13 @@ export async function applyBillingEvent(storage: IStorage, event: BillingEvent):
   const existing = await storage.getSystemSetting(eventKey);
   if (existing) {
     return { idempotent: true, entitlement: await getEntitlementState(storage, event.accountId) };
+  }
+
+  // Never let a billing event overwrite an internal-test workspace.
+  const masterMarkerKey = settingKeyForMasterWorkspace(event.accountId);
+  const masterMarker = await storage.getSystemSetting(masterMarkerKey);
+  if (masterMarker === "1") {
+    return { idempotent: false, entitlement: await getEntitlementState(storage, event.accountId) };
   }
 
   const now = new Date().toISOString();

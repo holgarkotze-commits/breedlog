@@ -301,9 +301,13 @@ test("Records.tsx PDF CSS uses A4 landscape orientation (via canonical template)
 test("Records.tsx PDF footer uses canonical dark gradient (via export-template.ts)", () => {
   // After canonical migration, footer CSS is in export-template.ts, not inline.
   // Records.tsx calls renderExportFooter() which outputs the canonical dark gradient.
+  // The canonical footer uses the dark ribbon gradient (#1a1a1a / #2d2d2d), NOT
+  // the old light-navy gradient (#003366 / #1a5276) that was in the inline PDF_CSS.
   assert.match(records, /renderExportFooter/);
   const exportTemplate = fs.readFileSync("client/src/lib/export-template.ts", "utf8");
-  assert.match(exportTemplate, /linear-gradient\(135deg/);
+  assert.match(exportTemplate, /linear-gradient\(135deg,\s*#1a1a1a\s+0%,\s*#2d2d2d\s+100%\)/);
+  // Must NOT contain the old light-navy placeholder gradient
+  assert.doesNotMatch(exportTemplate, /linear-gradient\(135deg, #003366, #1a5276\)/);
 });
 
 test("Records.tsx PDF footer contains BREEDLOG brand text (via canonical footer)", () => {
