@@ -36,12 +36,26 @@ export async function resolveTargetUserId(opts:{userId?:string; accessCode?:stri
   return primaryUserId;
 }
 
-const outDir=path.join(process.cwd(),'artifacts/field-test'); fs.mkdirSync(outDir,{recursive:true});
-const ds=buildFieldTestSimulationDataset();
+// outDir and dataset are built only inside main(), never at module load time.
+// This prevents any file write from occurring on import or in tests.
 
 function toCsv(rows: Record<string,unknown>[]) { const keys=Object.keys(rows[0]||{}); return [keys.join(','),...rows.map(r=>keys.map(k=>JSON.stringify(r[k]??'')).join(','))].join('\n'); }
 
+// --write-evidence flag gate.
+// Without this flag the script is read-only: it prints a summary to stdout and
+// does NOT write any repository file (tracked or otherwise).
+// With --write-evidence an explicit --out-dir <path> argument is also required.
+// The tracked report artifacts/field-test/breedlog-simulation-report.md is
+// static historical evidence and must never be overwritten at runtime.
+const writeEvidence = process.argv.includes('--write-evidence');
+const evidenceOutDir = (() => { const i = process.argv.indexOf('--out-dir'); return i > -1 ? process.argv[i+1] : undefined; })();
+if (writeEvidence && !evidenceOutDir) {
+  console.error('--write-evidence requires --out-dir <path>');
+  process.exit(1);
+}
+
 async function main(){
+  const ds = buildFieldTestSimulationDataset();
   const targetUserId = await resolveTargetUserId({userId: rawUserId, accessCode: rawAccessCode});
   const existing = await db.select().from(animals).where(and(eq(animals.userId,targetUserId), like(animals.notes, `%${SIM_BATCH_ID}%`)));
   const report={
@@ -53,10 +67,25 @@ async function main(){
     plannedAnimals:ds.animals.length,
     matingWindow:{start:MATING_START,end:MATING_END}
   };
-  fs.writeFileSync(path.join(outDir,'breedlog-simulation-dataset.json'), JSON.stringify(ds,null,2));
-  fs.writeFileSync(path.join(outDir,'breedlog-simulation-dataset.csv'), toCsv(ds.animals));
-  fs.writeFileSync(path.join(outDir,'breedlog-simulation-report.md'), `# BreedLog Field-Test Simulation\n\nBatch: ${SIM_BATCH_ID}\n\nResolved target userId: ${targetUserId}\n\nResolved from: ${report.resolvedFrom}${report.accessCode?` (code ${report.accessCode})`:''}\n\nMode: ${report.mode}\n\nTotals: ${ds.animals.length} animals (200 ewes, 4 rams, 222 lambs).\n`);
-  if(!apply){ console.log(JSON.stringify(report,null,2)); return; }
+
+  // Default mode: print summary, do NOT write any file.
+  if (!writeEvidence) {
+    console.log(JSON.stringify(report, null, 2));
+    if (!apply) return;
+  }
+
+  // Evidence mode: write to caller-supplied out-dir only, never to the tracked repo path.
+  if (writeEvidence) {
+    const outDir = path.resolve(evidenceOutDir!);
+    fs.mkdirSync(outDir, {recursive:true});
+    fs.writeFileSync(path.join(outDir,'breedlog-simulation-dataset.json'), JSON.stringify(ds,null,2));
+    fs.writeFileSync(path.join(outDir,'breedlog-simulation-dataset.csv'), toCsv(ds.animals));
+    fs.writeFileSync(path.join(outDir,'breedlog-simulation-report.md'), `# BreedLog Field-Test Simulation\n\nBatch: ${SIM_BATCH_ID}\n\nResolved target userId: ${targetUserId}\n\nResolved from: ${report.resolvedFrom}${report.accessCode?` (code ${report.accessCode})`:''}\n\nMode: ${report.mode}\n\nTotals: ${ds.animals.length} animals (200 ewes, 4 rams, 222 lambs).\n`);
+    console.log(JSON.stringify(report, null, 2));
+    if (!apply) return;
+  }
+
+  if(!apply){ return; }
   if(existing.length>0){ console.log('Batch already present for target; idempotent no-op.'); return; }
 
   const tagToId = new Map<string,number>();

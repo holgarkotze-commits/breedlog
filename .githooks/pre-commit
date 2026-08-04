@@ -1,0 +1,27 @@
+#!/bin/sh
+# pre-commit hook — blocks staging of permanently protected files.
+# Configured via:  git config core.hooksPath .githooks
+#
+# Override for intentional evidence commits only:
+#   BREEDLOG_ALLOW_PROTECTED_COMMIT=1 git commit ...
+
+PROTECTED_FILES=".replit artifacts/field-test/breedlog-simulation-report.md"
+
+if [ "${BREEDLOG_ALLOW_PROTECTED_COMMIT}" = "1" ]; then
+  exit 0
+fi
+
+FAIL=0
+for f in $PROTECTED_FILES; do
+  if git diff --cached --name-only | grep -qF "$f"; then
+    echo "[pre-commit] REJECTED: protected file is staged: $f"
+    echo "  To override intentionally: BREEDLOG_ALLOW_PROTECTED_COMMIT=1 git commit ..."
+    FAIL=1
+  fi
+done
+
+if [ "$FAIL" = "1" ]; then
+  exit 1
+fi
+
+exit 0
