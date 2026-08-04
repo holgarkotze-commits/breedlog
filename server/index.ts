@@ -538,8 +538,6 @@ async function runStartupMigrations() {
 
 (async () => {
   await runStartupMigrations();
-  const { cleanupSimulationData } = await import("./simulation-cleanup");
-  await cleanupSimulationData();
   await registerRoutes(httpServer, app);
 
   // Global error handler — always returns JSON, never leaks stack traces in production
