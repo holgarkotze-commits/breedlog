@@ -1863,10 +1863,23 @@ export async function registerRoutes(
       if (confirmPhrase !== "RESET BREEDLOG") {
         return res.status(400).json({ message: "Invalid confirmation phrase" });
       }
+
+      // Capture entitlement BEFORE the destructive reset so the internal-test
+      // marker can be restored afterwards.  Normal free accounts are unaffected.
+      const preResetEntitlement = await getEntitlementState(storage, userId);
+      const wasInternalTest = isInternalTestEntitlement(preResetEntitlement);
+
       const backup = backupBeforeReset
         ? await createWorkspaceBackup(storage, userId, { manual: false, passphrase })
         : null;
       await storage.clearAllData(userId);
+
+      // Restore the permanent internal-test entitlement marker so the workspace
+      // retains its AI bypass after reset without requiring re-activation.
+      if (wasInternalTest) {
+        await setInternalTestEntitlement(storage, userId);
+      }
+
       res.json({ message: "All data cleared successfully", backup });
     } catch (err: any) {
       console.error("Reset data error:", err);
