@@ -245,7 +245,11 @@ export function generateAllAlerts(opts: {
   const today = opts.today ?? new Date();
   const all: DecisionAlert[] = [];
 
-  const lambing = generateLambingSeasonAlert(today);
+  // Only emit the seasonal alert when the workspace has livestock context;
+  // an empty workspace after reset should not show "Lambing Season Active".
+  const hasLivestockContext =
+    (opts.animals != null && opts.animals.length > 0) || opts.matingGroups.length > 0;
+  const lambing = hasLivestockContext ? generateLambingSeasonAlert(today) : null;
   if (lambing) all.push(lambing);
 
   all.push(...generateHealthFollowUpAlerts(opts.flockHealthEvents, today));
