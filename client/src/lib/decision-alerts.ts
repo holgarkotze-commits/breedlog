@@ -239,17 +239,19 @@ export function generatePedigreeIncompletenessAlert(animals: LambAlertAnimal[]):
 export function generateAllAlerts(opts: {
   today?: Date;
   flockHealthEvents: Array<{ id: number | string; nextFollowUpDate?: string | null; eventName?: string | null }>;
-  matingGroups: Array<{ id: number | string; name?: string | null; dateOut?: string | null }>;
+  matingGroups: Array<{ id: number | string; name?: string | null; dateOut?: string | null; status?: string | null }>;
   animals?: LambAlertAnimal[];
 }): DecisionAlert[] {
   const today = opts.today ?? new Date();
   const all: DecisionAlert[] = [];
 
-  // Only emit the seasonal alert when the workspace has livestock context;
-  // an empty workspace after reset should not show "Lambing Season Active".
-  const hasLivestockContext =
-    (opts.animals != null && opts.animals.length > 0) || opts.matingGroups.length > 0;
-  const lambing = hasLivestockContext ? generateLambingSeasonAlert(today) : null;
+  // The generic seasonal alert requires at least one ACTIVE mating group.
+  // Rams, ewes, lambs, or explicitly closed/historical mating groups must not trigger it.
+  // status absent or null is treated as active for backward-compatibility with older records.
+  const hasActiveMatingGroup = opts.matingGroups.some(
+    (g) => g.status == null || g.status === "active",
+  );
+  const lambing = hasActiveMatingGroup ? generateLambingSeasonAlert(today) : null;
   if (lambing) all.push(lambing);
 
   all.push(...generateHealthFollowUpAlerts(opts.flockHealthEvents, today));

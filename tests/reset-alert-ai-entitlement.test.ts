@@ -62,48 +62,70 @@ test("Fix 1b: empty workspace (August) → no lambing-season alert", () => {
   assert.equal(lambing.length, 0, "Expected zero lambing-season alerts for empty workspace in August");
 });
 
-test("Fix 1c: workspace with at least one animal (July) → lambing-season alert present", () => {
+test("Fix 1c: July + two active rams + zero mating groups → NO lambing-season alert (live failure case)", () => {
   const alerts = generateAllAlerts({
     today: JULY,
     flockHealthEvents: [],
     matingGroups: [],
     animals: [
-      { id: 1, status: "active", sex: "female", birthDate: "2023-01-01" },
+      { id: 1, status: "active", sex: "male", birthDate: "2022-01-01" },
+      { id: 2, status: "active", sex: "male", birthDate: "2021-06-15" },
     ],
   });
   const lambing = alerts.filter((a) => a.key.startsWith("lambing-season-"));
-  assert.equal(lambing.length, 1, "Expected lambing-season alert when workspace has animals in July");
-  assert.equal(lambing[0].title, "Lambing Season Active");
+  assert.equal(lambing.length, 0, "Two active rams with no mating groups must NOT trigger the lambing alert");
 });
 
-test("Fix 1d: workspace with at least one mating group (July) → lambing-season alert present", () => {
+test("Fix 1d: July + animals present + only closed mating groups → NO lambing-season alert", () => {
   const alerts = generateAllAlerts({
     today: JULY,
     flockHealthEvents: [],
-    matingGroups: [{ id: 42, name: "Group A" }],
+    matingGroups: [
+      { id: 10, name: "Autumn 2025", status: "closed" },
+      { id: 11, name: "Spring 2026", status: "completed" },
+    ],
+    animals: [{ id: 1, status: "active", sex: "female" }],
+  });
+  const lambing = alerts.filter((a) => a.key.startsWith("lambing-season-"));
+  assert.equal(lambing.length, 0, "Closed/completed mating groups must NOT trigger the lambing alert");
+});
+
+test("Fix 1e: July + at least one active mating group → lambing-season alert IS present", () => {
+  const alerts = generateAllAlerts({
+    today: JULY,
+    flockHealthEvents: [],
+    matingGroups: [
+      { id: 10, name: "Autumn 2025", status: "closed" },
+      { id: 20, name: "Current Group", status: "active" },
+    ],
     animals: [],
   });
   const lambing = alerts.filter((a) => a.key.startsWith("lambing-season-"));
-  assert.equal(lambing.length, 1, "Expected lambing-season alert when workspace has mating groups in July");
+  assert.equal(lambing.length, 1, "Expected lambing-season alert when there is an active mating group in July");
+  assert.equal(lambing[0].title, "Lambing Season Active");
 });
 
-test("Fix 1e: non-season month → no lambing-season alert regardless of animals", () => {
+test("Fix 1f: non-season month → no lambing-season alert regardless of active mating groups", () => {
   const alerts = generateAllAlerts({
     today: NOV,
     flockHealthEvents: [],
-    matingGroups: [],
-    animals: [{ id: 1, status: "active" }],
+    matingGroups: [{ id: 1, name: "Active Group", status: "active" }],
+    animals: [],
   });
   const lambing = alerts.filter((a) => a.key.startsWith("lambing-season-"));
-  assert.equal(lambing.length, 0, "No lambing-season alert outside Jul/Aug");
+  assert.equal(lambing.length, 0, "No lambing-season alert outside Jul/Aug even with active mating group");
 });
 
-test("Fix 1 source: generateAllAlerts gates lambing on livestock context", () => {
-  // The fix must reference a livestock-context check before generateLambingSeasonAlert
+test("Fix 1 source: generateAllAlerts gates lambing on active mating group", () => {
   assert.match(
     alertsSrc,
-    /hasLivestockContext|animals.*length.*>.*0.*matingGroups|matingGroups.*length.*>.*0.*animals/,
-    "generateAllAlerts should gate the lambing alert on livestock context",
+    /hasActiveMatingGroup|matingGroups\.some/,
+    "generateAllAlerts must gate the lambing alert on active mating groups",
+  );
+  // Must not use the old blanket livestock-context check
+  assert.ok(
+    !alertsSrc.includes("hasLivestockContext"),
+    "Old hasLivestockContext rule must be removed",
   );
 });
 
