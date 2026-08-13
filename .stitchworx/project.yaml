@@ -1,0 +1,47 @@
+schema_version: 1
+
+product:
+  id: "breedlog"
+  name: "breedlog"
+
+engineering_system:
+  repository: "holgarkotze-commits/stitch-worx-software-engineering-system"
+  ref: "main"
+  transition_fallback_ref: "agent/artifact-governance-handoff-system"
+  governance_pr: 3
+  master_index: "00_MASTER_INDEX.md"
+  artifact_governance: "doctrine/05_ARTIFACT_AND_INFORMATION_GOVERNANCE.md"
+  handoff_skill: "skills/handoff/SKILL.md"
+
+code_repository:
+  repository: "holgarkotze-commits/breedlog"
+  default_branch: "main"
+  local_instruction_files:
+    - "AGENTS.md"
+
+project_assets:
+  repository: "holgarkotze-commits/PROJECT-ASSETS"
+  ref: "main"
+  transition_fallback_ref: "agent/artifact-governance-bootstrap"
+  governance_pr: 1
+  root: "breedlog"
+  navigation_state: "legacy-migration-pending"
+  target_index: "00_PROJECT_ASSET_INDEX.md"
+  target_current_build_status: "01_CURRENT_BUILD_STATUS.md"
+  target_next_work_order: "NEXT_WORK_ORDER.md"
+  target_active_handoff: "07-Implementation-Plans/Handoffs/CURRENT_HANDOFF.md"
+
+artifact_policy:
+  one_canonical_copy: true
+  auto_route_when_unambiguous: true
+  stop_on_ambiguous_persistent_destination: true
+  arbitrary_user_profile_paths_forbidden: true
+
+bootstrap_order:
+  - "repository AGENTS.md and local instructions"
+  - "engineering system governance"
+  - "project assets governance and mapped root"
+  - "current product status/work order/handoff when established"
+  - "live repository/runtime state"
+
+# Developed by STITCH WORX — Software, systems & digital builds.
