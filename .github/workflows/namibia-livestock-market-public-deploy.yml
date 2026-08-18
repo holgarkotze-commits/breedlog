@@ -1,0 +1,187 @@
+name: Deploy Namibia Livestock Market Live (Public Executor)
+
+on:
+  push:
+    branches:
+      - ops/namibia-livestock-market-cloudflare
+    paths:
+      - 'ops/namibia-livestock-market-live/**'
+      - '.github/workflows/namibia-livestock-market-public-deploy.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-and-prove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ops/namibia-livestock-market-live
+    env:
+      CI: 'true'
+      NO_COLOR: '1'
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout deployment executor branch
+        uses: actions/checkout@v4
+        with:
+          ref: ops/namibia-livestock-market-cloudflare
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate application JavaScript
+        run: |
+          set -euo pipefail
+          node --check worker/index.js
+          node --check public/app.js
+          node --check public/fallback-data.js
+          node --check public/sw.js
+
+      - name: Resolve Wrangler and validate configuration
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@latest --version
+          npx --yes wrangler@latest deploy --dry-run
+
+      - name: Deploy to Cloudflare
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f wrangler.raw.log wrangler.redacted.log deployment-public.env
+
+          if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
+            MODE="permanent"
+            npx --yes wrangler@latest deploy > wrangler.raw.log 2>&1
+          else
+            MODE="temporary"
+            node - <<'NODE'
+          const fs = require('fs');
+          const cfg = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'));
+          delete cfg.triggers;
+          fs.writeFileSync('wrangler.temporary.json', JSON.stringify(cfg, null, 2));
+          NODE
+            unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+            npx --yes wrangler@latest deploy --temporary --config wrangler.temporary.json > wrangler.raw.log 2>&1
+          fi
+
+          CLAIM_URL="$(grep -Eo 'https://dash\.cloudflare\.com/claim-preview\?claimToken=[^[:space:]`\"]+' wrangler.raw.log | tail -n 1 || true)"
+          if [[ -n "$CLAIM_URL" ]]; then
+            echo "::add-mask::$CLAIM_URL"
+          fi
+
+          sed -E 's#https://dash\.cloudflare\.com/claim-preview\?claimToken=[^[:space:]`\"]+#CLAIM_URL_REDACTED#g' wrangler.raw.log > wrangler.redacted.log
+          cat wrangler.redacted.log
+
+          LIVE_URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' wrangler.raw.log | tail -n 1 || true)"
+          if [[ -z "$LIVE_URL" ]]; then
+            echo "Cloudflare deployment completed without an extractable workers.dev URL." >&2
+            exit 1
+          fi
+
+          printf 'MODE=%s\nLIVE_URL=%s\n' "$MODE" "$LIVE_URL" > deployment-public.env
+          echo "MODE=$MODE" >> "$GITHUB_ENV"
+          echo "LIVE_URL=$LIVE_URL" >> "$GITHUB_ENV"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "live_url=$LIVE_URL" >> "$GITHUB_OUTPUT"
+          echo "Cloudflare deployment mode: $MODE"
+          echo "Live endpoint: $LIVE_URL"
+
+      - name: Verify live UI and all species APIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6; do
+            if curl --fail --silent --show-error --max-time 30 "$LIVE_URL/api/health" -o health.json; then
+              break
+            fi
+            sleep 5
+          done
+
+          curl --fail --silent --show-error --max-time 90 "$LIVE_URL/api/live?species=cattle&from=2026-01-01" -o cattle.json
+          curl --fail --silent --show-error --max-time 90 "$LIVE_URL/api/live?species=sheep&from=2026-01-01" -o sheep.json
+          curl --fail --silent --show-error --max-time 90 "$LIVE_URL/api/live?species=goat&from=2026-01-01" -o goat.json
+          curl --fail --silent --show-error --max-time 30 "$LIVE_URL/" -o live-index.html
+
+          node - <<'NODE'
+          const fs = require('fs');
+          const verification = {
+            health: JSON.parse(fs.readFileSync('health.json', 'utf8')),
+            checked_at: new Date().toISOString(),
+            species: {}
+          };
+          for (const species of ['cattle', 'sheep', 'goat']) {
+            const data = JSON.parse(fs.readFileSync(`${species}.json`, 'utf8'));
+            verification.species[species] = {
+              observations: data.summary?.observations ?? 0,
+              classes: data.summary?.classes ?? [],
+              venues: data.summary?.venues?.length ?? 0,
+              latest_discovered: data.latest_discovered ?? null,
+              latest_parsed: data.latest_parsed ?? null,
+              source_errors: (data.errors || []).length
+            };
+            if (verification.species[species].observations < 1) {
+              throw new Error(`Live ${species} API returned zero verified observations.`);
+            }
+          }
+          const html = fs.readFileSync('live-index.html', 'utf8');
+          if (!html.includes('Namibia Livestock Market')) {
+            throw new Error('Live root page did not contain the expected product identity.');
+          }
+          verification.root_ui = 'PASS';
+          fs.writeFileSync('verification.json', JSON.stringify(verification, null, 2) + '\n');
+          console.log(JSON.stringify(verification, null, 2));
+          NODE
+
+      - name: Persist public deployment proof
+        shell: bash
+        working-directory: .
+        run: |
+          set -euo pipefail
+          mkdir -p .deployment-evidence
+          export MODE LIVE_URL
+          node - <<'NODE'
+          const fs = require('fs');
+          const verification = JSON.parse(fs.readFileSync('ops/namibia-livestock-market-live/verification.json', 'utf8'));
+          const manifest = {
+            product: 'Namibia Livestock Market Live',
+            deployed_at: new Date().toISOString(),
+            deployment_mode: process.env.MODE,
+            live_url: process.env.LIVE_URL,
+            cloudflare_hosted: true,
+            verification,
+            canonical_repository: 'holgarkotze-commits/PROJECT-ASSETS/Namibia-Livestock-Market-Live',
+            creator: 'STITCH WORX — Software, systems & digital builds.'
+          };
+          fs.writeFileSync('.deployment-evidence/namibia-livestock-market-live-public.json', JSON.stringify(manifest, null, 2) + '\n');
+          NODE
+
+          git config user.name 'STITCH WORX Deploy Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .deployment-evidence/namibia-livestock-market-live-public.json
+          git commit -m 'chore: record live Namibia livestock market deployment'
+          git push origin HEAD:ops/namibia-livestock-market-cloudflare
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          {
+            echo '## Namibia Livestock Market Live'
+            echo ''
+            echo "- Cloudflare deployment: **PASS**"
+            echo "- Deployment mode: **$MODE**"
+            echo "- Live URL: $LIVE_URL"
+            echo '- Root UI: **PASS**'
+            echo '- Cattle API: **PASS**'
+            echo '- Sheep API: **PASS**'
+            echo '- Goat API: **PASS**'
+            echo ''
+            echo '**A STITCH WORX Product — Software, systems & digital builds.**'
+          } >> "$GITHUB_STEP_SUMMARY"
