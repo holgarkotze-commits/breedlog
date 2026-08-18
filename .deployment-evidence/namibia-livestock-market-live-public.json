@@ -1,0 +1,76 @@
+{
+  "product": "Namibia Livestock Market Live",
+  "deployed_at": "2026-08-18T10:31:47.886Z",
+  "deployment_mode": "temporary",
+  "live_url": "https://namibia-livestock-market-live.horn-lemonade.workers.dev",
+  "cloudflare_hosted": true,
+  "verification": {
+    "health": {
+      "ok": true,
+      "service": "Namibia Livestock Market Live",
+      "version": "2026-08-18.3",
+      "time": "2026-08-18T10:31:21.592Z",
+      "data_mode": "live-source + verified-2026-baseline"
+    },
+    "checked_at": "2026-08-18T10:31:47.845Z",
+    "species": {
+      "cattle": {
+        "observations": 17,
+        "classes": [
+          "Bull",
+          "Cow Fat",
+          "Cow Lean",
+          "Cow Medium",
+          "Cow&Calf",
+          "Heifer",
+          "Nguni Heifer",
+          "Nguni Stoor",
+          "Nguni Tolly",
+          "Ox",
+          "Slaughter Heifer",
+          "Stoor",
+          "Stoor Heifer",
+          "Tolly",
+          "Tollys/Heifer Mix",
+          "Weaner",
+          "Young Bull"
+        ],
+        "venues": 4,
+        "latest_discovered": "2026-08-14",
+        "latest_parsed": "2026-07-16",
+        "source_errors": 20
+      },
+      "sheep": {
+        "observations": 5,
+        "classes": [
+          "Sheep Castrate",
+          "Sheep Ewe",
+          "Sheep Ewe&Lamb",
+          "Sheep Lamb",
+          "Sheep Ram"
+        ],
+        "venues": 3,
+        "latest_discovered": "2026-08-14",
+        "latest_parsed": "2026-07-16",
+        "source_errors": 20
+      },
+      "goat": {
+        "observations": 5,
+        "classes": [
+          "Goat Ewe",
+          "Goat Ewe&Lamb",
+          "Goat Kapater",
+          "Goat Lamb",
+          "Goat Ram"
+        ],
+        "venues": 3,
+        "latest_discovered": "2026-08-14",
+        "latest_parsed": "2026-07-16",
+        "source_errors": 20
+      }
+    },
+    "root_ui": "PASS"
+  },
+  "canonical_repository": "holgarkotze-commits/PROJECT-ASSETS/Namibia-Livestock-Market-Live",
+  "creator": "STITCH WORX — Software, systems & digital builds."
+}
