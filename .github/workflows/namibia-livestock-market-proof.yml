@@ -3,7 +3,7 @@ name: Prove Namibia Livestock Market Cloudflare Deployment
 on:
   pull_request:
     branches:
-      - main
+      - ci/livestock-market-proof-runner
     paths:
       - 'ops/namibia-livestock-market-live/**'
 
