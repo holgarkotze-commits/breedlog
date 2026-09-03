@@ -35,6 +35,7 @@ import { FIELD_TEST_BUILD_DATE, FIELD_TEST_VERSION_LABEL } from "@shared/version
 import { BREEDLOG_RUNTIME_VERSION, type RuntimeUpdateState } from "@shared/update-runtime";
 import { detectRuntimePlatform, getConfiguredApiOrigin, getRuntimeVersionQuery } from "@/lib/runtime-updates";
 import { saveFileInNativeDownloads } from "@/lib/native-file-save";
+import { openExportPrintDialog } from "@/lib/export-template";
 
 type EntitlementResponse = {
   entitlement: {
@@ -909,12 +910,7 @@ export default function Settings() {
 </html>
     `;
     
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 500);
-    }
+    openExportPrintDialog(htmlContent);
     toast({ title: "PDF Ready", description: "Print dialog opened for PDF export" });
   };
 
@@ -1146,7 +1142,7 @@ export default function Settings() {
 
                   <Button 
                     type="submit" 
-                    className="w-full rugged-btn bg-primary text-primary-foreground" 
+                    className="w-full rugged-btn bg-primary text-white"
                     disabled={saveMutation.isPending}
                     data-testid="button-save-farm-settings"
                   >
@@ -1242,7 +1238,7 @@ export default function Settings() {
                       key={size.value}
                       type="button"
                       variant={logoSize === size.value ? "default" : "outline"}
-                      className={`flex flex-col h-auto py-2 ${logoSize === size.value ? "bg-primary text-primary-foreground" : ""}`}
+                      className={`flex flex-col h-auto py-2 ${logoSize === size.value ? "bg-primary text-white" : ""}`}
                       onClick={() => form.setValue("logoSize", size.value)}
                       data-testid={`button-logo-size-${size.value}`}
                     >
@@ -1287,7 +1283,7 @@ export default function Settings() {
               <Button 
                 type="button"
                 onClick={form.handleSubmit(onSubmit)}
-                className="w-full rugged-btn bg-primary text-primary-foreground" 
+                className="w-full rugged-btn bg-primary text-white"
                 disabled={saveMutation.isPending}
                 data-testid="button-save-logo-settings"
               >

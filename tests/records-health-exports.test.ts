@@ -69,6 +69,12 @@ test("canonical template exports openExportPrintDialog", () => {
   assert.match(templateSrc, /export\s+function\s+openExportPrintDialog/);
 });
 
+test("canonical PDF preview uses a blob URL for Android/PWA compatibility", () => {
+  assert.match(templateSrc, /new Blob\(\[htmlContent\]/);
+  assert.match(templateSrc, /URL\.createObjectURL\(blob\)/);
+  assert.match(templateSrc, /w\.location\.href = blobUrl/);
+});
+
 test("canonical template exports GROUP_ROWS_PER_PAGE = 20", () => {
   assert.match(templateSrc, /GROUP_ROWS_PER_PAGE\s*=\s*20/);
 });

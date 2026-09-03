@@ -1315,6 +1315,10 @@ ${data.notes || "No notes recorded."}
 
     const handleExportPDF = async (quality: PDFQuality = 'high') => {
         toast({ title: "Preparing PDF...", description: "Building performance datasheet, please wait." });
+        // Open the preview synchronously while the Download PDF click still has
+        // browser user activation. Opening it after the awaits below is treated
+        // as an unsolicited popup by mobile browsers and gets blocked.
+        const previewWindow = window.open("", "_blank");
 
         let nativePhotoBase64: string | null = null;
         if (animal.photo) {
@@ -1396,11 +1400,13 @@ ${data.notes || "No notes recorded."}
         const nativePath = await saveFileInNativeDownloads(pdfBlob, nativeFilename, "application/pdf");
 
         if (nativePath) {
+            previewWindow?.close();
             toast({ title: "PDF Exported", description: `${animal.tagId} performance datasheet saved to ${nativePath}` });
         } else {
             const blobUrl = URL.createObjectURL(pdfBlob);
-            const previewWindow = window.open(blobUrl, "_blank");
-            if (!previewWindow) {
+            if (previewWindow) {
+                previewWindow.location.href = blobUrl;
+            } else {
                 const anchor = document.createElement("a");
                 anchor.href = blobUrl;
                 anchor.download = nativeFilename;

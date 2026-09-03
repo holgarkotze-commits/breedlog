@@ -195,9 +195,23 @@ export function wrapExportDocument(title: string, css: string, pagesHtml: string
 /** Open the result in the browser print dialog */
 export function openExportPrintDialog(htmlContent: string): void {
   const w = window.open('', '_blank');
-  if (w) {
-    w.document.write(htmlContent);
-    w.document.close();
-    setTimeout(() => w.print(), 500);
-  }
+  if (!w) return;
+
+  // A blob URL is reliable in Android/PWA standalone mode, where writing into
+  // an about:blank popup can silently fail and leave the exported PDF unopened.
+  const blob = new Blob([htmlContent], { type: 'text/html; charset=utf-8' });
+  const blobUrl = URL.createObjectURL(blob);
+  let printStarted = false;
+  const printOnce = () => {
+    if (printStarted) return;
+    printStarted = true;
+    setTimeout(() => {
+      w.print();
+      URL.revokeObjectURL(blobUrl);
+    }, 400);
+  };
+
+  w.onload = printOnce;
+  w.location.href = blobUrl;
+  setTimeout(printOnce, 2500);
 }
