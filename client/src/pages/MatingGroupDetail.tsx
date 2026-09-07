@@ -24,6 +24,17 @@ import { z } from "zod";
 import { useLocation, Link } from "wouter";
 import { useRoute } from "wouter";
 import { useNavigationHistory } from "@/lib/navigation-history-context";
+import {
+  getCanonicalGroupCSS,
+  renderExportHeader,
+  renderExportFooter,
+  wrapExportDocument,
+  openExportPrintDialog,
+  GROUP_ROWS_PER_PAGE,
+  sanitizePublicNote,
+  escapeHtmlText,
+  getExportStatusClassToken,
+} from "@/lib/export-template";
 
 export default function MatingGroupDetail() {
   const [, params] = useRoute("/breeding/groups/:id");
@@ -75,7 +86,23 @@ export default function MatingGroupDetail() {
   const dateIn = new Date(group.dateIn);
   const dateOut = group.dateOut ? new Date(group.dateOut) : addDays(dateIn, 42);
   const expectedLambing = addMonths(dateIn, 5);
-  const ewesInGroup = (group.eweIds || []).map(id => getAnimalById(id)).filter(Boolean);
+  const ewesInGroup = (group.eweIds || []).map(id => {
+    const ewe = getAnimalById(id);
+    return ewe
+      ? { ...ewe, unavailable: false as const }
+      : {
+          id,
+          tagId: `Unavailable animal #${id}`,
+          name: "",
+          photo: "",
+          electronicId: "",
+          tattooId: "",
+          breed: "",
+          currentWeight: null,
+          status: "unavailable",
+          unavailable: true as const,
+        };
+  });
   
   const getDocumentFileName = (type: string) => {
     const date = format(new Date(), "yyyy-MM-dd");
@@ -84,19 +111,18 @@ export default function MatingGroupDetail() {
   };
   
   const getGroupExportData = () => {
-    const ewes = (group.eweIds || []).map(id => {
-      const ewe = getAnimalById(id);
-      return ewe ? {
+    const ewes = ewesInGroup.map(ewe => ({
         id: ewe.id,
         tagId: ewe.tagId,
         name: ewe.name || "",
         photo: ewe.photo || "",
         electronicId: ewe.electronicId || "",
         tattooId: ewe.tattooId || "",
-        breed: ewe.breed || "Meatmaster",
+        breed: ewe.unavailable ? "" : ewe.breed || "Meatmaster",
         currentWeight: ewe.currentWeight || null,
-      } : null;
-    }).filter(Boolean);
+        status: ewe.unavailable ? "unavailable" : ewe.status || "",
+        unavailable: ewe.unavailable,
+      }));
     
     return {
       name: group.name,
@@ -108,7 +134,7 @@ export default function MatingGroupDetail() {
       ramTattooId: ram?.tattooId || "",
       ramBreed: ram?.breed || "Meatmaster",
       ewes: ewes,
-      eweCount: ewes.length,
+      eweCount: (group.eweIds || []).length,
       dateIn: format(dateIn, "yyyy-MM-dd"),
       dateOut: format(dateOut, "yyyy-MM-dd"),
       matingPeriodDays: 42,
@@ -142,9 +168,9 @@ export default function MatingGroupDetail() {
       "",
     ].join("\n") : "";
     
-    const headers = ["Ewe Tag", "Ewe Name", "Electronic ID", "Breed", "Date Introduced", "Status"];
+    const headers = ["Ewe Tag", "Ewe Name", "Electronic ID", "Breed", "Date Introduced", "Current status"];
     const rows = g.ewes.map((ewe: any) => [
-      ewe.tagId, ewe.name || "", ewe.electronicId || "", ewe.breed, g.dateIn, "Active"
+      ewe.tagId, ewe.name || "", ewe.electronicId || "", ewe.breed, g.dateIn, ewe.status || "active"
     ]);
     const dataContent = [headers.join(","), ...rows.map(r => r.map(v => `"${v}"`).join(","))].join("\n");
     const content = farmInfo + `"Ram","${g.ramTagId} (${g.ramName})"` + "\n\n" + dataContent;
@@ -153,157 +179,47 @@ export default function MatingGroupDetail() {
   };
   
   const exportPDF = () => {
+    {
     const g = getGroupExportData();
-    
-    const content = `
-<!DOCTYPE html>
-<html>
-<head>
-<title>${g.name} - Mating Group Report</title>
-<style>
-@page { size: A4 portrait; margin: 10mm; }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; }
-.page { width: 190mm; min-height: 277mm; padding: 5mm; padding-bottom: 30mm; margin: 0 auto; position: relative; }
-.header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 3mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 4mm; }
-.header-left { width: 60px; flex-shrink: 0; }
-.header-center { flex: 1; text-align: center; }
-.header-right { width: 60px; text-align: right; font-size: 8pt; color: #666; }
-.header h1 { font-size: 14pt; color: #1a1a1a; margin: 0; font-weight: bold; }
-.header p { font-size: 8pt; color: #666; margin: 2px 0 0 0; }
-.group-title { font-size: 11pt; font-weight: bold; color: #1a1a1a; background: #FFC300; padding: 8px 10px; margin-bottom: 0; }
-.section-title { font-size: 9pt; font-weight: bold; color: #333; background: #f5f5f5; padding: 6px 10px; border-bottom: 1px solid #ddd; margin-top: 10px; }
-.summary-table { width: 100%; border-collapse: collapse; border: 1px solid #ddd; }
-.summary-table td { padding: 8px 10px; border: 1px solid #ddd; font-size: 9pt; text-align: left; vertical-align: top; }
-.summary-table .label { width: 25%; font-weight: 600; color: #555; background: #fafafa; }
-.summary-table .value { width: 25%; color: #1a1a1a; }
-.ewes-table { width: 100%; border-collapse: collapse; border: 1px solid #ddd; margin-top: 0; }
-.ewes-table th { background: #FFC300; color: #1a1a1a; font-weight: bold; padding: 8px 10px; text-align: left; font-size: 9pt; border: 1px solid #ddd; }
-.ewes-table td { padding: 8px 10px; border: 1px solid #ddd; font-size: 9pt; text-align: left; vertical-align: middle; }
-.ewes-table tr:nth-child(even) { background: #fafafa; }
-.ewes-table tr:nth-child(odd) { background: #fff; }
-.status-active { color: #16a34a; font-weight: 600; }
-.highlight { color: #b8860b; font-weight: bold; }
-.no-data { color: #999; font-style: italic; text-align: center; padding: 15px; }
-.footer { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 8px 15px; }
-.footer-content { display: flex; justify-content: space-between; align-items: center; }
-.footer-brand { font-size: 10pt; font-weight: bold; color: #FFC300; letter-spacing: 1px; }
-.footer-tagline { font-size: 8pt; color: #999; }
-@media print { body { padding: 0; } .page { margin: 0; } }
-</style>
-</head>
-<body>
-<div class="page">
-<div class="header">
-<div class="header-left">
-${farmSettings?.logoUrl ? `<img src="${farmSettings.logoUrl}" style="width: 50px; height: 50px; object-fit: contain;" alt="Logo" />` : ''}
-</div>
-<div class="header-center">
-<h1>${displayName || "BreedLog"}</h1>
-<p>${g.name} - Mating Group Report</p>
-</div>
-<div class="header-right">
-<div>${format(new Date(), "dd MMM yyyy")}</div>
-</div>
-</div>
-
-<div class="group-title">${g.name}</div>
-
-${g.ramPhoto ? `
-<div style="text-align: center; margin: 15px 0;">
-  <img src="${g.ramPhoto}" style="max-width: 150px; max-height: 120px; object-fit: contain; border: 2px solid #FFC300; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" alt="${g.ramTagId}" />
-  <p style="font-size: 10pt; font-weight: bold; color: #1a1a1a; margin-top: 8px;">Ram: ${g.ramTagId}${g.ramName ? ` (${g.ramName})` : ''}</p>
-</div>
-` : ''}
-
-<div class="section-title">MATING GROUP SUMMARY</div>
-<table class="summary-table">
-<tr>
-<td class="label">Ram ID</td>
-<td class="value">${g.ramTagId}</td>
-<td class="label">Date In</td>
-<td class="value">${g.dateIn}</td>
-</tr>
-<tr>
-<td class="label">Ram Name</td>
-<td class="value">${g.ramName || "N/A"}</td>
-<td class="label">Date Out</td>
-<td class="value">${g.dateOut}</td>
-</tr>
-<tr>
-<td class="label">Breed</td>
-<td class="value">${g.ramBreed}</td>
-<td class="label">Mating Period</td>
-<td class="value">${g.matingPeriodDays} days</td>
-</tr>
-<tr>
-<td class="label">Status</td>
-<td class="value ${g.status === 'active' ? 'status-active' : ''}">${(g.status || "active").toUpperCase()}</td>
-<td class="label">Expected Lambing</td>
-<td class="value highlight">${g.expectedLambing}</td>
-</tr>
-<tr>
-<td class="label">Season Code</td>
-<td class="value">${g.lambingSeason || "N/A"}</td>
-<td class="label">Ewes in Group</td>
-<td class="value">${g.eweCount}</td>
-</tr>
-</table>
-
-<div class="section-title">EWES IN THIS GROUP (${g.eweCount})</div>
-<table class="ewes-table">
-<thead>
-<tr>
-<th style="width: 5%;">#</th>
-<th style="width: 18%;">Ewe ID</th>
-<th style="width: 18%;">Name</th>
-<th style="width: 20%;">Electronic ID</th>
-<th style="width: 15%;">Breed</th>
-<th style="width: 12%;">Weight</th>
-<th style="width: 12%;">Status</th>
-</tr>
-</thead>
-<tbody>
-${g.ewes.length > 0 ? g.ewes.map((ewe: any, i: number) => `
-<tr>
-<td>${i + 1}</td>
-<td>${ewe.tagId}</td>
-<td>${ewe.name || "—"}</td>
-<td>${ewe.electronicId || "—"}</td>
-<td>${ewe.breed}</td>
-<td>${ewe.currentWeight ? ewe.currentWeight + " kg" : "—"}</td>
-<td class="status-active">Active</td>
-</tr>
-`).join("") : `
-<tr>
-<td colspan="7" class="no-data">No ewes recorded in this mating group</td>
-</tr>
-`}
-</tbody>
-</table>
-${g.notes ? `<p style="margin-top: 12px; font-size: 9pt; color: #555; padding: 0 10px;"><strong>Group Notes:</strong> ${g.notes}</p>` : ""}
-
-<div class="footer">
-<div class="footer-content">
-<div class="footer-brand">BREEDLOG</div>
-<div class="footer-tagline">Professional Livestock Management</div>
-</div>
-</div>
-</div>
-</body>
-</html>`;
-    
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(content);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 250);
-    }
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    const title = `${g.name} Mating Group Report`;
+    const chunks = Array.from(
+      { length: Math.max(1, Math.ceil(g.ewes.length / GROUP_ROWS_PER_PAGE)) },
+      (_, page) => g.ewes.slice(page * GROUP_ROWS_PER_PAGE, (page + 1) * GROUP_ROWS_PER_PAGE),
+    );
+    const css = getCanonicalGroupCSS() + `
+      .summary { display:grid; grid-template-columns:repeat(4, 1fr); border:1px solid #ddd; margin-bottom:4mm; }
+      .summary div { padding:3mm; border-right:1px solid #ddd; }
+      .summary div:last-child { border-right:0; }
+      .summary strong { display:block; font-size:7pt; color:#666; text-transform:uppercase; margin-bottom:1mm; }
+      .notes { margin-top:3mm; font-size:8pt; }
+    `;
+    const pages = chunks.map((ewes, page) => `<div class="page">
+      ${renderExportHeader(farmSettings, page + 1, chunks.length, exportDate, title, `Mating Group — ${g.name}`)}
+      <p class="section-label">${escapeHtmlText(g.name)}${page ? " — Ewes continued" : ""}</p>
+      ${page === 0 ? `<div class="summary">
+        <div><strong>Ram</strong>${escapeHtmlText(g.ramTagId)}${g.ramName ? ` (${escapeHtmlText(g.ramName)})` : ""}</div>
+        <div><strong>Mating period</strong>${g.dateIn} – ${g.dateOut}</div>
+        <div><strong>Expected lambing</strong>${g.expectedLambing}</div>
+        <div><strong>Group status</strong><span class="status status-${getExportStatusClassToken(g.status)}">${escapeHtmlText(g.status || "active")}</span></div>
+      </div>` : ""}
+      <table class="export-table"><thead><tr><th class="row-num">#</th><th>Ewe ID</th><th>Name</th><th>Electronic ID</th><th>Breed</th><th>Weight</th><th>Current status</th></tr></thead>
+      <tbody>${ewes.length ? ewes.map((ewe: any, index: number) => `<tr>
+        <td class="row-num">${page * GROUP_ROWS_PER_PAGE + index + 1}</td><td>${escapeHtmlText(ewe.tagId)}</td><td>${escapeHtmlText(ewe.name || "—")}</td>
+        <td>${escapeHtmlText(ewe.electronicId || "—")}</td><td>${escapeHtmlText(ewe.breed)}</td><td>${escapeHtmlText(ewe.currentWeight ? `${ewe.currentWeight} kg` : "—")}</td>
+        <td><span class="status status-${getExportStatusClassToken(ewe.status)}">${escapeHtmlText(ewe.status || "active")}</span></td>
+      </tr>`).join("") : `<tr><td colspan="7" class="zero-state">No ewes recorded in this mating group</td></tr>`}</tbody></table>
+      ${page === 0 && g.notes ? `<p class="notes"><strong>Group notes:</strong> ${escapeHtmlText(sanitizePublicNote(g.notes))}</p>` : ""}
+      ${renderExportFooter(farmSettings)}
+    </div>`).join("");
+    openExportPrintDialog(wrapExportDocument(title, css, pages));
     createExportedDoc.mutate({
       name: getDocumentFileName("MatingGroup"),
       documentType: "breeding",
       subfolder: "breeding"
     });
+    }
+
   };
   
   return (
@@ -485,17 +401,31 @@ ${g.notes ? `<p style="margin-top: 12px; font-size: 9pt; color: #555; padding: 0
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {ewesInGroup.map((ewe) => ewe && (
-                  <Link 
-                    key={ewe.id}
+                {ewesInGroup.map((ewe, index) => ewe.unavailable ? (
+                  <div
+                    key={`${ewe.id}-${index}`}
+                    className="p-3 bg-secondary rounded-md border border-dashed border-border flex items-center gap-3"
+                    data-testid={`unavailable-ewe-${ewe.id}`}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-muted border-2 border-border flex items-center justify-center">
+                      <Heart className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-sm truncate">{ewe.tagId}</p>
+                      <Badge variant="outline" className="mt-1 text-xs">Unavailable</Badge>
+                    </div>
+                  </div>
+                ) : (
+                  <Link
+                    key={`${ewe.id}-${index}`}
                     href={`/animals/${ewe.id}`}
                     className="p-3 bg-secondary rounded-md hover:bg-secondary/80 transition-colors flex items-center gap-3"
                     data-testid={`link-ewe-${ewe.id}`}
                   >
                     {ewe.photo ? (
-                      <img 
-                        src={ewe.photo} 
-                        alt={ewe.tagId} 
+                      <img
+                        src={ewe.photo}
+                        alt={ewe.tagId}
                         className="w-10 h-10 rounded-full object-cover border-2 border-pink-500/50"
                       />
                     ) : (

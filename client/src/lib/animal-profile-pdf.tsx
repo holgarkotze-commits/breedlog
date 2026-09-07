@@ -26,6 +26,7 @@ type FarmSettingsLike = {
   farmAddress?: string | null;
   membershipNumber?: string | null;
   registrationNumber?: string | null;
+  logoUrl?: string | null;
 };
 
 /** One resolved ancestor node — used for the grandparent tier of the pedigree tree. */
@@ -59,8 +60,8 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica",
     fontSize: 10,
     lineHeight: 1.4,
-    paddingTop: 112,
-    paddingBottom: 68,
+    paddingTop: 108,
+    paddingBottom: 96,
     paddingHorizontal: 32,
   },
   header: {
@@ -69,59 +70,84 @@ const styles = StyleSheet.create({
     left: 32,
     right: 32,
     borderBottom: "2 solid #FFC300",
-    paddingBottom: 10,
+    paddingBottom: 12,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
   },
-  brandStack: {
-    gap: 2,
-    maxWidth: 320,
+  headerLeft: {
+    width: 60,
+    height: 60,
+    flexShrink: 0,
   },
-  brandName: {
-    fontSize: 19,
+  logo: {
+    width: 60,
+    height: 60,
+    objectFit: "contain",
+  },
+  headerCenter: {
+    flexGrow: 1,
+    flexBasis: 0,
+    alignItems: "center",
+    textAlign: "center",
+    paddingHorizontal: 10,
+  },
+  headerFarmName: {
+    fontSize: 14,
     fontFamily: "Helvetica-Bold",
     color: "#1a1a1a",
+    textTransform: "uppercase",
   },
-  brandTagline: {
-    fontSize: 9,
-    color: "#444",
+  headerSubtitle: {
+    fontSize: 8,
+    color: "#666",
+    marginTop: 3,
   },
-  farmStack: {
+  headerRight: {
+    width: 82,
     gap: 2,
     alignItems: "flex-end",
     textAlign: "right",
-    maxWidth: 200,
+    flexShrink: 0,
   },
-  farmName: {
-    fontSize: 12,
-    fontFamily: "Helvetica-Bold",
-    color: "#1a1a1a",
-  },
-  farmMeta: {
-    fontSize: 8.5,
-    color: "#555",
+  headerMeta: {
+    fontSize: 8,
+    color: "#666",
   },
   footer: {
     position: "absolute",
-    bottom: 14,
+    bottom: 18,
     left: 32,
     right: 32,
-    borderTop: "1.5 solid #FFC300",
-    paddingTop: 5,
+    height: 54,
+    backgroundColor: "#1a1a1a",
+    // React-PDF views do not support CSS gradients; this is the dark-ribbon
+    // equivalent of the canonical #1a1a1a → #2d2d2d footer.
+    borderRight: "18 solid #2d2d2d",
+    borderTop: "2 solid #FFC300",
+    borderRadius: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+  },
+  footerInfo: { flexGrow: 1, flexBasis: 0, gap: 2 },
+  footerTitle: {
+    fontSize: 9,
+    fontFamily: "Helvetica-Bold",
+    color: "#FFC300",
   },
   footerText: {
     fontSize: 7.5,
-    color: "#888",
+    color: "#d8d8d8",
   },
   footerBrand: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: "Helvetica-Bold",
-    color: "#102033",
+    color: "#ffffff",
   },
+  footerTagline: { fontSize: 7, color: "#FFC300", marginTop: 2 },
   footerCreator: {
     fontSize: 6,
     color: "#aaa",
@@ -263,8 +289,8 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
     fontFamily: "Helvetica",
     fontSize: 10,
-    paddingTop: 80,
-    paddingBottom: 80,
+    paddingTop: 108,
+    paddingBottom: 96,
     paddingHorizontal: 32,
   },
   pedigreeTitle: {
@@ -504,6 +530,63 @@ function PedigreeBox({ label, tagId, breed, isSubject = false }: {
   );
 }
 
+function CanonicalHeader({
+  farmDisplayName,
+  logoUrl,
+  exportDate,
+  subtitle,
+}: {
+  farmDisplayName: string;
+  logoUrl?: string | null;
+  exportDate: string;
+  subtitle: string;
+}) {
+  return (
+    <View fixed style={styles.header}>
+      <View style={styles.headerLeft}>
+        {logoUrl ? <Image src={logoUrl} style={styles.logo} /> : null}
+      </View>
+      <View style={styles.headerCenter}>
+        <Text style={styles.headerFarmName}>{farmDisplayName}</Text>
+        <Text style={styles.headerSubtitle}>{subtitle}</Text>
+      </View>
+      <View style={styles.headerRight}>
+        <Text
+          style={styles.headerMeta}
+          render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+        />
+        <Text style={styles.headerMeta}>{exportDate}</Text>
+      </View>
+    </View>
+  );
+}
+
+function CanonicalFooter({
+  farmDisplayName,
+  contactLine,
+}: {
+  farmDisplayName: string;
+  contactLine: string;
+}) {
+  return (
+    <View fixed style={styles.footer}>
+      <View style={styles.footerInfo}>
+        <Text style={styles.footerTitle}>{farmDisplayName}</Text>
+        {contactLine ? <Text style={styles.footerText}>{contactLine}</Text> : null}
+      </View>
+      <View style={styles.footerRight}>
+        <Text style={styles.footerBrand}>BREEDLOG</Text>
+        <Text style={styles.footerTagline}>Professional Livestock Management</Text>
+        <Text style={styles.footerCreator}>A STITCH WORX Product</Text>
+        <Text
+          style={styles.footerText}
+          render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
+        />
+      </View>
+    </View>
+  );
+}
+
 function AnimalProfilePdfDocument({
   animal,
   exportDate,
@@ -514,13 +597,6 @@ function AnimalProfilePdfDocument({
 }: AnimalProfilePdfDocumentProps) {
   const farmDisplayName = farmSettings?.studName || farmSettings?.farmName || "BreedLog";
   const contactLine = [farmSettings?.ownerName, farmSettings?.ownerPhone].filter(Boolean).join(" | ");
-  const registrationLine = [
-    farmSettings?.membershipNumber ? `Membership: ${farmSettings.membershipNumber}` : null,
-    farmSettings?.registrationNumber ? `Registration: ${farmSettings.registrationNumber}` : null,
-  ]
-    .filter(Boolean)
-    .join(" | ");
-
   return (
     <Document
       title={`${animal.tagId} Performance Datasheet`}
@@ -531,32 +607,13 @@ function AnimalProfilePdfDocument({
       language="en-GB"
     >
       <Page size="A4" style={styles.page}>
-        <View fixed style={styles.header}>
-          <View style={styles.brandStack}>
-            <Text style={styles.brandName}>BREEDLOG</Text>
-            <Text style={styles.brandTagline}>Professional livestock performance datasheet</Text>
-          </View>
-          <View style={styles.farmStack}>
-            <Text style={styles.farmName}>{farmDisplayName}</Text>
-            {contactLine ? <Text style={styles.farmMeta}>{contactLine}</Text> : null}
-            {registrationLine ? <Text style={styles.farmMeta}>{registrationLine}</Text> : null}
-          </View>
-        </View>
-
-        <View fixed style={styles.footer}>
-          <View>
-            <Text style={styles.footerText}>Exported {exportDate}</Text>
-            {contactLine ? <Text style={styles.footerText}>{contactLine}</Text> : null}
-          </View>
-          <View style={styles.footerRight}>
-            <Text style={styles.footerBrand}>BREEDLOG</Text>
-            <Text style={styles.footerCreator}>A STITCH WORX Product</Text>
-            <Text
-              style={styles.footerText}
-              render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
-            />
-          </View>
-        </View>
+        <CanonicalHeader
+          farmDisplayName={farmDisplayName}
+          logoUrl={farmSettings?.logoUrl}
+          exportDate={exportDate}
+          subtitle="Professional livestock performance datasheet"
+        />
+        <CanonicalFooter farmDisplayName={farmDisplayName} contactLine={contactLine} />
 
         <View style={styles.hero}>
           <View style={styles.heroMain}>
@@ -638,30 +695,13 @@ function AnimalProfilePdfDocument({
 
       {/* Page 2 — Pedigree Tree */}
       <Page size="A4" style={styles.pedigreePage}>
-        <View fixed style={styles.header}>
-          <View style={styles.brandStack}>
-            <Text style={styles.brandName}>BREEDLOG</Text>
-            <Text style={styles.brandTagline}>Animal Pedigree Record</Text>
-          </View>
-          <View style={styles.farmStack}>
-            <Text style={styles.farmName}>{farmDisplayName}</Text>
-            {contactLine ? <Text style={styles.farmMeta}>{contactLine}</Text> : null}
-          </View>
-        </View>
-
-        <View fixed style={styles.footer}>
-          <View>
-            <Text style={styles.footerText}>Exported {exportDate}</Text>
-          </View>
-          <View style={styles.footerRight}>
-            <Text style={styles.footerBrand}>BREEDLOG</Text>
-            <Text style={styles.footerCreator}>A STITCH WORX Product</Text>
-            <Text
-              style={styles.footerText}
-              render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`}
-            />
-          </View>
-        </View>
+        <CanonicalHeader
+          farmDisplayName={farmDisplayName}
+          logoUrl={farmSettings?.logoUrl}
+          exportDate={exportDate}
+          subtitle="Animal Pedigree Record"
+        />
+        <CanonicalFooter farmDisplayName={farmDisplayName} contactLine={contactLine} />
 
         <Text style={styles.pedigreeTitle}>Pedigree — {animal.tagId}</Text>
         <Text style={styles.pedigreeSubtitle}>

@@ -63,9 +63,18 @@ import { cn } from "@/lib/utils";
 import { useAnalysisBundle } from "@/hooks/use-analysis";
 import { buildDataInsights, type DataInsights } from "@/lib/data-engine";
 import { AskSectionButton } from "@/components/AskBreedLogButton";
+import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { format } from "date-fns";
-import { getCanonicalGroupCSS, wrapExportDocument, openExportPrintDialog } from "@/lib/export-template";
+import { compressImage, PDF_QUALITY_SETTINGS, type PDFQuality } from "@/lib/pdf-utils";
+import {
+  getCanonicalGroupCSS,
+  renderExportHeader,
+  renderExportFooter,
+  wrapExportDocument,
+  openExportPrintDialog,
+  escapeHtmlText,
+} from "@/lib/export-template";
 
 type ConfidenceLevel = "Low" | "Medium" | "High" | "Proven";
 
@@ -635,6 +644,7 @@ export default function Analysis() {
   const [season, setSeason] = useState<string>("all");
   const [classification, setClassification] = useState<string>("all");
   const [sex, setSex] = useState<"all" | "ram" | "ewe">("all");
+  const pdfExport = usePDFExportDialog();
 
   const insights = useMemo(
     () => buildDataInsights({
@@ -648,22 +658,38 @@ export default function Analysis() {
   );
 
   // ── Export Report ─────────────────────────────────────────────────────────
-  const exportAnalysisPDF = () => {
+  const exportAnalysisPDF = async (quality: PDFQuality): Promise<void> => {
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    const fb = farmSettings;
+    const rawLogo = farmSettings?.logoUrl;
+    const exportLogo = rawLogo && quality !== "high"
+      ? await compressImage(rawLogo, PDF_QUALITY_SETTINGS[quality])
+      : rawLogo;
+    const exportFarmSettings = farmSettings
+      ? { ...farmSettings, logoUrl: exportLogo ?? farmSettings.logoUrl }
+      : null;
     const d = insights.herdDistribution;
     const sire = insights.sirePerformance;
     const ewe = insights.eweMaternal;
     const growth = insights.lambGrowth;
     const rep = insights.reproductive;
     const health = insights.health;
-    const quality = insights.dataQuality;
+    const dataQuality = insights.dataQuality;
+    const filterLabels = {
+      season: season === "all" ? "All seasons" : season,
+      classification: classification === "all"
+        ? "All classifications"
+        : classification === "slaughter_cull"
+          ? "Slaughter / Cull"
+          : classification.charAt(0).toUpperCase() + classification.slice(1),
+      sex: sex === "all" ? "All sexes" : sex === "ram" ? "Rams" : "Ewes",
+    };
+    const filterScope = `Season: ${filterLabels.season} · Classification: ${filterLabels.classification} · Sex: ${filterLabels.sex}`;
 
     const row = (label: string, value: string | number) =>
-      `<tr><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:8pt">${label}</td><td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:8pt;font-weight:600;text-align:right">${value}</td></tr>`;
+      `<tr><td>${escapeHtmlText(label)}</td><td class="analysis-value">${escapeHtmlText(value)}</td></tr>`;
 
     const section = (title: string, rows: string) =>
-      `<div style="margin-bottom:8mm"><h3 style="font-size:9pt;font-weight:800;text-transform:uppercase;background:#FFC300;padding:4px 8px;margin:0 0 4px 0">${title}</h3><table style="width:100%;border-collapse:collapse">${rows}</table></div>`;
+      `<section class="analysis-section"><h3 class="section-label">${escapeHtmlText(title)}</h3><table class="export-table"><tbody>${rows}</tbody></table></section>`;
 
     const herdRows = section("Herd Distribution", [
       row("Total in scope", d.total ?? 0),
@@ -724,41 +750,30 @@ export default function Analysis() {
       : section("Health Overview", row("Status", "Add health records to unlock"));
 
     const qualityRows = section("Data Quality", [
-      row("Completeness score", `${quality.score.toFixed(0)}%`),
-      row("Warnings", quality.warnings.length),
+      row("Completeness score", `${dataQuality.score.toFixed(0)}%`),
+      row("Warnings", dataQuality.warnings.length),
     ].join(""));
 
     const pagesHtml = `
       <div class="page">
-        <div class="header">
-          <div class="header-left">${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;">` : ""}</div>
-          <div class="header-center">
-            <h1>${fb?.studName || fb?.farmName || "Herd Data Report"}</h1>
-            <p class="subtitle">Full Herd Analytics & Data Export — ${exportDate}</p>
-          </div>
-          <div class="header-right">
-            <p>Page 1 of 1</p>
-            <p>${exportDate}</p>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6mm">
+        ${renderExportHeader(exportFarmSettings, 1, 1, exportDate, "Herd Data Report", "Full Herd Analytics & Data Export")}
+        <p class="analysis-scope"><strong>Applied filter scope:</strong> ${escapeHtmlText(filterScope)}</p>
+        <p class="analysis-scope">Metrics below are calculated only from records matching this scope.</p>
+        <div class="analysis-grid">
           <div>${herdRows}${repRows}${healthRows}</div>
           <div>${sireRows}${eweRows}${growthRows}${qualityRows}</div>
         </div>
-        <div class="footer">
-          <div class="footer-info">
-            <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-            <p>${fb?.ownerName || ""}${fb?.ownerPhone ? " | " + fb.ownerPhone : ""}</p>
-          </div>
-          <div class="footer-branding">
-            <p class="breedlog-text">BREEDLOG</p>
-            <p class="tagline">Professional Livestock Management</p>
-            <p style="font-size:6pt;color:#aaa;margin-top:2px">A STITCH WORX Product</p>
-          </div>
-        </div>
+        ${renderExportFooter(exportFarmSettings)}
       </div>`;
 
-    const html = wrapExportDocument("Herd Data & Analytics Report", getCanonicalGroupCSS(), pagesHtml);
+    const css = getCanonicalGroupCSS() + `
+      .analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; }
+      .analysis-section { margin-bottom: 5mm; }
+      .analysis-section .section-label { display: block; margin-bottom: 2mm; padding: 4px 8px; font-size: 8pt; }
+      .analysis-value { font-weight: 700; text-align: right !important; }
+      .analysis-scope { font-size: 8pt; color: #555; margin-bottom: 2mm; }
+    `;
+    const html = wrapExportDocument("Herd Data & Analytics Report", css, pagesHtml);
     openExportPrintDialog(html);
   };
 
@@ -814,7 +829,7 @@ export default function Analysis() {
             <Button
               variant="outline"
               size="sm"
-              onClick={exportAnalysisPDF}
+              onClick={() => pdfExport.openDialog("analysis")}
               data-testid="btn-export-analysis-pdf"
               className="gap-1.5 text-xs"
             >
@@ -900,6 +915,14 @@ export default function Analysis() {
             <Section8Quality q={insights.dataQuality} />
           </SectionCard>
         </div>
+        <PDFExportDialog
+          open={pdfExport.isOpen}
+          onOpenChange={pdfExport.setIsOpen}
+          title="Export Herd Data Report"
+          description="Choose the image quality for the farm logo in your filtered herd data PDF. Report data and layout remain unchanged."
+          onExport={exportAnalysisPDF}
+          exportLabel="Export Report"
+        />
       </div>
     </Layout>
   );
