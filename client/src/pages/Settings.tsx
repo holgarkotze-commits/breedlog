@@ -35,6 +35,7 @@ import { FIELD_TEST_BUILD_DATE, FIELD_TEST_VERSION_LABEL } from "@shared/version
 import { BREEDLOG_RUNTIME_VERSION, type RuntimeUpdateState } from "@shared/update-runtime";
 import { detectRuntimePlatform, getConfiguredApiOrigin, getRuntimeVersionQuery } from "@/lib/runtime-updates";
 import { saveFileInNativeDownloads } from "@/lib/native-file-save";
+import { trackAnalyticsEvent } from "@/lib/project-analytics";
 import {
   getCanonicalGroupCSS,
   renderExportHeader,
@@ -472,6 +473,15 @@ export default function Settings() {
       setImportResult(data);
       queryClient.invalidateQueries({ queryKey: ['/api/animals'] });
       const validationErrors = data.validationErrors || data.errors || [];
+      const importedCount = typeof data.imported === "number" && Number.isFinite(data.imported)
+        ? data.imported
+        : 0;
+      const warningCount = validationErrors.length;
+      trackAnalyticsEvent("csv_import_completed", {
+        imported_count: importedCount,
+        warning_count: warningCount,
+        result: warningCount > 0 ? "completed_with_warnings" : "completed",
+      });
       if (validationErrors.length === 0) {
         toast({ title: "Import Complete", description: `${data.imported} animals imported successfully` });
       } else {
@@ -523,6 +533,10 @@ export default function Settings() {
       
       await clearAllOfflineData();
       queryClient.clear();
+      trackAnalyticsEvent("workspace_reset_completed", {
+        scope: "workspace",
+        offline_cache_cleared: true,
+      });
       
       toast({ 
         title: "Reset Complete", 

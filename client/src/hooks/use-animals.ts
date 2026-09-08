@@ -6,6 +6,7 @@ import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQue
 import { syncManager } from "@/lib/sync-manager";
 import { clearExpiredOperationCache, getOrCreateOperationId } from "@/lib/idempotency";
 import { splitTagInput } from "@shared/tag-utils";
+import { trackAnalyticsEvent } from "@/lib/project-analytics";
 
 function normalizeTagId(tagId?: string | null): string {
   return (tagId || "").trim().toUpperCase();
@@ -310,9 +311,13 @@ export function useCreateAnimal() {
       
       return { previousAnimals };
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       // Check if actually saved to server (positive ID means server confirmed)
       const serverConfirmed = (data.id as number) > 0;
+      trackAnalyticsEvent("animal_created", {
+        sync_state: serverConfirmed ? "synced" : "queued",
+        sex: variables.sex,
+      });
       
       if (serverConfirmed) {
         toast({ 

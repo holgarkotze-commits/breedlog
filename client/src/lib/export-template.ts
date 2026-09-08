@@ -7,6 +7,8 @@
 //   own date/url/title chrome. body { margin: 10mm } restores equivalent visual
 //   margins inside the printable content area.
 
+import { trackAnalyticsEvent } from "@/lib/project-analytics";
+
 export const GROUP_ROWS_PER_PAGE = 20;
 
 export type ExportFarmSettings = {
@@ -222,6 +224,7 @@ export function wrapExportDocument(title: string, css: string, pagesHtml: string
 export function openExportPrintDialog(htmlContent: string): void {
   const w = window.open('', '_blank');
   if (!w) return;
+  trackAnalyticsEvent("document_preview_opened", { format: "pdf" });
 
   // A blob URL is reliable in Android/PWA standalone mode, where writing into
   // an about:blank popup can silently fail and leave the exported PDF unopened.

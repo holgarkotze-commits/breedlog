@@ -9,6 +9,7 @@ import {
   deleteFromStore,
   addToSyncQueue 
 } from "@/lib/indexeddb";
+import { trackAnalyticsEvent } from "@/lib/project-analytics";
 
 export function useMatingGroups() {
   const { isOnline } = useNetworkStatus();
@@ -68,7 +69,11 @@ export function useCreateMatingGroup() {
       
       return created;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      trackAnalyticsEvent("mating_group_created", {
+        sync_state: data.id > 0 ? "synced" : "queued",
+        member_count: variables.eweIds?.length ?? 0,
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/mating-groups"] });
     },
   });
