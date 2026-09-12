@@ -20,11 +20,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
 import { type PDFQuality, chunkGroupExportRows, compressImage, PDF_QUALITY_SETTINGS } from "@/lib/pdf-utils";
-import { getCanonicalGroupCSS, renderExportHeader, renderExportFooter, wrapExportDocument, openExportPrintDialog, GROUP_ROWS_PER_PAGE } from "@/lib/export-template";
+import { escapeHtmlText, getCanonicalGroupCSS, renderExportHeader, renderExportFooter, wrapExportDocument, openExportPrintDialog, GROUP_ROWS_PER_PAGE } from "@/lib/export-template";
 import { buildLambBirthRows, buildLambPerformanceRows } from "@/lib/stamboek-export-fields";
 import { useCreateExportedDocument } from "@/hooks/use-exported-documents";
 import type { Animal } from "@shared/schema";
 import { calculateLambStage } from "@shared/lamb-stage";
+import { isActiveAnimal } from "@/lib/herd-counts";
 
 function getAgeDays(birthDate: string | null): number {
   if (!birthDate) return 0;
@@ -33,6 +34,7 @@ function getAgeDays(birthDate: string | null): number {
 
 export default function Lambs() {
   const LAMB_MAX_AGE_DAYS = 365;
+  const EXPORT_LAMB_MAX_AGE_DAYS = 240;
   const [search, setSearch] = useState("");
   const [sexFilter, setSexFilter] = useState("all");
   const [classFilter, setClassFilter] = useState("all");
@@ -67,7 +69,17 @@ export default function Lambs() {
   
   // Export Lambs PDF
   const handlePDFExport = async (quality: PDFQuality): Promise<void> => {
-    if (!lambs || lambs.length === 0) {
+    // The workflow remains available through 365 days for lifecycle actions,
+    // while the register is intentionally limited to active lambs up to 240 days.
+    const exportLambs = lambs.filter(animal => {
+      if (!animal.birthDate || getAgeDays(animal.birthDate) > EXPORT_LAMB_MAX_AGE_DAYS) return false;
+      if (!isActiveAnimal(animal)) return false;
+      return animal.lambStatus !== 'moved_to_ewes'
+        && animal.lambStatus !== 'moved_to_rams'
+        && animal.lambStatus !== 'culled';
+    });
+
+    if (exportLambs.length === 0) {
       toast({ title: "No lambs to export", description: "There are no lambs matching your current filters.", variant: "destructive" });
       return;
     }
@@ -83,8 +95,8 @@ export default function Lambs() {
       : rawLogo;
     const compressedFb = { ...fb, logoUrl: compressedLogoUrl ?? fb?.logoUrl };
 
-    const eweLambs = lambs.filter(a => a.sex === "ewe");
-    const ramLambs = lambs.filter(a => a.sex === "ram");
+    const eweLambs = exportLambs.filter(a => a.sex === "ewe");
+    const ramLambs = exportLambs.filter(a => a.sex === "ram");
 
     const eweBirthRows = buildLambBirthRows(eweLambs);
     const ewePerfRows = buildLambPerformanceRows(eweLambs);
@@ -106,13 +118,8 @@ export default function Lambs() {
         const perf = ewePerfRows[gi] || {};
         return `<tr>
           <td class="row-num">${gi + 1}</td>
-          <td><strong>${lamb["Lamb ID"] || "—"}</strong></td>
-          <td>${lamb["Birth date"] || "—"}</td>
-          <td>${perf["Age at 100-day weighing"] || "—"}</td>
-          <td>${lamb["Dam/mother ID"] || "—"}</td>
-          <td>${lamb["Sire/father ID"] || "—"}</td>
-          <td>${perf["100-day weight"] ? perf["100-day weight"] + " kg" : "—"}</td>
-          <td>${lamb["Birth status"] || "—"}</td>
+          <td><strong>${escapeHtmlText(lamb["Lamb ID"] || "—")}</strong></td>
+          <td>${escapeHtmlText(lamb["Birth date"] || "—")}</td><td>${escapeHtmlText(lamb["Dam/mother ID"] || "—")}</td><td>${escapeHtmlText(lamb["Sire/father ID"] || "—")}</td><td>${escapeHtmlText(lamb["Birth status"] || "—")}</td><td>${escapeHtmlText(lamb["Birth weight"] || "—")}</td><td>${escapeHtmlText(perf["100-day weigh date"] || "—")}</td><td>${escapeHtmlText(perf["100-day weight"] || "—")}</td><td>${escapeHtmlText(perf["270-day/post-wean weigh date"] || "—")}</td><td>${escapeHtmlText(perf["270-day/post-wean weight"] || "—")}</td><td>${escapeHtmlText(perf["Latest/current weight"] || "—")}</td><td>${escapeHtmlText(lamb["Lamb stage"] || "—")}</td>
         </tr>`;
       }).join('');
       return `<div class="page">
@@ -122,11 +129,16 @@ export default function Lambs() {
             <th class="row-num">#</th>
             <th>Lamb ID</th>
             <th>Birth Date</th>
-            <th>Age (Days)</th>
-            <th>Dam</th>
-            <th>Sire</th>
-            <th>100-Day Wt</th>
-            <th>Status</th>
+            <th>Dam/mother ID</th>
+            <th>Sire/father ID</th>
+            <th>Birth status</th>
+            <th>Birth weight</th>
+            <th>100-day weigh date</th>
+            <th>100-day weight</th>
+            <th>270-day/post-wean weigh date</th>
+            <th>270-day/post-wean weight</th>
+            <th>Latest/current weight</th>
+            <th>Lamb stage</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -143,14 +155,8 @@ export default function Lambs() {
         const perf = ramPerfRows[gi] || {};
         return `<tr>
           <td class="row-num">${gi + 1}</td>
-          <td><strong>${lamb["Lamb ID"] || "—"}</strong></td>
-          <td>${lamb["Birth date"] || "—"}</td>
-          <td>${perf["Age at 100-day weighing"] || "—"}</td>
-          <td>${lamb["Dam/mother ID"] || "—"}</td>
-          <td>${lamb["Sire/father ID"] || "—"}</td>
-          <td>${perf["100-day weight"] ? perf["100-day weight"] + " kg" : "—"}</td>
-          <td>${perf["270-day/post-wean weight"] ? perf["270-day/post-wean weight"] + " kg" : "—"}</td>
-          <td>${lamb["Birth status"] || "—"}</td>
+          <td><strong>${escapeHtmlText(lamb["Lamb ID"] || "—")}</strong></td>
+          <td>${escapeHtmlText(lamb["Birth date"] || "—")}</td><td>${escapeHtmlText(lamb["Dam/mother ID"] || "—")}</td><td>${escapeHtmlText(lamb["Sire/father ID"] || "—")}</td><td>${escapeHtmlText(lamb["Birth status"] || "—")}</td><td>${escapeHtmlText(lamb["Birth weight"] || "—")}</td><td>${escapeHtmlText(perf["100-day weigh date"] || "—")}</td><td>${escapeHtmlText(perf["100-day weight"] || "—")}</td><td>${escapeHtmlText(perf["270-day/post-wean weigh date"] || "—")}</td><td>${escapeHtmlText(perf["270-day/post-wean weight"] || "—")}</td><td>${escapeHtmlText(perf["Latest/current weight"] || "—")}</td><td>${escapeHtmlText(lamb["Lamb stage"] || "—")}</td>
         </tr>`;
       }).join('');
       return `<div class="page">
@@ -160,12 +166,16 @@ export default function Lambs() {
             <th class="row-num">#</th>
             <th>Lamb ID</th>
             <th>Birth Date</th>
-            <th>Age (Days)</th>
-            <th>Dam</th>
-            <th>Sire</th>
-            <th>100-Day Wt</th>
-            <th>270-Day Wt</th>
-            <th>Status</th>
+            <th>Dam/mother ID</th>
+            <th>Sire/father ID</th>
+            <th>Birth status</th>
+            <th>Birth weight</th>
+            <th>100-day weigh date</th>
+            <th>100-day weight</th>
+            <th>270-day/post-wean weigh date</th>
+            <th>270-day/post-wean weight</th>
+            <th>Latest/current weight</th>
+            <th>Lamb stage</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -189,7 +199,7 @@ export default function Lambs() {
         exportType: "pdf",
         category: "lambs",
         sourceSection: "lambs",
-        animalCount: lambs.length,
+        animalCount: exportLambs.length,
         pageCount,
         status: "success",
         rowsSummary: {
@@ -208,9 +218,9 @@ export default function Lambs() {
     const ageDays = getAgeDays(animal.birthDate);
     if (ageDays > LAMB_MAX_AGE_DAYS) return false;
     
+    if (!isActiveAnimal(animal)) return false;
     if (animal.lambStatus === 'moved_to_ewes' || animal.lambStatus === 'moved_to_rams') return false;
-    if (animal.status === 'culled' || animal.lambStatus === 'culled') return false;
-    if (animal.status === 'sold' || animal.status === 'dead') return false;
+    if (animal.lambStatus === 'culled') return false;
     
     if (sexFilter !== "all" && animal.sex !== sexFilter) return false;
     

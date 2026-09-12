@@ -10,6 +10,10 @@ test("native shell PDF export generates a real PDF blob and saves it through the
 });
 
 test("browser fallback still previews or downloads the generated PDF blob", () => {
-  assert.match(source, /const previewWindow = window\.open\(blobUrl, "_blank"\);/);
+  const preOpenIndex = source.indexOf('const previewWindow = window.open("", "_blank");');
+  const buildIndex = source.indexOf("const pdfBlob = await buildAnimalProfilePdfBlob(");
+  assert.ok(preOpenIndex >= 0, "PDF preview window should open synchronously");
+  assert.ok(preOpenIndex < buildIndex, "PDF preview window must open before asynchronous PDF generation");
+  assert.match(source, /previewWindow\.location\.href = blobUrl;/);
   assert.match(source, /anchor\.download = nativeFilename;/);
 });

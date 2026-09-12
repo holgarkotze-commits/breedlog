@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { getDeviceToken } from "@/lib/queryClient";
 import { useAIAssistant } from "@/lib/ai-assistant-context";
+import { trackAnalyticsEvent } from "@/lib/project-analytics";
 
 interface PromptCategory {
   key: string;
@@ -102,6 +103,26 @@ async function sendAIChat(opts: {
 }
 
 const MAX_VISIBLE_FOLLOWUPS = 2;
+const ANALYTICS_CATEGORIES = new Set([
+  "herd-overview",
+  "sire-performance",
+  "ewe-maternal",
+  "lamb-growth",
+  "breeding-lambing",
+  "health-records",
+  "data-quality",
+  "market-readiness",
+  "app-help",
+  "genetics",
+  "animal-profile",
+  "all",
+]);
+const ANALYTICS_ANSWER_TYPES = new Set(["help", "data", "hybrid", "unsupported"]);
+const ANALYTICS_CONFIDENCE_LEVELS = new Set(["high", "medium", "low", "insufficient"]);
+
+function getAnalyticsCategory(category: string): string {
+  return ANALYTICS_CATEGORIES.has(category) ? category : "other";
+}
 
 export function BreedLogAssistantPanel() {
   const { isOpen, initialOptions, closePanel } = useAIAssistant();
@@ -164,11 +185,23 @@ export function BreedLogAssistantPanel() {
     setShowDetails(false);
     setShowAllFollowUp(false);
     try {
+      trackAnalyticsEvent("ai_prompt_submitted", {
+        category: getAnalyticsCategory(selectedCategory),
+        has_context_section: Boolean(initialOptions.contextSection),
+        has_animal_context: Boolean(initialOptions.animalId),
+      });
       const result = await sendAIChat({
         question: q,
         category: selectedCategory !== "all" ? selectedCategory : undefined,
         contextSection: initialOptions.contextSection,
         animalId: initialOptions.animalId,
+      });
+      trackAnalyticsEvent("ai_response_received", {
+        category: getAnalyticsCategory(selectedCategory),
+        has_context_section: Boolean(initialOptions.contextSection),
+        has_animal_context: Boolean(initialOptions.animalId),
+        answer_type: ANALYTICS_ANSWER_TYPES.has(result.answerType ?? "") ? result.answerType! : "unknown",
+        confidence: ANALYTICS_CONFIDENCE_LEVELS.has(result.confidence) ? result.confidence : "unknown",
       });
       setResponse(result);
       setShowControls(false);

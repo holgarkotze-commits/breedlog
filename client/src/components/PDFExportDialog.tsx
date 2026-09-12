@@ -5,6 +5,7 @@ import { PDFQualitySelector } from "@/components/PDFQualitySelector";
 import { type PDFQuality } from "@/lib/pdf-utils";
 import { FileDown, Loader2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { trackAnalyticsEvent } from "@/lib/project-analytics";
 
 interface PDFExportDialogProps {
   open: boolean;
@@ -34,7 +35,9 @@ export function PDFExportDialog({
     setProgressText('Preparing export...');
     
     try {
+      trackAnalyticsEvent("pdf_export_started", { quality });
       await onExport(quality);
+      trackAnalyticsEvent("pdf_export_completed", { quality });
       setProgress(100);
       setProgressText('Complete!');
       setTimeout(() => {

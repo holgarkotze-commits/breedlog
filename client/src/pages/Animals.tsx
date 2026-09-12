@@ -35,7 +35,7 @@ import logo from "@/assets/breedlog-logo-mark.png";
 import { type PDFQuality, compressImage, PDF_QUALITY_SETTINGS } from "@/lib/pdf-utils";
 import { getHerdCounts, isActiveAnimal } from "@/lib/herd-counts";
 import { getRamProgenyMetrics } from "@/lib/animal-performance";
-import { getCanonicalGroupCSS, renderExportHeader, renderExportFooter, wrapExportDocument, sanitizePublicNote } from "@/lib/export-template";
+import { escapeHtmlText, getCanonicalGroupCSS, getExportStatusClassToken, renderExportHeader, renderExportFooter, wrapExportDocument, openExportPrintDialog, GROUP_ROWS_PER_PAGE } from "@/lib/export-template";
 import { api } from "@shared/routes";
 import { nextTagRawSequence, splitTagInput } from "@shared/tag-utils";
 import { calculateLambStage } from "@shared/lamb-stage";
@@ -318,641 +318,138 @@ export default function Animals() {
     URL.revokeObjectURL(url);
   };
 
+  type ExportColumn = readonly [string, string];
+  type ExportSection = { label: string; subtitle: string; rows: Record<string, string | number | null>[]; columns: readonly ExportColumn[] };
+  const exportCanonicalSections = (
+    documentTitle: string,
+    sections: ExportSection[],
+    metadata: Record<string, unknown>,
+  ) => {
+    const fb = { ...farmSettings, logoUrl: pendingExportLogoRef.current ?? farmSettings?.logoUrl ?? null };
+    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
+    const pages = sections.flatMap(section => {
+      const chunks: Record<string, string | number | null>[][] = [];
+      for (let start = 0; start < section.rows.length; start += GROUP_ROWS_PER_PAGE) {
+        chunks.push(section.rows.slice(start, start + GROUP_ROWS_PER_PAGE));
+      }
+      return chunks.map((rows, index) => ({ section, rows, start: index * GROUP_ROWS_PER_PAGE }));
+    });
+    const totalPages = pages.length;
+    const cell = (row: Record<string, string | number | null>, key: string) => {
+      const value = row[key];
+      if (key === "Status") {
+        const status = String(value || "").toLowerCase();
+        return `<span class="status status-${getExportStatusClassToken(status)}">${escapeHtmlText(value || "—")}</span>`;
+      }
+      return value === null || value === undefined || value === "" ? "—" : escapeHtmlText(value);
+    };
+    const pagesHtml = pages.map(({ section, rows, start }, page) => `
+      <div class="page">
+        ${renderExportHeader(fb, page + 1, totalPages, exportDate, documentTitle, section.subtitle)}
+        <h2 class="section-label">${escapeHtmlText(section.label)}</h2>
+        <table class="export-table">
+          <thead><tr><th class="row-num">#</th>${section.columns.map(([, label]) => `<th>${escapeHtmlText(label)}</th>`).join("")}</tr></thead>
+          <tbody>${rows.map((row, index) => `<tr><td class="row-num">${start + index + 1}</td>${section.columns.map(([key]) => `<td>${cell(row, key)}</td>`).join("")}</tr>`).join("")}</tbody>
+        </table>
+        ${renderExportFooter(fb)}
+      </div>
+    `).join("");
+    openExportPrintDialog(wrapExportDocument(
+      `${fb?.studName || fb?.farmName || "BreedLog"} - ${documentTitle}`,
+      getCanonicalGroupCSS(),
+      pagesHtml,
+    ));
+    createExportedDoc.mutate({
+      name: getDocumentFileName(documentTitle.replace(/\s+/g, ""), "Export"),
+      documentType: "herd",
+      subfolder: "herd",
+      metadata: { exportType: "pdf", pageCount: totalPages, status: "success", ...metadata },
+    });
+  };
+
+  const ramColumns: readonly ExportColumn[] = [
+    ["Ram ID", "Ram ID"], ["Date of birth", "Date of birth"], ["Breed", "Breed"], ["Status", "Status"],
+    ["Sire ID", "Sire ID"], ["Dam ID", "Dam ID"], ["Number of ewes joined", "Ewes joined"],
+    ["Number of lambs born from this sire", "Lambs born"], ["Latest weight", "Latest weight"],
+  ];
+  const eweColumns: readonly ExportColumn[] = [
+    ["Ewe ID", "Ewe ID"], ["Date of birth", "Date of birth"], ["Breed", "Breed"], ["Status", "Status"],
+    ["Sire ID", "Sire ID"], ["Dam ID", "Dam ID"], ["Lambs born total", "Lambs born"],
+    ["Last lambing date", "Last lambing date"], ["Latest weight", "Latest weight"],
+  ];
+  const lambColumns: readonly ExportColumn[] = [
+    ["Lamb ID", "Lamb ID"], ["Birth date", "Birth date"], ["Sex", "Sex"], ["Dam/mother ID", "Dam/mother ID"],
+    ["Sire/father ID", "Sire/father ID"], ["Birth status", "Birth status"], ["Birth weight", "Birth weight"],
+    ["100-day weight", "100-day weight"], ["270-day/post-wean weight", "270-day/post-wean weight"],
+    ["Latest/current weight", "Latest/current weight"], ["Lamb stage", "Lamb stage"],
+  ];
+  const cullSoldColumns: readonly ExportColumn[] = [
+    ["Animal ID", "Animal ID"], ["Sex", "Sex"], ["Breed", "Breed"], ["Date of birth", "Date of birth"],
+    ["Status", "Status"], ["Status date", "Status date"], ["Reason", "Reason"], ["Latest weight", "Latest weight"], ["Notes", "Notes"],
+  ];
+
   // Full Herd Export PDF with Rams, Ewes, Lambs sections
   const exportFullHerdPDF = () => {
     if (!allAnimals || !breedingEvents) return;
-    const fb = farmSettings;
-    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    
-    // Active-animal selector: use the authoritative herd-counts selector so
-    // the exported animal set matches exactly what My Herd displays.
-    const activeAnimals = allAnimals.filter(isActiveAnimal);
-    const rams = activeAnimals.filter(a => a.sex?.toLowerCase() === "ram");
-    const ewes = activeAnimals.filter(a => a.sex?.toLowerCase() === "ewe");
-    const lambs = activeAnimals.filter(a => {
-      if (!a.birthDate) return false;
-      const birthDate = new Date(a.birthDate);
-      const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
-      return ageInDays <= 240;
-    });
-    
-    if (rams.length === 0 && ewes.length === 0 && lambs.length === 0) {
-      toast({ title: "No Animals", description: "No animals found to export", variant: "destructive" });
+    const fullActiveAnimals = allAnimals.filter(isActiveAnimal);
+    const fullLambs = fullActiveAnimals.filter(a => a.birthDate && (Date.now() - new Date(a.birthDate).getTime()) / 86400000 <= 240);
+    const fullLambIds = new Set(fullLambs.map(a => a.id));
+    const fullRams = fullActiveAnimals.filter(a => a.sex?.toLowerCase() === "ram" && !fullLambIds.has(a.id));
+    const fullEwes = fullActiveAnimals.filter(a => a.sex?.toLowerCase() === "ewe" && !fullLambIds.has(a.id));
+    const fullLambBirthRows = buildLambBirthRows(fullLambs);
+    const fullLambPerformanceRows = buildLambPerformanceRows(fullLambs);
+    const fullLambRows = fullLambBirthRows.map((row, index) => ({ ...row, ...fullLambPerformanceRows[index] }));
+    const sections: ExportSection[] = [
+      ...(fullRams.length ? [{ label: "Rams", subtitle: "Active adult rams", rows: buildRamExportRows(fullRams, breedingEvents, allAnimals, []), columns: ramColumns }] : []),
+      ...(fullEwes.length ? [{ label: "Ewes", subtitle: "Active adult ewes", rows: buildEweExportRows(fullEwes, breedingEvents, []), columns: eweColumns }] : []),
+      ...(fullLambs.length ? [{ label: "Lambs", subtitle: "Active lambs (240 days or younger)", rows: fullLambRows, columns: lambColumns }] : []),
+    ];
+    if (!sections.length) {
+      toast({ title: "No Animals", description: "No active animals found to export", variant: "destructive" });
       return;
     }
-    
-    let pagesHtml = "";
-    let pageNum = 1;
-    
-    // Count total pages
-    const ramsPerPage = 20;
-    const ewesPerPage = 20;
-    const lambsPerPage = 20;
-    const ramsPages = Math.max(1, Math.ceil(rams.length / ramsPerPage));
-    const ewesPages = Math.max(1, Math.ceil(ewes.length / ewesPerPage));
-    const lambsPages = Math.max(1, Math.ceil(lambs.length / lambsPerPage));
-    const totalPages = (rams.length > 0 ? ramsPages : 0) + (ewes.length > 0 ? ewesPages : 0) + (lambs.length > 0 ? lambsPages : 0);
-    
-    // SECTION 1: RAMS
-    if (rams.length > 0) {
-      const ramRows = buildRamExportRows(rams, breedingEvents, allAnimals, []);
-      
-      for (let page = 0; page < ramsPages; page++) {
-        const startIdx = page * ramsPerPage;
-        const pageRams = ramRows.slice(startIdx, startIdx + ramsPerPage);
-        
-        const tableRows = pageRams.map((ram, idx) => {
-          const rowNum = startIdx + idx + 1;
-          return `<tr>
-            <td class="row-num">${rowNum}</td>
-            <td><strong>${ram["Ram ID"] || "-"}</strong></td>
-            <td>${ram["Date of birth"] || '-'}</td>
-            <td>${ram["Number of lambs born from this sire"] || 0}</td>
-            <td>-</td>
-            <td>${ram["Average 100-day progeny weight"] || '-'}</td>
-            <td>${ram["Average 270-day progeny weight"] || '-'}</td>
-            <td>${ram["Number of ewes joined"] || 0}</td>
-            <td>-</td>
-            <td><span class="status status-${ram["Status"] || "active"}">${ram["Status"] || "-"}</span></td>
-          </tr>`;
-        }).join('');
-        
-        pagesHtml += `
-          <div class="page">
-            <div class="header">
-              <div class="header-left">
-                ${getExportLogoImg('class="logo"')}
-              </div>
-              <div class="header-center">
-                <h1>${fb?.studName || fb?.farmName || "Full Herd Register"}</h1>
-                <p class="subtitle">Complete Livestock Register</p>
-              </div>
-              <div class="header-right">
-                <p>Page ${pageNum} of ${totalPages}</p>
-                <p>${exportDate}</p>
-              </div>
-            </div>
-            
-            <h2 class="section-title">RAMS</h2>
-            
-            <table class="animals-table">
-              <thead>
-                <tr>
-                  <th class="row-num">#</th>
-                  <th>Ram ID</th>
-                  <th>DOB</th>
-                  <th>Total Lambs</th>
-                  <th>Avg Birth (kg)</th>
-                  <th>Avg 100-Day (kg)</th>
-                  <th>Avg 270-Day (kg)</th>
-                  <th>Twin Count</th>
-                  <th>Avg Wean (kg)</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>${tableRows}</tbody>
-            </table>
-            
-            <div class="footer">
-              <div class="footer-info">
-                <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-                <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
-              </div>
-              <div class="footer-branding">
-                <p class="breedlog-text">BREEDLOG</p>
-                <p class="tagline">Professional Livestock Management</p>
-                <p class="creator">A STITCH WORX Product</p>
-              </div>
-            </div>
-          </div>
-        `;
-        pageNum++;
-      }
-    }
-    
-    // SECTION 2: EWES
-    if (ewes.length > 0) {
-      const eweRows = buildEweExportRows(ewes, breedingEvents, []);
-      
-      for (let page = 0; page < ewesPages; page++) {
-        const startIdx = page * ewesPerPage;
-        const pageEwes = eweRows.slice(startIdx, startIdx + ewesPerPage);
-        
-        const tableRows = pageEwes.map((ewe, idx) => {
-          const rowNum = startIdx + idx + 1;
-          return `<tr>
-            <td class="row-num">${rowNum}</td>
-            <td><strong>${ewe["Ewe ID"] || "-"}</strong></td>
-            <td>${ewe["Date of birth"] || '-'}</td>
-            <td>${ewe["Last lambing date"] || '-'}</td>
-            <td>${ewe["Lambs born total"] || 0}</td>
-            <td>-</td>
-            <td>${ewe["Lambs weaned total"] || '-'}</td>
-            <td>-</td>
-            <td><span class="status status-${ewe["Status"] || "active"}">${ewe["Status"] || "-"}</span></td>
-          </tr>`;
-        }).join('');
-        
-        pagesHtml += `
-          <div class="page">
-            <div class="header">
-              <div class="header-left">
-                ${getExportLogoImg('class="logo"')}
-              </div>
-              <div class="header-center">
-                <h1>${fb?.studName || fb?.farmName || "Full Herd Register"}</h1>
-                <p class="subtitle">Complete Livestock Register</p>
-              </div>
-              <div class="header-right">
-                <p>Page ${pageNum} of ${totalPages}</p>
-                <p>${exportDate}</p>
-              </div>
-            </div>
-            
-            <h2 class="section-title">EWES</h2>
-            
-            <table class="animals-table">
-              <thead>
-                <tr>
-                  <th class="row-num">#</th>
-                  <th>Ewe ID</th>
-                  <th>Date of Birth</th>
-                  <th>First Lamb Date</th>
-                  <th>Total Lamb Count</th>
-                  <th>ILP (days)</th>
-                  <th>Weaned Lamb Count</th>
-                  <th>Avg Wean Weight (kg)</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>${tableRows}</tbody>
-            </table>
-            
-            <div class="footer">
-              <div class="footer-info">
-                <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-                <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
-              </div>
-              <div class="footer-branding">
-                <p class="breedlog-text">BREEDLOG</p>
-                <p class="tagline">Professional Livestock Management</p>
-                <p class="creator">A STITCH WORX Product</p>
-              </div>
-            </div>
-          </div>
-        `;
-        pageNum++;
-      }
-    }
-    
-    // SECTION 3: LAMBS
-    if (lambs.length > 0) {
-      const lambBirthRows = buildLambBirthRows(lambs);
-      const lambPerfRows = buildLambPerformanceRows(lambs);
-      for (let page = 0; page < lambsPages; page++) {
-        const startIdx = page * lambsPerPage;
-        const pageLambBirthRows = lambBirthRows.slice(startIdx, startIdx + lambsPerPage);
-        const pageLambPerfRows = lambPerfRows.slice(startIdx, startIdx + lambsPerPage);
-        
-        const tableRows = pageLambBirthRows.map((lamb, idx) => {
-          const perf = pageLambPerfRows[idx] || {};
-          const rowNum = startIdx + idx + 1;
-          return `<tr>
-            <td class="row-num">${rowNum}</td>
-            <td><strong>${lamb["Lamb ID"] || "-"}</strong></td>
-            <td>${lamb["Birth status"] || '-'}</td>
-            <td>${lamb["Sex"] || '-'}</td>
-            <td>${lamb["Birth date"] || '-'}</td>
-            <td>${perf["100-day weight"] || '-'}</td>
-            <td>${perf["270-day/post-wean weight"] || '-'}</td>
-            <td>${perf["Latest/current weight"] || '-'}</td>
-            <td><span class="status status-active">active</span></td>
-          </tr>`;
-        }).join('');
-        
-        pagesHtml += `
-          <div class="page">
-            <div class="header">
-              <div class="header-left">
-                ${getExportLogoImg('class="logo"')}
-              </div>
-              <div class="header-center">
-                <h1>${fb?.studName || fb?.farmName || "Full Herd Register"}</h1>
-                <p class="subtitle">Complete Livestock Register</p>
-              </div>
-              <div class="header-right">
-                <p>Page ${pageNum} of ${totalPages}</p>
-                <p>${exportDate}</p>
-              </div>
-            </div>
-            
-            <h2 class="section-title">LAMBS</h2>
-            
-            <table class="animals-table">
-              <thead>
-                <tr>
-                  <th class="row-num">#</th>
-                  <th>Lamb ID</th>
-                  <th>Name</th>
-                  <th>Sex</th>
-                  <th>Date of Birth</th>
-                  <th>Birth Weight</th>
-                  <th>Current Weight</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>${tableRows}</tbody>
-            </table>
-            
-            <div class="footer">
-              <div class="footer-info">
-                <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-                <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
-              </div>
-              <div class="footer-branding">
-                <p class="breedlog-text">BREEDLOG</p>
-                <p class="tagline">Professional Livestock Management</p>
-                <p class="creator">A STITCH WORX Product</p>
-              </div>
-            </div>
-          </div>
-        `;
-        pageNum++;
-      }
-    }
-    
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${fb?.studName || fb?.farmName || "BreedLog"} - Full Herd Register</title>
-  <style>
-    @page { size: A4 landscape; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
-    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
-    .page:last-child { page-break-after: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
-    .header-left { width: 60px; flex-shrink: 0; }
-    .logo { width: 50px; height: 50px; object-fit: contain; }
-    .header-center { flex: 1; text-align: center; }
-    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
-    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
-    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
-    .section-title { font-size: 12pt; font-weight: 800; color: #1a1a1a; margin-bottom: 4mm; text-transform: uppercase; background: #FFC300; padding: 6px 12px; display: inline-block; border-radius: 3px; }
-    .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-    .animals-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
-    .row-num { width: 25px; text-align: center; color: #666; font-size: 7pt; }
-    .animals-table tbody tr { height: auto; }
-    .animals-table tr:nth-child(even) { background: #fafafa; }
-    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
-    .status-active { background: #22c55e20; color: #16a34a; }
-    .status-sold { background: #f59e0b20; color: #d97706; }
-    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
-    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
-    .footer-info { flex: 1; }
-    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
-    .footer-info p { font-size: 7pt; margin-top: 2px; }
-    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
-    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-    @media print { 
-      .page { page-break-after: always; } 
-      .page:last-child { page-break-after: avoid; }
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    }
-    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
-  </style>
-</head>
-<body>
-  ${pagesHtml}
-</body>
-</html>
-    `;
-    
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 500);
-    }
-    createExportedDoc.mutate({
-      name: getDocumentFileName("HerdExport", "FullHerd"),
-      documentType: "herd",
-      subfolder: "herd",
-      metadata: { exportType: "pdf", category: "full-herd", sourceSection: "full herd", animalCount: rams.length + ewes.length + lambs.length, pageCount: totalPages, status: "success", rowsSummary: { rams: rams.length, ewes: ewes.length, lambs: lambs.length } }
+    exportCanonicalSections("Full Herd Register", sections, {
+      category: "full-herd", sourceSection: "full herd", animalCount: fullActiveAnimals.length,
+      rowsSummary: { rams: fullRams.length, ewes: fullEwes.length, lambs: fullLambs.length },
     });
     toast({ title: "PDF Ready", description: "Full Herd Register export opened for printing" });
   };
 
   const exportHerdPDF = (exportType: "rams" | "ewes" | "lambs") => {
     if (!allAnimals || !breedingEvents) return;
-    const fb = farmSettings;
-    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    
-    // Filter animals based on export type
-    let exportAnimals: Animal[] = [];
-    let exportTitle = "";
-    let exportSubtitle = "";
-    
-    switch (exportType) {
-      case "rams":
-        exportAnimals = allAnimals.filter(a => a.sex?.toLowerCase() === "ram");
-        exportTitle = "Rams Register";
-        exportSubtitle = "Male Livestock";
-        break;
-      case "ewes":
-        exportAnimals = allAnimals.filter(a => a.sex?.toLowerCase() === "ewe");
-        exportTitle = "Ewes Register";
-        exportSubtitle = "Breeding Female Livestock";
-        break;
-      case "lambs":
-        exportAnimals = allAnimals.filter(a => {
-          if (!a.birthDate) return false;
-          const birthDate = new Date(a.birthDate);
-          const ageInDays = (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24);
-          return ageInDays <= 240 && a.status !== 'culled' && a.status !== 'sold' && a.status !== 'dead';
-        });
-        exportTitle = "Lambs Register";
-        exportSubtitle = "Animals Under 8 Months";
-        break;
-    }
-    
-    if (exportAnimals.length === 0) {
-      toast({ title: "No Animals", description: `No ${exportType} found to export`, variant: "destructive" });
-      return;
-    }
-    
-    // Ewes get special handling with breeding stats columns
-    if (exportType === "ewes") {
-      const ewesWithStats = exportAnimals.map(ewe => {
-        const stats = calculateEweBreedingStats(ewe.id, breedingEvents, allAnimals);
-        return { ...ewe, stats };
-      });
-      
-      const ewesPerPage = 20;
-      const totalPages = Math.ceil(ewesWithStats.length / ewesPerPage);
-      
-      let pagesHtml = "";
-      for (let page = 0; page < Math.max(1, totalPages); page++) {
-        const startIdx = page * ewesPerPage;
-        const pageEwes = ewesWithStats.slice(startIdx, startIdx + ewesPerPage);
-        
-        const tableRows = pageEwes.map((ewe) => {
-          return `<tr>
-            <td><strong>${ewe.tagId}</strong></td>
-            <td>${ewe.birthDate ? format(new Date(ewe.birthDate), "dd/MM/yyyy") : '-'}</td>
-            <td>${ewe.stats.firstLambDate ? format(new Date(ewe.stats.firstLambDate), "dd/MM/yyyy") : '-'}</td>
-            <td>${ewe.stats.totalLambs}</td>
-            <td>${ewe.stats.avgILP || '-'}</td>
-            <td>${ewe.stats.lambsWeaned}</td>
-            <td>${ewe.stats.avgWeanWeight || '-'}</td>
-            <td><span class="status status-${ewe.status}">${ewe.status}</span></td>
-          </tr>`;
-        }).join('');
-        
-        pagesHtml += `
-          <div class="page">
-            <div class="header">
-              <div class="header-left">
-                ${getExportLogoImg('class="logo"')}
-              </div>
-              <div class="header-center">
-                <h1>${fb?.studName || fb?.farmName || exportTitle}</h1>
-                <p class="subtitle">${exportSubtitle}</p>
-              </div>
-              <div class="header-right">
-                <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
-                <p>${exportDate}</p>
-              </div>
-            </div>
-            
-            <table class="animals-table">
-              <thead>
-                <tr>
-                  <th>Ewe ID</th>
-                  <th>Date of Birth</th>
-                  <th>First Lamb Date</th>
-                  <th>Total Lamb Count</th>
-                  <th>ILP (days)</th>
-                  <th>Weaned Lamb Count</th>
-                  <th>Avg Wean Wt (kg)</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>${tableRows}</tbody>
-            </table>
-            
-            <div class="footer">
-              <div class="footer-info">
-                <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-                <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
-              </div>
-              <div class="footer-branding">
-                <p class="breedlog-text">BREEDLOG</p>
-                <p class="tagline">Professional Livestock Management</p>
-                <p class="creator">A STITCH WORX Product</p>
-              </div>
-            </div>
-          </div>
-        `;
+    const activeAnimals = allAnimals.filter(isActiveAnimal);
+    const isYoung = (animal: Animal) => Boolean(animal.birthDate) && (Date.now() - new Date(animal.birthDate!).getTime()) / 86400000 <= 240;
+    if (exportType === "rams") {
+      const rams = activeAnimals.filter(a => a.sex?.toLowerCase() === "ram" && !isYoung(a));
+      if (!rams.length) {
+        toast({ title: "No Rams", description: "No active adult rams found to export", variant: "destructive" });
+        return;
       }
-      
-      const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${fb?.studName || fb?.farmName || "BreedLog"} - ${exportTitle}</title>
-  <style>
-    @page { size: A4 landscape; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
-    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
-    .page:last-child { page-break-after: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
-    .header-left { width: 60px; flex-shrink: 0; }
-    .logo { width: 50px; height: 50px; object-fit: contain; }
-    .header-center { flex: 1; text-align: center; }
-    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
-    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
-    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
-    .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-    .animals-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
-    .row-num { width: 25px; text-align: center; color: #666; font-size: 7pt; }
-    .animals-table tbody tr { height: auto; }
-    .animals-table tr:nth-child(even) { background: #fafafa; }
-    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
-    .status-active { background: #22c55e20; color: #16a34a; }
-    .status-sold { background: #f59e0b20; color: #d97706; }
-    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
-    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
-    .footer-info { flex: 1; }
-    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; }
-    .footer-info p { font-size: 7pt; margin-top: 2px; }
-    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
-    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-    @media print { 
-      .page { page-break-after: always; } 
-      .page:last-child { page-break-after: avoid; }
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    }
-    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
-  </style>
-</head>
-<body>
-  ${pagesHtml}
-</body>
-</html>
-      `;
-      
-      const printWindow = window.open("", "_blank");
-      if (printWindow) {
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-        setTimeout(() => printWindow.print(), 500);
-      }
-      createExportedDoc.mutate({
-        name: getDocumentFileName("HerdExport", "EwesOnly"),
-        documentType: "herd",
-        subfolder: "herd",
-        metadata: { exportType: "pdf", category: "ewes", sourceSection: "ewes", animalCount: ewesWithStats.length, pageCount: Math.max(1, totalPages), status: "success", rowsSummary: { sample: ewesWithStats.slice(0, 3).map(e => e.tagId) } }
+      exportCanonicalSections("Rams Register", [{ label: "Rams", subtitle: "Active adult rams", rows: buildRamExportRows(rams, breedingEvents, allAnimals, []), columns: ramColumns }], {
+        category: "rams", sourceSection: "rams", animalCount: rams.length,
       });
-      toast({ title: "PDF Ready", description: `${exportTitle} export opened for printing` });
-      return;
+    } else if (exportType === "ewes") {
+      const ewes = activeAnimals.filter(a => a.sex?.toLowerCase() === "ewe" && !isYoung(a));
+      if (!ewes.length) {
+        toast({ title: "No Ewes", description: "No active adult ewes found to export", variant: "destructive" });
+        return;
+      }
+      exportCanonicalSections("Ewes Register", [{ label: "Ewes", subtitle: "Active adult ewes", rows: buildEweExportRows(ewes, breedingEvents, []), columns: eweColumns }], {
+        category: "ewes", sourceSection: "ewes", animalCount: ewes.length,
+      });
+    } else {
+      const lambs = activeAnimals.filter(isYoung);
+      if (!lambs.length) {
+        toast({ title: "No Lambs", description: "No active lambs 240 days or younger found to export", variant: "destructive" });
+        return;
+      }
+      const births = buildLambBirthRows(lambs);
+      const performance = buildLambPerformanceRows(lambs);
+      exportCanonicalSections("Lambs Register", [{ label: "Lambs", subtitle: "Active lambs (240 days or younger)", rows: births.map((row, index) => ({ ...row, ...performance[index] })), columns: lambColumns }], {
+        category: "lambs", sourceSection: "lambs", animalCount: lambs.length,
+      });
     }
-    
-    // Standard export for rams and lambs
-    const animalsPerPage = 20;
-    const totalPages = Math.ceil(exportAnimals.length / animalsPerPage);
-    
-    // Table headers - no photo column
-    const tableHeaders = `
-      <th style="width:15%">Tag ID</th>
-      <th style="width:18%">Name</th>
-      <th style="width:10%">Sex</th>
-      <th style="width:16%">Breed</th>
-      <th style="width:14%">DOB</th>
-      <th style="width:12%">Weight</th>
-      <th style="width:15%">Status</th>`;
-    
-    let pagesHtml = "";
-    for (let page = 0; page < Math.max(1, totalPages); page++) {
-      const startIdx = page * animalsPerPage;
-      const pageAnimals = exportAnimals.slice(startIdx, startIdx + animalsPerPage);
-      
-      const tableRows = pageAnimals.map((a: Animal) => {
-        return `<tr>
-          <td><strong>${a.tagId}</strong></td>
-          <td>${a.name || '-'}</td>
-          <td>${a.sex || '-'}</td>
-          <td>${a.breed || 'Meatmaster'}</td>
-          <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : '-'}</td>
-          <td>${a.currentWeight ? a.currentWeight + ' kg' : '-'}</td>
-          <td><span class="status status-${a.status}">${a.status}</span></td>
-        </tr>`;
-      }).join('');
-      
-      pagesHtml += `
-        <div class="page">
-          <div class="header">
-            <div class="header-left">
-              ${getExportLogoImg()}
-            </div>
-            <div class="header-center">
-              <h1>${fb?.studName || fb?.farmName || exportTitle}</h1>
-              <p class="subtitle">${exportSubtitle}</p>
-            </div>
-            <div class="header-right">
-              <p>Page ${page + 1} of ${Math.max(1, totalPages)}</p>
-              <p>${exportDate}</p>
-            </div>
-          </div>
-          
-          <table class="animals-table">
-            <thead><tr>${tableHeaders}</tr></thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-          
-          <div class="footer">
-            <div class="footer-info">
-              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-              <p>${fb?.ownerName || ""} ${fb?.ownerPhone ? "| " + fb.ownerPhone : ""}</p>
-            </div>
-            <div class="footer-branding">
-              <p class="breedlog-text">BREEDLOG</p>
-              <p class="tagline">Professional Livestock Management</p>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-    
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>${fb?.studName || fb?.farmName || "BreedLog"} - ${exportTitle}</title>
-  <style>
-    @page { size: A4 landscape; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9pt; color: #1a1a1a; background: white; margin: 10mm; }
-    .page { width: 277mm; height: 190mm; overflow: hidden; padding: 6mm; padding-bottom: 28mm; margin: 0 auto; page-break-after: always; position: relative; }
-    .page:last-child { page-break-after: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; padding: 0 2mm 4mm 2mm; border-bottom: 2px solid #FFC300; margin-bottom: 5mm; }
-    .header-left { width: 60px; flex-shrink: 0; }
-    .header-center { flex: 1; text-align: center; }
-    .header-center h1 { font-size: 14pt; font-weight: 800; color: #1a1a1a; text-transform: uppercase; letter-spacing: 1px; }
-    .header-center .subtitle { font-size: 8pt; color: #666; margin-top: 3px; }
-    .header-right { text-align: right; font-size: 8pt; color: #666; flex-shrink: 0; }
-    .animals-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .animals-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-    .animals-table td { padding: 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
-    .animals-table tbody tr { height: auto; }
-    .animals-table tr:nth-child(even) { background: #fafafa; }
-    .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
-    .status-active { background: #22c55e20; color: #16a34a; }
-    .status-sold { background: #f59e0b20; color: #d97706; }
-    .status-deceased, .status-dead { background: #ef444420; color: #dc2626; }
-    .footer { display: flex; align-items: center; justify-content: space-between; border-top: 2px solid #FFC300; background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 4mm 5mm; border-radius: 2mm; position: absolute; bottom: 6mm; left: 6mm; right: 6mm; }
-    .footer-info { flex: 1; }
-    .footer-title { font-size: 9pt; font-weight: 700; color: #FFC300; margin: 0; }
-    .footer-info p { font-size: 7pt; margin-top: 2px; color: #d8d8d8; }
-    .footer-branding { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
-    .footer-branding .breedlog-text { font-size: 11pt; font-weight: 800; color: white; letter-spacing: 1px; margin: 0; }
-    .footer-branding .tagline { font-size: 7pt; font-style: italic; color: #FFC300; margin-top: 2px; }
-    @media print {
-      .page { page-break-after: always; }
-      .page:last-child { page-break-after: avoid; }
-      body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    }
-    .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
-  </style>
-</head>
-<body>
-  ${pagesHtml}
-</body>
-</html>
-    `;
-    
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 500);
-    }
-    createExportedDoc.mutate({
-      name: getDocumentFileName("HerdExport", exportType === "rams" ? "RamsOnly" : "LambsOnly"),
-      documentType: "herd",
-      subfolder: "herd",
-      metadata: { exportType: "pdf", category: exportType, sourceSection: exportType, animalCount: exportAnimals.length, pageCount: Math.max(1, totalPages), status: "success" }
-    });
-    toast({ title: "PDF Ready", description: `${exportTitle} export opened for printing` });
+    toast({ title: "PDF Ready", description: `${exportType} export opened for printing` });
   };
 
   // Active Rams Register PDF — uses the authoritative getRamProgenyMetrics so
@@ -962,207 +459,34 @@ export default function Animals() {
   // "Twin Count" has been removed — it was incorrectly mapped to mating events.
   const exportRamsPDF = () => {
     if (!allAnimals || !breedingEvents) return;
-    const fb = farmSettings;
-    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-
-    // ACTIVE rams only — no historical/sold/culled animals
-    const rams = allAnimals.filter(a => a.sex?.toLowerCase() === "ram" && isActiveAnimal(a));
-
-    if (rams.length === 0) {
-      toast({ title: "No Active Rams", description: "No active rams found to export", variant: "destructive" });
+    const canonicalRams = allAnimals.filter(a =>
+      a.sex?.toLowerCase() === "ram" &&
+      isActiveAnimal(a) &&
+      (!a.birthDate || (Date.now() - new Date(a.birthDate).getTime()) / 86400000 > 240)
+    );
+    if (!canonicalRams.length) {
+      toast({ title: "No Active Rams", description: "No active adult rams found to export", variant: "destructive" });
       return;
     }
-
-    // Use the authoritative ram progeny metrics (same as individual PDF and animal profile)
-    const ramsWithStats = rams.map(ram => {
-      const stats = getRamProgenyMetrics(ram.id, allAnimals, breedingEvents);
-      return { ...ram, stats };
+    exportCanonicalSections("Rams Register", [{ label: "Rams", subtitle: "Active adult rams", rows: buildRamExportRows(canonicalRams, breedingEvents, allAnimals, []), columns: ramColumns }], {
+      category: "rams-register", sourceSection: "rams", animalCount: canonicalRams.length,
     });
-
-    const ramsPerPage = 20;
-    const totalPages = Math.max(1, Math.ceil(ramsWithStats.length / ramsPerPage));
-    const css = getCanonicalGroupCSS() + `
-      .rams-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      .rams-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-      .rams-table td { padding: 5px 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
-      .rams-table tbody tr:nth-child(even) { background: #fafafa; }
-      .status { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 6pt; font-weight: 600; text-transform: uppercase; }
-      .status-active { background: #22c55e20; color: #16a34a; }
-      .footer-branding .creator { font-size: 6pt; color: #aaa; margin-top: 2px; }
-    `;
-
-    let pagesHtml = "";
-    for (let page = 0; page < totalPages; page++) {
-      const startIdx = page * ramsPerPage;
-      const pageRams = ramsWithStats.slice(startIdx, startIdx + ramsPerPage);
-
-      const tableRows = pageRams.map((ram) => {
-        const s = ram.stats;
-        return `<tr>
-          <td><strong>${ram.tagId}</strong></td>
-          <td>${ram.birthDate ? format(new Date(ram.birthDate), "dd/MM/yyyy") : '-'}</td>
-          <td>${s.totalProgeny}</td>
-          <td>${s.matingEvents}</td>
-          <td>${s.lambingEvents}</td>
-          <td>${s.lambingRate !== null ? s.lambingRate + '%' : '-'}</td>
-          <td>${s.avgProgenyBirthWeight !== null ? s.avgProgenyBirthWeight + ' kg' : 'Not recorded'}</td>
-          <td>${s.avgProgeny100Day !== null ? s.avgProgeny100Day + ' kg' : 'Not recorded'}</td>
-          <td>${s.avgProgeny270Day !== null ? s.avgProgeny270Day + ' kg' : 'Not recorded'}</td>
-          <td><span class="status status-${ram.status}">${ram.status}</span></td>
-        </tr>`;
-      }).join('');
-
-      pagesHtml += `
-        <div class="page">
-          <div class="header">
-            <div class="header-left">
-              ${getExportLogoImg()}
-            </div>
-            <div class="header-center">
-              <h1>${fb?.studName || fb?.farmName || "Rams Register"}</h1>
-              <p class="subtitle">Active Breeding Ram Performance Register</p>
-            </div>
-            <div class="header-right">
-              <p>Page ${page + 1} of ${totalPages}</p>
-              <p>${exportDate}</p>
-            </div>
-          </div>
-
-          <table class="rams-table">
-            <thead>
-              <tr>
-                <th>Ram ID</th>
-                <th>DOB</th>
-                <th>Total Progeny</th>
-                <th>Mating Events</th>
-                <th>Lambing Events</th>
-                <th>Lambing Rate</th>
-                <th>Avg Birth (kg)</th>
-                <th>Avg 100-Day (kg)</th>
-                <th>Avg 270-Day (kg)</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-
-          <div class="footer">
-            <div class="footer-info">
-              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-              <p>${fb?.ownerName || ""}${fb?.ownerPhone ? " | " + fb.ownerPhone : ""}</p>
-            </div>
-            <div class="footer-branding">
-              <p class="breedlog-text">BREEDLOG</p>
-              <p class="tagline">Professional Livestock Management</p>
-              <p class="creator">A STITCH WORX Product</p>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>${fb?.studName || fb?.farmName || "BreedLog"} - Active Rams Register</title>
-<style>${css}</style></head><body>${pagesHtml}</body></html>`;
-
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 500);
-    }
-    createExportedDoc.mutate({
-      name: getDocumentFileName("RamsRegister", "Active"),
-      documentType: "herd",
-      subfolder: "herd",
-      metadata: { exportType: "pdf", category: "rams-register", sourceSection: "rams", animalCount: rams.length, pageCount: totalPages, status: "success" }
-    });
-    toast({ title: "PDF Ready", description: `Active Rams Register (${rams.length} rams) opened for printing` });
+    toast({ title: "PDF Ready", description: `Active Rams Register (${canonicalRams.length} rams) opened for printing` });
   };
 
   const exportEwesPDF = () => {
     if (!allAnimals || !breedingEvents) return;
-    const fb = farmSettings;
-    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    const compressedFb = { ...fb, logoUrl: pendingExportLogoRef.current ?? fb?.logoUrl ?? null };
-    
-    const ewes = allAnimals.filter(a => 
-      a.sex?.toLowerCase() === "ewe" && 
-      a.status !== 'culled' && 
-      a.status !== 'sold' &&
-      a.status !== 'dead'
+    const canonicalEwes = allAnimals.filter(a =>
+      a.sex?.toLowerCase() === "ewe" &&
+      isActiveAnimal(a) &&
+      (!a.birthDate || (Date.now() - new Date(a.birthDate).getTime()) / 86400000 > 240)
     );
-    
-    if (ewes.length === 0) {
-      toast({ title: "No Ewes", description: "No ewes found to export", variant: "destructive" });
+    if (!canonicalEwes.length) {
+      toast({ title: "No Ewes", description: "No active adult ewes found to export", variant: "destructive" });
       return;
     }
-    
-    const ewesWithStats = ewes.map(ewe => {
-      const stats = calculateEweBreedingStats(ewe.id, breedingEvents, allAnimals);
-      return { ...ewe, stats };
-    });
-    
-    const ewesPerPage = 20;
-    const totalPages = Math.ceil(ewesWithStats.length / ewesPerPage);
-    
-    let pagesHtml = "";
-    for (let page = 0; page < Math.max(1, totalPages); page++) {
-      const startIdx = page * ewesPerPage;
-      const pageEwes = ewesWithStats.slice(startIdx, startIdx + ewesPerPage);
-      
-      const tableRows = pageEwes.map((ewe) => {
-        return `<tr>
-          <td><strong>${ewe.tagId}</strong></td>
-          <td>${ewe.birthDate ? format(new Date(ewe.birthDate), "dd/MM/yyyy") : '-'}</td>
-          <td>${ewe.stats.totalLambs || 0}</td>
-          <td>${ewe.stats.firstLambDate ? format(ewe.stats.firstLambDate, "dd/MM/yyyy") : '-'}</td>
-          <td>${ewe.stats.avgILP || '-'}</td>
-          <td>${ewe.stats.lambsWeaned || 0}</td>
-          <td>${ewe.stats.avgWeanWeight || '-'}</td>
-          <td><span class="status status-${ewe.status}">${ewe.status}</span></td>
-        </tr>`;
-      }).join('');
-      
-      pagesHtml += `
-        <div class="page">
-          ${renderExportHeader(compressedFb, page + 1, Math.max(1, totalPages), exportDate, fb?.studName || fb?.farmName || 'Ewes Register', 'Breeding Ewe Performance Report')}
-          <table class="export-table">
-            <thead>
-              <tr>
-                <th>Ewe ID</th>
-                <th>DOB</th>
-                <th># Lambs</th>
-                <th>First Lamb</th>
-                <th>Avg ILP</th>
-                <th>Lambs Weaned</th>
-                <th>Avg Wean (kg)</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-          ${renderExportFooter(compressedFb)}
-        </div>
-      `;
-    }
-    
-    const htmlContent = wrapExportDocument(
-      `${fb?.studName || fb?.farmName || "BreedLog"} - Ewes Register`,
-      getCanonicalGroupCSS(),
-      pagesHtml
-    );
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 500);
-    }
-    createExportedDoc.mutate({
-      name: getDocumentFileName("EwesRegister", "Active"),
-      documentType: "herd",
-      subfolder: "herd",
-      metadata: { exportType: "pdf", category: "ewes-register", sourceSection: "ewes", animalCount: ewes.length, pageCount: Math.max(1, totalPages), status: "success" }
+    exportCanonicalSections("Ewes Register", [{ label: "Ewes", subtitle: "Active adult ewes", rows: buildEweExportRows(canonicalEwes, breedingEvents, []), columns: eweColumns }], {
+      category: "ewes-register", sourceSection: "ewes", animalCount: canonicalEwes.length,
     });
     toast({ title: "PDF Ready", description: "Ewes Register export opened for printing" });
   };
@@ -1172,200 +496,30 @@ export default function Animals() {
   // Notes are sanitized to remove internal simulation metadata.
   const exportCulledPDF = () => {
     if (!allAnimals) return;
-    const fb = farmSettings;
-    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    const compressedFb = { ...fb, logoUrl: pendingExportLogoRef.current ?? fb?.logoUrl ?? null };
-
-    // Authoritative selector: only animals whose status is "culled"
-    const culledAnimals = allAnimals.filter(a =>
-      (a.status || '').toLowerCase() === 'culled'
-    );
-    
-    if (culledAnimals.length === 0) {
+    const canonicalCulledRows = buildCullSoldRows(allAnimals.filter(a => (a.status || "").toLowerCase() === "culled"));
+    if (!canonicalCulledRows.length) {
       toast({ title: "No Culled Animals", description: "No animals marked for cull to export", variant: "destructive" });
       return;
     }
-    
-    const animalsPerPage = 20;
-    const culledRows = buildCullSoldRows(culledAnimals);
-    const totalPages = Math.ceil(culledRows.length / animalsPerPage);
-    
-    let pagesHtml = "";
-    for (let page = 0; page < Math.max(1, totalPages); page++) {
-      const startIdx = page * animalsPerPage;
-      const pageAnimals = culledRows.slice(startIdx, startIdx + animalsPerPage);
-      
-      const tableRows = pageAnimals.map((animal) => {
-        return `<tr>
-          <td><strong>${animal["Animal ID"] || "-"}</strong></td>
-          <td>${animal["Sex"] || '-'}</td>
-          <td>${animal["Breed"] || '-'}</td>
-          <td>${animal["Date of birth"] || '-'}</td>
-          <td>${animal["Status"] || '-'}</td>
-          <td>${animal["Status date"] || '-'}</td>
-          <td>${animal["Reason"] || '-'}</td>
-          <td>${animal["Latest weight"] || '-'}</td>
-          <td>${animal["Notes"] || '-'}</td>
-        </tr>`;
-      }).join('');
-      
-      pagesHtml += `
-        <div class="page">
-          ${renderExportHeader(compressedFb, page + 1, Math.max(1, totalPages), exportDate, fb?.studName || fb?.farmName || 'Culled Animals', 'Slaughter/Cull Register')}
-          <table class="export-table">
-            <thead>
-              <tr>
-                <th>Animal ID</th>
-                <th>Sex</th>
-                <th>Breed</th>
-                <th>DOB</th>
-                <th>Status</th>
-                <th>Status date</th>
-                <th>Reason</th>
-                <th>Latest weight</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-          ${renderExportFooter(compressedFb)}
-        </div>
-      `;
-    }
-    
-    const htmlContent = wrapExportDocument(
-      `${fb?.studName || fb?.farmName || "BreedLog"} - Culled Animals`,
-      getCanonicalGroupCSS(),
-      pagesHtml
-    );
-    
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 500);
-    }
-    createExportedDoc.mutate({
-      name: getDocumentFileName("CulledAnimals", "Full"),
-      documentType: "herd",
-      subfolder: "herd",
-      metadata: { exportType: "pdf", category: "culled", sourceSection: "culled", animalCount: culledRows.length, pageCount: Math.max(1, totalPages), status: "success", rowsSummary: culledRows.slice(0, 5) }
+    exportCanonicalSections("Culled Animals", [{ label: "Culled animals", subtitle: "Cull register", rows: canonicalCulledRows, columns: cullSoldColumns }], {
+      category: "culled", sourceSection: "culled", animalCount: canonicalCulledRows.length, rowsSummary: canonicalCulledRows.slice(0, 5),
     });
-    toast({ title: "PDF Ready", description: `Culled Animals export (${culledRows.length} animals) opened for printing` });
+    toast({ title: "PDF Ready", description: `Culled Animals export (${canonicalCulledRows.length} animals) opened for printing` });
   };
 
   // Export Sold Animals PDF — status === "sold" only.
   // Notes are sanitized to remove internal simulation metadata.
   const exportSoldPDF = () => {
     if (!allAnimals) return;
-    const fb = farmSettings;
-    const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-
-    const soldAnimals = allAnimals.filter(a =>
-      (a.status || '').toLowerCase() === 'sold'
-    );
-
-    if (soldAnimals.length === 0) {
+    const canonicalSoldRows = buildCullSoldRows(allAnimals.filter(a => (a.status || "").toLowerCase() === "sold"));
+    if (!canonicalSoldRows.length) {
       toast({ title: "No Sold Animals", description: "No sold animals found to export", variant: "destructive" });
       return;
     }
-
-    const soldRows = buildCullSoldRows(soldAnimals);
-
-    const rowsPerPage = 20;
-    const totalPages = Math.max(1, Math.ceil(soldRows.length / rowsPerPage));
-    const css = getCanonicalGroupCSS() + `
-      .sold-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      .sold-table th { background: #FFC300; color: #000; font-weight: 700; font-size: 7pt; padding: 8px 6px; text-align: left; text-transform: uppercase; vertical-align: middle; }
-      .sold-table td { padding: 5px 6px; border-bottom: 1px solid #e0e0e0; font-size: 8pt; vertical-align: middle; text-align: left; }
-      .sold-table tbody tr:nth-child(even) { background: #fafafa; }
-    `;
-
-    let pagesHtml = "";
-    for (let page = 0; page < totalPages; page++) {
-      const startIdx = page * rowsPerPage;
-      const pageRows = soldRows.slice(startIdx, startIdx + rowsPerPage);
-
-      const tableRows = pageRows.map((animal, idx) => {
-        const rowNum = startIdx + idx + 1;
-        return `<tr>
-          <td class="row-num">${rowNum}</td>
-          <td><strong>${animal["Animal ID"] || "-"}</strong></td>
-          <td>${animal["Sex"] || '-'}</td>
-          <td>${animal["Breed"] || '-'}</td>
-          <td>${animal["Date of birth"] || '-'}</td>
-          <td>${animal["Status date"] || '-'}</td>
-          <td>${animal["Reason"] || '-'}</td>
-          <td>${animal["Latest weight"] || '-'}</td>
-          <td>${animal["Notes"] || '-'}</td>
-        </tr>`;
-      }).join('');
-
-      pagesHtml += `
-        <div class="page">
-          <div class="header">
-            <div class="header-left">
-              ${getExportLogoImg()}
-            </div>
-            <div class="header-center">
-              <h1>${fb?.studName || fb?.farmName || "Sold Animals Register"}</h1>
-              <p class="subtitle">Sold Animals Export — Page ${page + 1} of ${totalPages}</p>
-            </div>
-            <div class="header-right">
-              <p>Page ${page + 1} of ${totalPages}</p>
-              <p>${exportDate}</p>
-            </div>
-          </div>
-
-          <table class="sold-table">
-            <thead>
-              <tr>
-                <th style="width:25px">#</th>
-                <th>Animal ID</th>
-                <th>Sex</th>
-                <th>Breed</th>
-                <th>DOB</th>
-                <th>Sale Date</th>
-                <th>Reason / Buyer</th>
-                <th>Weight</th>
-                <th>Notes</th>
-              </tr>
-            </thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-
-          <div class="footer">
-            <div class="footer-info">
-              <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-              <p>${fb?.ownerName || ""}${fb?.ownerPhone ? " | " + fb.ownerPhone : ""}</p>
-            </div>
-            <div class="footer-branding">
-              <p class="breedlog-text">BREEDLOG</p>
-              <p class="tagline">Professional Livestock Management</p>
-              <p class="creator">A STITCH WORX Product</p>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-<title>${fb?.studName || fb?.farmName || "BreedLog"} - Sold Animals Register</title>
-<style>${css}</style></head><body>${pagesHtml}</body></html>`;
-
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-      setTimeout(() => printWindow.print(), 500);
-    }
-    createExportedDoc.mutate({
-      name: getDocumentFileName("SoldAnimals", "Full"),
-      documentType: "herd",
-      subfolder: "herd",
-      metadata: { exportType: "pdf", category: "sold", sourceSection: "sold", animalCount: soldRows.length, pageCount: totalPages, status: "success" }
+    exportCanonicalSections("Sold Animals Register", [{ label: "Sold animals", subtitle: "Sold animals register", rows: canonicalSoldRows, columns: cullSoldColumns }], {
+      category: "sold", sourceSection: "sold", animalCount: canonicalSoldRows.length, rowsSummary: canonicalSoldRows.slice(0, 5),
     });
-    toast({ title: "PDF Ready", description: `Sold Animals (${soldRows.length} animals) opened for printing` });
+    toast({ title: "PDF Ready", description: `Sold Animals (${canonicalSoldRows.length} animals) opened for printing` });
   };
 
   // Update filters AND expand the right section when URL changes

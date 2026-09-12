@@ -4,7 +4,9 @@ import {
   renderExportFooter,
   wrapExportDocument,
   openExportPrintDialog,
+  escapeHtmlText,
   sanitizePublicNote,
+  GROUP_ROWS_PER_PAGE,
 } from "@/lib/export-template";
 import { PDFExportDialog } from "@/components/PDFExportDialog";
 import { useState } from "react";
@@ -63,9 +65,9 @@ export default function HealthEventDetail() {
     `;
 
     const field = (label: string, value: string | null | undefined) =>
-      `<div class="health-field"><label>${label}</label><span>${value || "Not recorded"}</span></div>`;
+       `<div class="health-field"><label>${escapeHtmlText(label)}</label><span>${escapeHtmlText(value || "Not recorded")}</span></div>`;
 
-    const body = `
+    const details = `
       <div class="health-grid">
         ${field("Event Name", event.eventName)}
         ${field("Event Date", format(new Date(event.eventDate), "dd MMMM yyyy"))}
@@ -78,27 +80,30 @@ export default function HealthEventDetail() {
         ${field("Withdrawal Date", (event as any).withdrawalDate)}
         ${field("Follow-up Date", event.nextFollowUpDate ? format(new Date(event.nextFollowUpDate), "dd/MM/yyyy") : null)}
       </div>
-      ${event.withdrawalPeriodNotes ? `<div class="notes-box"><strong>Withdrawal notes:</strong> ${sanitizePublicNote(event.withdrawalPeriodNotes)}</div>` : ""}
-      ${event.notes ? `<div class="notes-box"><strong>Clinical notes:</strong> ${sanitizePublicNote(event.notes)}</div>` : ""}
-      <p class="section-title">Animals Treated (${eventAnimals.length})</p>
+      ${event.withdrawalPeriodNotes ? `<div class="notes-box"><strong>Withdrawal notes:</strong> ${escapeHtmlText(sanitizePublicNote(event.withdrawalPeriodNotes))}</div>` : ""}
+       ${event.notes ? `<div class="notes-box"><strong>Clinical notes:</strong> ${escapeHtmlText(sanitizePublicNote(event.notes))}</div>` : ""}`;
+    const animalChunks = Array.from(
+      { length: Math.max(1, Math.ceil(eventAnimals.length / GROUP_ROWS_PER_PAGE)) },
+      (_, page) => eventAnimals.slice(page * GROUP_ROWS_PER_PAGE, (page + 1) * GROUP_ROWS_PER_PAGE),
+    );
+    const pageHtml = animalChunks.map((pageAnimals, page) => `<div class="page">
+       ${renderExportHeader(fb, page + 1, animalChunks.length, exportDate, title, subtitle)}
+       ${page === 0 ? details : ""}
+       <p class="section-title">Animals Treated (${eventAnimals.length})${page ? " — Continued" : ""}</p>
       <table class="animal-table">
         <thead><tr><th>#</th><th>Tag ID</th><th>Name</th><th>Sex</th><th>Breed</th></tr></thead>
         <tbody>
-          ${eventAnimals.map((animal, idx) => `<tr>
-            <td>${idx + 1}</td>
-            <td><strong>${animal?.tagId || "—"}</strong></td>
-            <td>${animal?.name || "—"}</td>
-            <td style="text-transform:capitalize">${animal?.sex || "—"}</td>
-            <td>${animal?.breed || "—"}</td>
-          </tr>`).join("")}
+           ${pageAnimals.length ? pageAnimals.map((animal, idx) => `<tr>
+             <td>${page * GROUP_ROWS_PER_PAGE + idx + 1}</td>
+             <td><strong>${escapeHtmlText(animal?.tagId || "—")}</strong></td>
+             <td>${escapeHtmlText(animal?.name || "—")}</td>
+             <td style="text-transform:capitalize">${escapeHtmlText(animal?.sex || "—")}</td>
+             <td>${escapeHtmlText(animal?.breed || "—")}</td>
+           </tr>`).join("") : `<tr><td colspan="5" class="zero-state">No animals recorded for this event</td></tr>`}
         </tbody>
-      </table>`;
-
-    const pageHtml = `<div class="page">
-      ${renderExportHeader(fb, 1, 1, exportDate, title, subtitle)}
-      ${body}
+       </table>
       ${renderExportFooter(fb)}
-    </div>`;
+    </div>`).join("");
 
     const html = wrapExportDocument(title, css, pageHtml);
     openExportPrintDialog(html);
