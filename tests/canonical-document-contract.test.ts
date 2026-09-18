@@ -50,8 +50,9 @@ test("Animal Detail delegates to the PDF document and exposes no Word export", (
 
   assert.match(detail, /buildAnimalProfilePdfBlob/);
   assert.doesNotMatch(detail, /\b(?:exportWord|application\/msword|\bWord\b)/i);
-  // The sole direct popup is intentionally opened synchronously for the PDF blob preview.
-  assert.match(detail, /const\s+previewWindow\s*=\s*window\.open\(/);
+  // Individual PDFs download directly because some mobile/PWA browsers render blob previews as blank tabs.
+  assert.doesNotMatch(withoutComments(detail), /\bwindow\.open\s*\(/);
+  assert.match(detail, /anchor\.download\s*=\s*nativeFilename/);
   assert.doesNotMatch(withoutComments(detail), /\bdocument\.write\s*\(/);
 
   assert.match(profile, /from\s+"@react-pdf\/renderer"/);

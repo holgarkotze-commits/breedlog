@@ -1244,10 +1244,6 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
 
     const handleExportPDF = async (quality: PDFQuality = 'high') => {
         toast({ title: "Preparing PDF...", description: "Building performance datasheet, please wait." });
-        // Open the preview synchronously while the Download PDF click still has
-        // browser user activation. Opening it after the awaits below is treated
-        // as an unsolicited popup by mobile browsers and gets blocked.
-        const previewWindow = window.open("", "_blank");
 
         let nativePhotoBase64: string | null = null;
         if (animal.photo) {
@@ -1310,9 +1306,9 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
             profile: nativeProfile,
             grandparents: nativeGrandparents,
         }, quality);
-        // Export-history bookkeeping must not block delivery of an already-built PDF.
-        // A transient API/offline failure here previously left the preview window blank.
-        void createExportedDoc.mutateAsync({
+        // This request records the export and enforces the existing individual-PDF quota.
+        // No preview tab is opened, so a rejected request cannot leave a blank screen.
+        await createExportedDoc.mutateAsync({
             name: nativeFilename,
             documentType: "individual",
             subfolder: "individual",
@@ -1327,29 +1323,22 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
               status: "success",
               rowsSummary: [{ tagId: animal.tagId, sex: animal.sex, breed: animal.breed, status: animal.status }],
             }
-        }).catch((error) => {
-            console.warn("Unable to record individual PDF export history:", error);
         });
         const nativePath = await saveFileInNativeDownloads(pdfBlob, nativeFilename, "application/pdf");
 
         if (nativePath) {
-            previewWindow?.close();
             toast({ title: "PDF Exported", description: `${animal.tagId} performance datasheet saved to ${nativePath}` });
         } else {
             const blobUrl = URL.createObjectURL(pdfBlob);
-            if (previewWindow) {
-                previewWindow.location.href = blobUrl;
-            } else {
-                const anchor = document.createElement("a");
-                anchor.href = blobUrl;
-                anchor.download = nativeFilename;
-                anchor.rel = "noopener";
-                document.body.appendChild(anchor);
-                anchor.click();
-                anchor.remove();
-            }
+            const anchor = document.createElement("a");
+            anchor.href = blobUrl;
+            anchor.download = nativeFilename;
+            anchor.rel = "noopener";
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
             setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-            toast({ title: "PDF Ready", description: `Performance datasheet opened for ${animal.tagId}` });
+            toast({ title: "PDF Downloaded", description: `Performance datasheet downloaded for ${animal.tagId}` });
         }
 
         return;
