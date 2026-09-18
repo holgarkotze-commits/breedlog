@@ -1310,7 +1310,9 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
             profile: nativeProfile,
             grandparents: nativeGrandparents,
         }, quality);
-        await createExportedDoc.mutateAsync({
+        // Export-history bookkeeping must not block delivery of an already-built PDF.
+        // A transient API/offline failure here previously left the preview window blank.
+        void createExportedDoc.mutateAsync({
             name: nativeFilename,
             documentType: "individual",
             subfolder: "individual",
@@ -1325,6 +1327,8 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
               status: "success",
               rowsSummary: [{ tagId: animal.tagId, sex: animal.sex, breed: animal.breed, status: animal.status }],
             }
+        }).catch((error) => {
+            console.warn("Unable to record individual PDF export history:", error);
         });
         const nativePath = await saveFileInNativeDownloads(pdfBlob, nativeFilename, "application/pdf");
 
