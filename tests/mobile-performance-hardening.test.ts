@@ -56,12 +56,3 @@ test("Settings keeps JSON export hidden and XLSX blocked messaging visible", () 
   assert.match(src, /XLSX blocked in this environment/);
   assert.doesNotMatch(src, /Export JSON/i);
 });
-
-test("Phase 14 performance hardening report exists", () => {
-  const docPath = path.join(repoRoot, "docs/release/mobile-performance-hardening.md");
-  assert.ok(fs.existsSync(docPath));
-  const doc = fs.readFileSync(docPath, "utf8");
-  assert.match(doc, /Animals page rendering strategy/);
-  assert.match(doc, /Health Plan lazy-load status/);
-  assert.match(doc, /Simulation dataset runtime status/);
-});

@@ -1,52 +1,18 @@
 import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { once } from "node:events";
 
 const BASE_URL = "http://127.0.0.1:5012";
 const TAURI_ORIGIN = "https://tauri.localhost";
 const REPO_ROOT = fileURLToPath(new URL("../", import.meta.url));
-const LOCAL_TSX_CLI = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
 
 let server: ChildProcessWithoutNullStreams | null = null;
 let logs = "";
 
 function createServerProcess() {
-  if (existsSync(LOCAL_TSX_CLI)) {
-    return spawn(process.execPath, [LOCAL_TSX_CLI, "server/index.ts"], {
-      env: {
-        ...process.env,
-        NODE_ENV: "test",
-        USE_IN_MEMORY_STORAGE: "1",
-        SESSION_SECRET: "test-secret",
-        ADMIN_PIN: "1234",
-        PORT: "5012",
-      },
-      cwd: REPO_ROOT,
-      stdio: "pipe",
-      windowsHide: true,
-    });
-  }
-
-  if (process.platform === "win32") {
-    return spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", "npx tsx server/index.ts"], {
-      env: {
-        ...process.env,
-        NODE_ENV: "test",
-        USE_IN_MEMORY_STORAGE: "1",
-        SESSION_SECRET: "test-secret",
-        ADMIN_PIN: "1234",
-        PORT: "5012",
-      },
-      cwd: REPO_ROOT,
-      stdio: "pipe",
-      windowsHide: true,
-    });
-  }
-
-  return spawn("npx", ["tsx", "server/index.ts"], {
+  return spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
     env: {
       ...process.env,
       NODE_ENV: "test",

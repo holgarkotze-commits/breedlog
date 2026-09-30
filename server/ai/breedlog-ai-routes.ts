@@ -159,7 +159,7 @@ export function registerAIRoutes(app: Express): void {
           ? "fallback"
           : "ready",
       message: !configured
-        ? "No AI provider configured. Add GROQ_API_KEY or GEMINI_API_KEY."
+        ? "No AI provider is configured. Contact support."
         : info.groqConfigured
           ? "BreedLog AI ready — Groq GPT-OSS 120B primary."
           : "BreedLog AI ready — Gemini fallback.",

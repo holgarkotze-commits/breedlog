@@ -12,8 +12,7 @@ if ! npm ls @playwright/test --depth=0 >/dev/null 2>&1; then
   "passed": false,
   "reason": "Browser certification dependencies are not installed. Install @playwright/test and browser binaries, then re-run.",
   "blockerType": "external_dependency",
-  "missing": "@playwright/test",
-  "runbook": "docs/release/offline-sync-certification.md"
+  "missing": "@playwright/test"
 }
 JSON
   echo "[Browser Cert] Missing @playwright/test. Wrote failing RESULT.json"
@@ -25,8 +24,7 @@ if ! npx playwright test --config tests/browser-cert/playwright.config.ts; then
 {
   "status": "failed",
   "passed": false,
-  "reason": "Playwright browser certification suite failed. Inspect artifacts/browser-certification/report.",
-  "runbook": "docs/release/offline-sync-certification.md"
+  "reason": "Playwright browser certification suite failed. Inspect artifacts/browser-certification/report."
 }
 JSON
   echo "[Browser Cert] Playwright suite failed. Wrote failing RESULT.json"
@@ -41,8 +39,7 @@ cat > "$RESULT_FILE" <<JSON
     "tests/browser-cert/specs/offline-sync.spec.ts",
     "tests/browser-cert/specs/decision-alerts.spec.ts"
   ],
-  "executedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "runbook": "docs/release/offline-sync-certification.md"
+  "executedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 JSON
 
