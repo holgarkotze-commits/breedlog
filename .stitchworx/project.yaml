@@ -25,7 +25,7 @@ project_assets:
   transition_fallback_ref: "agent/artifact-governance-bootstrap"
   governance_pr: 1
   root: "breedlog"
-  navigation_state: "legacy-migration-pending"
+  navigation_state: "canonical-assets-established"
   target_index: "00_PROJECT_ASSET_INDEX.md"
   target_current_build_status: "01_CURRENT_BUILD_STATUS.md"
   target_next_work_order: "NEXT_WORK_ORDER.md"

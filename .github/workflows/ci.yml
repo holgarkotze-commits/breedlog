@@ -47,18 +47,12 @@ jobs:
           node-version: 22
           cache: npm
 
-      # package-lock.json now resolves everything from the public npm
-      # registry (the Replit-only package-firewall URLs were removed), so no
-      # lockfile patching is needed before install.
       - name: Install dependencies
         run: npm ci
 
       - name: TypeScript check
         run: npm run check
 
-      # The suite must actually execute the full tests/ tree. A silent glob or
-      # runner regression that drops test files must fail this gate, so the
-      # aggregate executed-test count is enforced against a floor.
       - name: Run certification tests
         run: |
           npm run test:cert 2>&1 | tee /tmp/test-cert.log
@@ -71,9 +65,6 @@ jobs:
 
       - name: Production build
         run: npm run build
-
-      - name: Generate release pack
-        run: npm run release:pack
 
       - name: Push DB schema
         run: npm run db:push

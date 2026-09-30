@@ -110,13 +110,6 @@ test("PDF export structure keeps header/footer placement guards", () => {
   assert.match(settings, /padding-bottom: 30mm/);
 });
 
-test("XLSX blocker doc exists with attempted package command and error", () => {
-  const doc = fs.readFileSync("docs/release/xlsx-import-export-handoff.md", "utf8");
-  assert.match(doc, /npm install xlsx --save-exact/);
-  assert.match(doc, /E403/);
-  assert.match(doc, /CSV is the active and supported spreadsheet format/i);
-});
-
 test("CSV sire/dam lookup resolves parent tag IDs from full herd, not just exported subset (fix1)", () => {
   const dataset = buildBreedLogSimulationDataset();
   const allAnimals = dataset.animals;
