@@ -1,0 +1,30 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "t_GN_0T1rTxHv5qvcjsvl"
+uri = "file://.canvas/assets/document-previews/gallery.html"
+type = "html"
+title = "BreedLog — All export document previews"
+description = "21 current document examples, 28 pages. Click any page to enlarge. Fictional sample data; app unchanged."
+logical_id = "547524e2-3505-40f9-97d2-507428e9417b"
+content_hash = "sha256:f22bc30d2ec19030be9509592edafa66e8f4112780b03cc582ce6b4d6e52311d"
+size = 3389109
+mtime_ms = 1792438838583
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:6ce90b94-d10c-4c37-8a57-695302c1aa92/547524e2-3505-40f9-97d2-507428e9417b/40399899-1fc5-480d-b47b-2761cc13d317"
+storage_version_token = "1792438880094794"
+content_type = "text/html"
+
+[[outputs]]
+id = "2vQx7t1iSnbvGQ30QlvlA"
+uri = "file://.canvas/assets/document-previews/BreedLog-export-document-catalogue.pdf"
+type = "pdf"
+title = "BreedLog export document catalogue — 28 pages"
+description = "All current PDF layouts together, including full ram/ewe performance sheets, registers, breeding, health, genetics and analysis reports. Sample data only."
+logical_id = "ef5ce43d-c1ec-4d00-afc9-ccfd3f2add32"
+content_hash = "sha256:09616564f269a720c48de8d1b1298f2ce4aa11267456a87a49204751e66fea9d"
+size = 2510209
+mtime_ms = 1792438839355
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:6ce90b94-d10c-4c37-8a57-695302c1aa92/ef5ce43d-c1ec-4d00-afc9-ccfd3f2add32/7f9f12e6-2e2d-4757-b71d-e6ec5a2e1293"
+storage_version_token = "1792438881062528"
+content_type = "application/pdf"
