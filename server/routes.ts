@@ -140,7 +140,7 @@ function filterRowsForVisibleAnimals<T>(
 
 function hiddenAnimalNotFound(res: Response) {
   return res.status(404).json({
-    message: "Animal is hidden on the Free plan. Reactivate Premium to restore the full workspace.",
+    message: "Animal not found or not available in this workspace.",
     code: "ANIMAL_HIDDEN_BY_DOWNGRADE",
   });
 }

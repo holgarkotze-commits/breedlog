@@ -40,6 +40,14 @@ Durable product requirements, architecture assessments, plans, handoffs, evidenc
 
 Copy `.env.example` and provide the values needed for the mode being run. Production must use managed secrets; never commit credentials or real farm data.
 
+### Controlled public trials
+
+Farmer accounts use `/auth/register`, `/auth/login`, and `/auth/recovery`; existing invitation workspaces remain under `/beta`. Public registration always creates a new empty workspace. Paid plans and AI are not available to public trial accounts.
+
+`BREEDLOG_PUBLIC_TRIAL_SIGNUP=disabled` pauses only new registrations, without preventing existing farmers from signing in. Recovery works with the one-time saved recovery code; email recovery is unavailable unless the existing SMTP configuration is supplied. Never log or persist the plaintext recovery code.
+
+For an isolated preview, use `USE_IN_MEMORY_STORAGE=1 npm run dev` (or `npm start` after building). This mode never connects to SQL, skips startup migrations, and loses its test records on restart. Deployment still uses the normal database-backed start command; do not enable in-memory storage in a real release.
+
 ## Repository rules
 
 Read `AGENTS.md` and `.stitchworx/project.yaml` before substantial changes. Keep runtime code, tests and code-facing configuration here. Do not add work orders, agent memory, build diaries, evidence packs or generated release output to this repository.

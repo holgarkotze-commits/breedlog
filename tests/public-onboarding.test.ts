@@ -63,7 +63,10 @@ test("public farmer onboarding, isolation, revocation and recovery", async t => 
       assert.equal(created.status, 201);
       const id = created.body.id;
       assert.equal((await request(`/api/animals/${id}`, undefined, farmerA.cookie)).status, 200);
-      assert.equal((await request(`/api/animals/${id}`, undefined, farmerB.cookie)).status, 404);
+      const denied = await request(`/api/animals/${id}`, undefined, farmerB.cookie);
+      assert.equal(denied.status, 404);
+      assert.match(denied.body.message, /not found/i);
+      assert.doesNotMatch(denied.body.message, /premium|upgrade/i);
       assert.deepEqual((await request("/api/animals", undefined, farmerB.cookie)).body, []);
     });
     await t.test("paid AI and simulated billing are blocked for trials", async () => {

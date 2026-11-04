@@ -4,6 +4,7 @@ import connectPg from "connect-pg-simple";
 import createMemoryStore from "memorystore";
 import crypto from "crypto";
 import { storage } from "./storage";
+import { pool } from "./db";
 
 // Device session data stored in express session
 declare module "express-session" {
@@ -99,7 +100,7 @@ export function setupDeviceAuth(app: Express) {
   const sessionTtl = 30 * 24 * 60 * 60 * 1000; // 30 days
   const sessionStore = process.env.DATABASE_URL && process.env.USE_IN_MEMORY_STORAGE !== "1"
     ? new (connectPg(session))({
-        conString: process.env.DATABASE_URL,
+        pool,
         createTableIfMissing: false,
         ttl: sessionTtl,
         tableName: "sessions",
@@ -141,6 +142,7 @@ export function setupDeviceAuth(app: Express) {
   // Token-based auth middleware - runs before routes
   // Checks Authorization: Bearer <token> or X-Device-Token header for token auth (more reliable than cookies on mobile)
   app.use(async (req: Request, res: Response, next: NextFunction) => {
+    try {
     // Account devices use the HttpOnly session, NEVER a reusable legacy token.
     // Check revocation on every request so logout/recovery invalidates old cookies.
     if (req.session.accountId) {
@@ -205,6 +207,9 @@ export function setupDeviceAuth(app: Express) {
       }
     }
     next();
+    } catch (error) {
+      next(error);
+    }
   });
 }
 
