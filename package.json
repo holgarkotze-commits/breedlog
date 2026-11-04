@@ -10,7 +10,7 @@
     "check": "tsc",
     "test": "npm run test:cert",
     "db:push": "drizzle-kit push",
-    "test:cert": "cross-env NODE_ENV=test USE_IN_MEMORY_STORAGE=1 node --import tsx --test --test-concurrency=1 tests/*.test.ts tests/isolation/*.test.ts",
+    "test:cert": "cross-env NODE_ENV=test USE_IN_MEMORY_STORAGE=1 node --import tsx --test --test-concurrency=1 tests/*.test.ts tests/isolation/*.test.ts && node --import tsx scripts/certify-onboarding-sql.ts",
     "test:browser-cert": "bash scripts/run-browser-cert.sh",
     "test:onboarding-db": "cross-env NODE_ENV=test USE_IN_MEMORY_STORAGE=0 node --import tsx --test tests/sql/public-onboarding.sql.test.ts",
     "release:gate": "bash scripts/release-gate.sh",

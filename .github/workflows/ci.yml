@@ -68,8 +68,3 @@ jobs:
 
       - name: Push DB schema
         run: npm run db:push
-
-      - name: Certify public onboarding with isolated PostgreSQL
-        run: npm run test:onboarding-db
-        env:
-          BREEDLOG_ISOLATED_SQL_CERT: "1"
