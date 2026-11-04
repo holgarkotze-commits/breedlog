@@ -28,7 +28,11 @@ test("SQL-backed farmer accounts persist with isolated sessions and one-time rec
     app.use(express.json());
     server = createServer(app);
     await registerRoutes(server, app);
-    app.use((err: any, _req: any, res: any, _next: any) => res.status(500).json({ message: "Certification request failed" }));
+    app.use((err: any, _req: any, res: any, _next: any) => {
+      const cause = err.cause || err;
+      console.error("[SQL certification]", { code: cause.code, table: cause.table, column: cause.column, constraint: cause.constraint });
+      res.status(500).json({ message: "Certification request failed" });
+    });
     await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
     base = `http://127.0.0.1:${(server.address() as any).port}`;
   };

@@ -36,7 +36,9 @@ async function establishSession(req: Request, accountId: string, userId: string,
 // supplements the IP limiter; neither login nor recovery trusts a device ID.
 async function limitIdentity(identity: string, action: string, limit = 12) {
   const window = Math.floor(Date.now() / (15 * 60_000));
-  const key = `auth-limit:${action}:${crypto.createHash("sha256").update(identity).digest("hex")}`;
+  // system_settings.key is varchar(64). Hash action and identity together:
+  // the fixed prefix plus a complete SHA-256 base64url digest is 54 characters.
+  const key = `auth-limit:${crypto.createHash("sha256").update(`${action}\0${identity}`).digest("base64url")}`;
   const raw = await storage.getSystemSetting(key);
   const previous = raw ? JSON.parse(raw) : null;
   const count = previous?.window === window ? previous.count + 1 : 1;
