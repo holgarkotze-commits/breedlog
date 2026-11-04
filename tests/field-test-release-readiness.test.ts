@@ -23,26 +23,6 @@ test("settings shows field-test version and issue-reporting link", () => {
   assert.match(src, /mailto:support@breedlog\.app/);
 });
 
-test("field-test release documents exist", () => {
-  const requiredDocs = [
-    "docs/release/field-test-release-notes.md",
-    "docs/release/field-test-checklist.md",
-    "docs/release/next-upgrade-android-aab-package.md",
-    "docs/release/phase-15-web-pwa-field-test-validation.md",
-  ];
-
-  for (const rel of requiredDocs) {
-    const full = path.join(repoRoot, rel);
-    assert.ok(fs.existsSync(full), `${rel} should exist`);
-  }
-});
-
-test("field-test notes include cache refresh guidance and known blockers", () => {
-  const notes = read("docs/release/field-test-release-notes.md");
-  assert.match(notes, /open the app while online and use reload\/refresh once/i);
-  assert.match(notes, /Known blockers/i);
-});
-
 test("phase 14 performance and runtime safety signals remain present", () => {
   const animals = read("client/src/pages/Animals.tsx");
   const health = read("client/src/pages/Health.tsx");

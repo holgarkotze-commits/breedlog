@@ -4,8 +4,8 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
-release-artifacts/ci-artifacts/
-release-artifacts/windows-proof/
+/artifacts/
+/release-artifacts/
 test-results/
 cookies.txt
 .canvas/

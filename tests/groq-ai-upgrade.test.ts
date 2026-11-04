@@ -353,8 +353,8 @@ describe("Health and canary endpoint contract", () => {
     assert.ok(groqCanaryPos < geminiCanaryPos, "Groq canary must run before Gemini canary");
   });
 
-  test("health endpoint not-configured message references GROQ_API_KEY", () => {
-    assert.match(routesSrc, /GROQ_API_KEY/);
+  test("health endpoint not-configured message is provider-neutral", () => {
+    assert.match(routesSrc, /No AI provider is configured\. Contact support\./);
   });
 
   test("canary uses include_reasoning: false", () => {

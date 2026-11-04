@@ -45,8 +45,8 @@ function toCsv(rows: Record<string,unknown>[]) { const keys=Object.keys(rows[0]|
 // Without this flag the script is read-only: it prints a summary to stdout and
 // does NOT write any repository file (tracked or otherwise).
 // With --write-evidence an explicit --out-dir <path> argument is also required.
-// The tracked report artifacts/field-test/breedlog-simulation-report.md is
-// static historical evidence and must never be overwritten at runtime.
+// Evidence is written only to the caller-selected directory. Generated output
+// must never be committed to the product repository.
 const writeEvidence = process.argv.includes('--write-evidence');
 const evidenceOutDir = (() => { const i = process.argv.indexOf('--out-dir'); return i > -1 ? process.argv[i+1] : undefined; })();
 if (writeEvidence && !evidenceOutDir) {

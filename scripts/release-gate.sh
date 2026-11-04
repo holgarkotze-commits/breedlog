@@ -9,7 +9,7 @@ npm run test:cert >/dev/null
 STATUS_FILE="artifacts/browser-certification/RESULT.json"
 if [[ ! -f "$STATUS_FILE" ]]; then
   printf "[Gate] Browser offline/sync certification artifact missing: %s\n" "$STATUS_FILE"
-  printf "[Gate] See docs/release/offline-sync-certification.md\n"
+  printf "[Gate] Run npm run test:browser-cert before the release gate.\n"
   exit 1
 fi
 
