@@ -89,7 +89,7 @@ type ManualBackupResponse = {
 };
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, account, isTrial } = useAuth();
   const { data: farmSettings, isLoading } = useFarmSettings();
   const { data: animals } = useAnimals();
   const { data: breedingEvents } = useBreedingEvents();
@@ -932,6 +932,15 @@ export default function Settings() {
         <h1 className="text-xl md:text-4xl font-black uppercase tracking-tight" data-testid="page-title">
           {displayName ? `${displayName} - Settings` : "Settings"}
         </h1>
+        {account && <Card className="rugged-card" data-testid="farmer-account-summary">
+          <CardHeader><CardTitle>Farmer account</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm break-all">{account.email}</p>
+            {isTrial && <p className="text-sm">Free trial: 30 active animals, 1 active device, 5 individual PDFs per month. No card or charge. Paid plans and AI are coming soon.</p>}
+            <p className="text-xs text-muted-foreground">Keep your saved recovery code private. Made by STITCH WORX.</p>
+            <Button variant="outline" onClick={() => void performLogout()} data-testid="button-account-signout">Sign out</Button>
+          </CardContent>
+        </Card>}
 
         <Card className="rugged-card">
           <CardHeader className="cursor-pointer" onClick={() => setProfileOpen((v) => !v)}>
@@ -1417,7 +1426,7 @@ export default function Settings() {
                       <div className="rounded border border-border bg-background/70 p-3">
                         <p><strong>Active animals:</strong> {currentPlan.limits.activeAnimals === "unlimited" ? "Unlimited" : currentPlan.limits.activeAnimals}</p>
                         <p><strong>Registered devices:</strong> {currentPlan.limits.activeDevices}</p>
-                        <p><strong>AI actions/month:</strong> {currentPlan.limits.aiActionsPerMonth === "fair_use" ? "Fair use" : currentPlan.limits.aiActionsPerMonth}</p>
+                        <p><strong>AI:</strong> {isTrial ? "Coming soon — not enabled for trials" : currentPlan.limits.aiActionsPerMonth === "fair_use" ? "Fair use" : `${currentPlan.limits.aiActionsPerMonth} actions/month`}</p>
                       </div>
                       <div className="rounded border border-border bg-background/70 p-3">
                         <p><strong>Individual PDFs/month:</strong> {currentPlan.limits.individualPdfExportsPerMonth}</p>

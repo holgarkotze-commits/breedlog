@@ -97,7 +97,7 @@ export function validateDeviceToken(token: string): { valid: boolean; deviceId?:
 // Setup device-based session management
 export function setupDeviceAuth(app: Express) {
   const sessionTtl = 30 * 24 * 60 * 60 * 1000; // 30 days
-  const sessionStore = process.env.DATABASE_URL
+  const sessionStore = process.env.DATABASE_URL && process.env.USE_IN_MEMORY_STORAGE !== "1"
     ? new (connectPg(session))({
         conString: process.env.DATABASE_URL,
         createTableIfMissing: false,
@@ -120,10 +120,44 @@ export function setupDeviceAuth(app: Express) {
       sameSite: "lax",
     },
   }));
+
+  // Cookie-authenticated writes must originate from this app, not a third-party
+  // form. JSON is required even for sign-in to prevent login-CSRF.
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api/") || ["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+    if (req.session.accountId || req.path.startsWith("/api/auth/")) {
+      const origin = req.headers.origin;
+      const sameOrigin = !origin || origin === `${req.protocol}://${req.get("host")}`;
+      if (!sameOrigin || (req.headers["sec-fetch-site"] === "cross-site")) {
+        return res.status(403).json({ message: "Use BreedLog directly to make this request.", code: "INVALID_ORIGIN" });
+      }
+      if (!req.is("application/json")) {
+        return res.status(415).json({ message: "A JSON request is required." });
+      }
+    }
+    return next();
+  });
   
   // Token-based auth middleware - runs before routes
   // Checks Authorization: Bearer <token> or X-Device-Token header for token auth (more reliable than cookies on mobile)
   app.use(async (req: Request, res: Response, next: NextFunction) => {
+    // Account devices use the HttpOnly session, NEVER a reusable legacy token.
+    // Check revocation on every request so logout/recovery invalidates old cookies.
+    if (req.session.accountId) {
+      const device = req.session.deviceId
+        ? await storage.getAccountDeviceByDeviceId(req.session.deviceId) : undefined;
+      const account = await storage.getAccountById(req.session.accountId);
+      const workspace = await storage.getAccountWorkspace(req.session.accountId);
+      if (!device || device.status !== "active" || device.accountId !== account?.id ||
+          account.status !== "active" || workspace?.workspaceUserId !== device.workspaceUserId) {
+        return req.session.destroy(() => {
+          res.clearCookie("connect.sid");
+          res.status(401).json({ message: "Please sign in again.", code: "SESSION_EXPIRED" });
+        });
+      }
+      req.session.userId = workspace.workspaceUserId;
+      return next();
+    }
     // Test-mode auth bypass for automated runtime certification.
     if (process.env.NODE_ENV === "test") {
       const testUserId = req.headers["x-test-user-id"] as string | undefined;
@@ -153,7 +187,7 @@ export function setupDeviceAuth(app: Express) {
         const user = await storage.getUserByDeviceId(validation.deviceId);
         if (user) {
           const accountDevice = await storage.getAccountDeviceByDeviceId(validation.deviceId);
-          if (accountDevice && accountDevice.status !== "active") {
+          if (accountDevice) {
             return next();
           }
           // If this device shares a workspace with another device (same invite code),
@@ -167,7 +201,6 @@ export function setupDeviceAuth(app: Express) {
           // Also sync to session for backwards compatibility
           req.session.deviceId = validation.deviceId;
           req.session.userId = effectiveUserId;
-          req.session.accountId = accountDevice?.accountId;
         }
       }
     }
@@ -256,6 +289,10 @@ export function registerDeviceAuthRoutes(app: Express) {
       
       if (!deviceId || typeof deviceId !== "string" || deviceId.length < 32) {
         return res.status(400).json({ message: "Invalid device ID" });
+      }
+      // Knowing an account's device ID must never mint access to its workspace.
+      if (await storage.getAccountDeviceByDeviceId(deviceId)) {
+        return res.status(403).json({ message: "Sign in with your farmer account.", code: "ACCOUNT_SIGN_IN_REQUIRED" });
       }
       
       // Check if device already exists

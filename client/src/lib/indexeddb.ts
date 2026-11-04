@@ -640,6 +640,9 @@ export async function ensureUserIsolation(userId: string): Promise<boolean> {
   const storedUserId = await getCurrentUserId();
   
   if (storedUserId && storedUserId !== userId) {
+    if ((await getPendingSyncItems()).length > 0) {
+      throw new Error("This device has unsynced records for another workspace. Sign back into that workspace and sync before switching accounts.");
+    }
     console.log(`[IndexedDB] User changed from ${storedUserId} to ${userId}, clearing offline data`);
     await clearAllOfflineData();
     await setCurrentUserId(userId);

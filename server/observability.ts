@@ -1,4 +1,4 @@
-const SECRET_KEY_PATTERN = /(token|secret|password|authorization|api[_-]?key|cookie|session|signature|payment|card|iban|accountNumber)/i;
+const SECRET_KEY_PATTERN = /(token|secret|password|recoveryCode|authorization|api[_-]?key|cookie|session|signature|payment|card|iban|accountNumber)/i;
 const SENSITIVE_VALUE_PATTERN = /\b(?:Bearer\s+)?[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b|\b[A-Fa-f0-9]{32,}\b/g;
 
 export type BreedLogLogLevel = "debug" | "info" | "warn" | "error";

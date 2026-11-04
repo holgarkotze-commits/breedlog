@@ -44,9 +44,7 @@ function resolveCorsOrigin(originHeader: string | undefined) {
 }
 
 // Trust proxy in production (Replit uses a reverse proxy)
-if (process.env.NODE_ENV === "production") {
-  app.set("trust proxy", 1);
-}
+app.set("trust proxy", 1);
 
 // Gzip/brotli compression for all responses
 app.use(compression({
@@ -122,6 +120,8 @@ app.use("/api/device/register", authLimiter);
 app.use("/api/auth/register", authLimiter);
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/recovery/request", authLimiter);
+app.use("/api/auth/recovery/confirm", authLimiter);
+app.use("/api/auth/verify-email", authLimiter);
 app.use("/api/admin", adminLimiter);
 app.use("/api", apiLimiter);
 
@@ -180,7 +180,7 @@ app.use((req, res, next) => {
 });
 
 async function runStartupMigrations() {
-  if (process.env.USE_IN_MEMORY_STORAGE === "1" && !process.env.DATABASE_URL) {
+  if (process.env.USE_IN_MEMORY_STORAGE === "1") {
     console.log("[Startup] Using in-memory storage mode; skipping SQL migrations");
     return;
   }

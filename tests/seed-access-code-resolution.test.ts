@@ -16,7 +16,9 @@ const { Pool } = pg;
 // Then clean up.
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const REQUIRES_DB = !!DATABASE_URL;
+// An inherited DATABASE_URL must never opt an explicitly isolated test run into
+// creating SQL fixtures. SQL certification is an intentional separate mode.
+const REQUIRES_DB = !!DATABASE_URL && process.env.USE_IN_MEMORY_STORAGE !== "1";
 
 const skipIfNoDb = REQUIRES_DB ? test : test.skip;
 
