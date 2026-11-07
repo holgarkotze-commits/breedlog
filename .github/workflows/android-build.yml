@@ -7,7 +7,11 @@ on:
       - main
 
 jobs:
+  certify:
+    uses: ./.github/workflows/release-certification.yml
+
   android-build:
+    needs: certify
     name: Android wrapper build
     runs-on: ubuntu-latest
     env:
@@ -25,6 +29,8 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -34,6 +40,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Download release certification
+        uses: actions/download-artifact@v4
+        with:
+          name: release-certification
+          path: artifacts
 
       - name: Build web assets
         run: npm run build
