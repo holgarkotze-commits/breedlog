@@ -4,8 +4,8 @@ import * as schema from "@shared/schema";
 
 const { Pool } = pg;
 
-const databaseUrl = process.env.DATABASE_URL;
 const allowInMemoryStorage = process.env.USE_IN_MEMORY_STORAGE === "1";
+const databaseUrl = allowInMemoryStorage ? undefined : process.env.DATABASE_URL;
 
 if (!databaseUrl && !allowInMemoryStorage) {
   throw new Error(

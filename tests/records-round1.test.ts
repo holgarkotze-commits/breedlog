@@ -190,8 +190,11 @@ test("ExportSync: Health events → subfolder=flock-health", () => {
 });
 
 test("ExportSync: Herd exports (Animals.tsx) → subfolder=herd", () => {
-  const matches = [...animals.matchAll(/subfolder: "herd"/g)];
-  assert.ok(matches.length >= 5, `Expected ≥5 herd subfolder refs in Animals.tsx, found ${matches.length}`);
+  // All herd reports now share one canonical exporter and one folder mapping.
+  assert.match(animals, /const exportCanonicalSections =/);
+  assert.match(animals, /documentType: "herd",\s+subfolder: "herd"/);
+  const calls = [...animals.matchAll(/exportCanonicalSections\(/g)];
+  assert.ok(calls.length >= 5, `Expected ≥5 reports routed through the herd exporter, found ${calls.length}`);
 });
 
 test("ExportSync: Lambs.tsx exports → subfolder=herd", () => {

@@ -7,6 +7,8 @@
 //   own date/url/title chrome. body { margin: 10mm } restores equivalent visual
 //   margins inside the printable content area.
 
+import { trackAnalyticsEvent } from "@/lib/project-analytics";
+
 export const GROUP_ROWS_PER_PAGE = 20;
 
 export type ExportFarmSettings = {
@@ -18,6 +20,32 @@ export type ExportFarmSettings = {
   membershipNumber?: string | null;
   logoUrl?: string | null;
 };
+
+/** Escape a value placed between HTML tags in an exported document. */
+export function escapeHtmlText(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/** Escape a value placed inside a quoted HTML attribute in an exported document. */
+export function escapeHtmlAttribute(value: unknown): string {
+  return escapeHtmlText(value);
+}
+
+const EXPORT_STATUS_CLASS_TOKENS = new Set([
+  "active", "sold", "culled", "deceased", "dead", "closed", "archived",
+  "pending", "lambed", "transferred", "unknown",
+]);
+
+/** Return only a known-safe token for use in an export CSS class name. */
+export function getExportStatusClassToken(value: unknown): string {
+  const token = String(value ?? "").trim().toLowerCase();
+  return EXPORT_STATUS_CLASS_TOKENS.has(token) ? token : "unknown";
+}
 
 // ---------------------------------------------------------------------------
 // Internal metadata patterns to strip from customer-facing notes
@@ -143,15 +171,15 @@ export function renderExportHeader(
   return `
   <div class="header">
     <div class="header-left">
-      ${fb?.logoUrl ? `<img src="${fb.logoUrl}" class="logo" alt="logo" />` : ''}
+      ${fb?.logoUrl ? `<img src="${escapeHtmlAttribute(fb.logoUrl)}" class="logo" alt="logo" />` : ''}
     </div>
     <div class="header-center">
-      <h1>${fb?.studName || fb?.farmName || title}</h1>
-      <p class="subtitle">${subtitle}</p>
+      <h1>${escapeHtmlText(fb?.studName || fb?.farmName || title)}</h1>
+      <p class="subtitle">${escapeHtmlText(subtitle)}</p>
     </div>
     <div class="header-right">
       <p>Page ${pageNum} of ${totalPages}</p>
-      <p>${exportDate}</p>
+      <p>${escapeHtmlText(exportDate)}</p>
     </div>
   </div>`;
 }
@@ -166,8 +194,8 @@ export function renderExportFooter(fb: ExportFarmSettings | null | undefined): s
   return `
   <div class="footer">
     <div class="footer-info">
-      <p class="footer-title">${fb?.studName || fb?.farmName || ''}</p>
-      ${ownerInfo ? `<p>${ownerInfo}</p>` : ''}
+      <p class="footer-title">${escapeHtmlText(fb?.studName || fb?.farmName || '')}</p>
+      ${ownerInfo ? `<p>${escapeHtmlText(ownerInfo)}</p>` : ''}
     </div>
     <div class="footer-branding">
       <p class="breedlog-text">BREEDLOG</p>
@@ -183,7 +211,7 @@ export function wrapExportDocument(title: string, css: string, pagesHtml: string
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>${title}</title>
+  <title>${escapeHtmlText(title)}</title>
   <style>${css}</style>
 </head>
 <body>
@@ -195,9 +223,24 @@ export function wrapExportDocument(title: string, css: string, pagesHtml: string
 /** Open the result in the browser print dialog */
 export function openExportPrintDialog(htmlContent: string): void {
   const w = window.open('', '_blank');
-  if (w) {
-    w.document.write(htmlContent);
-    w.document.close();
-    setTimeout(() => w.print(), 500);
-  }
+  if (!w) return;
+  trackAnalyticsEvent("document_preview_opened", { format: "pdf" });
+
+  // A blob URL is reliable in Android/PWA standalone mode, where writing into
+  // an about:blank popup can silently fail and leave the exported PDF unopened.
+  const blob = new Blob([htmlContent], { type: 'text/html; charset=utf-8' });
+  const blobUrl = URL.createObjectURL(blob);
+  let printStarted = false;
+  const printOnce = () => {
+    if (printStarted) return;
+    printStarted = true;
+    setTimeout(() => {
+      w.print();
+      URL.revokeObjectURL(blobUrl);
+    }, 400);
+  };
+
+  w.onload = printOnce;
+  w.location.href = blobUrl;
+  setTimeout(printOnce, 2500);
 }

@@ -89,7 +89,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
+args = "USE_IN_MEMORY_STORAGE=1 npm start"
 waitForPort = 5000
 
 [agent]

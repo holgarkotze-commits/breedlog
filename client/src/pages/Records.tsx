@@ -5,6 +5,7 @@ import {
   renderExportFooter,
   wrapExportDocument,
   openExportPrintDialog,
+  escapeHtmlText,
   sanitizePublicNote,
   GROUP_ROWS_PER_PAGE,
 } from "@/lib/export-template";
@@ -227,7 +228,7 @@ export default function Records() {
       const slice = dataRows.slice(p * rowsPerPage, (p + 1) * rowsPerPage).join("");
       pagesHtml += `<div class="page">
         ${renderExportHeader(fb, p + 1, totalPages, exportDate, title, subtitle)}
-        ${p === 0 ? `<p class="meta-line">${metaLine}</p>` : ""}
+        ${p === 0 ? `<p class="meta-line">${escapeHtmlText(metaLine)}</p>` : ""}
         <table class="records-table">
           <thead><tr>${headerRow}</tr></thead>
           <tbody>${slice}</tbody>
@@ -243,12 +244,12 @@ export default function Records() {
     const animals = filterAnimals(culledAnimals, "culled");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching culled animals to export", variant: "destructive" }); return; }
     const rows = animals.map(a => `<tr>
-      <td><strong>${a.tagId}</strong></td>
-      <td>${a.sex || "Not recorded"}</td>
+      <td><strong>${escapeHtmlText(a.tagId)}</strong></td>
+      <td>${escapeHtmlText(a.sex || "Not recorded")}</td>
       <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : "Not recorded"}</td>
       <td>${(a as any).cullDate ? format(new Date((a as any).cullDate), "dd/MM/yyyy") : "Not recorded"}</td>
-      <td>${(a as any).cullReason || "Not recorded"}</td>
-      <td>${sanitizePublicNote(a.notes) || "Not recorded"}</td>
+      <td>${escapeHtmlText((a as any).cullReason || "Not recorded")}</td>
+      <td>${escapeHtmlText(sanitizePublicNote(a.notes) || "Not recorded")}</td>
     </tr>`);
     const meta = `Total: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}${reasonFilter !== "all" ? ` | Reason: ${reasonFilter}` : ""}${dateFrom || dateTo ? ` | Period: ${dateFrom || "—"} to ${dateTo || "—"}` : ""}`;
     const html = buildPagedPdf("Culled Animals Report", `${farmLabel} — Records`, "<th>Animal ID</th><th>Sex</th><th>DOB</th><th>Cull Date</th><th>Cull Reason</th><th>Notes</th>", rows, meta);
@@ -275,11 +276,11 @@ export default function Records() {
     const animals = filterAnimals(soldAnimals, "sold");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching sold/removed animals to export", variant: "destructive" }); return; }
     const rows = animals.map(a => `<tr>
-      <td><strong>${a.tagId}</strong></td>
-      <td>${a.sex || "Not recorded"}</td>
+      <td><strong>${escapeHtmlText(a.tagId)}</strong></td>
+      <td>${escapeHtmlText(a.sex || "Not recorded")}</td>
       <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : "Not recorded"}</td>
-      <td>${a.status || "Not recorded"}</td>
-      <td>${sanitizePublicNote(a.notes) || "Not recorded"}</td>
+      <td>${escapeHtmlText(a.status || "Not recorded")}</td>
+      <td>${escapeHtmlText(sanitizePublicNote(a.notes) || "Not recorded")}</td>
     </tr>`);
     const meta = `Total: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}${statusFilter !== "all" ? ` | Status: ${statusFilter}` : ""}`;
     const html = buildPagedPdf("Sold / Removed Animals Report", `${farmLabel} — Records`, "<th>Animal ID</th><th>Sex</th><th>DOB</th><th>Status</th><th>Notes</th>", rows, meta);
@@ -305,10 +306,10 @@ export default function Records() {
     const animals = filterAnimals(deceasedAnimals, "deceased");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching deceased animals to export", variant: "destructive" }); return; }
     const rows = animals.map(a => `<tr>
-      <td><strong>${a.tagId}</strong></td>
-      <td>${a.sex || "Not recorded"}</td>
+      <td><strong>${escapeHtmlText(a.tagId)}</strong></td>
+      <td>${escapeHtmlText(a.sex || "Not recorded")}</td>
       <td>${a.birthDate ? format(new Date(a.birthDate), "dd/MM/yyyy") : "Not recorded"}</td>
-      <td>${sanitizePublicNote(a.notes) || "Not recorded"}</td>
+      <td>${escapeHtmlText(sanitizePublicNote(a.notes) || "Not recorded")}</td>
     </tr>`);
     const meta = `Total: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}`;
     const html = buildPagedPdf("Deceased Animals Report", `${farmLabel} — Records`, "<th>Animal ID</th><th>Sex</th><th>DOB</th><th>Notes</th>", rows, meta);
@@ -338,11 +339,11 @@ export default function Records() {
       const ewe = allAnimals?.find(a => a.id === e.eweId);
       const ram = allAnimals?.find(a => a.id === e.ramId);
       return `<tr>
-        <td><strong>${ewe?.tagId || `Ewe #${e.eweId}`}</strong></td>
-        <td>${ram?.tagId || `Ram #${e.ramId}`}</td>
+        <td><strong>${escapeHtmlText(ewe?.tagId || `Ewe #${e.eweId}`)}</strong></td>
+        <td>${escapeHtmlText(ram?.tagId || `Ram #${e.ramId}`)}</td>
         <td>${e.lambingDate ? format(new Date(e.lambingDate), "dd/MM/yyyy") : "Not recorded"}</td>
         <td>${e.lambCount ?? "Not recorded"}</td>
-        <td>${sanitizePublicNote(e.notes) || "Not recorded"}</td>
+        <td>${escapeHtmlText(sanitizePublicNote(e.notes) || "Not recorded")}</td>
       </tr>`;
     });
     const meta = `Total lambing events: ${filteredLambingEvents.length}${prodDateFrom || prodDateTo ? ` | Period: ${prodDateFrom || "—"} to ${prodDateTo || "—"}` : ""}`;
@@ -378,14 +379,14 @@ export default function Records() {
     const rows = filteredMatingGroups.map(g => {
       const ram = allAnimals?.find(a => a.id === g.ramId);
       return `<tr>
-        <td><strong>${g.name}</strong></td>
-        <td>${ram?.tagId || `Ram #${g.ramId}`}</td>
+        <td><strong>${escapeHtmlText(g.name)}</strong></td>
+        <td>${escapeHtmlText(ram?.tagId || `Ram #${g.ramId}`)}</td>
         <td>${g.eweIds?.length ?? 0} ewes</td>
         <td>${g.dateIn ? format(new Date(g.dateIn), "dd/MM/yyyy") : "Not recorded"}</td>
         <td>${g.dateOut ? format(new Date(g.dateOut), "dd/MM/yyyy") : "Not recorded"}</td>
-        <td>${g.lambingSeason || "Not recorded"}</td>
-        <td>${g.status || "Not recorded"}</td>
-        <td>${sanitizePublicNote(g.notes) || "Not recorded"}</td>
+        <td>${escapeHtmlText(g.lambingSeason || "Not recorded")}</td>
+        <td>${escapeHtmlText(g.status || "Not recorded")}</td>
+        <td>${escapeHtmlText(sanitizePublicNote(g.notes) || "Not recorded")}</td>
       </tr>`;
     });
     const meta = `Total groups: ${filteredMatingGroups.length}${prodDateFrom || prodDateTo ? ` | Date In: ${prodDateFrom || "—"} to ${prodDateTo || "—"}` : ""}`;

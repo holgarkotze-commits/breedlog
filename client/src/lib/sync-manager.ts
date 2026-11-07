@@ -257,6 +257,19 @@ class SyncManager {
   }
 
   private async pushChanges(): Promise<{ successCount: number; failedCount: number; retryableCount: number }> {
+    // Both automatic and manual sync enter here. Check ownership before either
+    // can upload queued mutations using a changed/expired session cookie.
+    const { getCurrentUserId } = await import("./indexeddb");
+    const owner = await getCurrentUserId();
+    const token = localStorage.getItem("breedlog_device_token");
+    const response = await fetch("/api/device/info", {
+      credentials: "include", cache: "no-store",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const session = response.ok ? await response.json() : null;
+    if (!owner || !session?.registered || session.userId !== owner) {
+      throw new Error("Sign in to the workspace that owns these offline records before syncing.");
+    }
     const pendingItems = await getPendingSyncItems();
     console.log(`[SyncManager] Pushing ${pendingItems.length} changes`);
 

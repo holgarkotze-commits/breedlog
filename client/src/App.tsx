@@ -7,6 +7,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { OfflineBanner } from "@/components/NetworkStatusIndicator";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { BetaAccessGate } from "@/components/BetaAccessGate";
+import AccountAccess from "@/components/AccountAccess";
+import { TrialWelcome } from "@/components/TrialWelcome";
+import { completeAccountSignIn, accountRequest } from "@/lib/account-session";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { AppUpdateBanner } from "@/components/AppUpdateBanner";
 import { NavigationHistoryProvider } from "@/lib/navigation-history-context";
@@ -106,6 +109,7 @@ function Router() {
 }
 
 function AuthenticatedApp() {
+  const { isTrial } = useAuth();
   return (
     <AIAssistantProvider>
       <NavigationHistoryProvider>
@@ -113,8 +117,8 @@ function AuthenticatedApp() {
         <AppUpdateBanner />
         <PWAInstallPrompt />
         <Router />
-        <AskBreedLogButton />
-        <BreedLogAssistantPanel />
+        {!isTrial && <AskBreedLogButton />}
+        {!isTrial && <BreedLogAssistantPanel />}
       </NavigationHistoryProvider>
     </AIAssistantProvider>
   );
@@ -158,7 +162,7 @@ async function checkAndReloadIfVersionMismatch() {
 }
 
 function AppContent() {
-  const { user, isLoading: authLoading, deviceId } = useAuth();
+  const { user, account, isTrial, accountError, isLoading: authLoading, deviceId } = useAuth();
   const [location, navigate] = useLocation();
   const [versionChecked, setVersionChecked] = useState(false);
   const [telemetryStarted, setTelemetryStarted] = useState(false);
@@ -226,11 +230,33 @@ function AppContent() {
     );
   }
   
-  // Device is auto-registered, now check beta access
+  if (account) {
+    if (location === "/welcome" && isTrial) return <TrialWelcome />;
+    return <AuthenticatedApp />;
+  }
+  if (accountError && navigator.onLine) {
+    return <div className="min-h-screen flex items-center justify-center p-6"><div role="alert">
+      <h1 className="text-xl font-bold">Unable to check your account</h1>
+      <p>Your records have not been changed. Please reconnect and try again.</p>
+      <button className="rugged-btn mt-4 p-3" onClick={() => window.location.reload()}>Try again</button>
+      <button className="rugged-btn mt-4 ml-3 p-3" onClick={async () => {
+        try {
+          await accountRequest("/api/auth/logout", {});
+          window.location.assign("/auth/login");
+        } catch { window.alert("Reconnect to return to sign in. Your pending records remain on this device."); }
+      }}>Sign in to the original workspace</button>
+    </div></div>;
+  }
+  if (location !== "/beta" && !localStorage.getItem("breedlog_beta_access")) {
+    return <AccountAccess onAuthenticated={completeAccountSignIn} onLegacy={() => navigate("/beta")} />;
+  }
+
+  // Legacy beta workspaces retain their original invitation-based entry.
   return (
-    <BetaAccessGate deviceId={deviceId}>
-      <AuthenticatedApp />
-    </BetaAccessGate>
+    <>
+      {location === "/beta" && <button className="fixed top-3 left-3 z-50 bg-background border rounded px-3 py-2 text-sm" onClick={() => navigate("/auth/login")}>Farmer account sign in</button>}
+      <BetaAccessGate deviceId={deviceId}><AuthenticatedApp /></BetaAccessGate>
+    </>
   );
 }
 

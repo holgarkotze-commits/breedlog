@@ -239,7 +239,7 @@ test("reactivating an inactive animal cannot bypass the Free active-animal cap",
   assert.equal(rows.filter((animal) => (animal.status ?? "active") === "active").length, 30);
 });
 
-test("revoked managed-device tokens can no longer authenticate protected requests", async () => {
+test("revoked managed account sessions can no longer authenticate protected requests", async () => {
   const email = "revoked-managed-device@example.com";
   const password = "VerySecurePass9";
   const primaryDeviceId = "managed-device-primary-1234567890123456";
@@ -252,11 +252,13 @@ test("revoked managed-device tokens can no longer authenticate protected request
     body: JSON.stringify({
       email,
       password,
+      acceptedTerms: true,
       deviceName: "Primary Device",
       platform: "windows",
     }),
   });
   assert.equal(response.status, 201);
+  const primaryCookie = response.headers.get("set-cookie")!.split(";")[0];
   const registerBody = await response.json() as { profile: { accountId: string; workspaceUserId: string } };
   const accountId = registerBody.profile.workspaceUserId;
 
@@ -289,27 +291,30 @@ test("revoked managed-device tokens can no longer authenticate protected request
     }),
   });
   assert.equal(response.status, 200);
+  const secondaryCookie = response.headers.get("set-cookie")!.split(";")[0];
+  const loginBody = await response.json() as { profile: { devices: Array<{deviceId: string}> } };
+  const actualSecondaryDeviceId = loginBody.profile.devices.at(-1)!.deviceId;
 
   response = await fetch(`${BASE_URL}/api/auth/devices/revoke`, {
     method: "POST",
-    headers: bearerHeaders(primary.token),
-    body: JSON.stringify({ deviceId: secondaryDeviceId }),
+    headers: { ...bearerHeaders(primary.token), Cookie: primaryCookie },
+    body: JSON.stringify({ deviceId: actualSecondaryDeviceId }),
   });
   assert.equal(response.status, 200);
 
   response = await fetch(`${BASE_URL}/api/animals`, {
-    headers: bearerHeaders(secondary.token),
+    headers: { Cookie: secondaryCookie },
   });
   assert.equal(response.status, 401);
 
   response = await fetch(`${BASE_URL}/api/auth/me`, {
-    headers: bearerHeaders(secondary.token),
+    headers: { Cookie: secondaryCookie },
   });
-  assert.equal(response.status, 401);
+  assert.equal((await response.json()).authenticated, false);
 
   response = await fetch(`${BASE_URL}/api/auth/devices/revoke`, {
     method: "POST",
-    headers: bearerHeaders(secondary.token),
+    headers: { ...bearerHeaders(secondary.token), Cookie: secondaryCookie },
     body: JSON.stringify({ deviceId: primaryDeviceId }),
   });
   assert.equal(response.status, 401);

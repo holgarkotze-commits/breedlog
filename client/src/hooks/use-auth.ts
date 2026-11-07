@@ -1,8 +1,8 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ensureUserIsolation } from "@/lib/indexeddb";
-import { clearBetaAccessStorage } from "@/components/BetaAccessGate";
-import { apiRequest, getDeviceToken, setDeviceToken, clearDeviceToken } from "@/lib/queryClient";
+import { getDeviceToken, setDeviceToken, performLogout } from "@/lib/queryClient";
+import { fetchAccountSession } from "@/lib/account-session";
 
 // Generate or retrieve deviceId
 function getDeviceId(): string {
@@ -91,6 +91,12 @@ export function useAuth() {
   const queryClient = useQueryClient();
   const [isRegistering, setIsRegistering] = useState(false);
   const [registrationAttempted, setRegistrationAttempted] = useState(false);
+  const account = useQuery({
+    queryKey: ["/api/auth/me"], queryFn: fetchAccountSession,
+    retry: false, staleTime: 60_000, refetchOnWindowFocus: true,
+  });
+  const legacyEnabled = !account.data?.authenticated &&
+    (!!getDeviceToken() || window.location.pathname === "/beta");
   
   const { data: deviceInfo, isLoading, refetch } = useQuery<DeviceInfo>({
     queryKey: ["/api/device/info"],
@@ -98,12 +104,13 @@ export function useAuth() {
     retry: 1,
     retryDelay: 1000,
     staleTime: 1000 * 60 * 5,
+    enabled: legacyEnabled && !account.isLoading,
   });
 
   // Auto-register device on first load if not registered (only try once)
   useEffect(() => {
     async function autoRegister() {
-      if (deviceInfo && !deviceInfo.registered && !isRegistering && !registrationAttempted) {
+      if (legacyEnabled && deviceInfo && !deviceInfo.registered && !isRegistering && !registrationAttempted) {
         setIsRegistering(true);
         setRegistrationAttempted(true);
         try {
@@ -118,7 +125,7 @@ export function useAuth() {
       }
     }
     autoRegister();
-  }, [deviceInfo, isRegistering, registrationAttempted, refetch]);
+  }, [deviceInfo, isRegistering, registrationAttempted, refetch, legacyEnabled]);
 
   // Ensure user data isolation when device changes
   useEffect(() => {
@@ -132,28 +139,21 @@ export function useAuth() {
     }
   }, [deviceInfo?.userId, queryClient]);
 
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      clearBetaAccessStorage();
-      clearDeviceToken();
-      await apiRequest("POST", "/api/device/logout", {});
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(["/api/device/info"], { registered: false });
-      queryClient.invalidateQueries();
-    },
-  });
-
   // Only show loading on initial fetch, not during registration attempts
   // This prevents the app from being stuck if registration fails
-  const effectiveLoading = isLoading && !registrationAttempted;
+  const effectiveLoading = account.isLoading || (legacyEnabled && isLoading && !registrationAttempted);
 
   return {
-    user: deviceInfo?.registered ? { id: deviceInfo.userId!, deviceId: deviceInfo.deviceId! } : null,
+    user: account.data?.authenticated && account.data.profile
+      ? { id: account.data.profile.workspaceUserId, deviceId: "" }
+      : legacyEnabled && deviceInfo?.registered ? { id: deviceInfo.userId!, deviceId: deviceInfo.deviceId! } : null,
+    account: account.data?.authenticated ? account.data.profile : undefined,
+    isTrial: account.data?.trial === true,
+    accountError: account.error,
     isLoading: effectiveLoading,
-    isAuthenticated: !!deviceInfo?.registered,
-    logout: logoutMutation.mutate,
-    isLoggingOut: logoutMutation.isPending,
+    isAuthenticated: !!account.data?.authenticated || (legacyEnabled && !!deviceInfo?.registered),
+    logout: performLogout,
+    isLoggingOut: false,
     deviceId: getDeviceId(),
   };
 }

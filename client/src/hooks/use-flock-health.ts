@@ -3,6 +3,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { FlockHealthEvent, InsertFlockHealthEvent, FlockHealthTreatment } from "@shared/schema";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { getAllFromStore, putManyInStore, putInStore, addToSyncQueue, getPendingSyncItems } from "@/lib/indexeddb";
+import { trackAnalyticsEvent } from "@/lib/project-analytics";
 
 export type FlockHealthEventWithTreatments = FlockHealthEvent & {
   treatments?: FlockHealthTreatment[];
@@ -168,7 +169,12 @@ export function useCreateFlockHealthEvent() {
       await putInStore('flockHealthEvents', created);
       return created;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      trackAnalyticsEvent("health_event_created", {
+        sync_state: data.id > 0 ? "synced" : "queued",
+        event_type: variables.eventType ?? "observation_symptom",
+        treat_all_animals: variables.treatAllAnimals ?? false,
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/flock-health-events"] });
     },
   });

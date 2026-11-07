@@ -1,0 +1,2 @@
+- [PDF export canonical standard](pdf-export-canonical.md) — all formatted reports are PDF-only and share one header/footer/page contract, safe HTML encoding, and explicit data-scope rules.
+- [Public farmer onboarding](public-farmer-onboarding.md) — public trials and legacy invitation workspaces must remain separate; never migrate an existing herd into a new public account implicitly.

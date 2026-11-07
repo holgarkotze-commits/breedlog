@@ -36,8 +36,25 @@ export function clearDeviceToken(): void {
 // The device ID is kept so the same device can re-activate with the same invite code
 // without consuming a new slot.
 export async function performLogout(): Promise<void> {
-  // 1. Destroy server session (best-effort, fire-and-forget)
-  fetch("/api/beta/logout", { method: "POST", credentials: "include" }).catch(() => {});
+  const { assertNoPendingChanges, clearAccountCache } = await import("./account-session");
+  try {
+    await assertNoPendingChanges();
+    if (!navigator.onLine) throw new Error("Reconnect before signing out. Your offline records remain on this device.");
+    // Do not clear credentials until revocation has succeeded on the server.
+    const accountResponse = await fetch("/api/auth/me", { credentials: "include", cache: "no-store" });
+    const account = accountResponse.ok ? await accountResponse.json() : null;
+    const response = await fetch(account?.authenticated ? "/api/auth/logout" : "/api/beta/logout", {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    if (!response.ok) throw new Error("Sign out failed. Please try again.");
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : "Please sync before signing out.");
+    return;
+  }
+  clearAccountCache();
+  const { clearAllOfflineData } = await import("./indexeddb");
+  await clearAllOfflineData();
+  localStorage.removeItem("breedlog_recent_visits");
 
   // 2. Clear localStorage (keep breedlog_device_id for same-device re-login)
   try {
@@ -55,6 +72,8 @@ export async function performLogout(): Promise<void> {
     hasAccess: false,
     needsCode: true,
   });
+  queryClient.clear();
+  window.location.assign("/auth/login");
 }
 
 // Robust connectivity check - pings actual API endpoint instead of relying on navigator.onLine

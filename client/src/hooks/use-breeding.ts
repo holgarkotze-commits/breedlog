@@ -11,6 +11,7 @@ import {
   getPendingSyncItems
 } from "@/lib/indexeddb";
 import { buildPatchMap } from "@/lib/sync-utils";
+import { trackAnalyticsEvent } from "@/lib/project-analytics";
 
 export function useBreedingEvents() {
   const { isOnline } = useNetworkStatus();
@@ -157,7 +158,12 @@ export function useCreateBreedingEvent() {
       
       return created;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      trackAnalyticsEvent("breeding_event_created", {
+        sync_state: data.id > 0 ? "synced" : "queued",
+        method: variables.matingType,
+        has_mating_group: variables.matingGroupId != null,
+      });
       queryClient.invalidateQueries({ queryKey: [api.breeding.list.path] });
       toast({ title: "Recorded", description: "Breeding event recorded successfully" });
     },

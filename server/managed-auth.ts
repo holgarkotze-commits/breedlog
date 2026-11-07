@@ -49,8 +49,8 @@ function normalizeEmail(email: string): string {
 }
 
 function enforcePasswordStrength(password: string) {
-  if (password.length < 10) {
-    throw new ManagedAuthError("WEAK_PASSWORD", "Password must be at least 10 characters long.");
+  if (password.length < 10 || password.length > 128) {
+    throw new ManagedAuthError("WEAK_PASSWORD", "Password must be between 10 and 128 characters long.");
   }
 }
 
@@ -107,7 +107,9 @@ export function createManagedAuthProvider(storage: IStorage): ManagedAuthProvide
       if (!stored || stored.consumedAt || stored.expiresAt.getTime() < Date.now()) {
         throw new ManagedAuthError("INVALID_TOKEN", "The supplied authentication token is invalid or expired.", 400);
       }
-      await storage.consumeAccountToken(stored.id);
+      if (!await storage.consumeAccountToken(stored.id)) {
+        throw new ManagedAuthError("INVALID_TOKEN", "The supplied authentication token is invalid or expired.", 400);
+      }
       return { accountId: stored.accountId, metadata: (stored.metadata as Record<string, unknown> | null) ?? null };
     },
   };
@@ -235,6 +237,7 @@ export async function loginManagedAccount(
     deviceUserId: string;
     deviceName?: string | null;
     platform?: string | null;
+    replaceDevice?: boolean;
   },
 ) {
   const email = normalizeEmail(params.email);
@@ -253,12 +256,22 @@ export async function loginManagedAccount(
     });
     throw new ManagedAuthError("INVALID_CREDENTIALS", "Email or password is incorrect.", 401);
   }
+  if (account.status !== "active") {
+    throw new ManagedAuthError("ACCOUNT_UNAVAILABLE", "This account is not currently available.", 403);
+  }
 
   const workspace = await storage.getAccountWorkspace(account.id);
   if (!workspace) {
     throw new ManagedAuthError("WORKSPACE_MISSING", "Managed account has no linked workspace.", 500);
   }
 
+  if (params.replaceDevice) {
+    for (const device of await storage.getAccountDevices(account.id)) {
+      if (device.status === "active" && device.deviceId !== params.deviceId) {
+        await storage.revokeAccountDevice(account.id, device.deviceId);
+      }
+    }
+  }
   await assertDeviceLimit(storage, account.id, params.deviceId);
   await storage.setSharedUserId(params.deviceUserId, workspace.workspaceUserId);
   await storage.upsertAccountDevice({
@@ -335,6 +348,9 @@ export async function resetPasswordWithToken(
   token: string,
   newPassword: string,
 ) {
+  // Validate before consuming the one-time token so a weak password cannot
+  // accidentally destroy the farmer's only saved recovery credential.
+  enforcePasswordStrength(newPassword);
   const resolved = await provider.consumeToken("password_recovery", token);
   const account = await storage.updateAccount(resolved.accountId, {
     passwordHash: await provider.hashPassword(newPassword),
@@ -342,6 +358,9 @@ export async function resetPasswordWithToken(
   });
   if (!account) {
     throw new ManagedAuthError("ACCOUNT_NOT_FOUND", "Recovery token refers to an unknown account.", 404);
+  }
+  for (const device of await storage.getAccountDevices(account.id)) {
+    await storage.revokeAccountDevice(account.id, device.deviceId);
   }
   await storage.createAccountAuditEvent({
     accountId: account.id,

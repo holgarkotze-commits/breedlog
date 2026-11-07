@@ -215,7 +215,7 @@ export interface IStorage {
   deleteAccountDevices(accountId: string): Promise<void>;
   createAccountToken(data: { accountId: string; tokenType: string; tokenHash: string; expiresAt: Date; metadata?: Record<string, unknown> | null }): Promise<AccountToken>;
   getAccountToken(tokenType: string, tokenHash: string): Promise<AccountToken | undefined>;
-  consumeAccountToken(tokenId: string, now?: Date): Promise<void>;
+  consumeAccountToken(tokenId: string, now?: Date): Promise<boolean>;
   createAccountAuditEvent(data: { accountId?: string | null; workspaceUserId?: string | null; deviceId?: string | null; eventType: string; result?: string; detail?: string | null; metadata?: Record<string, unknown> | null; occurredAt?: Date }): Promise<AccountAuditEvent>;
   getAccountAuditEvents(accountId: string): Promise<AccountAuditEvent[]>;
   purgeManagedAccount(accountId: string): Promise<void>;
@@ -980,9 +980,12 @@ export class DatabaseStorage implements IStorage {
     return results[0];
   }
 
-  async consumeAccountToken(tokenId: string, now = new Date()): Promise<void> {
+  async consumeAccountToken(tokenId: string, now = new Date()): Promise<boolean> {
     const { accountTokens } = await import("@shared/models/auth");
-    await db.update(accountTokens).set({ consumedAt: now }).where(eq(accountTokens.id, tokenId));
+    const consumed = await db.update(accountTokens).set({ consumedAt: now }).where(and(
+      eq(accountTokens.id, tokenId), sql`${accountTokens.consumedAt} IS NULL`, gte(accountTokens.expiresAt, now),
+    )).returning({ id: accountTokens.id });
+    return consumed.length === 1;
   }
 
   async createAccountAuditEvent(data: { accountId?: string | null; workspaceUserId?: string | null; deviceId?: string | null; eventType: string; result?: string; detail?: string | null; metadata?: Record<string, unknown> | null; occurredAt?: Date }): Promise<AccountAuditEvent> {
@@ -1741,10 +1744,11 @@ export class InMemoryStorage implements IStorage {
   async getAccountToken(tokenType: string, tokenHash: string): Promise<AccountToken | undefined> {
     return [...this.accountTokensMap.values()].find((token) => token.tokenType === tokenType && token.tokenHash === tokenHash);
   }
-  async consumeAccountToken(tokenId: string, now = new Date()): Promise<void> {
+  async consumeAccountToken(tokenId: string, now = new Date()): Promise<boolean> {
     const existing = this.accountTokensMap.get(tokenId);
-    if (!existing) return;
+    if (!existing || existing.consumedAt || existing.expiresAt < now) return false;
     this.accountTokensMap.set(tokenId, { ...existing, consumedAt: now });
+    return true;
   }
   async createAccountAuditEvent(data: { accountId?: string | null; workspaceUserId?: string | null; deviceId?: string | null; eventType: string; result?: string; detail?: string | null; metadata?: Record<string, unknown> | null; occurredAt?: Date }): Promise<AccountAuditEvent> {
     const row: AccountAuditEvent = {

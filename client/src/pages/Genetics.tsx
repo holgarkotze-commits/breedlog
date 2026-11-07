@@ -12,14 +12,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { PDFExportDialog, usePDFExportDialog } from "@/components/PDFExportDialog";
 import {
   Dna, Plus, Pencil, Trash2, Archive, AlertTriangle,
   CheckCircle2, HelpCircle, BookOpen, TrendingUp, GitFork, ChevronDown, ChevronUp, Zap, FileText
 } from "lucide-react";
 import { format } from "date-fns";
-import { getCanonicalGroupCSS, wrapExportDocument, openExportPrintDialog } from "@/lib/export-template";
+import {
+  getCanonicalGroupCSS,
+  renderExportHeader,
+  renderExportFooter,
+  wrapExportDocument,
+  openExportPrintDialog,
+  escapeHtmlText,
+  GROUP_ROWS_PER_PAGE,
+} from "@/lib/export-template";
 import { useFarmSettings } from "@/hooks/use-farm-settings";
 import { cn } from "@/lib/utils";
+import { compressImage, PDF_QUALITY_SETTINGS, type PDFQuality } from "@/lib/pdf-utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Bloodline {
@@ -186,69 +196,57 @@ function BloodlinesTab() {
   const { toast } = useToast();
   const { data: farmSettings } = useFarmSettings();
   const [openDialog, setOpenDialog] = useState<"create" | number | null>(null);
+  const pdfExport = usePDFExportDialog();
 
   const { data: bloodlines = [], isLoading } = useQuery<Bloodline[]>({ queryKey: ["/api/genetics/bloodlines"] });
 
-  const exportBloodlinesPDF = () => {
+  const exportBloodlinesPDF = async (quality: PDFQuality): Promise<void> => {
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
-    const fb = farmSettings;
-
-    const rows = bloodlines.map((bl, idx) => `
-      <tr>
-        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${idx + 1}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt;font-weight:700">${bl.name}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.type.replace(/_/g, " ")}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.evidenceStatus}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.status}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.originFarmOrBreeder || "—"}</td>
-        <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:8pt">${bl.selectedTraits || "—"}</td>
-      </tr>
-    `).join("");
-
-    const pagesHtml = `
-      <div class="page">
-        <div class="header">
-          <div class="header-left">${fb?.logoUrl ? `<img src="${fb.logoUrl}" style="width:60px;height:60px;object-fit:contain;">` : ""}</div>
-          <div class="header-center">
-            <h1>${fb?.studName || fb?.farmName || "Bloodline Register"}</h1>
-            <p class="subtitle">Genetics &amp; Bloodline Register — ${exportDate}</p>
-          </div>
-          <div class="header-right">
-            <p>Page 1 of 1</p>
-            <p>${exportDate}</p>
-          </div>
-        </div>
+    const rawLogo = farmSettings?.logoUrl;
+    const exportLogo = rawLogo && quality !== "high"
+      ? await compressImage(rawLogo, PDF_QUALITY_SETTINGS[quality])
+      : rawLogo;
+    const exportFarmSettings = farmSettings
+      ? { ...farmSettings, logoUrl: exportLogo ?? farmSettings.logoUrl }
+      : null;
+    const totalPages = Math.max(1, Math.ceil(bloodlines.length / GROUP_ROWS_PER_PAGE));
+    let pagesHtml = "";
+    for (let page = 0; page < totalPages; page++) {
+      const pageBloodlines = bloodlines.slice(page * GROUP_ROWS_PER_PAGE, (page + 1) * GROUP_ROWS_PER_PAGE);
+      const rows = pageBloodlines.map((bl, index) => `
+        <tr>
+          <td class="row-num">${page * GROUP_ROWS_PER_PAGE + index + 1}</td>
+          <td class="bloodline-name">${escapeHtmlText(bl.name)}</td>
+          <td>${escapeHtmlText(bl.type.replace(/_/g, " "))}</td>
+          <td>${escapeHtmlText(bl.evidenceStatus)}</td>
+          <td>${escapeHtmlText(bl.status.replace(/_/g, " "))}</td>
+          <td>${escapeHtmlText(bl.originFarmOrBreeder || "—")}</td>
+          <td>${escapeHtmlText(bl.selectedTraits || "—")}</td>
+        </tr>
+      `).join("");
+      pagesHtml += `<div class="page">
+        ${renderExportHeader(exportFarmSettings, page + 1, totalPages, exportDate, "Bloodline Register", `Genetics & Bloodline Register — ${bloodlines.length} record${bloodlines.length === 1 ? "" : "s"}`)}
         ${bloodlines.length === 0
-          ? `<div style="text-align:center;padding:30px;color:#888;font-size:10pt">No bloodlines recorded in this workspace.</div>`
-          : `<table style="width:100%;border-collapse:collapse">
-              <thead>
-                <tr>
-                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">#</th>
-                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Bloodline Name</th>
-                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Type</th>
-                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Evidence</th>
-                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Status</th>
-                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Origin / Breeder</th>
-                  <th style="background:#FFC300;color:#000;font-weight:700;font-size:7pt;padding:8px 6px;text-align:left;text-transform:uppercase">Selected Traits</th>
-                </tr>
-              </thead>
+          ? `<div class="zero-state">No bloodlines recorded in this workspace.</div>`
+          : `<table class="export-table bloodline-table">
+              <thead><tr>
+                <th class="row-num">#</th><th>Bloodline Name</th><th>Type</th><th>Evidence</th><th>Status</th><th>Origin / Breeder</th><th>Selected Traits</th>
+              </tr></thead>
               <tbody>${rows}</tbody>
             </table>`
         }
-        <div class="footer">
-          <div class="footer-info">
-            <p class="footer-title">${fb?.studName || fb?.farmName || "BreedLog"}</p>
-            <p>${fb?.ownerName || ""}${fb?.ownerPhone ? " | " + fb.ownerPhone : ""}</p>
-          </div>
-          <div class="footer-branding">
-            <p class="breedlog-text">BREEDLOG</p>
-            <p class="tagline">Professional Livestock Management</p>
-            <p style="font-size:6pt;color:#aaa;margin-top:2px">A STITCH WORX Product</p>
-          </div>
-        </div>
+        ${renderExportFooter(exportFarmSettings)}
       </div>`;
+    }
 
-    const html = wrapExportDocument("Bloodline Register", getCanonicalGroupCSS(), pagesHtml);
+    const css = getCanonicalGroupCSS() + `
+      .bloodline-table th:nth-child(1) { width: 4%; }
+      .bloodline-table th:nth-child(2) { width: 16%; }
+      .bloodline-table th:nth-child(3), .bloodline-table th:nth-child(4), .bloodline-table th:nth-child(5) { width: 11%; }
+      .bloodline-table th:nth-child(6), .bloodline-table th:nth-child(7) { width: 18%; }
+      .bloodline-name { font-weight: 700; }
+    `;
+    const html = wrapExportDocument("Bloodline Register", css, pagesHtml);
     openExportPrintDialog(html);
   };
 
@@ -273,7 +271,7 @@ function BloodlinesTab() {
           <Button
             variant="outline"
             size="sm"
-            onClick={exportBloodlinesPDF}
+            onClick={() => pdfExport.openDialog("bloodlines")}
             data-testid="btn-export-bloodlines-pdf"
             className="gap-1.5 text-xs"
           >
@@ -341,6 +339,13 @@ function BloodlinesTab() {
           </Card>
         ))}
       </div>
+      <PDFExportDialog
+        open={pdfExport.isOpen}
+        onOpenChange={pdfExport.setIsOpen}
+        title="Export Bloodline Register"
+        description="Choose the image quality for the farm logo in your bloodline register PDF. Bloodline data and layout remain unchanged."
+        onExport={exportBloodlinesPDF}
+      />
     </div>
   );
 }

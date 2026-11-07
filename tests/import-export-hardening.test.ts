@@ -104,10 +104,12 @@ test("Settings does not expose JSON as normal export and marks XLSX as blocked",
 
 test("PDF export structure keeps header/footer placement guards", () => {
   const settings = fs.readFileSync("client/src/pages/Settings.tsx", "utf8");
-  assert.match(settings, /class="header"/);
-  assert.match(settings, /class="footer"/);
-  assert.match(settings, /position: absolute; bottom: 5mm/);
-  assert.match(settings, /padding-bottom: 30mm/);
+  // Layout was centralized; verify the exporter uses the canonical contract,
+  // rather than requiring the deleted inline HTML/CSS implementation.
+  assert.match(settings, /renderExportHeader\(fb,/);
+  assert.match(settings, /renderExportFooter\(fb\)/);
+  assert.match(settings, /getCanonicalGroupCSS\(\)/);
+  assert.match(settings, /wrapExportDocument\("Herd Database Export"/);
 });
 
 test("CSV sire/dam lookup resolves parent tag IDs from full herd, not just exported subset (fix1)", () => {
