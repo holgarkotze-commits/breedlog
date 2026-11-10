@@ -67,6 +67,8 @@ export type EntitlementState = {
   customerId?: string;
   effectiveAt: string;
   updatedAt: string;
+  paidUntil?: string;
+  paymentOrderId?: string;
 };
 
 export type UsageState = {
@@ -270,7 +272,13 @@ export async function getEntitlementState(storage: IStorage, accountId: string):
   }
 
   const raw = await storage.getSystemSetting(settingKeyForEntitlement(accountId));
-  if (raw) return JSON.parse(raw) as EntitlementState;
+  if (raw) {
+    const state = JSON.parse(raw) as EntitlementState;
+    if (state.paidUntil && (!Number.isFinite(new Date(state.paidUntil).getTime()) || new Date(state.paidUntil).getTime() <= Date.now())) {
+      return { ...state, planId: "free", status: "expired" };
+    }
+    return state;
+  }
   const now = new Date().toISOString();
   return {
     accountId,
@@ -327,7 +335,10 @@ export async function listBillingAuditEntries(storage: IStorage, accountId: stri
 
 export async function getBillingSubscriptionState(storage: IStorage, accountId: string): Promise<BillingSubscriptionState | null> {
   const raw = await storage.getSystemSetting(settingKeyForSubscription(accountId));
-  return raw ? JSON.parse(raw) as BillingSubscriptionState : null;
+  const state = raw ? JSON.parse(raw) as BillingSubscriptionState & { paymentOrderId?: string } : null;
+  if (state?.provider === "paytoday" && state.paymentOrderId &&
+      new Date(state.currentPeriodEnd).getTime() <= Date.now()) return { ...state, status: "expired" };
+  return state;
 }
 
 export async function saveBillingSubscriptionState(storage: IStorage, subscription: BillingSubscriptionState): Promise<void> {
@@ -393,6 +404,10 @@ export async function completeTestCheckoutSession(
   const session = await getCheckoutSession(storage, sessionId);
   if (!session) {
     throw new EntitlementDeniedError("UNKNOWN_CHECKOUT_SESSION", "Checkout session was not found.", 404);
+  }
+  const currentEntitlement = await getEntitlementState(storage, session.accountId);
+  if (session.provider !== "test-provider" || currentEntitlement.paymentOrderId) {
+    throw new EntitlementDeniedError("PROTECTED_PAYMENT_ORDER", "A protected annual payment cannot be completed through the simulator.", 403);
   }
   if (session.status === "completed") {
     const subscription = await getBillingSubscriptionState(storage, session.accountId);
@@ -472,6 +487,9 @@ export async function cancelBillingSubscription(
   const subscription = await getBillingSubscriptionState(storage, accountId);
   if (!subscription) {
     throw new EntitlementDeniedError("SUBSCRIPTION_NOT_FOUND", "No active billing subscription exists for this account.", 404);
+  }
+  if (subscription.provider === "paytoday") {
+    throw new EntitlementDeniedError("ONCE_OFF_ANNUAL", "Once-off annual access expires automatically; there is no recurring charge to cancel.", 409);
   }
   const now = options.now ?? new Date();
   const updated: BillingSubscriptionState = {
@@ -726,6 +744,13 @@ export function verifyBillingSignature(rawBody: string | Buffer, signature: stri
 }
 
 export async function applyBillingEvent(storage: IStorage, event: BillingEvent): Promise<{ idempotent: boolean; entitlement: EntitlementState }> {
+  // PayToday has no verified webhook protocol. It can ONLY enter through
+  // protected stored-intent lookup and the transactional annual reconciler.
+  const existingSubscription = await getBillingSubscriptionState(storage, event.accountId);
+  const protectedEntitlement = await getEntitlementState(storage, event.accountId);
+  if (event.provider.toLowerCase() === "paytoday" || existingSubscription?.provider === "paytoday" || protectedEntitlement.paymentOrderId) {
+    throw new EntitlementDeniedError("UNVERIFIED_PROVIDER", "This provider requires protected order reconciliation.", 403);
+  }
   const eventKey = settingKeyForBillingEvent(event.provider, event.providerEventId);
   const existing = await storage.getSystemSetting(eventKey);
   if (existing) {

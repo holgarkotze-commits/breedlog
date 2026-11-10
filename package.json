@@ -15,6 +15,8 @@
     "prebuild": "node --import tsx scripts/check-certification-result.ts",
     "test:browser-cert": "bash scripts/run-browser-cert.sh",
     "test:onboarding-db": "cross-env NODE_ENV=test USE_IN_MEMORY_STORAGE=0 node --import tsx --test tests/sql/public-onboarding.sql.test.ts",
+    "test:paytoday": "cross-env NODE_ENV=test USE_IN_MEMORY_STORAGE=1 node --import tsx --test --test-concurrency=1 tests/paytoday-annual.test.ts tests/paytoday-routes.test.ts",
+    "test:paytoday-db": "cross-env NODE_ENV=test USE_IN_MEMORY_STORAGE=0 node --import tsx --test tests/sql/paytoday-annual.sql.test.ts",
     "release:gate": "bash scripts/release-gate.sh",
     "android:sync": "npm run build && npx cap sync android",
     "android:build": "node scripts/build-android-shell.mjs",

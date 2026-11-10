@@ -512,6 +512,16 @@ export const systemSettings = pgTable("system_settings", {
 
 export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({ id: true, updatedAt: true });
 export type SystemSetting = typeof systemSettings.$inferSelect;
+
+// Prepared annual PayToday candidate. No startup migration applies this table.
+// Provider intent tokens are encrypted inside state; never exposed by API schemas.
+export const breedlogPaymentOrders = pgTable("breedlog_payment_orders", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  workspace: varchar("workspace", { length: 160 }).notNull(),
+  snapshot: jsonb("snapshot").notNull(),
+  state: jsonb("state").notNull(),
+  paymentHash: varchar("payment_hash", { length: 64 }).unique(),
+});
 export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
 
 // === FIELD TEST ISSUE REPORTS ===
