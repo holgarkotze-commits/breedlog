@@ -52,7 +52,7 @@ export type PaymentTransact = <T>(
 
 export class PaymentUnavailable extends Error {
   readonly status = 503;
-  constructor() { super("Annual payments are unavailable pending verified provider and merchant approval."); }
+  constructor() { super("Annual payments are not available yet. You can keep using the Free plan."); }
 }
 
 export class PaymentRejected extends Error {

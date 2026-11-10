@@ -24,11 +24,19 @@ test("real HTTP routes reject unavailable payments, forged callbacks and cross-p
   });
   try {
     await t.test("no contract: checkout and return are unavailable, no activation", async () => {
-      assert.equal((await post("/api/billing/checkout-session", { provider: "paytoday", productCode: "premium_annual" })).status, 503);
+      const message = "Annual payments are not available yet. You can keep using the Free plan.";
+      const checkout = await post("/api/billing/checkout-session", { provider: "paytoday", productCode: "premium_annual" });
+      assert.equal(checkout.status, 503);
+      assert.equal((await checkout.json()).message, message);
       const response = await fetch(base + "/api/billing/paytoday/return?order=BREEDLOG-" + "A".repeat(32) + "&status=success&token=forged",
         { headers: headers("paytoday-route-owner") });
       assert.equal(response.status, 503);
-      assert.ok(!JSON.stringify(await response.json()).includes("forged"));
+      const body = await response.json();
+      assert.equal(body.message, message);
+      assert.ok(!JSON.stringify(body).includes("forged"));
+      const reconcile = await post("/api/billing/paytoday/reconcile", { order: "BREEDLOG-" + "A".repeat(32) });
+      assert.equal(reconcile.status, 503);
+      assert.equal((await reconcile.json()).message, message);
       assert.equal(await storage.getSystemSetting("commercial:entitlement:paytoday-route-owner"), undefined);
     });
     await t.test("generic webhook rejects PayToday and other product/merchant payloads even if signed", async () => {
