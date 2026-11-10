@@ -24,6 +24,9 @@ export type PaymentOrder = {
     finalizedAt?: string;
     periodStart?: string;
     periodEnd?: string;
+    // Set only with verified proof a failed/cancelled intent is no longer payable.
+    // Rejected/expired/creating alone may still represent an unknown outcome.
+    checkoutResolved?: true;
   };
 };
 

@@ -1,5 +1,5 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, date, varchar, jsonb } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, date, varchar, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -521,7 +521,10 @@ export const breedlogPaymentOrders = pgTable("breedlog_payment_orders", {
   snapshot: jsonb("snapshot").notNull(),
   state: jsonb("state").notNull(),
   paymentHash: varchar("payment_hash", { length: 64 }).unique(),
-});
+}, table => [
+  uniqueIndex("breedlog_one_unresolved_annual_checkout").on(table.workspace)
+    .where(sql`COALESCE(${table.state}->>'status','') NOT IN ('paid','revoked') AND (${table.state}->>'checkoutResolved') IS DISTINCT FROM 'true'`),
+]);
 
 export const breedlogProviderTransactions = pgTable("breedlog_provider_transactions", {
   transactionHash: varchar("transaction_hash", { length: 64 }).primaryKey(),

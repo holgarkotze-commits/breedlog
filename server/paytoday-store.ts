@@ -29,6 +29,12 @@ export function sqlPaymentTransact(pool: pg.Pool): PaymentTransact {
         },
         async insertOrder(order) {
           if (order.workspace !== workspace) throw new PaymentRejected();
+          // Same workspace advisory lock as all state transitions; reserve BEFORE
+          // any provider request. Unknown outcomes do not time out.
+          const unresolved = await c.query(`SELECT id FROM breedlog_payment_orders WHERE workspace=$1
+            AND COALESCE(state->>'status','') NOT IN ('paid','revoked')
+            AND (state->>'checkoutResolved') IS DISTINCT FROM 'true' LIMIT 1`, [workspace]);
+          if (unresolved.rowCount) throw new PaymentRejected();
           const { state, ...snapshot } = order;
           await c.query("INSERT INTO breedlog_payment_orders (id,workspace,snapshot,state) VALUES ($1,$2,$3,$4)",
             [order.id, workspace, JSON.stringify(snapshot), JSON.stringify(state)]);
@@ -83,7 +89,9 @@ export function memoryPaymentTransact(settings: Map<string, string>): PaymentTra
           return o?.workspace === workspace ? structuredClone(o) : undefined;
         },
         async insertOrder(o) {
-          if (o.workspace !== workspace || staged.has(o.id)) throw new PaymentRejected();
+          if (o.workspace !== workspace || staged.has(o.id) || [...staged.values()].some(existing =>
+            existing.workspace === workspace && !["paid", "revoked"].includes(existing.state.status) &&
+            existing.state.checkoutResolved !== true)) throw new PaymentRejected();
           staged.set(o.id, structuredClone(o));
         },
         async updateOrderState(id, state) {

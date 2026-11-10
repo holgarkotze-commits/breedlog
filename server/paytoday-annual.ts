@@ -55,7 +55,10 @@ const subscriptionKey = (workspace: string) => `commercial:subscription:${worksp
 
 function checkedOrder(order: PaymentOrder | undefined, workspace: string, config: AnnualPaymentConfig): PaymentOrder {
   if (!order || order.workspace !== workspace || !/^BREEDLOG-[A-F0-9]{32}$/.test(order.id) ||
-      Object.keys(config.offer).some(key => order.offer[key as keyof AnnualOffer] !== config.offer[key as keyof AnnualOffer])) throw new PaymentRejected();
+      (["product", "provider", "currency", "merchant", "environment", "contractVersion"] as const)
+        .some(key => order.offer[key] !== config.offer[key]) ||
+      !Number.isSafeInteger(order.offer.amountMinor) || order.offer.amountMinor <= 0 ||
+      typeof order.offer.version !== "string" || !order.offer.version) throw new PaymentRejected();
   return order;
 }
 
@@ -105,8 +108,9 @@ export class AnnualPayToday {
       await tx.insertOrder(order);
     });
     // Intentionally no automatic retry of createIntent (provider-side
-    // idempotency is undocumented). A crash here grants nothing; explicit new
-    // checkout is required. Reconciliation of a saved intent IS retry-safe.
+    // idempotency is undocumented). The committed reservation survives a crash
+    // or uncertain response and blocks another create. Never expire it on a
+    // clock/browser deadline. Reconciliation of a saved intent IS retry-safe.
     try {
       const created = await this.provider.create(order.id, order.offer, contact,
         `${this.config.returnOrigin}/api/billing/paytoday/return?order=${order.id}`);
@@ -142,9 +146,17 @@ export class AnnualPayToday {
       const needsTransaction = payment.status === "success" || state.status === "paid" ||
         ["refunded", "reversed"].includes(payment.status);
       if (!needsTransaction) {
-        if (["rejected", "revoked"].includes(state.status)) return { orderId: id, status: state.status };
+        const closed = payment.intentNonPayable === true &&
+          ["failed", "cancelled", "canceled"].includes(payment.status);
+        if (["rejected", "revoked"].includes(state.status)) {
+          if (state.status === "rejected" && closed) {
+            await tx.updateOrderState(id, { ...state, checkoutResolved: true });
+          }
+          return { orderId: id, status: state.status };
+        }
         if (payment.status === "pending") return { orderId: id, status: "pending" };
-        await tx.updateOrderState(id, { ...state, status: "rejected" });
+        await tx.updateOrderState(id, { ...state, status: "rejected",
+          checkoutResolved: closed ? true : undefined });
         return { orderId: id, status: "rejected" };
       }
       const transaction = payment.transaction;

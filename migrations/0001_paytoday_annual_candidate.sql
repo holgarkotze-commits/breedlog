@@ -17,6 +17,13 @@ CREATE TABLE IF NOT EXISTS breedlog_payment_orders (
   CHECK (snapshot->'offer'->>'product' = 'breedlog_premium_annual'),
   CHECK (snapshot->'offer'->>'provider' = 'paytoday')
 );
+-- An uncertain provider outcome is not a lease: time/browser expiry never frees
+-- this reservation. Existing duplicate unresolved rows make preparation fail
+-- closed for explicit review; never delete or rewrite them automatically.
+CREATE UNIQUE INDEX IF NOT EXISTS breedlog_one_unresolved_annual_checkout
+  ON breedlog_payment_orders (workspace)
+  WHERE COALESCE(state->>'status','') NOT IN ('paid','revoked')
+    AND (state->>'checkoutResolved') IS DISTINCT FROM 'true';
 CREATE OR REPLACE FUNCTION breedlog_keep_payment_snapshot() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN

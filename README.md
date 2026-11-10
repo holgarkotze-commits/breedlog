@@ -84,6 +84,15 @@ The fixed annual period starts at that verified payment time; retries cannot
 extend it. Missing/ambiguous/future or mismatched evidence fails closed.
 Provider-wide transaction-reference hashes are claimed atomically across products.
 
+Each workspace may have only one unresolved annual checkout. Its reservation
+commits before any provider request and is not released by a browser return,
+intent deadline, crash or uncertain response. Never blindly retry intent creation.
+Failed/cancelled status alone does not release the reservation: the reviewed
+contract must also prove that the intent is no longer payable.
+Reconciliation retains the immutable order's approved amount/price version after
+catalogue changes, while enforcing the same product, merchant, currency,
+environment and verified-provider-contract identity.
+
 **Financial safety:** an apparent provider sandbox/test environment may still
 charge real currency. Use injected fake-network fixtures only for this candidate;
 do not make real provider calls or treat sandbox mode as financial authorization.

@@ -24,6 +24,9 @@ export interface VerifiedPayTodayContract {
   // Provider-confirmed successful financial transaction details, NOT the
   // payment_token (which identifies an intent). Mapping remains uninstalled.
   finalizedTransaction(claims: Json): FinalizedTransaction | undefined;
+  // Optional independently verified proof that this intent can no longer be
+  // paid. A failed attempt/status alone is NOT proof of closed checkout.
+  intentNonPayable?(claims: Json): boolean;
   // FMD's integer amount convention is NOT independently verified. Mapping
   // and exact minor-unit conversion must be established in the approved contract.
   amountToProvider(minor: number): string | number;
@@ -43,7 +46,7 @@ export type FinalizedTransaction = {
 };
 export interface PayTodayProvider {
   create(invoice: string, offer: AnnualOffer, contact: Contact, returnUrl: string): Promise<{ url: string; token: string }>;
-  lookup(token: string): Promise<{ status: string; invoice: string; amountMinor?: number; merchant?: string; currency?: string; paymentToken?: string; transaction?: FinalizedTransaction }>;
+  lookup(token: string): Promise<{ status: string; invoice: string; amountMinor?: number; merchant?: string; currency?: string; paymentToken?: string; transaction?: FinalizedTransaction; intentNonPayable?: boolean }>;
 }
 
 export class PayTodayAdapter implements PayTodayProvider {
@@ -117,6 +120,7 @@ export class PayTodayAdapter implements PayTodayProvider {
       merchant: context?.merchant, currency: context?.currency,
       paymentToken: intent.payment_token,
       transaction: this.contract.finalizedTransaction(claims),
+      intentNonPayable: this.contract.intentNonPayable?.(claims) === true,
     };
   }
 }

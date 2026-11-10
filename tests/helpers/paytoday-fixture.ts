@@ -27,6 +27,7 @@ export const fixtureContract: VerifiedPayTodayContract = {
     // Entirely synthetic field mapping; NOT copied provider/private contract.
     return (claims.intent ?? claims.data?.intent)?.transaction_data?.fixtureFinalized;
   },
+  intentNonPayable: claims => claims.fixtureIntentNonPayable === true,
   amountToProvider: minor => minor / 100,
   amountFromProvider: amount => typeof amount === "number" && Number.isSafeInteger(amount * 100) ? amount * 100 : undefined,
   allowedPaymentOrigins: ["https://fixture-payment.invalid"],
@@ -86,7 +87,7 @@ export function fixture(transact: PaymentTransact) {
   };
   const adapter = new PayTodayAdapter("sandbox", { handle: config.offer.merchant, key: "fixture-shop-secret" }, fixtureContract, network);
   let now = new Date("2030-01-01T12:00:00Z");
-  const restart = (tx: PaymentTransact = transact) => new AnnualPayToday(config, tx, adapter, () => now);
+  const restart = (tx: PaymentTransact = transact, approvedConfig = config) => new AnnualPayToday(approvedConfig, tx, adapter, () => now);
   const service = restart();
   const workspace = "test-" + randomUUID().slice(0, 12);
   const contact = { firstName: "Fixture", lastName: "Only", email: "fixture@example.invalid", phone: "000" };
@@ -182,17 +183,6 @@ export async function annualConformance(
     const f = fixture(transact), o = await f.create(), count = f.calls.length;
     await assert.rejects(() => f.service.reconcile("other-workspace", o.orderId));
     assert.equal(f.calls.length, count);
-  });
-  await t.test("wrong product and changed price/config cannot reconcile an existing order", async () => {
-    const f = fixture(transact), o = await f.create();
-    const config = structuredClone(f.config); config.encryptionKey = f.config.encryptionKey;
-    config.offer.amountMinor++;
-    const changed = new AnnualPayToday(config, transact, { create: async () => { throw Error(); }, lookup: async () => { throw Error(); } });
-    await assert.rejects(() => changed.reconcile(f.workspace, o.orderId));
-    await transact(f.workspace, async tx => {
-      const order = await tx.getOrder(o.orderId);
-      assert.equal(order!.offer.amountMinor, 12300);
-    });
   });
   await t.test("concurrent duplicate/restart replay never extends the original annual period", async () => {
     const f = fixture(transact), o = await f.create();
