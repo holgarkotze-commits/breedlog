@@ -68,6 +68,18 @@ function annualEnd(start: Date): Date {
   return end;
 }
 
+// Only explicit timezone-bearing, millisecond-or-second ISO evidence is accepted.
+// Invalid calendar dates, local/ambiguous dates and future times fail closed.
+function finalizedTime(value: unknown): Date {
+  if (typeof value !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) throw new PaymentRejected();
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime()) || date.toISOString() !== value.replace(/Z$/, value.includes(".") ? "Z" : ".000Z")) {
+    throw new PaymentRejected();
+  }
+  return date;
+}
+
 export class AnnualPayToday {
   private config: AnnualPaymentConfig;
   constructor(config: AnnualPaymentConfig | undefined, private transact: PaymentTransact, private provider: PayTodayProvider,
@@ -124,8 +136,34 @@ export class AnnualPayToday {
         // against the same stored intent remains possible, but nothing is granted.
         throw new PaymentRejected();
       }
-      const paymentHash = crypto.createHash("sha256").update("paytoday\0" + payment.paymentToken).digest("hex");
-      if (state.paymentHash && state.paymentHash !== paymentHash) throw new PaymentRejected();
+      const now = this.now();
+      // Pending/failed intent state alone is not evidence of a completed payment.
+      // Do not expire a pending order merely because its confirmation arrived late.
+      const needsTransaction = payment.status === "success" || state.status === "paid" ||
+        ["refunded", "reversed"].includes(payment.status);
+      if (!needsTransaction) {
+        if (["rejected", "revoked"].includes(state.status)) return { orderId: id, status: state.status };
+        if (payment.status === "pending") return { orderId: id, status: "pending" };
+        await tx.updateOrderState(id, { ...state, status: "rejected" });
+        return { orderId: id, status: "rejected" };
+      }
+      const transaction = payment.transaction;
+      if (!transaction || transaction.status !== "success" ||
+          typeof transaction.reference !== "string" || !transaction.reference ||
+          transaction.reference !== transaction.reference.trim() || transaction.reference.length > 256 ||
+          transaction.invoice !== saved.id || transaction.amountMinor !== saved.offer.amountMinor ||
+          transaction.currency !== saved.offer.currency || transaction.merchant !== saved.offer.merchant) throw new PaymentRejected();
+      const finalized = finalizedTime(transaction.finalizedAt);
+      if (finalized.getTime() < new Date(saved.createdAt).getTime() ||
+          finalized.getTime() >= new Date(saved.expiresAt).getTime() ||
+          finalized.getTime() > now.getTime()) throw new PaymentRejected();
+      // Financial identity is the verified finalized transaction reference.
+      // Intent identifiers/payment_token are never used as transaction identity.
+      const paymentHash = crypto.createHash("sha256").update("paytoday\0" + transaction.reference).digest("hex");
+      if (state.paymentHash && (state.bindingVersion !== "transaction-v1" ||
+          state.paymentHash !== paymentHash || state.finalizedAt !== finalized.toISOString())) throw new PaymentRejected();
+      await tx.bindProviderTransaction(paymentHash, { provider: "paytoday", orderId: id,
+        product: saved.offer.product, workspace, finalizedAt: finalized.toISOString() });
       if (["refunded", "reversed"].includes(payment.status)) {
         if (state.status === "paid") {
           const current = JSON.parse(await tx.getSetting(entitlementKey(workspace)) ?? "null");
@@ -137,44 +175,43 @@ export class AnnualPayToday {
             if (sub?.paymentOrderId === id) await tx.setSetting(subscriptionKey(workspace), JSON.stringify({ ...sub, status: "refunded" }));
           }
         }
-        await tx.updateOrderState(id, { ...state, status: "revoked", paymentHash });
+        await tx.updateOrderState(id, { ...state, status: "revoked", paymentHash,
+          bindingVersion: "transaction-v1", finalizedAt: finalized.toISOString() });
         return { orderId: id, status: "revoked" };
       }
-      if (["rejected", "expired", "revoked"].includes(state.status)) return { orderId: id, status: state.status };
+      if (["rejected", "revoked"].includes(state.status)) return { orderId: id, status: state.status };
       if (state.status === "paid") return { orderId: id,
         status: state.periodEnd && state.periodEnd <= this.now().toISOString() ? "expired" : "paid", periodEnd: state.periodEnd };
-      const now = this.now();
-      if (now.toISOString() >= saved.expiresAt) {
-        await tx.updateOrderState(id, { ...state, status: "expired" });
-        return { orderId: id, status: "expired" };
-      }
-      if (payment.status === "pending") return { orderId: id, status: "pending" };
       if (payment.status !== "success") {
         await tx.updateOrderState(id, { ...state, status: "rejected" });
         return { orderId: id, status: "rejected" };
       }
-      await this.activate(tx, saved, paymentHash, now);
-      return { orderId: id, status: "paid", periodEnd: annualEnd(now).toISOString() };
+      await this.activate(tx, saved, paymentHash, finalized, now);
+      const end = annualEnd(finalized).toISOString();
+      return { orderId: id, status: end <= now.toISOString() ? "expired" : "paid", periodEnd: end };
     });
   }
 
-  private async activate(tx: PaymentTransaction, order: PaymentOrder, paymentHash: string, now: Date) {
+  private async activate(tx: PaymentTransaction, order: PaymentOrder, paymentHash: string, finalized: Date, now: Date) {
     if (await tx.getSetting(`commercial:master_workspace:${order.workspace}`) === "1") throw new PaymentRejected();
     const existing = JSON.parse(await tx.getSetting(entitlementKey(order.workspace)) ?? "null");
-    if (existing?.planId === "premium" && (!existing.paidUntil || existing.paidUntil > now.toISOString())) throw new PaymentRejected();
-    const start = now.toISOString(), end = annualEnd(now).toISOString();
-    await tx.updateOrderState(order.id, { ...order.state, status: "paid", paymentHash, periodStart: start, periodEnd: end });
+    if (existing && ((existing.planId === "premium" && !existing.paidUntil) ||
+        (existing.paidUntil && existing.paidUntil > finalized.toISOString()))) throw new PaymentRejected();
+    const start = finalized.toISOString(), end = annualEnd(finalized).toISOString();
+    const active = end > now.toISOString();
+    await tx.updateOrderState(order.id, { ...order.state, status: "paid", paymentHash,
+      bindingVersion: "transaction-v1", finalizedAt: start, periodStart: start, periodEnd: end });
     await tx.setSetting(entitlementKey(order.workspace), JSON.stringify({
-      accountId: order.workspace, planId: "premium", status: "active", source: "billing_event",
+      accountId: order.workspace, planId: active ? "premium" : "free", status: active ? "active" : "expired", source: "billing_event",
       pricingVersion: BREEDLOG_PRICING_VERSION, offerVersion: order.offer.version,
-      subscriptionId: order.id, effectiveAt: start, updatedAt: start, paidUntil: end,
+      subscriptionId: order.id, effectiveAt: start, updatedAt: now.toISOString(), paidUntil: end,
       paymentOrderId: order.id,
     }));
     await tx.setSetting(subscriptionKey(order.workspace), JSON.stringify({
       accountId: order.workspace, provider: "paytoday", subscriptionId: order.id,
       customerId: "", productCode: "premium_annual", planId: "premium", billingPeriod: "annual",
-      status: "active", currentPeriodStart: start, currentPeriodEnd: end, cancelAtPeriodEnd: true,
-      autoRenew: false, addOns: [], updatedAt: start, paymentOrderId: order.id,
+      status: active ? "active" : "expired", currentPeriodStart: start, currentPeriodEnd: end, cancelAtPeriodEnd: true,
+      autoRenew: false, addOns: [], updatedAt: now.toISOString(), paymentOrderId: order.id,
     }));
   }
 }

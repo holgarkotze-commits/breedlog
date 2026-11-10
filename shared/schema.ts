@@ -522,6 +522,11 @@ export const breedlogPaymentOrders = pgTable("breedlog_payment_orders", {
   state: jsonb("state").notNull(),
   paymentHash: varchar("payment_hash", { length: 64 }).unique(),
 });
+
+export const breedlogProviderTransactions = pgTable("breedlog_provider_transactions", {
+  transactionHash: varchar("transaction_hash", { length: 64 }).primaryKey(),
+  binding: jsonb("binding").notNull(),
+});
 export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
 
 // === FIELD TEST ISSUE REPORTS ===

@@ -21,6 +21,9 @@ export interface VerifiedPayTodayContract {
   // Extract from verified claims only, under a provider-confirmed mapping.
   // No inferred/default currency or merchant, and no FMD credential fallback.
   context(claims: Json): { merchant: string; currency: string } | undefined;
+  // Provider-confirmed successful financial transaction details, NOT the
+  // payment_token (which identifies an intent). Mapping remains uninstalled.
+  finalizedTransaction(claims: Json): FinalizedTransaction | undefined;
   // FMD's integer amount convention is NOT independently verified. Mapping
   // and exact minor-unit conversion must be established in the approved contract.
   amountToProvider(minor: number): string | number;
@@ -29,9 +32,18 @@ export interface VerifiedPayTodayContract {
 }
 
 export type Contact = { firstName: string; lastName: string; email: string; phone: string };
+export type FinalizedTransaction = {
+  reference: string;
+  status: "success";
+  finalizedAt: string;
+  invoice: string;
+  amountMinor: number;
+  merchant: string;
+  currency: string;
+};
 export interface PayTodayProvider {
   create(invoice: string, offer: AnnualOffer, contact: Contact, returnUrl: string): Promise<{ url: string; token: string }>;
-  lookup(token: string): Promise<{ status: string; invoice: string; amountMinor?: number; merchant?: string; currency?: string; paymentToken?: string }>;
+  lookup(token: string): Promise<{ status: string; invoice: string; amountMinor?: number; merchant?: string; currency?: string; paymentToken?: string; transaction?: FinalizedTransaction }>;
 }
 
 export class PayTodayAdapter implements PayTodayProvider {
@@ -104,6 +116,7 @@ export class PayTodayAdapter implements PayTodayProvider {
       amountMinor: this.contract.amountFromProvider(intent.amount),
       merchant: context?.merchant, currency: context?.currency,
       paymentToken: intent.payment_token,
+      transaction: this.contract.finalizedTransaction(claims),
     };
   }
 }

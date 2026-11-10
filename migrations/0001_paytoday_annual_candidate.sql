@@ -1,5 +1,11 @@
 -- PREPARED ONLY. Never auto-apply at application startup or to production.
 -- Existing livestock, accounts, pricing and commercial settings are unchanged.
+CREATE TABLE IF NOT EXISTS breedlog_provider_transactions (
+  transaction_hash varchar(64) PRIMARY KEY,
+  binding jsonb NOT NULL
+);
+-- Provider-wide registry: no product/tenant/intent partition in the unique key.
+-- Future product adapters must claim this same registry in their grant transaction.
 CREATE TABLE IF NOT EXISTS breedlog_payment_orders (
   id varchar(64) PRIMARY KEY CHECK (id ~ '^BREEDLOG-[A-F0-9]{32}$'),
   workspace varchar(160) NOT NULL,

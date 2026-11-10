@@ -20,18 +20,31 @@ export type PaymentOrder = {
     status: "creating" | "pending" | "paid" | "rejected" | "expired" | "revoked";
     intentCipher?: string;
     paymentHash?: string;
+    bindingVersion?: "transaction-v1";
+    finalizedAt?: string;
     periodStart?: string;
     periodEnd?: string;
   };
 };
 
 export interface PaymentTransaction {
+  bindProviderTransaction(hash: string, binding: ProviderTransactionBinding): Promise<void>;
   getOrder(id: string): Promise<PaymentOrder | undefined>;
   insertOrder(order: PaymentOrder): Promise<void>;
   updateOrderState(id: string, state: PaymentOrder["state"]): Promise<void>;
   getSetting(key: string): Promise<string | undefined>;
   setSetting(key: string, value: string): Promise<void>;
 }
+
+// Shared provider-wide uniqueness boundary: never include product, workspace or
+// intent token in the reference hash. No raw financial reference is persisted.
+export type ProviderTransactionBinding = {
+  provider: "paytoday";
+  orderId: string;
+  product: string;
+  workspace: string;
+  finalizedAt: string;
+};
 
 export type PaymentTransact = <T>(
   workspace: string, run: (tx: PaymentTransaction) => Promise<T>,

@@ -75,6 +75,21 @@ the explicitly isolated `breedlog_test` certification database and
 `BREEDLOG_ISOLATED_SQL_CERT=1 CI=true npm run test:paytoday-db`.
 Synthetic test signing/context mappings are **not** PayToday contract evidence.
 
+Review candidate reconciliation requires independently verified successful
+financial transaction details (reference, finalized timestamp and matching order
+context). `payment_token` identifies an intent, not a unique financial transaction.
+Confirmation may arrive hours or days later: eligibility is based on payment
+finalization inside the original intent window, never callback arrival time.
+The fixed annual period starts at that verified payment time; retries cannot
+extend it. Missing/ambiguous/future or mismatched evidence fails closed.
+Provider-wide transaction-reference hashes are claimed atomically across products.
+
+**Financial safety:** an apparent provider sandbox/test environment may still
+charge real currency. Use injected fake-network fixtures only for this candidate;
+do not make real provider calls or treat sandbox mode as financial authorization.
+No live contract or configuration is installed. Private merchant contracts,
+correspondence, document links and fee details must not be copied into GitHub.
+
 ## Repository rules
 
 Read `AGENTS.md` and `.stitchworx/project.yaml` before substantial changes. Keep runtime code, tests and code-facing configuration here. Do not add work orders, agent memory, build diaries, evidence packs or generated release output to this repository.

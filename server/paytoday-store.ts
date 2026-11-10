@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { PaymentOrder, PaymentTransact } from "./paytoday-types";
+import type { PaymentOrder, PaymentTransact, ProviderTransactionBinding } from "./paytoday-types";
 import { PaymentRejected } from "./paytoday-types";
 
 // Extends the existing SQL/settings architecture. No provider calls inside a
@@ -14,6 +14,15 @@ export function sqlPaymentTransact(pool: pg.Pool): PaymentTransact {
       await c.query("SET LOCAL statement_timeout='10s'");
       await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["breedlog:annual:" + workspace]);
       const result = await run({
+        async bindProviderTransaction(hash, binding) {
+          if (binding.workspace !== workspace) throw new PaymentRejected();
+          await c.query("INSERT INTO breedlog_provider_transactions (transaction_hash,binding) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+            [hash, JSON.stringify(binding)]);
+          const r = await c.query("SELECT binding FROM breedlog_provider_transactions WHERE transaction_hash=$1", [hash]);
+          const saved = r.rows[0]?.binding;
+          if (!saved || Object.keys(binding).some(key =>
+            saved[key] !== binding[key as keyof ProviderTransactionBinding])) throw new PaymentRejected();
+        },
         async getOrder(id) {
           const r = await c.query("SELECT snapshot, state FROM breedlog_payment_orders WHERE id=$1 AND workspace=$2 FOR UPDATE", [id, workspace]);
           return r.rows[0] ? { ...r.rows[0].snapshot, state: r.rows[0].state } : undefined;
@@ -50,6 +59,7 @@ export function sqlPaymentTransact(pool: pg.Pool): PaymentTransact {
 // Test/preview only; same atomic semantics, discarded when the process exits.
 export function memoryPaymentTransact(settings: Map<string, string>): PaymentTransact {
   let orders = new Map<string, PaymentOrder>();
+  let transactions = new Map<string, ProviderTransactionBinding>();
   let tail = Promise.resolve();
   return async (workspace, run) => {
     let unlock!: () => void;
@@ -57,9 +67,17 @@ export function memoryPaymentTransact(settings: Map<string, string>): PaymentTra
     tail = new Promise<void>(resolve => { unlock = resolve; });
     await previous;
     const staged = structuredClone(orders);
+    const stagedTransactions = structuredClone(transactions);
     const writes = new Map<string, string>();
     try {
       const result = await run({
+        async bindProviderTransaction(hash, binding) {
+          if (binding.workspace !== workspace) throw new PaymentRejected();
+          const saved = stagedTransactions.get(hash);
+          if (saved && Object.keys(binding).some(key =>
+            saved[key as keyof ProviderTransactionBinding] !== binding[key as keyof ProviderTransactionBinding])) throw new PaymentRejected();
+          stagedTransactions.set(hash, structuredClone(binding));
+        },
         async getOrder(id) {
           const o = staged.get(id);
           return o?.workspace === workspace ? structuredClone(o) : undefined;
@@ -79,6 +97,7 @@ export function memoryPaymentTransact(settings: Map<string, string>): PaymentTra
         async setSetting(key, value) { writes.set(key, value); },
       });
       orders = staged;
+      transactions = stagedTransactions;
       for (const [key, value] of writes) settings.set(key, value);
       return result;
     } finally { unlock(); }

@@ -28,7 +28,9 @@ test("isolated PostgreSQL annual payment persistence, concurrency and atomic fau
     });
     await t.test("new Node process reconciles persisted encrypted intent and duplicate replay", async () => {
       const f = fixture(sqlPaymentTransact(pool)), order = await f.create();
-      const packet = { workspace: f.workspace, id: order.orderId, payment: [...f.intents.values()][0].intent.payment_token };
+      const intent = [...f.intents.values()][0].intent;
+      const packet = { workspace: f.workspace, id: order.orderId, payment: intent.payment_token,
+        transaction: intent.transaction_data.fixtureFinalized };
       const source = `
         import { pool } from './server/db.ts';
         import { sqlPaymentTransact } from './server/paytoday-store.ts';
@@ -38,7 +40,7 @@ test("isolated PostgreSQL annual payment persistence, concurrency and atomic fau
         const p=JSON.parse(input);
         const provider={create:async()=>{throw Error('no new intent allowed')},lookup:async token=>{
           if(!token.startsWith('intent-secret-')) throw Error('stored token required');
-          return {status:'success',invoice:p.id,amountMinor:12300,merchant:'test-breedlog-merchant',currency:'NAD',paymentToken:p.payment};
+          return {status:'success',invoice:p.id,amountMinor:12300,merchant:'test-breedlog-merchant',currency:'NAD',paymentToken:p.payment,transaction:p.transaction};
         }};
         try {
           const service=new AnnualPayToday(fixtureConfig(),sqlPaymentTransact(pool),provider,()=>new Date('2030-01-01T12:00:00Z'));

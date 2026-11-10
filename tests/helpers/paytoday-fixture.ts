@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { AnnualPayToday, type AnnualPaymentConfig } from "../../server/paytoday-annual";
 import { PayTodayAdapter, type VerifiedPayTodayContract } from "../../server/paytoday-adapter";
 import type { PaymentTransact } from "../../server/paytoday-types";
@@ -22,6 +22,10 @@ export const fixtureContract: VerifiedPayTodayContract = {
   context(claims) {
     return claims.fixtureMerchant && claims.fixtureCurrency
       ? { merchant: claims.fixtureMerchant, currency: claims.fixtureCurrency } : undefined;
+  },
+  finalizedTransaction(claims) {
+    // Entirely synthetic field mapping; NOT copied provider/private contract.
+    return (claims.intent ?? claims.data?.intent)?.transaction_data?.fixtureFinalized;
   },
   amountToProvider: minor => minor / 100,
   amountFromProvider: amount => typeof amount === "number" && Number.isSafeInteger(amount * 100) ? amount * 100 : undefined,
@@ -62,7 +66,11 @@ export function fixture(transact: PaymentTransact) {
       lastInvoice = body.invoice_number;
       const token = "intent-secret-" + randomUUID();
       intents.set(token, {
-        intent: { transaction_status: "success", invoice_number: lastInvoice, amount: 123, payment_token: "payment-secret-" + randomUUID() },
+        intent: { transaction_status: "success", invoice_number: lastInvoice, amount: 123, payment_token: "intent-id-" + randomUUID(),
+          transaction_data: { fixtureFinalized: {
+            reference: "transaction-secret-" + randomUUID(), status: "success", finalizedAt: now.toISOString(),
+            invoice: lastInvoice, amountMinor: 12300, merchant: config.offer.merchant, currency: "NAD",
+          } } },
         fixtureMerchant: config.offer.merchant, fixtureCurrency: "NAD",
       });
       payload = { data: { payment_url: "https://fixture-payment.invalid/pay/" + lastInvoice, payment_intent_token: token } };
@@ -117,7 +125,7 @@ export async function annualConformance(
     assert.equal(saved!.state.status, "paid");
     assert.ok(saved!.state.paymentHash); assert.equal(saved!.state.periodEnd, ent.paidUntil);
     const json = JSON.stringify(saved);
-    assert.ok(!json.includes("intent-secret-") && !json.includes("payment-secret-") && !json.includes("fixture-access-secret"));
+    assert.ok(!json.includes("intent-secret-") && !json.includes("transaction-secret-") && !json.includes("fixture-access-secret"));
     assert.ok(!JSON.stringify(result).includes("token"));
   });
   for (const status of ["pending", "failed", "cancelled", "canceled", "refunded", "reversed", "unknown", "SUCCESS", " success"]) {
@@ -145,6 +153,19 @@ export async function annualConformance(
     ["missing merchant", p => { delete p.fixtureMerchant; }],
     ["FMD merchant", p => { p.fixtureMerchant = "fmd-fixture-merchant"; }],
     ["missing payment binding", p => { delete p.intent.payment_token; }],
+    ["missing finalized transaction", p => { delete p.intent.transaction_data; }],
+    ["missing transaction reference", p => { delete p.intent.transaction_data.fixtureFinalized.reference; }],
+    ["blank transaction reference", p => { p.intent.transaction_data.fixtureFinalized.reference = " "; }],
+    ["missing transaction timestamp", p => { delete p.intent.transaction_data.fixtureFinalized.finalizedAt; }],
+    ["future transaction timestamp", p => { p.intent.transaction_data.fixtureFinalized.finalizedAt = "2030-01-01T12:01:00Z"; }],
+    ["transaction before order", p => { p.intent.transaction_data.fixtureFinalized.finalizedAt = "2030-01-01T11:59:59Z"; }],
+    ["invalid calendar timestamp", p => { p.intent.transaction_data.fixtureFinalized.finalizedAt = "2030-02-30T12:00:00Z"; }],
+    ["ambiguous timestamp", p => { p.intent.transaction_data.fixtureFinalized.finalizedAt = "2030-01-01 12:00:00"; }],
+    ["unconfirmed transaction status", p => { p.intent.transaction_data.fixtureFinalized.status = "pending"; }],
+    ["mismatched finalized invoice", p => { p.intent.transaction_data.fixtureFinalized.invoice = "FMD-fixture"; }],
+    ["mismatched finalized amount", p => { p.intent.transaction_data.fixtureFinalized.amountMinor = 1; }],
+    ["mismatched finalized merchant", p => { p.intent.transaction_data.fixtureFinalized.merchant = "other-fixture"; }],
+    ["mismatched finalized currency", p => { p.intent.transaction_data.fixtureFinalized.currency = "ZAR"; }],
   ];
   for (const [label, change] of mismatches) await t.test(`${label} fails closed`, async () => {
     const f = fixture(transact), o = await f.create();
@@ -184,11 +205,11 @@ export async function annualConformance(
     const replay = await f.restart().reconcile(f.workspace, o.orderId);
     assert.equal(replay.status, "expired"); assert.equal(replay.periodEnd, results[0].periodEnd);
   });
-  await t.test("same provider payment cannot bind to a second order or tenant", async () => {
+  await t.test("same financial transaction with distinct intent identifiers cannot bind to a second order or tenant", async () => {
     const a = fixture(transact), b = fixture(transact), oa = await a.create(), ob = await b.create();
-    let paymentToken = "";
-    a.edit(p => { paymentToken = p.intent.payment_token; });
-    b.edit(p => { p.intent.payment_token = paymentToken; });
+    let reference = "";
+    a.edit(p => { reference = p.intent.transaction_data.fixtureFinalized.reference; });
+    b.edit(p => { p.intent.transaction_data.fixtureFinalized.reference = reference; });
     await a.service.reconcile(a.workspace, oa.orderId);
     await assert.rejects(() => b.service.reconcile(b.workspace, ob.orderId));
     assert.equal(await setting(b.workspace, "commercial:entitlement:"), undefined);
@@ -217,11 +238,89 @@ export async function annualConformance(
     await assert.rejects(() => f.service.reconcile(f.workspace, o.orderId));
     assert.equal(await setting(f.workspace, "commercial:entitlement:"), undefined);
   });
-  await t.test("expired pending order cannot activate even on subsequent success", async () => {
+  await t.test("payment actually finalized at the intent window boundary cannot activate", async () => {
     const f = fixture(transact), o = await f.create();
     f.setNow("2030-01-01T12:30:00Z");
-    assert.equal((await f.service.reconcile(f.workspace, o.orderId)).status, "expired");
+    f.edit(p => { p.intent.transaction_data.fixtureFinalized.finalizedAt = "2030-01-01T12:30:00Z"; });
+    await assert.rejects(() => f.service.reconcile(f.workspace, o.orderId));
     assert.equal(await setting(f.workspace, "commercial:entitlement:"), undefined);
+  });
+  await t.test("late query rejects a payment actually finalized after the permitted window", async () => {
+    const f = fixture(transact), o = await f.create();
+    f.setNow("2030-01-04T12:00:00Z");
+    f.edit(p => { p.intent.transaction_data.fixtureFinalized.finalizedAt = "2030-01-01T12:31:00Z"; });
+    await assert.rejects(() => f.service.reconcile(f.workspace, o.orderId));
+    assert.equal(await setting(f.workspace, "commercial:entitlement:"), undefined);
+  });
+  for (const arrival of ["2030-01-01T20:00:00Z", "2030-01-04T12:00:00Z"]) {
+    await t.test(`timely payment confirmed at ${arrival} keeps payment-time annual period`, async () => {
+      const f = fixture(transact), o = await f.create();
+      f.edit(p => { p.intent.transaction_data.fixtureFinalized.finalizedAt = "2030-01-01T12:05:00Z"; });
+      f.setNow(arrival);
+      const result = await f.service.reconcile(f.workspace, o.orderId);
+      assert.equal(result.status, "paid"); assert.equal(result.periodEnd, "2031-01-01T12:05:00.000Z");
+      const ent = JSON.parse((await setting(f.workspace, "commercial:entitlement:"))!);
+      assert.equal(ent.effectiveAt, "2030-01-01T12:05:00.000Z");
+      f.setNow("2030-02-01T12:00:00Z");
+      assert.equal((await f.restart(freshTransact()).reconcile(f.workspace, o.orderId)).periodEnd, result.periodEnd);
+    });
+  }
+  await t.test("late pending query does not prevent a later confirmed timely payment", async () => {
+    const f = fixture(transact), o = await f.create();
+    f.setNow("2030-01-05T12:00:00Z");
+    f.edit(p => { p.intent.transaction_status = "pending"; delete p.intent.transaction_data; });
+    assert.equal((await f.service.reconcile(f.workspace, o.orderId)).status, "pending");
+    f.edit(p => { p.intent.transaction_status = "success"; p.intent.transaction_data = { fixtureFinalized: {
+      reference: "transaction-secret-" + randomUUID(), status: "success", finalizedAt: "2030-01-01T12:15:00Z",
+      invoice: o.orderId, amountMinor: 12300, merchant: f.config.offer.merchant, currency: "NAD",
+    } }; });
+    assert.equal((await f.service.reconcile(f.workspace, o.orderId)).periodEnd, "2031-01-01T12:15:00.000Z");
+  });
+  await t.test("confirmation after the annual period records expiry, not a fresh year", async () => {
+    const f = fixture(transact), o = await f.create();
+    f.setNow("2032-01-01T12:00:00Z");
+    const result = await f.service.reconcile(f.workspace, o.orderId);
+    assert.equal(result.status, "expired"); assert.equal(result.periodEnd, "2031-01-01T12:00:00.000Z");
+    assert.equal(JSON.parse((await setting(f.workspace, "commercial:entitlement:"))!).planId, "free");
+  });
+  await t.test("intent identifiers are not financial uniqueness keys", async () => {
+    const a = fixture(transact), b = fixture(transact), oa = await a.create(), ob = await b.create();
+    a.edit(p => { p.intent.payment_token = "shared-intent-fixture"; });
+    b.edit(p => { p.intent.payment_token = "shared-intent-fixture"; });
+    assert.equal((await a.service.reconcile(a.workspace, oa.orderId)).status, "paid");
+    assert.equal((await b.service.reconcile(b.workspace, ob.orderId)).status, "paid");
+  });
+  await t.test("provider transaction reserved by another product cannot activate annual access", async () => {
+    const f = fixture(transact), o = await f.create();
+    let reference = ""; f.edit(p => { reference = p.intent.transaction_data.fixtureFinalized.reference; });
+    const hash = createHash("sha256").update("paytoday\0" + reference).digest("hex");
+    await transact(f.workspace, tx => tx.bindProviderTransaction(hash, { provider: "paytoday", orderId: "OTHER-PRODUCT-FIXTURE",
+      product: "other-test-product", workspace: f.workspace, finalizedAt: "2030-01-01T12:00:00.000Z" }));
+    await assert.rejects(() => f.service.reconcile(f.workspace, o.orderId));
+    assert.equal(await setting(f.workspace, "commercial:entitlement:"), undefined);
+  });
+  await t.test("concurrent cross-order transaction replay grants at most one workspace", async () => {
+    const a = fixture(transact), b = fixture(transact), oa = await a.create(), ob = await b.create();
+    let reference = ""; a.edit(p => { reference = p.intent.transaction_data.fixtureFinalized.reference; });
+    b.edit(p => { p.intent.transaction_data.fixtureFinalized.reference = reference; });
+    const results = await Promise.allSettled([
+      a.service.reconcile(a.workspace, oa.orderId), b.service.reconcile(b.workspace, ob.orderId),
+    ]);
+    assert.equal(results.filter(r => r.status === "fulfilled" && r.value.status === "paid").length, 1);
+    assert.equal(results.filter(r => r.status === "rejected").length, 1);
+    const granted = await Promise.all([a.workspace, b.workspace].map(w => setting(w, "commercial:entitlement:")));
+    assert.equal(granted.filter(Boolean).length, 1);
+  });
+  await t.test("paid replay with changed finalized time or financial reference fails closed", async () => {
+    const f = fixture(transact), o = await f.create();
+    await f.service.reconcile(f.workspace, o.orderId);
+    f.setNow("2030-01-02T12:00:00Z");
+    f.edit(p => { p.intent.transaction_data.fixtureFinalized.finalizedAt = "2030-01-01T12:01:00Z"; });
+    await assert.rejects(() => f.service.reconcile(f.workspace, o.orderId));
+    f.edit(p => { p.intent.transaction_data.fixtureFinalized.finalizedAt = "2030-01-01T12:00:00Z";
+      p.intent.transaction_data.fixtureFinalized.reference = "different-financial-reference"; });
+    await assert.rejects(() => f.service.reconcile(f.workspace, o.orderId));
+    assert.equal(JSON.parse((await setting(f.workspace, "commercial:entitlement:"))!).paidUntil, "2031-01-01T12:00:00.000Z");
   });
   await t.test("verified refund revokes only its original period and cannot reactivate", async () => {
     const f = fixture(transact), o = await f.create();
