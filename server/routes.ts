@@ -429,7 +429,7 @@ export async function registerRoutes(
       if (!verifyBillingSignature(rawBody, signature, secret)) {
         return res.status(401).json({ message: "Invalid billing webhook signature" });
       }
-      const event = billingEventSchema.parse({ ...req.body, provider });
+      const event = billingEventSchema.strict().parse({ ...req.body, provider });
       const result = await applyBillingEvent(storage, event);
       res.status(result.idempotent ? 200 : 202).json(result);
     } catch (err) {

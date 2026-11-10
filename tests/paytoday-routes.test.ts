@@ -45,6 +45,15 @@ test("real HTTP routes reject unavailable payments, forged callbacks and cross-p
         });
         assert.equal(response.status, 403);
       }
+      for (const extra of [{ productCode: "fmd_kit" }, { merchant: "other-product" }, { currency: "ZAR" }]) {
+        const body = JSON.stringify({ providerEventId: "unknown-product-fields", accountId: "paytoday-route-owner",
+          eventType: "subscription.created", planId: "premium", ...extra });
+        const response = await fetch(base + "/api/billing/webhook/test-provider", {
+          method: "POST", body, headers: { "Content-Type": "application/json",
+            "X-BreedLog-Signature": createHmac("sha256", "fixture-webhook-secret").update(body).digest("hex") },
+        });
+        assert.equal(response.status, 400, "unknown product/merchant/currency fields must never be silently discarded");
+      }
       assert.equal(await storage.getSystemSetting("commercial:entitlement:paytoday-route-owner"), undefined);
     });
     await t.test("test checkout completion cannot operate on another tenant's session", async () => {
