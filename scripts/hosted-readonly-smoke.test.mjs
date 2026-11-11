@@ -74,3 +74,17 @@ test("registration unrelated non-HTML response is rejected", async () => {
   const r = await run({ "/auth/register": [200, { "Content-Type": "application/json" }, "{}"] });
   assert.equal(r.code, 1, r.output);
 });
+
+test("version endpoint redirect is rejected instead of followed", async () => {
+  const r = await run({ "/api/version": [302, { Location: "/auth/login" }, ""] });
+  assert.equal(r.code, 1, r.output);
+  assert.match(r.output, /FAIL version contract/);
+});
+test("anonymous animals 403 is accepted as denied", async () => {
+  const r = await run({ "/api/animals": [403, { "Content-Type": "application/json" }, '{"message":"forbidden"}'] });
+  assert.equal(r.code, 0, r.output);
+});
+test("unexpected animals redirect is rejected", async () => {
+  const r = await run({ "/api/animals": [302, { Location: "/auth/login" }, ""] });
+  assert.equal(r.code, 1, r.output);
+});
