@@ -44,7 +44,17 @@ const validVersion = (r, body) => {
 await probe("landing shell reachable (not visual acceptance)", "/", [200], html);
 await probe("registration shell reachable (not rendered signup acceptance)", "/auth/register", [200], html);
 await probe("version contract", "/api/version", [200], validVersion);
-await probe("anonymous animals denied", "/api/animals", [401, 403], r =>
-  !/text\/html/i.test(r.headers.get("content-type") || ""));
+const deniedWithoutData = (r, body) => {
+  const type = r.headers.get("content-type") || "";
+  if (!/application\/json/i.test(type)) return false;
+  let payload;
+  try { payload = JSON.parse(body); } catch { return false; }
+  if (payload === null || Array.isArray(payload) || typeof payload !== "object") return false;
+  // Denial proof must not treat a 401/403 containing animal records as safe.
+  const allowed = new Set(["error", "message", "code", "status"]);
+  if (!Object.keys(payload).every(key => allowed.has(key))) return false;
+  return Object.values(payload).every(value => value === null || ["string", "number", "boolean"].includes(typeof value));
+};
+await probe("anonymous animals denied without data", "/api/animals", [401, 403], deniedWithoutData);
 console.log(`Hosted read-only smoke: ${failed ? "FAIL" : "PASS"}; ${failed} failed checks. Does not prove rendered signup, real registration, email recovery, billing, or native installers.`);
 process.exitCode = failed ? 1 : 0;
