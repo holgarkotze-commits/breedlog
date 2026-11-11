@@ -88,3 +88,17 @@ test("unexpected animals redirect is rejected", async () => {
   const r = await run({ "/api/animals": [302, { Location: "/auth/login" }, ""] });
   assert.equal(r.code, 1, r.output);
 });
+
+test("401 carrying private animal records fails closed", async () => {
+  const r = await run({ "/api/animals": [401, { "Content-Type": "application/json" }, JSON.stringify({ animals: [{ id: 7, name: "private" }] })] });
+  assert.equal(r.code, 1, r.output);
+  assert.match(r.output, /FAIL anonymous animals denied/);
+});
+test("403 with nested animal records fails closed", async () => {
+  const r = await run({ "/api/animals": [403, { "Content-Type": "application/json" }, JSON.stringify({ data: [{ id: 7 }] })] });
+  assert.equal(r.code, 1, r.output);
+});
+test("malformed denial JSON fails closed", async () => {
+  const r = await run({ "/api/animals": [401, { "Content-Type": "application/json" }, "{broken"] });
+  assert.equal(r.code, 1, r.output);
+});
