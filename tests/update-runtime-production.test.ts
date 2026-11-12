@@ -190,8 +190,8 @@ test("plain Android browsers stay in the PWA runtime unless the native shell mar
     navigator: mockNavigator,
     matchMedia: () => ({ matches: false }),
     location: {
-      origin: "https://app.breedlog.com",
-      hostname: "app.breedlog.com",
+      origin: "https://breedlog.stitchworx.net",
+      hostname: "breedlog.stitchworx.net",
       protocol: "https:",
     },
   };
@@ -236,8 +236,8 @@ test("Android Firefox remains in the PWA runtime", () => {
     navigator: mockNavigator,
     matchMedia: () => ({ matches: false }),
     location: {
-      origin: "https://app.breedlog.com",
-      hostname: "app.breedlog.com",
+      origin: "https://breedlog.stitchworx.net",
+      hostname: "breedlog.stitchworx.net",
       protocol: "https:",
     },
   };
