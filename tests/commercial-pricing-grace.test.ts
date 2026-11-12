@@ -48,3 +48,21 @@ test("server-authoritative grace ends exactly at 72h, preserves all records and 
   assert.deepEqual(await store.getAnimals(workspace, {}), animals);
   for (const status of ["refunded", "cancelled"]) assert.equal(effectivePaidAccess({ ...state, planId: "free" as const, status }, new Date("2030-02-02")).planId, "free");
 });
+
+test("renewal notice is visible across app screens for grace and expired access", async () => {
+  const React = await import("react"), { renderToStaticMarkup } = await import("react-dom/server");
+  const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
+  const { PaymentGraceNotice } = await import("../client/src/components/PaymentGraceNotice");
+  const { Router } = await import("wouter");
+  const now = Date.now();
+  for (const [age, active] of [[3600000, true], [73 * 3600000, false]] as const) {
+    const client = new QueryClient();
+    const due = now - age;
+    client.setQueryData(["/api/entitlements/me"], { entitlement: { planId: "premium", status: "active", billingPeriod: "monthly", paidUntil: new Date(due).toISOString() } });
+    const markup = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(Router, { ssrPath: "/settings" }, React.createElement(PaymentGraceNotice, { isAuthenticated: true }))));
+    assert.match(markup, /role="status"/); assert.match(markup, /All records are preserved/); assert.match(markup, /href="\/settings"/);
+    assert.ok(markup.includes(new Date(due + 72 * 3600000).toISOString()));
+    assert.match(markup, active ? /Premium remains active/ : /now on Free/);
+    client.clear();
+  }
+});

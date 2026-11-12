@@ -5,7 +5,7 @@ import { BILLING_CURRENCIES, type localizedPricing } from "@shared/commercial";
 import { Button } from "@/components/ui/button";
 
 type Pricing = ReturnType<typeof localizedPricing>;
-export function PlanPricing({ graceUntil, status }: { graceUntil?: string; status?: string }) {
+export function PlanPricing() {
   const [currency, setCurrency] = useState("");
   const [billingCountry, setBillingCountry] = useState("");
   const locale = navigator.language;
@@ -38,7 +38,6 @@ export function PlanPricing({ graceUntil, status }: { graceUntil?: string; statu
     </div> : <p>{isError ? "Pricing could not be loaded. Checkout is unavailable." : price ? `${price.currency} prices are awaiting approval. No chargeable quote or automatic FX conversion is available.` : "Loading prices…"}</p>}
     <div className="flex flex-wrap gap-2"><Button disabled>Monthly payment unavailable</Button><Button disabled variant="outline">Annual payment unavailable</Button></div>
     <p className="text-muted-foreground">Checkout is not enabled. Monthly payments require an explicit customer-initiated invoice; automatic debits are not available.</p>
-    {graceUntil && <p role="status" className="rounded border border-border p-3">{status === "grace_period" ? "Renewal payment is due. Premium remains active until" : "The payment grace period ended at"} <time dateTime={graceUntil}>{new Date(graceUntil).toISOString()} (UTC)</time>. {status === "grace_period" ? "Use the existing payment invoice to retry once checkout is available." : "Your preserved records return on verified payment."}</p>}
     <p className="text-muted-foreground">Unpaid monthly renewal has 72 hours of Premium grace from its scheduled due time. At expiry, Free shows the first 30 originally registered animals. All other records remain preserved and return on verified payment. Cancellation ends at the paid term; annual payments do not auto-renew.</p>
   </section>;
 }

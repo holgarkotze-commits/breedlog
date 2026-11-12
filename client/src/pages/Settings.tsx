@@ -1405,7 +1405,7 @@ export default function Settings() {
              </div>
 
              <div className="p-4 bg-secondary rounded border border-border space-y-4" data-testid="card-plan-entitlements">
-                <PlanPricing graceUntil={entitlementData?.entitlement.graceUntil} status={entitlementData?.entitlement.status} />
+                <PlanPricing />
                 <div>
                   <h4 className="font-bold text-sm uppercase mb-2">Plan & Entitlements</h4>
                   <p className="text-xs text-muted-foreground">
