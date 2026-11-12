@@ -246,7 +246,9 @@ test("reactivating an inactive animal cannot bypass the Free active-animal cap",
   const signature = createHmac("sha256", "webhook-secret").update(event).digest("hex");
   const upgraded = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, { method: "POST",
     headers: { "Content-Type": "application/json", "X-BreedLog-Signature": signature }, body: event });
-  assert.equal(upgraded.status, 200);
+  assert.equal(upgraded.status, 202);
+  const applied = await upgraded.json() as { idempotent: boolean; entitlement: { planId: string } };
+  assert.equal(applied.idempotent, false); assert.equal(applied.entitlement.planId, "premium");
   const rows = await (await fetch(`${BASE_URL}/api/animals`, { headers: testHeaders(userId, deviceId) })).json() as Array<{ id: number; status?: string }>;
   assert.equal(rows.length, 31, "all records were preserved");
   assert.equal(rows.filter((animal) => (animal.status ?? "active") === "active").length, 30);

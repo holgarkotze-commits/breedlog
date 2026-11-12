@@ -19,7 +19,7 @@ export function PlanPricing({ graceUntil, status }: { graceUntil?: string; statu
     },
   });
   const price = data?.pricing;
-  const money = (minor: number) => new Intl.NumberFormat(locale, { style: "currency", currency: price!.currency }).format(minor / 100);
+  const money = (minor: number) => `${price!.currency === "NAD" ? "N$" : price!.currency === "ZAR" ? "R" : price!.currency} ${new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)}`;
   return <section className="space-y-3 text-sm" aria-label="Free and Premium pricing">
     <h5 className="font-semibold">One Premium plan · monthly or annual</h5>
     <div className="flex flex-wrap gap-3">
