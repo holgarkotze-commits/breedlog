@@ -72,6 +72,77 @@ export async function annualLifecycle(
     await assert.rejects(() => f.restart(fresh()).create(f.workspace, f.contact));
     assert.equal(f.calls.length, calls);
   });
+  for (const status of ["failed", "cancelled", "unknown"]) {
+    await t.test(`${status} without non-payable proof can settle once after restart`, async () => {
+      const f = fixture(transact), order = await f.create();
+      f.edit(p => { p.intent.transaction_status = status; });
+      assert.notEqual((await f.service.reconcile(f.workspace, order.orderId)).status, "paid");
+      assert.equal(await transact(f.workspace, tx => tx.getSetting("commercial:entitlement:" + f.workspace)), undefined);
+      await assert.rejects(() => f.create());
+      f.edit(p => { p.intent.transaction_status = "success"; });
+      const results = await Promise.all(Array.from({ length: 3 }, () =>
+        f.restart(fresh()).reconcile(f.workspace, order.orderId)));
+      assert.ok(results.every(r => r.status === "paid" && r.periodEnd === "2031-01-01T12:00:00.000Z"));
+      assert.equal(creates(f), 1);
+      f.edit(p => { p.intent.transaction_status = "refunded"; });
+      assert.equal((await f.service.reconcile(f.workspace, order.orderId)).status, "revoked");
+      f.edit(p => { p.intent.transaction_status = "success"; });
+      assert.equal((await f.service.reconcile(f.workspace, order.orderId)).status, "revoked");
+    });
+  }
+  for (const failure of ["rollback", "crash", "lost_ack"]) {
+    await t.test(`provider intent survives ${failure} with safe original-invoice recovery`, async () => {
+      const f = fixture(transact);
+      let phase = 0;
+      const fault: PaymentTransact = async (w, run) => {
+        const current = ++phase;
+        if (current === 2 && failure === "crash") throw Error("synthetic process death before save");
+        const value = await transact(w, async tx => {
+          const result = await run(tx);
+          if (current === 2 && failure === "rollback") throw Error("synthetic save rollback");
+          return result;
+        });
+        if (current === 2 && failure === "lost_ack") throw Error("synthetic lost save acknowledgement");
+        return value;
+      };
+      await assert.rejects(() => f.restart(fault).create(f.workspace, f.contact));
+      const id = f.lastInvoice();
+      const calls = f.calls.length;
+      await assert.rejects(() => f.restart(fresh()).create(f.workspace, f.contact));
+      assert.equal(f.calls.length, calls);
+      if (failure !== "lost_ack") {
+        assert.deepEqual(await f.restart(fresh()).reconcile(f.workspace, id), { orderId: id, status: "recovery_required" });
+        assert.deepEqual(await f.restart(fresh()).recoverIntent(f.workspace, id), { orderId: id, status: "recovery_required" });
+        assert.equal(f.calls.length, calls, "no guessed provider recovery or duplicate create");
+      }
+      const recovered = await f.restart(fresh(), f.config, true).recoverIntent(f.workspace, id);
+      assert.equal(recovered.status, "paid");
+      assert.equal(recovered.periodEnd, "2031-01-01T12:00:00.000Z");
+      assert.equal((await f.restart(fresh(), f.config, true).recoverIntent(f.workspace, id)).periodEnd, recovered.periodEnd);
+      assert.equal(creates(f), 1);
+      const saved = (await transact(f.workspace, tx => tx.getOrder(id)))!;
+      assert.ok(saved.state.intentCipher);
+      assert.ok(!JSON.stringify(saved).includes("intent-secret-"));
+      await assert.rejects(() => f.restart(fresh(), f.config, true).recoverIntent("other-workspace", id));
+    });
+  }
+  await t.test("recovery rejects mismatched provider context without losing the reservation", async () => {
+    const f = fixture(transact);
+    let phase = 0;
+    const crash: PaymentTransact = async (w, run) => {
+      if (++phase === 2) throw Error("synthetic death before intent save");
+      return transact(w, run);
+    };
+    await assert.rejects(() => f.restart(crash).create(f.workspace, f.contact));
+    const id = f.lastInvoice();
+    f.edit(p => { p.fixtureMerchant = "different-merchant"; });
+    await assert.rejects(() => f.restart(fresh(), f.config, true).recoverIntent(f.workspace, id));
+    assert.equal((await transact(f.workspace, tx => tx.getOrder(id)))!.state.intentCipher, undefined);
+    await assert.rejects(() => f.create());
+    assert.equal(creates(f), 1);
+    f.edit(p => { p.fixtureMerchant = f.config.offer.merchant; });
+    assert.equal((await f.restart(fresh(), f.config, true).recoverIntent(f.workspace, id)).status, "paid");
+  });
   for (const afterCommit of [false, true]) {
     await t.test(`intent save ${afterCommit ? "lost acknowledgement" : "rollback"} preserves reservation`, async () => {
       const f = fixture(transact);
@@ -101,6 +172,9 @@ export async function annualLifecycle(
       const f = fixture(transact), order = await f.create();
       f.edit(p => { p.intent.transaction_status = status; p.fixtureIntentNonPayable = true; });
       await f.service.reconcile(f.workspace, order.orderId);
+      f.edit(p => { p.intent.transaction_status = "success"; });
+      assert.equal((await f.service.reconcile(f.workspace, order.orderId)).status, "rejected",
+        "provider-proven non-payable orders cannot be reactivated by a contradictory replay");
       const next = await f.create();
       assert.notEqual(next.orderId, order.orderId);
       assert.equal(creates(f), 2);

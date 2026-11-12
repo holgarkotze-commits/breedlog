@@ -125,7 +125,12 @@ export class AnnualPayToday {
 
   async reconcile(workspace: string, id: string) {
     const order = await this.transact(workspace, async tx => checkedOrder(await tx.getOrder(id), workspace, this.config));
-    if (!order.state.intentCipher) throw new PaymentRejected();
+    if (!order.state.intentCipher) {
+      if (order.state.status !== "creating") throw new PaymentRejected();
+      // Preserve the reservation and original reference for support. Neither a
+      // browser deadline nor a lost token proves that another create is safe.
+      return { orderId: id, status: "recovery_required" as const };
+    }
     // Token is loaded ONLY from this order, never a browser/callback payload.
     let payment: Awaited<ReturnType<PayTodayProvider["lookup"]>>;
     try { payment = await this.provider.lookup(open(order.state.intentCipher, this.config.encryptionKey)); }
@@ -191,7 +196,12 @@ export class AnnualPayToday {
           bindingVersion: "transaction-v1", finalizedAt: finalized.toISOString() });
         return { orderId: id, status: "revoked" };
       }
-      if (["rejected", "revoked"].includes(state.status)) return { orderId: id, status: state.status };
+      // A failed attempt is provisional unless the provider proved the intent
+      // non-payable. A later verified, timely financial success must settle the
+      // same unresolved order. Refunds and definitively closed orders stay shut.
+      if (state.status === "revoked" || (state.status === "rejected" && state.checkoutResolved)) {
+        return { orderId: id, status: state.status };
+      }
       if (state.status === "paid") return { orderId: id,
         status: state.periodEnd && state.periodEnd <= this.now().toISOString() ? "expired" : "paid", periodEnd: state.periodEnd };
       if (payment.status !== "success") {
@@ -202,6 +212,39 @@ export class AnnualPayToday {
       const end = annualEnd(finalized).toISOString();
       return { orderId: id, status: end <= now.toISOString() ? "expired" : "paid", periodEnd: end };
     });
+  }
+
+  // Server-side operations only; no browser token or new HTTP/admin surface.
+  // Remains unavailable on the live adapter until invoice recovery is verified.
+  async recoverIntent(workspace: string, id: string) {
+    const order = await this.transact(workspace, async tx => checkedOrder(await tx.getOrder(id), workspace, this.config));
+    if (order.state.intentCipher) return this.reconcile(workspace, id);
+    if (order.state.status !== "creating") throw new PaymentRejected();
+    if (!this.provider.recoverIntent) return { orderId: id, status: "recovery_required" as const };
+    let token: string;
+    try {
+      const recovered = await this.provider.recoverIntent(order.id, structuredClone(order.offer));
+      token = recovered.token;
+      if (typeof token !== "string" || !token || token.length > 4096) throw new PaymentRejected();
+      // Recovery evidence must match the frozen invoice and commercial context
+      // BEFORE persisting a token. Entitlements still require full reconciliation.
+      const payment = await this.provider.lookup(token);
+      if (payment.invoice !== order.id || payment.amountMinor !== order.offer.amountMinor ||
+          payment.currency !== order.offer.currency || payment.merchant !== order.offer.merchant ||
+          typeof payment.paymentToken !== "string" || !payment.paymentToken || payment.paymentToken.length > 4096) {
+        throw new PaymentRejected();
+      }
+    } catch { throw new PaymentRejected(); }
+    await this.transact(workspace, async tx => {
+      const saved = checkedOrder(await tx.getOrder(id), workspace, this.config);
+      if (saved.state.intentCipher) {
+        if (open(saved.state.intentCipher, this.config.encryptionKey) !== token) throw new PaymentRejected();
+        return;
+      }
+      if (saved.state.status !== "creating") throw new PaymentRejected();
+      await tx.updateOrderState(id, { ...saved.state, status: "pending", intentCipher: seal(token, this.config.encryptionKey) });
+    });
+    return this.reconcile(workspace, id);
   }
 
   private async activate(tx: PaymentTransaction, order: PaymentOrder, paymentHash: string, finalized: Date, now: Date) {

@@ -87,7 +87,16 @@ export function fixture(transact: PaymentTransact) {
   };
   const adapter = new PayTodayAdapter("sandbox", { handle: config.offer.merchant, key: "fixture-shop-secret" }, fixtureContract, network);
   let now = new Date("2030-01-01T12:00:00Z");
-  const restart = (tx: PaymentTransact = transact, approvedConfig = config) => new AnnualPayToday(approvedConfig, tx, adapter, () => now);
+  const restart = (tx: PaymentTransact = transact, approvedConfig = config, recovery = false) => new AnnualPayToday(approvedConfig, tx, recovery ? {
+    create: adapter.create.bind(adapter), lookup: adapter.lookup.bind(adapter),
+    // Synthetic invoice recovery only; not a claim about any provider endpoint.
+    async recoverIntent(invoice, offer) {
+      assert.equal(offer.merchant, config.offer.merchant);
+      const matches = [...intents].filter(([, p]) => p.intent.invoice_number === invoice);
+      assert.equal(matches.length, 1);
+      return { token: matches[0][0] };
+    },
+  } : adapter, () => now);
   const service = restart();
   const workspace = "test-" + randomUUID().slice(0, 12);
   const contact = { firstName: "Fixture", lastName: "Only", email: "fixture@example.invalid", phone: "000" };
@@ -136,9 +145,12 @@ export async function annualConformance(
       const r = await f.service.reconcile(f.workspace, o.orderId);
       assert.notEqual(r.status, "paid");
       assert.equal(await setting(f.workspace, "commercial:entitlement:"), undefined);
-      if (status !== "pending") {
+      if (["refunded", "reversed"].includes(status)) {
         f.edit(p => { p.intent.transaction_status = "success"; });
         assert.notEqual((await f.service.reconcile(f.workspace, o.orderId)).status, "paid");
+      } else {
+        f.edit(p => { p.intent.transaction_status = "success"; });
+        assert.equal((await f.service.reconcile(f.workspace, o.orderId)).status, "paid");
       }
     });
   }

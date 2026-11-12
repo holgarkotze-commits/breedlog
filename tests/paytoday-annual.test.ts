@@ -2,11 +2,46 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { InMemoryStorage } from "../server/storage";
 import { AnnualPayToday, assertAnnualConfig, runtimeAnnualConfig } from "../server/paytoday-annual";
-import { fixture, fixtureConfig, annualConformance } from "./helpers/paytoday-fixture";
-import { installedPayTodayContract } from "../server/paytoday-adapter";
+import { fixture, fixtureConfig, fixtureContract, annualConformance } from "./helpers/paytoday-fixture";
+import { installedPayTodayContract, PayTodayAdapter } from "../server/paytoday-adapter";
 import { applyBillingEvent, getEntitlementState, getBillingSubscriptionState, cancelBillingSubscription,
   createCheckoutSession, completeTestCheckoutSession } from "../server/commercial";
 import { BREEDLOG_PLANS } from "../shared/commercial";
+
+for (const outcome of ["success", "timeout", "malformed", "non-2xx"] as const) {
+  test(`lookup diagnostics omit secret URLs on ${outcome}`, async () => {
+    const token = "synthetic-private-lookup-token";
+    const logs: unknown[][] = [];
+    const original = { log: console.log, warn: console.warn, error: console.error };
+    const contract = { ...fixtureContract, async verifyJwt(_token: string, purpose: string) {
+      if (purpose === "configuration") return { data: { status: "success", authorization: { access_token: "synthetic-access" } } };
+      return { intent: { transaction_status: "pending", invoice_number: "BREEDLOG-FIXTURE", amount: 123,
+        payment_token: "synthetic-intent-id" }, fixtureMerchant: "synthetic-merchant", fixtureCurrency: "NAD" };
+    } };
+    const network: typeof fetch = async input => {
+      const url = String(input);
+      if (url.includes("/lookup/")) {
+        assert.ok(url.includes(token)); // observed transport, not a live contract
+        if (outcome === "timeout") throw new Error("timeout at " + url);
+        if (outcome === "malformed") return new Response("broken-json");
+        if (outcome === "non-2xx") return new Response(url, { status: 503 });
+      }
+      return new Response(JSON.stringify({ token: "synthetic-verified-envelope" }));
+    };
+    try {
+      console.log = console.warn = console.error = (...args) => { logs.push(args); };
+      const adapter = new PayTodayAdapter("sandbox", { handle: "synthetic-merchant", key: "synthetic-key" }, contract, network);
+      if (outcome === "success") assert.equal((await adapter.lookup(token)).status, "pending");
+      else await assert.rejects(() => adapter.lookup(token), err => {
+        assert.ok(err instanceof Error);
+        assert.ok(!JSON.stringify({ message: err.message, stack: err.stack, ...err }).includes(token));
+        assert.equal(err.cause, undefined);
+        return true;
+      });
+      assert.deepEqual(logs, []);
+    } finally { Object.assign(console, original); }
+  });
+}
 
 test("annual candidate memory transaction conformance", async t => {
   const storage = new InMemoryStorage();
