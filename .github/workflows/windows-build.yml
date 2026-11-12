@@ -7,12 +7,16 @@ on:
       - main
 
 jobs:
+  certify:
+    uses: ./.github/workflows/release-certification.yml
+
   windows-build:
+    needs: certify
     name: Windows desktop shell build
     runs-on: windows-latest
     env:
       BREEDLOG_NATIVE_BUILD_TARGET: windows
-      VITE_BREEDLOG_API_ORIGIN: https://app.breedlog.com
+      VITE_BREEDLOG_API_ORIGIN: https://breedlog.stitchworx.net
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +29,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Download release certification
+        uses: actions/download-artifact@v4
+        with:
+          name: release-certification
+          path: artifacts
+
+      - name: Verify release certification
+        run: node --import tsx scripts/check-certification-result.ts
 
       - name: Build web assets
         run: npm run build

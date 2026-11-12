@@ -24,6 +24,7 @@ declare module "http" {
 app.disable("x-powered-by");
 
 const TRUSTED_NATIVE_APP_ORIGINS = new Set([
+  "https://breedlog.stitchworx.net",
   "http://tauri.localhost",
   "https://tauri.localhost",
   "tauri://localhost",

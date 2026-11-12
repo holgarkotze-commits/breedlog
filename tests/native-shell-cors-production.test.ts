@@ -6,6 +6,7 @@ import { once } from "node:events";
 
 const BASE_URL = "http://127.0.0.1:5012";
 const TAURI_ORIGIN = "https://tauri.localhost";
+const PRODUCTION_ORIGIN = "https://breedlog.stitchworx.net";
 const REPO_ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 let server: ChildProcessWithoutNullStreams | null = null;
@@ -90,6 +91,20 @@ test("native shell preflight receives the trusted CORS contract", async () => {
   assert.equal(response.headers.get("access-control-allow-credentials"), "true");
   assert.match(response.headers.get("access-control-allow-methods") ?? "", /POST/);
   assert.match(response.headers.get("access-control-allow-headers") ?? "", /Content-Type/i);
+});
+
+test("production app preflight receives the trusted credentialed CORS contract", async () => {
+  const response = await fetch(`${BASE_URL}/api/version`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: PRODUCTION_ORIGIN,
+      "Access-Control-Request-Method": "GET",
+    },
+  });
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), PRODUCTION_ORIGIN);
+  assert.equal(response.headers.get("access-control-allow-credentials"), "true");
 });
 
 test("native shell write preflight allows the idempotency header used by create flows", async () => {
