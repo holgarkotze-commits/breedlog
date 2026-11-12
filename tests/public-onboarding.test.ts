@@ -69,6 +69,12 @@ test("public farmer onboarding, isolation, revocation and recovery", async t => 
       assert.doesNotMatch(denied.body.message, /premium|upgrade/i);
       assert.deepEqual((await request("/api/animals", undefined, farmerB.cookie)).body, []);
     });
+    await t.test("trial may read approved prices without enabling checkout", async () => {
+      const result = await request("/api/billing/catalog?billingCountry=ZA", undefined, farmerA.cookie);
+      assert.equal(result.status, 200); assert.equal(result.body.pricing.currency, "ZAR");
+      assert.equal(result.body.pricing.monthlyMinor, 7999); assert.equal(result.body.pricing.checkoutEnabled, false);
+      assert.equal((await request("/api/billing/checkout-session", { provider: "paytoday", productCode: "premium_monthly" }, farmerA.cookie)).status, 403);
+    });
     await t.test("paid AI and simulated billing are blocked for trials", async () => {
       for (const path of ["/api/ai/ask", "/api/billing/checkout-session", "/api/billing/portal-session"]) {
         const result = await request(path, {}, farmerA.cookie);

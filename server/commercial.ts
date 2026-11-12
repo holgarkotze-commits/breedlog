@@ -6,6 +6,7 @@ import {
   BREEDLOG_PRICING_VERSION,
   getBreedLogPlan,
   monthWindowKey,
+  effectivePaidAccess,
   type BreedLogPlanId,
 } from "@shared/commercial";
 
@@ -68,6 +69,9 @@ export type EntitlementState = {
   effectiveAt: string;
   updatedAt: string;
   paidUntil?: string;
+  billingPeriod?: "monthly" | "annual";
+  cancelAtPeriodEnd?: boolean;
+  graceUntil?: string;
   paymentOrderId?: string;
 };
 
@@ -130,6 +134,9 @@ export type BillingSubscriptionState = {
   status: "pending" | "active" | "grace_period" | "payment_failed" | "cancelled" | "refunded" | "expired";
   currentPeriodStart: string;
   currentPeriodEnd: string;
+  graceUntil?: string;
+  renewalMode?: "customer_initiated" | "recurring";
+  autoRenew?: boolean;
   cancelAtPeriodEnd: boolean;
   addOns: string[];
   updatedAt: string;
@@ -152,14 +159,14 @@ export const BILLING_CATALOG: Record<BillingProductCode, BillingCatalogEntry> = 
     productCode: "premium_monthly",
     planId: "premium",
     billingPeriod: "monthly",
-    amountNad: 149,
+    amountNad: 79.99,
     currency: "NAD",
   },
   premium_annual: {
     productCode: "premium_annual",
     planId: "premium",
     billingPeriod: "annual",
-    amountNad: 1520,
+    amountNad: 799,
     currency: "NAD",
   },
   addon_pdf_250: {
@@ -241,7 +248,7 @@ async function createBillingAuditEntry(storage: IStorage, accountId: string, eve
   return entry;
 }
 
-export async function getEntitlementState(storage: IStorage, accountId: string): Promise<EntitlementState> {
+export async function getEntitlementState(storage: IStorage, accountId: string, at = new Date()): Promise<EntitlementState> {
   // Check the permanent master-workspace marker first.  This key is written by
   // setInternalTestEntitlement at activation time and is never overwritten by
   // billing events.  Checking it here makes internal-test bypass survive server
@@ -274,10 +281,7 @@ export async function getEntitlementState(storage: IStorage, accountId: string):
   const raw = await storage.getSystemSetting(settingKeyForEntitlement(accountId));
   if (raw) {
     const state = JSON.parse(raw) as EntitlementState;
-    if (state.paidUntil && (!Number.isFinite(new Date(state.paidUntil).getTime()) || new Date(state.paidUntil).getTime() <= Date.now())) {
-      return { ...state, planId: "free", status: "expired" };
-    }
-    return state;
+    return effectivePaidAccess(state, at);
   }
   const now = new Date().toISOString();
   return {
@@ -336,8 +340,10 @@ export async function listBillingAuditEntries(storage: IStorage, accountId: stri
 export async function getBillingSubscriptionState(storage: IStorage, accountId: string): Promise<BillingSubscriptionState | null> {
   const raw = await storage.getSystemSetting(settingKeyForSubscription(accountId));
   const state = raw ? JSON.parse(raw) as BillingSubscriptionState & { paymentOrderId?: string } : null;
-  if (state?.provider === "paytoday" && state.paymentOrderId &&
-      new Date(state.currentPeriodEnd).getTime() <= Date.now()) return { ...state, status: "expired" };
+  if (state?.provider === "paytoday" && state.paymentOrderId) {
+    const access = effectivePaidAccess({ ...state, paidUntil: state.currentPeriodEnd });
+    return { ...state, status: access.status, graceUntil: access.graceUntil };
+  }
   return state;
 }
 
@@ -620,8 +626,7 @@ export async function assertCanCreateAnimal(storage: IStorage, accountId: string
 export function projectDowngradedAnimalVisibility<T extends { id: number; createdAt?: Date | string | null; status?: string | null }>(
   animals: T[],
 ): DowngradeProjection<T> {
-  const activeAnimals = animals
-    .filter((animal) => (animal.status ?? "active") === "active")
+  const activeAnimals = [...animals]
     .sort((a, b) => {
       const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -629,8 +634,8 @@ export function projectDowngradedAnimalVisibility<T extends { id: number; create
     });
   const visibleIds = new Set(activeAnimals.slice(0, BREEDLOG_PLANS.free.limits.activeAnimals as number).map((animal) => animal.id));
   return {
-    visible: animals.filter((animal) => visibleIds.has(animal.id) || (animal.status ?? "active") !== "active"),
-    hidden: animals.filter((animal) => !visibleIds.has(animal.id) && (animal.status ?? "active") === "active"),
+    visible: animals.filter((animal) => visibleIds.has(animal.id)),
+    hidden: animals.filter((animal) => !visibleIds.has(animal.id)),
     rule: "first_30_originally_added",
   };
 }

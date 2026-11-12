@@ -3,7 +3,7 @@ import type { AnnualOffer, PaymentOrder, PaymentTransact, PaymentTransaction } f
 import { PaymentRejected, PaymentUnavailable } from "./paytoday-types";
 import { installedPayTodayContract } from "./paytoday-adapter";
 import type { Contact, PayTodayProvider } from "./paytoday-adapter";
-import { BREEDLOG_PRICING_VERSION } from "@shared/commercial";
+import { BREEDLOG_PRICING_VERSION, premiumPrice, effectivePaidAccess, type BillingCurrency } from "@shared/commercial";
 
 export interface AnnualPaymentConfig {
   enabled: boolean;
@@ -17,11 +17,15 @@ export interface AnnualPaymentConfig {
 
 export function assertAnnualConfig(config: AnnualPaymentConfig | undefined): asserts config is AnnualPaymentConfig {
   if (!config?.enabled || !config.merchantAuthorizationRef || !config.priceApprovalRef || !config.contractEvidenceRef ||
-      config.offer.product !== "breedlog_premium_annual" || config.offer.provider !== "paytoday" ||
+      !["breedlog_premium_annual", "breedlog_premium_monthly"].includes(config.offer.product) || config.offer.provider !== "paytoday" ||
       !Number.isSafeInteger(config.offer.amountMinor) || config.offer.amountMinor <= 0 ||
-      config.offer.currency !== "NAD" || !config.offer.version || !config.offer.merchant ||
+      !["NAD", "ZAR"].includes(config.offer.currency) || !config.offer.version || !config.offer.merchant ||
       !config.offer.contractVersion || !["sandbox", "production"].includes(config.offer.environment) ||
       config.encryptionKey.length !== 32) throw new PaymentUnavailable();
+  if (config.offer.environment === "production" && (config.offer.amountMinor !== premiumPrice(config.offer.currency as BillingCurrency,
+      config.offer.product === "breedlog_premium_monthly" ? "monthly" : "annual") || config.offer.version !== BREEDLOG_PRICING_VERSION)) {
+    throw new PaymentUnavailable();
+  }
   try {
     const u = new URL(config.returnOrigin);
     if (u.protocol !== "https:" || u.origin !== config.returnOrigin) throw new Error();
@@ -62,12 +66,14 @@ function checkedOrder(order: PaymentOrder | undefined, workspace: string, config
   return order;
 }
 
-function annualEnd(start: Date): Date {
+function periodEnd(start: Date, monthly: boolean): Date {
   const end = new Date(start);
-  const month = start.getUTCMonth();
-  end.setUTCFullYear(end.getUTCFullYear() + 1);
-  // A leap-day purchase expires on Feb 28, not March 1.
-  if (end.getUTCMonth() !== month) end.setUTCDate(0);
+  const day = start.getUTCDate();
+  end.setUTCDate(1);
+  if (monthly) end.setUTCMonth(end.getUTCMonth() + 1);
+  else end.setUTCFullYear(end.getUTCFullYear() + 1);
+  const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0)).getUTCDate();
+  end.setUTCDate(Math.min(day, last));
   return end;
 }
 
@@ -93,7 +99,9 @@ export class AnnualPayToday {
     this.config.encryptionKey = Buffer.from(config.encryptionKey);
   }
 
-  async create(workspace: string, contact: Contact) {
+  async create(workspace: string, contact: Contact, selection?: { productCode: string; currency?: string }) {
+    if (selection && (selection.productCode !== this.config.offer.product.replace("breedlog_", "") ||
+        (selection.currency && selection.currency !== this.config.offer.currency))) throw new PaymentRejected();
     const now = this.now();
     const order: PaymentOrder = {
       id: "BREEDLOG-" + crypto.randomBytes(16).toString("hex").toUpperCase(), workspace,
@@ -105,6 +113,10 @@ export class AnnualPayToday {
       const current = JSON.parse(await tx.getSetting(entitlementKey(workspace)) ?? "null");
       // No overlapping periods or implicit automatic renewal.
       if (current?.planId === "premium" && (!current.paidUntil || current.paidUntil > now.toISOString())) throw new PaymentRejected();
+      const sub = JSON.parse(await tx.getSetting(subscriptionKey(workspace)) ?? "null");
+      if (this.config.offer.product === "breedlog_premium_monthly" && sub?.provider === "paytoday" &&
+          sub.billingPeriod === "monthly" && !sub.cancelAtPeriodEnd && sub.paymentOrderId === current?.paymentOrderId &&
+          ["active", "grace_period", "payment_failed", "expired"].includes(sub.status)) order.renewalOf = sub.paymentOrderId;
       await tx.insertOrder(order);
     });
     // Intentionally no automatic retry of createIntent (provider-side
@@ -209,7 +221,7 @@ export class AnnualPayToday {
         return { orderId: id, status: "rejected" };
       }
       await this.activate(tx, saved, paymentHash, finalized, now);
-      const end = annualEnd(finalized).toISOString();
+      const end = periodEnd(finalized, saved.offer.product === "breedlog_premium_monthly").toISOString();
       return { orderId: id, status: end <= now.toISOString() ? "expired" : "paid", periodEnd: end };
     });
   }
@@ -247,26 +259,57 @@ export class AnnualPayToday {
     return this.reconcile(workspace, id);
   }
 
+  // Customer-initiated monthly renewal needs no provider autopay promise.
+  // Exact server deadlines are derived from the verified paid term, not retries.
+  async subscription(workspace: string) {
+    return this.transact(workspace, async tx => {
+      const state = JSON.parse(await tx.getSetting(entitlementKey(workspace)) ?? "null");
+      if (!state) return null;
+      return effectivePaidAccess(state, this.now());
+    });
+  }
+
+  async cancel(workspace: string) {
+    return this.transact(workspace, async tx => {
+      const sub = JSON.parse(await tx.getSetting(subscriptionKey(workspace)) ?? "null");
+      const ent = JSON.parse(await tx.getSetting(entitlementKey(workspace)) ?? "null");
+      if (!sub || sub.provider !== "paytoday" || sub.paymentOrderId !== ent?.paymentOrderId) throw new PaymentRejected();
+      // This lane never enrolls automatic debits. A real recurring adapter must
+      // verify remote cancellation before exposing that different capability.
+      if (sub.autoRenew) throw new PaymentUnavailable();
+      await tx.setSetting(subscriptionKey(workspace), JSON.stringify({ ...sub, cancelAtPeriodEnd: true, updatedAt: this.now().toISOString() }));
+      await tx.setSetting(entitlementKey(workspace), JSON.stringify({ ...ent, cancelAtPeriodEnd: true }));
+      return { cancelAtPeriodEnd: true, paidUntil: ent.paidUntil };
+    });
+  }
+
   private async activate(tx: PaymentTransaction, order: PaymentOrder, paymentHash: string, finalized: Date, now: Date) {
     if (await tx.getSetting(`commercial:master_workspace:${order.workspace}`) === "1") throw new PaymentRejected();
     const existing = JSON.parse(await tx.getSetting(entitlementKey(order.workspace)) ?? "null");
+    if (order.renewalOf && existing?.paymentOrderId !== order.renewalOf) {
+      throw new PaymentRejected();
+    }
     if (existing && ((existing.planId === "premium" && !existing.paidUntil) ||
-        (existing.paidUntil && existing.paidUntil > finalized.toISOString()))) throw new PaymentRejected();
-    const start = finalized.toISOString(), end = annualEnd(finalized).toISOString();
-    const active = end > now.toISOString();
+        (existing.planId === "premium" && existing.paidUntil && existing.paidUntil > finalized.toISOString()))) throw new PaymentRejected();
+    const billingPeriod = order.offer.product === "breedlog_premium_monthly" ? "monthly" : "annual";
+    const start = finalized.toISOString(), end = periodEnd(finalized, billingPeriod === "monthly").toISOString();
+    // A separately authorized invoice that was already payable must still be
+    // fulfilled after cancellation; carry the stop-at-term instruction forward.
+    const cancelAtPeriodEnd = !!(order.renewalOf && existing?.cancelAtPeriodEnd);
+    const access = effectivePaidAccess({ planId: "premium" as const, status: "active", billingPeriod, paidUntil: end, cancelAtPeriodEnd }, now);
     await tx.updateOrderState(order.id, { ...order.state, status: "paid", paymentHash,
       bindingVersion: "transaction-v1", finalizedAt: start, periodStart: start, periodEnd: end });
     await tx.setSetting(entitlementKey(order.workspace), JSON.stringify({
-      accountId: order.workspace, planId: active ? "premium" : "free", status: active ? "active" : "expired", source: "billing_event",
+      accountId: order.workspace, planId: access.planId, status: access.status, source: "billing_event",
       pricingVersion: BREEDLOG_PRICING_VERSION, offerVersion: order.offer.version,
       subscriptionId: order.id, effectiveAt: start, updatedAt: now.toISOString(), paidUntil: end,
-      paymentOrderId: order.id,
+      paymentOrderId: order.id, billingPeriod, cancelAtPeriodEnd,
     }));
     await tx.setSetting(subscriptionKey(order.workspace), JSON.stringify({
       accountId: order.workspace, provider: "paytoday", subscriptionId: order.id,
-      customerId: "", productCode: "premium_annual", planId: "premium", billingPeriod: "annual",
-      status: active ? "active" : "expired", currentPeriodStart: start, currentPeriodEnd: end, cancelAtPeriodEnd: true,
-      autoRenew: false, addOns: [], updatedAt: now.toISOString(), paymentOrderId: order.id,
+      customerId: "", productCode: billingPeriod === "monthly" ? "premium_monthly" : "premium_annual", planId: "premium", billingPeriod,
+      status: access.status, currentPeriodStart: start, currentPeriodEnd: end, cancelAtPeriodEnd,
+      renewalMode: "customer_initiated", autoRenew: false, addOns: [], updatedAt: now.toISOString(), paymentOrderId: order.id,
     }));
   }
 }

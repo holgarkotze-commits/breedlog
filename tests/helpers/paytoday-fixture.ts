@@ -42,8 +42,8 @@ export const fixtureConfig = (): AnnualPaymentConfig => ({
   encryptionKey: Buffer.alloc(32, 7), returnOrigin: "https://breedlog-fixture.invalid",
 });
 
-export function fixture(transact: PaymentTransact) {
-  const config = fixtureConfig();
+export function fixture(transact: PaymentTransact, override?: AnnualPaymentConfig) {
+  const config = override ?? fixtureConfig();
   const calls: { url: string; init?: RequestInit }[] = [];
   const intents = new Map<string, Record<string, any>>();
   let failure = false, corruptJwt = false;
@@ -70,9 +70,9 @@ export function fixture(transact: PaymentTransact) {
         intent: { transaction_status: "success", invoice_number: lastInvoice, amount: 123, payment_token: "intent-id-" + randomUUID(),
           transaction_data: { fixtureFinalized: {
             reference: "transaction-secret-" + randomUUID(), status: "success", finalizedAt: now.toISOString(),
-            invoice: lastInvoice, amountMinor: 12300, merchant: config.offer.merchant, currency: "NAD",
+            invoice: lastInvoice, amountMinor: 12300, merchant: config.offer.merchant, currency: config.offer.currency,
           } } },
-        fixtureMerchant: config.offer.merchant, fixtureCurrency: "NAD",
+        fixtureMerchant: config.offer.merchant, fixtureCurrency: config.offer.currency,
       });
       payload = { data: { payment_url: "https://fixture-payment.invalid/pay/" + lastInvoice, payment_intent_token: token } };
     } else {

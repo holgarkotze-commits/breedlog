@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { PaymentTransact } from "../../server/paytoday-types";
-import { fixture } from "./paytoday-fixture";
+import { fixture, fixtureConfig } from "./paytoday-fixture";
 
 export async function annualLifecycle(
   t: { test: (name: string, fn: () => Promise<void>) => Promise<unknown> },
@@ -226,4 +226,63 @@ export async function annualLifecycle(
       assert.equal(f.calls.length, calls);
     });
   }
+  for (const currency of ["NAD", "ZAR"]) {
+    await t.test(`${currency} monthly invoice: exact grace boundary, late success, replay and cancellation`, async () => {
+      const config = fixtureConfig();
+      config.offer = { ...config.offer, product: "breedlog_premium_monthly", currency };
+      const f = fixture(transact, config), initial = await f.create();
+      assert.equal((await f.service.reconcile(f.workspace, initial.orderId)).periodEnd, "2030-02-01T12:00:00.000Z");
+      f.setNow("2030-02-01T12:00:00Z");
+      const grace = await f.restart(fresh()).subscription(f.workspace);
+      assert.equal(grace.planId, "premium"); assert.equal(grace.status, "grace_period");
+      assert.equal(grace.graceUntil, "2030-02-04T12:00:00.000Z");
+      const attempts = await Promise.allSettled(Array.from({ length: 5 }, () => f.restart(fresh()).create(f.workspace, f.contact)));
+      assert.equal(attempts.filter(r => r.status === "fulfilled").length, 1);
+      const renewal = (attempts.find(r => r.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof f.create>>>).value;
+      assert.equal((await transact(f.workspace, tx => tx.getOrder(renewal.orderId)))!.renewalOf, initial.orderId);
+      f.edit(p => { p.intent.transaction_status = "failed"; });
+      await f.service.reconcile(f.workspace, renewal.orderId);
+      f.setNow("2030-02-04T11:59:59.999Z");
+      assert.equal((await f.service.subscription(f.workspace)).planId, "premium");
+      await f.service.reconcile(f.workspace, renewal.orderId);
+      assert.equal((await f.service.subscription(f.workspace)).graceUntil, grace.graceUntil);
+      f.setNow("2030-02-04T12:00:00Z");
+      assert.equal((await f.restart(fresh()).subscription(f.workspace)).planId, "free");
+      f.edit(p => { p.intent.transaction_status = "success"; });
+      const successes = await Promise.all(Array.from({ length: 3 }, () => f.restart(fresh()).reconcile(f.workspace, renewal.orderId)));
+      assert.ok(successes.every(r => r.status === "paid" && r.periodEnd === "2030-03-01T12:00:00.000Z"));
+      assert.equal((await f.service.subscription(f.workspace)).planId, "premium");
+      const old = [...f.intents.values()].find(p => p.intent.invoice_number === initial.orderId)!;
+      old.intent.transaction_status = "refunded";
+      assert.equal((await f.service.reconcile(f.workspace, initial.orderId)).status, "revoked");
+      assert.equal((await f.service.subscription(f.workspace)).planId, "premium", "old-period refund cannot revoke a newer term");
+      assert.equal(creates(f), 2, "no automatic/duplicate debit or invoice");
+      await f.service.cancel(f.workspace);
+      f.setNow("2030-03-01T12:00:00Z");
+      const cancelled = await f.service.subscription(f.workspace);
+      assert.equal(cancelled.planId, "free"); assert.equal(cancelled.graceUntil, undefined);
+    });
+  }
+  await t.test("monthly calendar clipping and annual expiry have no invented auto-renewal", async () => {
+    const config = fixtureConfig(); config.offer = { ...config.offer, product: "breedlog_premium_monthly" };
+    const f = fixture(transact, config); f.setNow("2030-01-31T12:00:00Z");
+    const o = await f.create();
+    assert.equal((await f.service.reconcile(f.workspace, o.orderId)).periodEnd, "2030-02-28T12:00:00.000Z");
+    await f.service.cancel(f.workspace); f.setNow("2030-02-28T12:00:00Z");
+    assert.equal((await f.service.subscription(f.workspace)).planId, "free");
+    const a = fixture(transact), annual = await a.create(); await a.service.reconcile(a.workspace, annual.orderId);
+    a.setNow("2031-01-01T12:00:00Z"); assert.equal((await a.service.subscription(a.workspace)).planId, "free");
+  });
+  await t.test("cancellation preserves fulfillment of an already payable invoice without resuming renewal", async () => {
+    const config = fixtureConfig(); config.offer = { ...config.offer, product: "breedlog_premium_monthly" };
+    const f = fixture(transact, config), first = await f.create(); await f.service.reconcile(f.workspace, first.orderId);
+    f.setNow("2030-02-01T12:00:00Z"); const renewal = await f.create();
+    await f.service.cancel(f.workspace);
+    assert.equal((await f.service.reconcile(f.workspace, renewal.orderId)).status, "paid");
+    assert.equal((await f.service.subscription(f.workspace)).planId, "premium");
+    f.setNow("2030-03-01T12:00:00Z");
+    assert.equal((await f.service.subscription(f.workspace)).planId, "free");
+    assert.equal((await f.service.subscription(f.workspace)).graceUntil, undefined);
+  });
+
 }

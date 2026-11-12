@@ -114,8 +114,39 @@ test("protected return handler ignores forged browser success and uses only stor
     await assert.rejects(() => createAnnualCheckout(f.service, f.workspace, {
       provider: "paytoday", productCode: "fmd_kit", contact: f.contact,
     }));
+    const cancelled = await fetch(base + "/api/billing/subscription/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    assert.equal(cancelled.status, 200); assert.equal((await cancelled.json()).cancelAtPeriodEnd, true);
   } finally {
     server.closeAllConnections();
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
+});
+
+test("monthly grace expiry enforces read/write visibility on other devices and verified renewal restores preserved records", async () => {
+  const { fixtureConfig } = await import("./helpers/paytoday-fixture");
+  const config = fixtureConfig(); config.offer = { ...config.offer, product: "breedlog_premium_monthly" };
+  const f = fixture(storage.paymentTransaction, config);
+  const paid = new Date(); paid.setUTCMonth(paid.getUTCMonth() - 1); paid.setUTCDate(paid.getUTCDate() - 4);
+  f.setNow(paid.toISOString()); const first = await f.create(); await f.service.reconcile(f.workspace, first.orderId);
+  const ids: number[] = [];
+  for (let i = 0; i < 35; i++) ids.push((await storage.createAnimal(f.workspace, { tagId: `HTTP-GRACE-${i}`, sex: "ewe", status: i === 34 ? "culled" : "active" } as any)).id);
+  const app = express(); app.use(express.json()); const server = createServer(app); await registerRoutes(server, app);
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${(server.address() as any).port}`;
+  const headers = { "Content-Type": "application/json", "x-test-user-id": f.workspace, "x-test-device-id": "another-farm-device" };
+  try {
+    const listed = await (await fetch(base + "/api/animals", { headers })).json(); assert.equal(listed.length, 30);
+    assert.equal((await fetch(base + `/api/animals/${ids[34]}`, { headers })).status, 404);
+    assert.equal((await fetch(base + `/api/animals/${ids[34]}`, { method: "PUT", headers, body: JSON.stringify({ name: "bypass" }) })).status, 404);
+    assert.equal((await storage.getAnimals(f.workspace, {})).length, 35);
+    assert.equal((await fetch(base + "/api/billing/checkout-session", { method: "POST", headers,
+      body: JSON.stringify({ provider: "paytoday", productCode: "premium_monthly", currency: "USD", contact: f.contact }) })).status, 503);
+    const usd = await (await fetch(base + "/api/billing/catalog?billingCountry=US", { headers })).json();
+    assert.equal(usd.pricing.currency, "USD"); assert.equal(usd.pricing.monthlyMinor, null); assert.deepEqual(usd.products, []);
+    const zar = await (await fetch(base + "/api/billing/catalog?billingCountry=US&currency=ZAR", { headers })).json();
+    assert.equal(zar.pricing.currency, "ZAR"); assert.equal(zar.products[0].amountMinor, 7999);
+    f.setNow(new Date().toISOString()); const next = await f.create(); await f.service.reconcile(f.workspace, next.orderId);
+    const restored = await (await fetch(base + "/api/animals", { headers })).json(); assert.equal(restored.length, 35);
+    assert.equal((await fetch(base + `/api/animals/${ids[34]}`, { headers })).status, 200);
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });

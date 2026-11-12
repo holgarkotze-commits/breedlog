@@ -1,3 +1,4 @@
+import { localizedPricing, BREEDLOG_PRICING_VERSION } from "@shared/commercial";
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
@@ -121,7 +122,7 @@ async function getDowngradeVisibilityContext(userId: string): Promise<DowngradeV
   const visibleAnimalIds = getDowngradeVisibleAnimalIdSet(allAnimals);
   const hiddenAnimalIds = new Set(
     allAnimals
-      .filter((animal) => (animal.status ?? "active") === "active" && !visibleAnimalIds.has(animal.id))
+      .filter((animal) => !visibleAnimalIds.has(animal.id))
       .map((animal) => animal.id),
   );
   return { visibleAnimalIds, hiddenAnimalIds };
@@ -273,11 +274,19 @@ export async function registerRoutes(
   });
 
   // === COMMERCIAL ENTITLEMENTS AND BILLING ===
-  app.get("/api/billing/catalog", requireAuth, async (_req, res) => {
+  app.get("/api/billing/catalog", requireAuth, async (req, res) => {
+    const pricing = localizedPricing(typeof req.query.billingCountry === "string" ? req.query.billingCountry : req.get("cf-ipcountry"),
+      typeof req.query.locale === "string" ? req.query.locale : req.get("accept-language")?.split(",")[0],
+      typeof req.query.currency === "string" ? req.query.currency : undefined);
     res.json({
       provider: "test-provider",
-      pricingVersion: "2026-07-locked-commercial-model",
-      products: Object.values(BILLING_CATALOG),
+      pricingVersion: BREEDLOG_PRICING_VERSION,
+      pricing,
+      products: pricing.priceApproved ? Object.values(BILLING_CATALOG)
+        .filter(product => pricing.currency === "NAD" || product.billingPeriod !== "addon")
+        .map(product => ({ productCode: product.productCode, planId: product.planId, billingPeriod: product.billingPeriod,
+          currency: pricing.currency, amountMinor: product.billingPeriod === "monthly" ? pricing.monthlyMinor
+            : product.billingPeriod === "annual" ? pricing.annualMinor : Math.round(product.amountNad * 100) })) : [],
     });
   });
 

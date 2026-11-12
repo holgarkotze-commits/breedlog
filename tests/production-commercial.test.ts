@@ -37,8 +37,8 @@ test("locked commercial catalogue exposes exactly Free and Premium plans", () =>
   assert.equal(BREEDLOG_PLANS.free.limits.aiActionsPerMonth, 10);
   assert.equal(BREEDLOG_PLANS.free.limits.activeDevices, 1);
   assert.equal(BREEDLOG_PLANS.free.limits.retainedWeeklyAutomaticBackups, 4);
-  assert.equal(BREEDLOG_PLANS.premium.priceNadMonthly, 149);
-  assert.equal(BREEDLOG_PLANS.premium.priceNadYearly, 1520);
+  assert.equal(BREEDLOG_PLANS.premium.priceNadMonthly, 79.99);
+  assert.equal(BREEDLOG_PLANS.premium.priceNadYearly, 799);
   assert.equal(BREEDLOG_PLANS.premium.limits.activeAnimals, "unlimited");
   assert.equal(BREEDLOG_PLANS.premium.limits.activeDevices, 3);
   assert.equal(BREEDLOG_PLANS.premium.limits.individualPdfExportsPerMonth, 1000);
@@ -132,8 +132,8 @@ test("deterministic billing checkout, portal, cancellation, and provider events 
   const userId = "commercial-deterministic-billing";
   await storage.clearAllData(userId);
 
-  assert.equal(BILLING_CATALOG.premium_monthly.amountNad, 149);
-  assert.equal(BILLING_CATALOG.premium_annual.amountNad, 1520);
+  assert.equal(BILLING_CATALOG.premium_monthly.amountNad, 79.99);
+  assert.equal(BILLING_CATALOG.premium_annual.amountNad, 799);
 
   const checkout = await createCheckoutSession(storage, userId, "premium_monthly", {
     returnUrl: "https://app.breedlog.test/return",

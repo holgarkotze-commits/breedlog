@@ -1,6 +1,6 @@
 // Private server types. Never serialize PaymentOrder/state to an HTTP response.
 export type AnnualOffer = Readonly<{
-  product: "breedlog_premium_annual";
+  product: "breedlog_premium_annual" | "breedlog_premium_monthly";
   provider: "paytoday";
   amountMinor: number;
   currency: string;
@@ -16,6 +16,7 @@ export type PaymentOrder = {
   offer: AnnualOffer;
   createdAt: string;
   expiresAt: string;
+  renewalOf?: string;
   state: {
     status: "creating" | "pending" | "paid" | "rejected" | "expired" | "revoked";
     intentCipher?: string;

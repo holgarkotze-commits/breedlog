@@ -64,14 +64,14 @@ test("gates default off, no verified contract installed, flags alone cannot enab
     const config = fixtureConfig(); config[key] = "";
     assert.throws(() => assertAnnualConfig(config));
   }
-  for (const patch of [{ currency: "ZAR" }, { amountMinor: 0 }, { amountMinor: 12.5 },
+  for (const patch of [{ currency: "USD" }, { amountMinor: 0 }, { amountMinor: 12.5 },
     { product: "fmd" }, { provider: "other" }, { version: "" }, { merchant: "" }, { contractVersion: "" }]) {
     const config = fixtureConfig(); Object.assign(config.offer, patch);
     assert.throws(() => assertAnnualConfig(config));
   }
   const config = fixtureConfig(); config.enabled = false;
   assert.throws(() => new AnnualPayToday(config, new InMemoryStorage().paymentTransaction, {} as any));
-  assert.equal(BREEDLOG_PLANS.premium.priceNadYearly, 1520, "existing public pricing unchanged");
+  assert.equal(BREEDLOG_PLANS.premium.priceNadYearly, 799, "approved annual pricing");
 });
 
 test("expired annual entitlement downgrades without deleting livestock or extending access", async () => {
