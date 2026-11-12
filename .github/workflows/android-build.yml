@@ -7,12 +7,16 @@ on:
       - main
 
 jobs:
+  certify:
+    uses: ./.github/workflows/release-certification.yml
+
   android-build:
+    needs: certify
     name: Android wrapper build
     runs-on: ubuntu-latest
     env:
       BREEDLOG_NATIVE_BUILD_TARGET: android
-      VITE_BREEDLOG_API_ORIGIN: https://app.breedlog.com
+      VITE_BREEDLOG_API_ORIGIN: https://breedlog.stitchworx.net
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +29,8 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -34,6 +40,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Download release certification
+        uses: actions/download-artifact@v4
+        with:
+          name: release-certification
+          path: artifacts
+
+      - name: Verify release certification
+        run: node --import tsx scripts/check-certification-result.ts
 
       - name: Build web assets
         run: npm run build
