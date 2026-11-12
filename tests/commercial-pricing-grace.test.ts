@@ -18,6 +18,8 @@ test("approved NAD/ZAR minor-unit prices, savings and explicit non-chargeable in
     assert.equal(p.monthlyMinor, null); assert.equal(p.annualMinor, null); assert.equal(p.savingsMinor, null);
   }
   assert.equal(defaultBillingCurrency(undefined, "en-ZA"), "ZAR");
+  assert.equal(defaultBillingCurrency(undefined, "en-ZA;q=0.9,en-US;q=0.8"), "ZAR");
+  assert.equal(defaultBillingCurrency(undefined, "bg-BG"), "EUR");
   assert.equal(defaultBillingCurrency("NA", "en-US"), "NAD");
   assert.equal(localizedPricing("US", "en-US", "ZAR").currency, "ZAR");
   for (const currency of ["NAD", "ZAR"]) for (const interval of ["monthly", "annual"]) {

@@ -68,10 +68,14 @@ export const BILLING_CURRENCIES = ["NAD", "ZAR", "USD", "GBP", "EUR"] as const;
 export type BillingCurrency = typeof BILLING_CURRENCIES[number];
 export type PremiumInterval = "monthly" | "annual";
 export const PAYMENT_GRACE_MS = 72 * 60 * 60 * 1000;
-const EURO_COUNTRIES = new Set(["AT", "BE", "HR", "CY", "EE", "FI", "FR", "DE", "GR", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PT", "SK", "SI", "ES"]);
+const EURO_COUNTRIES = new Set(["AT", "BE", "BG", "HR", "CY", "EE", "FI", "FR", "DE", "GR", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PT", "SK", "SI", "ES"]);
 
 export function defaultBillingCurrency(country?: string, locale?: string): BillingCurrency {
-  const region = country?.toUpperCase() || locale?.split(/[-_]/).find(part => /^[A-Z]{2}$/i.test(part) && part.toLowerCase() !== locale?.split(/[-_]/)[0].toLowerCase())?.toUpperCase();
+  let region = country?.trim().toUpperCase();
+  if (!region && locale) {
+    try { region = new Intl.Locale(locale.split(",")[0].split(";")[0].trim().replace("_", "-")).region; }
+    catch { /* Unrecognized locale is a display hint, never charge authority. */ }
+  }
   if (region === "ZA") return "ZAR";
   if (region === "US") return "USD";
   if (region === "GB") return "GBP";
