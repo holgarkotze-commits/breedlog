@@ -235,8 +235,24 @@ test("reactivating an inactive animal cannot bypass the Free active-animal cap",
     headers: testHeaders(userId, deviceId),
   });
   assert.equal(animals.status, 200);
-  const rows = await animals.json() as Array<{ status?: string }>;
+  const visible = await animals.json() as Array<{ id: number; status?: string }>;
+  assert.equal(visible.length, 30, "Free shows the first 30 registrations, including the inactive original");
+  assert.equal(visible.filter(animal => (animal.status ?? "active") === "active").length, 29);
+  assert.equal(visible.find(animal => animal.id === inactiveAnimal.id)?.status, "inactive");
+  // Verify the cap against the full preserved herd after a signed test-only
+  // upgrade; the visibility projection must not conceal an accidental write.
+  const event = JSON.stringify({ providerEventId: "evt-reactivation-preserved-cap", accountId: userId,
+    eventType: "subscription.created", planId: "premium" });
+  const signature = createHmac("sha256", "webhook-secret").update(event).digest("hex");
+  const upgraded = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, { method: "POST",
+    headers: { "Content-Type": "application/json", "X-BreedLog-Signature": signature }, body: event });
+  assert.equal(upgraded.status, 202);
+  const applied = await upgraded.json() as { idempotent: boolean; entitlement: { planId: string } };
+  assert.equal(applied.idempotent, false); assert.equal(applied.entitlement.planId, "premium");
+  const rows = await (await fetch(`${BASE_URL}/api/animals`, { headers: testHeaders(userId, deviceId) })).json() as Array<{ id: number; status?: string }>;
+  assert.equal(rows.length, 31, "all records were preserved");
   assert.equal(rows.filter((animal) => (animal.status ?? "active") === "active").length, 30);
+  assert.equal(rows.find(animal => animal.id === inactiveAnimal.id)?.status, "inactive");
 });
 
 test("revoked managed account sessions can no longer authenticate protected requests", async () => {

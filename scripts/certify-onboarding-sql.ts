@@ -16,7 +16,7 @@ if (process.env.CI !== "true") {
   } finally {
     await pool.end();
   }
-  for (const script of ["db:push", "test:onboarding-db"]) {
+  for (const script of ["db:push", "test:onboarding-db", "test:paytoday-db"]) {
     const result = spawnSync("npm", ["run", script], {
       stdio: "inherit", timeout: 120_000,
       env: { ...process.env, BREEDLOG_ISOLATED_SQL_CERT: "1" },

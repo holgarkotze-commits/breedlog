@@ -1,5 +1,5 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, date, varchar, jsonb } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, date, varchar, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -512,6 +512,24 @@ export const systemSettings = pgTable("system_settings", {
 
 export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({ id: true, updatedAt: true });
 export type SystemSetting = typeof systemSettings.$inferSelect;
+
+// Prepared annual PayToday candidate. No startup migration applies this table.
+// Provider intent tokens are encrypted inside state; never exposed by API schemas.
+export const breedlogPaymentOrders = pgTable("breedlog_payment_orders", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  workspace: varchar("workspace", { length: 160 }).notNull(),
+  snapshot: jsonb("snapshot").notNull(),
+  state: jsonb("state").notNull(),
+  paymentHash: varchar("payment_hash", { length: 64 }).unique(),
+}, table => [
+  uniqueIndex("breedlog_one_unresolved_annual_checkout").on(table.workspace)
+    .where(sql`COALESCE(${table.state}->>'status','') NOT IN ('paid','revoked') AND (${table.state}->>'checkoutResolved') IS DISTINCT FROM 'true'`),
+]);
+
+export const breedlogProviderTransactions = pgTable("breedlog_provider_transactions", {
+  transactionHash: varchar("transaction_hash", { length: 64 }).primaryKey(),
+  binding: jsonb("binding").notNull(),
+});
 export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
 
 // === FIELD TEST ISSUE REPORTS ===

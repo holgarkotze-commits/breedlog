@@ -6,6 +6,7 @@ import {
   BREEDLOG_PRICING_VERSION,
   getBreedLogPlan,
   monthWindowKey,
+  effectivePaidAccess,
   type BreedLogPlanId,
 } from "@shared/commercial";
 
@@ -67,6 +68,11 @@ export type EntitlementState = {
   customerId?: string;
   effectiveAt: string;
   updatedAt: string;
+  paidUntil?: string;
+  billingPeriod?: "monthly" | "annual";
+  cancelAtPeriodEnd?: boolean;
+  graceUntil?: string;
+  paymentOrderId?: string;
 };
 
 export type UsageState = {
@@ -128,6 +134,9 @@ export type BillingSubscriptionState = {
   status: "pending" | "active" | "grace_period" | "payment_failed" | "cancelled" | "refunded" | "expired";
   currentPeriodStart: string;
   currentPeriodEnd: string;
+  graceUntil?: string;
+  renewalMode?: "customer_initiated" | "recurring";
+  autoRenew?: boolean;
   cancelAtPeriodEnd: boolean;
   addOns: string[];
   updatedAt: string;
@@ -150,14 +159,14 @@ export const BILLING_CATALOG: Record<BillingProductCode, BillingCatalogEntry> = 
     productCode: "premium_monthly",
     planId: "premium",
     billingPeriod: "monthly",
-    amountNad: 149,
+    amountNad: 79.99,
     currency: "NAD",
   },
   premium_annual: {
     productCode: "premium_annual",
     planId: "premium",
     billingPeriod: "annual",
-    amountNad: 1520,
+    amountNad: 799,
     currency: "NAD",
   },
   addon_pdf_250: {
@@ -239,7 +248,7 @@ async function createBillingAuditEntry(storage: IStorage, accountId: string, eve
   return entry;
 }
 
-export async function getEntitlementState(storage: IStorage, accountId: string): Promise<EntitlementState> {
+export async function getEntitlementState(storage: IStorage, accountId: string, at = new Date()): Promise<EntitlementState> {
   // Check the permanent master-workspace marker first.  This key is written by
   // setInternalTestEntitlement at activation time and is never overwritten by
   // billing events.  Checking it here makes internal-test bypass survive server
@@ -270,7 +279,10 @@ export async function getEntitlementState(storage: IStorage, accountId: string):
   }
 
   const raw = await storage.getSystemSetting(settingKeyForEntitlement(accountId));
-  if (raw) return JSON.parse(raw) as EntitlementState;
+  if (raw) {
+    const state = JSON.parse(raw) as EntitlementState;
+    return effectivePaidAccess(state, at);
+  }
   const now = new Date().toISOString();
   return {
     accountId,
@@ -327,7 +339,12 @@ export async function listBillingAuditEntries(storage: IStorage, accountId: stri
 
 export async function getBillingSubscriptionState(storage: IStorage, accountId: string): Promise<BillingSubscriptionState | null> {
   const raw = await storage.getSystemSetting(settingKeyForSubscription(accountId));
-  return raw ? JSON.parse(raw) as BillingSubscriptionState : null;
+  const state = raw ? JSON.parse(raw) as BillingSubscriptionState & { paymentOrderId?: string } : null;
+  if (state?.provider === "paytoday" && state.paymentOrderId) {
+    const access = effectivePaidAccess({ ...state, paidUntil: state.currentPeriodEnd });
+    return { ...state, status: access.status, graceUntil: access.graceUntil };
+  }
+  return state;
 }
 
 export async function saveBillingSubscriptionState(storage: IStorage, subscription: BillingSubscriptionState): Promise<void> {
@@ -393,6 +410,10 @@ export async function completeTestCheckoutSession(
   const session = await getCheckoutSession(storage, sessionId);
   if (!session) {
     throw new EntitlementDeniedError("UNKNOWN_CHECKOUT_SESSION", "Checkout session was not found.", 404);
+  }
+  const currentEntitlement = await getEntitlementState(storage, session.accountId);
+  if (session.provider !== "test-provider" || currentEntitlement.paymentOrderId) {
+    throw new EntitlementDeniedError("PROTECTED_PAYMENT_ORDER", "A protected annual payment cannot be completed through the simulator.", 403);
   }
   if (session.status === "completed") {
     const subscription = await getBillingSubscriptionState(storage, session.accountId);
@@ -472,6 +493,9 @@ export async function cancelBillingSubscription(
   const subscription = await getBillingSubscriptionState(storage, accountId);
   if (!subscription) {
     throw new EntitlementDeniedError("SUBSCRIPTION_NOT_FOUND", "No active billing subscription exists for this account.", 404);
+  }
+  if (subscription.provider === "paytoday") {
+    throw new EntitlementDeniedError("ONCE_OFF_ANNUAL", "Once-off annual access expires automatically; there is no recurring charge to cancel.", 409);
   }
   const now = options.now ?? new Date();
   const updated: BillingSubscriptionState = {
@@ -602,8 +626,7 @@ export async function assertCanCreateAnimal(storage: IStorage, accountId: string
 export function projectDowngradedAnimalVisibility<T extends { id: number; createdAt?: Date | string | null; status?: string | null }>(
   animals: T[],
 ): DowngradeProjection<T> {
-  const activeAnimals = animals
-    .filter((animal) => (animal.status ?? "active") === "active")
+  const activeAnimals = [...animals]
     .sort((a, b) => {
       const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -611,8 +634,8 @@ export function projectDowngradedAnimalVisibility<T extends { id: number; create
     });
   const visibleIds = new Set(activeAnimals.slice(0, BREEDLOG_PLANS.free.limits.activeAnimals as number).map((animal) => animal.id));
   return {
-    visible: animals.filter((animal) => visibleIds.has(animal.id) || (animal.status ?? "active") !== "active"),
-    hidden: animals.filter((animal) => !visibleIds.has(animal.id) && (animal.status ?? "active") === "active"),
+    visible: animals.filter((animal) => visibleIds.has(animal.id)),
+    hidden: animals.filter((animal) => !visibleIds.has(animal.id)),
     rule: "first_30_originally_added",
   };
 }
@@ -726,6 +749,13 @@ export function verifyBillingSignature(rawBody: string | Buffer, signature: stri
 }
 
 export async function applyBillingEvent(storage: IStorage, event: BillingEvent): Promise<{ idempotent: boolean; entitlement: EntitlementState }> {
+  // PayToday has no verified webhook protocol. It can ONLY enter through
+  // protected stored-intent lookup and the transactional annual reconciler.
+  const existingSubscription = await getBillingSubscriptionState(storage, event.accountId);
+  const protectedEntitlement = await getEntitlementState(storage, event.accountId);
+  if (event.provider.toLowerCase() === "paytoday" || existingSubscription?.provider === "paytoday" || protectedEntitlement.paymentOrderId) {
+    throw new EntitlementDeniedError("UNVERIFIED_PROVIDER", "This provider requires protected order reconciliation.", 403);
+  }
   const eventKey = settingKeyForBillingEvent(event.provider, event.providerEventId);
   const existing = await storage.getSystemSetting(eventKey);
   if (existing) {

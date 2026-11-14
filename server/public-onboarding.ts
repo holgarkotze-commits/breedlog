@@ -156,6 +156,9 @@ export function registerPublicOnboardingRoutes(app: Express) {
   // Public trials must not call any paid AI provider or simulated checkout.
   app.use(["/api/ai", "/api/billing"], async (req, res, next) => {
     try {
+      // Approved read-only plan display is available to trials. Checkout,
+      // provider calls and simulated upgrades remain blocked below.
+      if (req.method === "GET" && req.originalUrl.split("?")[0] === "/api/billing/catalog") return next();
       const workspace = req.session.accountId ? await storage.getAccountWorkspace(req.session.accountId) : null;
       if (workspace?.migrationSource === PUBLIC_TRIAL_SOURCE) {
         return res.status(403).json({ code: "COMING_SOON", message: "AI and paid plans are coming soon. Your free trial remains available." });

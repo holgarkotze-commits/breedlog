@@ -1,4 +1,6 @@
-import { db } from "./db";
+import { db, pool } from "./db";
+import { memoryPaymentTransact, sqlPaymentTransact } from "./paytoday-store";
+import type { PaymentTransact } from "./paytoday-types";
 import crypto from "crypto";
 import type {
   Account,
@@ -103,6 +105,7 @@ export class DuplicateAnimalNameError extends Error {
 }
 
 export interface IStorage {
+  paymentTransaction: PaymentTransact;
   // Animals - ALL methods now require userId for data isolation
   getAnimals(userId: string, filters?: { search?: string; status?: string; sex?: string }): Promise<Animal[]>;
   getAnimal(userId: string, id: number): Promise<Animal | undefined>;
@@ -260,6 +263,7 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  paymentTransaction = sqlPaymentTransact(pool);
   private normalizeTagId(tagId?: string | null): string {
     return canonicalizeTag(tagId, undefined);
   }
@@ -1415,6 +1419,7 @@ export class InMemoryStorage implements IStorage {
   private inviteCodes = new Map<number, InviteCode>();
   private activations = new Map<number, UserActivation>();
   private settings = new Map<string, string>();
+  paymentTransaction = memoryPaymentTransact(this.settings);
   private accounts = new Map<string, Account>();
   private accountWorkspacesMap = new Map<string, AccountWorkspace>();
   private accountDevicesMap = new Map<string, AccountDevice>();

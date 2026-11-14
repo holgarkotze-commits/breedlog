@@ -1,3 +1,4 @@
+import { localizedPricing, BREEDLOG_PRICING_VERSION } from "@shared/commercial";
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
@@ -7,6 +8,9 @@ import { z } from "zod";
 import { setupDeviceAuth, registerDeviceAuthRoutes, requireDeviceAuth, requireAdminPin, isAdminPinHeaderValid, getUserId as getDeviceUserId, getDeviceId } from "./device-auth";
 import { registerAIRoutes } from "./ai/breedlog-ai-routes";
 import { registerPublicOnboardingRoutes } from "./public-onboarding";
+import { createAnnualCheckout, registerPayTodayReturns } from "./paytoday-routes";
+import { PaymentRejected, PaymentUnavailable } from "./paytoday-types";
+import { getCheckoutSession } from "./commercial";
 import { parse } from "csv-parse/sync";
 import { buildBreedLogCsvContent, buildBreedLogCsvRows, parseBreedLogCsvRecords, buildBreedLogImportTemplateCsv } from "@shared/import-export";
 import { buildBreedLogSimulationDataset } from "@shared/breedlog-simulation";
@@ -118,7 +122,7 @@ async function getDowngradeVisibilityContext(userId: string): Promise<DowngradeV
   const visibleAnimalIds = getDowngradeVisibleAnimalIdSet(allAnimals);
   const hiddenAnimalIds = new Set(
     allAnimals
-      .filter((animal) => (animal.status ?? "active") === "active" && !visibleAnimalIds.has(animal.id))
+      .filter((animal) => !visibleAnimalIds.has(animal.id))
       .map((animal) => animal.id),
   );
   return { visibleAnimalIds, hiddenAnimalIds };
@@ -270,11 +274,19 @@ export async function registerRoutes(
   });
 
   // === COMMERCIAL ENTITLEMENTS AND BILLING ===
-  app.get("/api/billing/catalog", requireAuth, async (_req, res) => {
+  app.get("/api/billing/catalog", requireAuth, async (req, res) => {
+    const pricing = localizedPricing(typeof req.query.billingCountry === "string" ? req.query.billingCountry : req.get("cf-ipcountry"),
+      typeof req.query.locale === "string" ? req.query.locale : req.get("accept-language")?.split(",")[0],
+      typeof req.query.currency === "string" ? req.query.currency : undefined);
     res.json({
       provider: "test-provider",
-      pricingVersion: "2026-07-locked-commercial-model",
-      products: Object.values(BILLING_CATALOG),
+      pricingVersion: BREEDLOG_PRICING_VERSION,
+      pricing,
+      products: pricing.priceApproved ? Object.values(BILLING_CATALOG)
+        .filter(product => pricing.currency === "NAD" || product.billingPeriod !== "addon")
+        .map(product => ({ productCode: product.productCode, planId: product.planId, billingPeriod: product.billingPeriod,
+          currency: pricing.currency, amountMinor: product.billingPeriod === "monthly" ? pricing.monthlyMinor
+            : product.billingPeriod === "annual" ? pricing.annualMinor : Math.round(product.amountNad * 100) })) : [],
     });
   });
 
@@ -290,6 +302,12 @@ export async function registerRoutes(
   app.post("/api/billing/checkout-session", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
+      if (req.body?.provider === "paytoday") {
+        // No verified provider contract/approved merchant and offer are installed.
+        // Do not construct a live adapter or make a provider request.
+        return res.status(201).json(await createAnnualCheckout(undefined, userId, req.body));
+      }
+      if (req.body?.provider && req.body.provider !== "test-provider") throw new PaymentRejected();
       const body = z.object({
         productCode: z.enum(["premium_monthly", "premium_annual", "addon_pdf_250"]),
         returnUrl: z.string().url().optional(),
@@ -301,6 +319,9 @@ export async function registerRoutes(
       });
       res.status(201).json(session);
     } catch (err) {
+      if (err instanceof PaymentUnavailable || err instanceof PaymentRejected) {
+        return res.status(err.status).json({ code: "PAYMENTS_UNAVAILABLE", message: err.message });
+      }
       if (err instanceof z.ZodError) {
         return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join(".") });
       }
@@ -310,6 +331,8 @@ export async function registerRoutes(
       throw err;
     }
   });
+
+  registerPayTodayReturns(app, requireAuth);
 
   app.post("/api/billing/portal-session", requireAuth, async (req, res) => {
     const userId = getUserId(req);
@@ -333,6 +356,10 @@ export async function registerRoutes(
   if (billingTestRoutesEnabled) {
     app.post("/api/billing/test/checkout/:sessionId/complete", requireAuth, async (req, res) => {
       try {
+        const checkout = await getCheckoutSession(storage, String(req.params.sessionId));
+        if (!checkout || checkout.accountId !== getUserId(req) || checkout.provider !== "test-provider") {
+          return res.status(404).json({ code: "CHECKOUT_NOT_FOUND", message: "Checkout session was not found." });
+        }
         res.json(await completeTestCheckoutSession(storage, String(req.params.sessionId)));
       } catch (err) {
         if (err instanceof EntitlementDeniedError) {
@@ -393,6 +420,16 @@ export async function registerRoutes(
           ? Buffer.from(req.rawBody, "utf8")
           : null;
       const provider = String(req.params.provider || "");
+      // The generic lane is a simulator, not a payment authorization adapter.
+      // Never accept PayToday/FMD/cross-product events even with a valid generic
+      // signature; there is no verified provider webhook contract.
+      if (provider !== "test-provider" || !billingTestRoutesEnabled ||
+          (req.body?.provider && req.body.provider !== provider) ||
+          (req.body?.product && !["premium_monthly", "premium_annual", "addon_pdf_250"].includes(req.body.product)) ||
+          (req.body?.metadata && Object.keys(req.body.metadata).some(key => !["sessionId", "productCode", "simulated"].includes(key))) ||
+          (req.body?.metadata?.productCode && !Object.hasOwn(BILLING_CATALOG, req.body.metadata.productCode))) {
+        return res.status(403).json({ code: "UNVERIFIED_PROVIDER", message: "Provider requires protected order reconciliation." });
+      }
       const signature = req.header("X-BreedLog-Signature");
       const secret = process.env.BILLING_WEBHOOK_SECRET;
       if (!rawBody) {
@@ -401,7 +438,7 @@ export async function registerRoutes(
       if (!verifyBillingSignature(rawBody, signature, secret)) {
         return res.status(401).json({ message: "Invalid billing webhook signature" });
       }
-      const event = billingEventSchema.parse({ ...req.body, provider });
+      const event = billingEventSchema.strict().parse({ ...req.body, provider });
       const result = await applyBillingEvent(storage, event);
       res.status(result.idempotent ? 200 : 202).json(result);
     } catch (err) {
