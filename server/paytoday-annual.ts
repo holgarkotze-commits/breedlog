@@ -126,12 +126,28 @@ export class AnnualPayToday {
     try {
       const created = await this.provider.create(order.id, order.offer, contact,
         `${this.config.returnOrigin}/api/billing/paytoday/return?order=${order.id}`);
-      if (!created.token || !created.url) throw new PaymentRejected();
-      await this.transact(workspace, async tx => {
+      if (typeof created.token !== "string" || !created.token || created.token.length > 4096 || !created.url) throw new PaymentRejected();
+      return await this.transact(workspace, async tx => {
         const saved = checkedOrder(await tx.getOrder(order.id), workspace, this.config);
-        await tx.updateOrderState(saved.id, { status: "pending", intentCipher: seal(created.token, this.config.encryptionKey) });
+        // The provider call is outside the transaction. Invoice recovery may
+        // already have reconciled/refunded this order while create was waiting.
+        // Re-read under the workspace/row lock and only advance the reservation;
+        // never replace the recovered intent or financial/period evidence.
+        const state = saved.state;
+        if (state.intentCipher && open(state.intentCipher, this.config.encryptionKey) !== created.token) throw new PaymentRejected();
+        if (state.status === "creating") {
+          await tx.updateOrderState(saved.id, { ...state, status: "pending",
+            intentCipher: state.intentCipher ?? seal(created.token, this.config.encryptionKey) });
+          return { orderId: saved.id, checkoutUrl: created.url, status: "pending" as const };
+        }
+        if (!state.intentCipher) throw new PaymentRejected();
+        if (state.status === "pending" && !state.checkoutResolved) {
+          return { orderId: saved.id, checkoutUrl: created.url, status: "pending" as const };
+        }
+        const status = state.status === "paid" && state.periodEnd && state.periodEnd <= this.now().toISOString()
+          ? "expired" as const : state.status;
+        return { orderId: saved.id, status, ...(state.periodEnd ? { periodEnd: state.periodEnd } : {}) };
       });
-      return { orderId: order.id, checkoutUrl: created.url, status: "pending" as const };
     } catch { throw new PaymentRejected(); }
   }
 

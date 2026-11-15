@@ -18,6 +18,16 @@ test("isolated PostgreSQL annual payment persistence, concurrency and atomic fau
     // Exercise the actual prepared migration ONLY on a disposable test database.
     await pool.query(readFileSync("migrations/0001_paytoday_annual_candidate.sql", "utf8"));
     await annualConformance(t, sqlPaymentTransact(pool), () => sqlPaymentTransact(pool));
+    await t.test("late-response races retain matching SQL financial hashes and provider ledger bindings", async () => {
+      const inconsistent = await pool.query(`SELECT o.id FROM breedlog_payment_orders o
+        LEFT JOIN breedlog_provider_transactions p ON p.transaction_hash=o.payment_hash
+        WHERE (o.state->>'paymentHash') IS DISTINCT FROM o.payment_hash
+          OR (o.payment_hash IS NOT NULL AND (p.binding IS NULL
+            OR p.binding->>'orderId' IS DISTINCT FROM o.id
+            OR p.binding->>'workspace' IS DISTINCT FROM o.workspace
+            OR p.binding->>'finalizedAt' IS DISTINCT FROM o.state->>'finalizedAt'))`);
+      assert.deepEqual(inconsistent.rows, []);
+    });
     await t.test("database enforces immutable server-priced snapshot", async () => {
       const f = fixture(sqlPaymentTransact(pool)), order = await f.create();
       await assert.rejects(() => pool.query(

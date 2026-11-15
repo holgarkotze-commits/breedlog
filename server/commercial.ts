@@ -361,6 +361,16 @@ export async function saveBillingSubscriptionState(storage: IStorage, subscripti
   );
 }
 
+async function assertSimulatorMayMutate(storage: IStorage, accountId: string, provider?: string): Promise<void> {
+  // Read raw records: rejection must not rebuild entitlements or write any
+  // provisional subscription, idempotency or audit state before this guard.
+  const subscription = parseJson<BillingSubscriptionState | null>(await storage.getSystemSetting(settingKeyForSubscription(accountId)), null);
+  const entitlement = parseJson<EntitlementState | null>(await storage.getSystemSetting(settingKeyForEntitlement(accountId)), null);
+  if (provider?.toLowerCase() === "paytoday" || subscription?.provider.toLowerCase() === "paytoday" || entitlement?.paymentOrderId) {
+    throw new EntitlementDeniedError("UNVERIFIED_PROVIDER", "This provider requires protected order reconciliation.", 403);
+  }
+}
+
 export async function createCheckoutSession(
   storage: IStorage,
   accountId: string,
@@ -418,6 +428,7 @@ export async function completeTestCheckoutSession(
   if (!session) {
     throw new EntitlementDeniedError("UNKNOWN_CHECKOUT_SESSION", "Checkout session was not found.", 404);
   }
+  await assertSimulatorMayMutate(storage, session.accountId, session.provider);
   const currentEntitlement = await getEntitlementState(storage, session.accountId);
   if (session.provider !== "test-provider" || currentEntitlement.paymentOrderId) {
     throw new EntitlementDeniedError("PROTECTED_PAYMENT_ORDER", "A protected annual payment cannot be completed through the simulator.", 403);
@@ -504,6 +515,7 @@ export async function cancelBillingSubscription(
   if (subscription.provider === "paytoday") {
     throw new EntitlementDeniedError("ONCE_OFF_ANNUAL", "Once-off annual access expires automatically; there is no recurring charge to cancel.", 409);
   }
+  await assertSimulatorMayMutate(storage, accountId, subscription.provider);
   const now = options.now ?? new Date();
   const updated: BillingSubscriptionState = {
     ...subscription,
@@ -533,6 +545,7 @@ export async function simulateBillingProviderEvent(
   accountId: string,
   input: { eventType: BillingEvent["eventType"]; providerEventId?: string; now?: Date },
 ) {
+  await assertSimulatorMayMutate(storage, accountId);
   const subscription = await getBillingSubscriptionState(storage, accountId);
   const now = input.now ?? new Date();
   const nextSubscription: BillingSubscriptionState | null = subscription
@@ -758,11 +771,7 @@ export function verifyBillingSignature(rawBody: string | Buffer, signature: stri
 export async function applyBillingEvent(storage: IStorage, event: BillingEvent): Promise<{ idempotent: boolean; entitlement: EntitlementState }> {
   // PayToday has no verified webhook protocol. It can ONLY enter through
   // protected stored-intent lookup and the transactional annual reconciler.
-  const existingSubscription = await getBillingSubscriptionState(storage, event.accountId);
-  const protectedEntitlement = await getEntitlementState(storage, event.accountId);
-  if (event.provider.toLowerCase() === "paytoday" || existingSubscription?.provider === "paytoday" || protectedEntitlement.paymentOrderId) {
-    throw new EntitlementDeniedError("UNVERIFIED_PROVIDER", "This provider requires protected order reconciliation.", 403);
-  }
+  await assertSimulatorMayMutate(storage, event.accountId, event.provider);
   const eventKey = settingKeyForBillingEvent(event.provider, event.providerEventId);
   const existing = await storage.getSystemSetting(eventKey);
   if (existing) {

@@ -107,7 +107,7 @@ export function fixture(transact: PaymentTransact, override?: AnnualPaymentConfi
     fn(entry);
   };
   return {
-    config, calls, intents, service, workspace, contact, create, edit, restart,
+    config, calls, intents, service, workspace, contact, create, edit, restart, provider: adapter, now: () => new Date(now),
     lastInvoice: () => lastInvoice,
     setNow: (date: string) => { now = new Date(date); },
     fail: (value: boolean) => { failure = value; },
@@ -121,6 +121,92 @@ export async function annualConformance(
   freshTransact: () => PaymentTransact = () => transact,
 ) {
   const setting = (w: string, prefix: string) => transact(w, tx => tx.getSetting(prefix + w));
+  for (const outcome of ["pending", "paid", "refunded", "reversed", "failed", "closed", "expired"] as const) {
+    await t.test(`late create after concurrent recovery/${outcome} preserves the committed order and settings`, async () => {
+      const f = fixture(transact);
+      let release!: () => void, created!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const ready = new Promise<void>(resolve => { created = resolve; });
+      let creates = 0;
+      const service = new AnnualPayToday(f.config, freshTransact(), {
+        async create(...args) {
+          creates++;
+          const response = await f.provider.create(...args);
+          created();
+          await gate;
+          return response;
+        },
+        lookup: f.provider.lookup.bind(f.provider),
+      }, f.now);
+      const inFlight = service.create(f.workspace, f.contact);
+      // Observe failures immediately, including when an assertion below fails.
+      const result = inFlight.then(value => ({ value }), error => ({ error }));
+      let before: unknown;
+      try {
+        await ready;
+        const id = f.lastInvoice();
+        // A retry while create is outstanding must not create a second intent.
+        await assert.rejects(() => service.create(f.workspace, f.contact));
+        const recover = () => f.restart(freshTransact(), f.config, true).recoverIntent(f.workspace, id);
+        if (["pending", "failed", "closed"].includes(outcome)) {
+          f.edit(p => { p.intent.transaction_status = outcome === "closed" ? "failed" : outcome;
+            if (outcome === "closed") p.fixtureIntentNonPayable = true; });
+        }
+        await Promise.all(Array.from({ length: 4 }, recover));
+        if (outcome === "refunded" || outcome === "reversed") {
+          f.edit(p => { p.intent.transaction_status = outcome; });
+          await Promise.all(Array.from({ length: 4 }, () => f.restart(freshTransact()).reconcile(f.workspace, id)));
+        }
+        if (outcome === "expired") f.setNow("2032-01-01T12:00:00Z");
+        const snapshot = () => transact(f.workspace, async tx => ({
+          order: await tx.getOrder(id),
+          entitlement: await tx.getSetting("commercial:entitlement:" + f.workspace),
+          subscription: await tx.getSetting("commercial:subscription:" + f.workspace),
+        }));
+        before = await snapshot();
+        release();
+        const completed = await result;
+        assert.ok("value" in completed, "same-intent late response must succeed without a new provider request");
+        assert.deepEqual(await snapshot(), before, "late create must not erase settlement/refund/period/intent evidence or settings");
+        const expected = outcome === "expired" ? "expired" : outcome === "closed" || outcome === "failed" ? "rejected"
+          : outcome === "refunded" || outcome === "reversed" ? "revoked" : outcome;
+        assert.equal(completed.value.status, expected);
+        assert.equal("checkoutUrl" in completed.value, outcome === "pending", "only an outstanding pending checkout may return its URL");
+        if (["paid", "expired", "refunded", "reversed"].includes(outcome)) {
+          f.edit(p => { p.intent.transaction_status = "success"; });
+          await Promise.all(Array.from({ length: 4 }, () => f.restart(freshTransact()).reconcile(f.workspace, id)));
+          assert.deepEqual(await snapshot(), before, "duplicate success cannot regrant refunded access or extend paid periods");
+        }
+        assert.equal(creates, 1);
+      } finally { release(); await result; }
+    });
+  }
+  await t.test("a conflicting late create token is rejected without changing recovered financial evidence", async () => {
+    const f = fixture(transact);
+    let release!: () => void, created!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const ready = new Promise<void>(resolve => { created = resolve; });
+    const service = new AnnualPayToday(f.config, freshTransact(), {
+      async create(...args) {
+        const response = await f.provider.create(...args);
+        created(); await gate;
+        return { ...response, token: "conflicting-synthetic-token" };
+      }, lookup: f.provider.lookup.bind(f.provider),
+    }, f.now);
+    const result = service.create(f.workspace, f.contact).then(value => ({ value }), error => ({ error }));
+    try {
+      await ready;
+      const id = f.lastInvoice();
+      await f.restart(freshTransact(), f.config, true).recoverIntent(f.workspace, id);
+      const snapshot = () => transact(f.workspace, async tx => ({ order: await tx.getOrder(id),
+        entitlement: await tx.getSetting("commercial:entitlement:" + f.workspace),
+        subscription: await tx.getSetting("commercial:subscription:" + f.workspace) }));
+      const before = await snapshot();
+      release();
+      assert.ok("error" in await result);
+      assert.deepEqual(await snapshot(), before);
+    } finally { release(); await result; }
+  });
   await t.test("success atomically binds annual payment, workspace, subscription and fixed period", async () => {
     const f = fixture(transact), o = await f.create();
     assert.deepEqual(Object.keys(o).sort(), ["checkoutUrl", "orderId", "status"]);
