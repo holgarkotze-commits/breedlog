@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { z } from "zod";
 import type { IStorage } from "./storage";
+import type { PaymentTransaction } from "./paytoday-types";
 import {
   BREEDLOG_PLANS,
   BREEDLOG_PRICING_VERSION,
@@ -25,6 +26,33 @@ const BILLING_AUDIT_PREFIX = "commercial:audit:";
 // it first so the internal-test bypass survives server restarts and billing
 // event replay without depending on the billing entitlement key.
 const MASTER_WORKSPACE_PREFIX = "commercial:master_workspace:";
+
+type BillingSettings = Pick<IStorage, "getSystemSetting" | "setSystemSetting">;
+type SimulatorSettings = BillingSettings & Pick<PaymentTransaction, "hasPaymentOrder">;
+
+async function simulatorTransaction<T>(storage: IStorage, accountId: string,
+  run: (settings: SimulatorSettings) => Promise<T>): Promise<T> {
+  let denial: EntitlementDeniedError | undefined;
+  try {
+    return await storage.paymentTransaction(accountId, async tx => {
+      try {
+        // Never call the outer storage or start a nested payment transaction
+        // from a locked simulator operation. All settings/audit writes stage
+        // on the same connection and roll back together on any failure.
+        return await run({ getSystemSetting: key => tx.getSetting(key),
+          setSystemSetting: (key, value) => tx.setSetting(key, value),
+          hasPaymentOrder: () => tx.hasPaymentOrder() });
+      } catch (error) {
+        if (error instanceof EntitlementDeniedError) denial = error;
+        throw error;
+      }
+    });
+  } catch (error) {
+    // SQL sanitizes transaction errors. Preserve only our safe business denial
+    // after rollback; database/provider diagnostics remain redacted.
+    throw denial ?? error;
+  }
+}
 
 export class EntitlementDeniedError extends Error {
   constructor(
@@ -241,7 +269,7 @@ function periodEnd(start: Date, billingPeriod: "monthly" | "annual"): Date {
   return next;
 }
 
-async function createBillingAuditEntry(storage: IStorage, accountId: string, eventType: string, payload: Record<string, unknown>) {
+async function createBillingAuditEntry(storage: BillingSettings, accountId: string, eventType: string, payload: Record<string, unknown>) {
   const auditId = `bill_${crypto.randomUUID().slice(0, 12)}`;
   const entry: BillingAuditEntry = {
     auditId,
@@ -254,7 +282,7 @@ async function createBillingAuditEntry(storage: IStorage, accountId: string, eve
   return entry;
 }
 
-export async function getEntitlementState(storage: IStorage, accountId: string, at = new Date()): Promise<EntitlementState> {
+export async function getEntitlementState(storage: BillingSettings, accountId: string, at = new Date()): Promise<EntitlementState> {
   // Check the permanent master-workspace marker first.  This key is written by
   // setInternalTestEntitlement at activation time and is never overwritten by
   // billing events.  Checking it here makes internal-test bypass survive server
@@ -301,7 +329,7 @@ export async function getEntitlementState(storage: IStorage, accountId: string, 
   };
 }
 
-export async function setEntitlementState(storage: IStorage, state: EntitlementState): Promise<EntitlementState> {
+export async function setEntitlementState(storage: BillingSettings, state: EntitlementState): Promise<EntitlementState> {
   const normalized: EntitlementState = {
     ...state,
     pricingVersion: BREEDLOG_PRICING_VERSION,
@@ -343,7 +371,7 @@ export async function listBillingAuditEntries(storage: IStorage, accountId: stri
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export async function getBillingSubscriptionState(storage: IStorage, accountId: string): Promise<BillingSubscriptionState | null> {
+export async function getBillingSubscriptionState(storage: BillingSettings, accountId: string): Promise<BillingSubscriptionState | null> {
   const raw = await storage.getSystemSetting(settingKeyForSubscription(accountId));
   const state = raw ? JSON.parse(raw) as BillingSubscriptionState & { paymentOrderId?: string } : null;
   if (state?.planId === "premium") {
@@ -353,7 +381,7 @@ export async function getBillingSubscriptionState(storage: IStorage, accountId: 
   return state;
 }
 
-export async function saveBillingSubscriptionState(storage: IStorage, subscription: BillingSubscriptionState): Promise<void> {
+export async function saveBillingSubscriptionState(storage: BillingSettings, subscription: BillingSubscriptionState): Promise<void> {
   await storage.setSystemSetting(
     settingKeyForSubscription(subscription.accountId),
     JSON.stringify(subscription),
@@ -361,12 +389,13 @@ export async function saveBillingSubscriptionState(storage: IStorage, subscripti
   );
 }
 
-async function assertSimulatorMayMutate(storage: IStorage, accountId: string, provider?: string): Promise<void> {
+async function assertSimulatorMayMutate(storage: SimulatorSettings, accountId: string, provider?: string): Promise<void> {
   // Read raw records: rejection must not rebuild entitlements or write any
   // provisional subscription, idempotency or audit state before this guard.
   const subscription = parseJson<BillingSubscriptionState | null>(await storage.getSystemSetting(settingKeyForSubscription(accountId)), null);
   const entitlement = parseJson<EntitlementState | null>(await storage.getSystemSetting(settingKeyForEntitlement(accountId)), null);
-  if (provider?.toLowerCase() === "paytoday" || subscription?.provider.toLowerCase() === "paytoday" || entitlement?.paymentOrderId) {
+  const protectedOrder = await storage.hasPaymentOrder();
+  if (protectedOrder || provider?.toLowerCase() === "paytoday" || subscription?.provider.toLowerCase() === "paytoday" || entitlement?.paymentOrderId) {
     throw new EntitlementDeniedError("UNVERIFIED_PROVIDER", "This provider requires protected order reconciliation.", 403);
   }
 }
@@ -400,7 +429,7 @@ export async function createCheckoutSession(
   return session;
 }
 
-export async function getCheckoutSession(storage: IStorage, sessionId: string): Promise<BillingCheckoutSession | null> {
+export async function getCheckoutSession(storage: BillingSettings, sessionId: string): Promise<BillingCheckoutSession | null> {
   const raw = await storage.getSystemSetting(settingKeyForCheckoutSession(sessionId));
   return raw ? JSON.parse(raw) as BillingCheckoutSession : null;
 }
@@ -424,7 +453,16 @@ export async function completeTestCheckoutSession(
   sessionId: string,
   options: { now?: Date } = {},
 ): Promise<{ session: BillingCheckoutSession; subscription: BillingSubscriptionState; entitlement: EntitlementState }> {
+  // Discovery is read-only; re-read and validate ownership under the lock.
   const session = await getCheckoutSession(storage, sessionId);
+  if (!session) throw new EntitlementDeniedError("UNKNOWN_CHECKOUT_SESSION", "Checkout session was not found.", 404);
+  return simulatorTransaction(storage, session.accountId, locked => completeTestCheckoutSessionLocked(locked, sessionId, session.accountId, options));
+}
+
+async function completeTestCheckoutSessionLocked(storage: SimulatorSettings, sessionId: string, accountId: string,
+  options: { now?: Date }) {
+  const session = await getCheckoutSession(storage, sessionId);
+  if (session && session.accountId !== accountId) throw new EntitlementDeniedError("CHECKOUT_ACCOUNT_CHANGED", "Checkout ownership changed.", 409);
   if (!session) {
     throw new EntitlementDeniedError("UNKNOWN_CHECKOUT_SESSION", "Checkout session was not found.", 404);
   }
@@ -486,7 +524,7 @@ export async function completeTestCheckoutSession(
     updatedAt: now.toISOString(),
   };
   await saveBillingSubscriptionState(storage, subscription);
-  const entitlement = (await applyBillingEvent(storage, {
+  const entitlement = (await applyBillingEventLocked(storage, {
     provider: session.provider,
     providerEventId: `evt_checkout_${sessionId}`,
     accountId: session.accountId,
@@ -508,6 +546,10 @@ export async function cancelBillingSubscription(
   accountId: string,
   options: { atPeriodEnd?: boolean; now?: Date } = {},
 ): Promise<BillingSubscriptionState> {
+  return simulatorTransaction(storage, accountId, locked => cancelBillingSubscriptionLocked(locked, accountId, options));
+}
+
+async function cancelBillingSubscriptionLocked(storage: SimulatorSettings, accountId: string, options: { atPeriodEnd?: boolean; now?: Date }) {
   const subscription = await getBillingSubscriptionState(storage, accountId);
   if (!subscription) {
     throw new EntitlementDeniedError("SUBSCRIPTION_NOT_FOUND", "No active billing subscription exists for this account.", 404);
@@ -526,7 +568,7 @@ export async function cancelBillingSubscription(
   await saveBillingSubscriptionState(storage, updated);
   await createBillingAuditEntry(storage, accountId, "subscription.cancel_requested", { atPeriodEnd: updated.cancelAtPeriodEnd });
   if (options.atPeriodEnd === false) {
-    await applyBillingEvent(storage, {
+    await applyBillingEventLocked(storage, {
       provider: updated.provider,
       providerEventId: `evt_cancel_${updated.subscriptionId}_${now.getTime()}`,
       accountId,
@@ -545,6 +587,11 @@ export async function simulateBillingProviderEvent(
   accountId: string,
   input: { eventType: BillingEvent["eventType"]; providerEventId?: string; now?: Date },
 ) {
+  return simulatorTransaction(storage, accountId, locked => simulateBillingProviderEventLocked(locked, accountId, input));
+}
+
+async function simulateBillingProviderEventLocked(storage: SimulatorSettings, accountId: string,
+  input: { eventType: BillingEvent["eventType"]; providerEventId?: string; now?: Date }) {
   await assertSimulatorMayMutate(storage, accountId);
   const subscription = await getBillingSubscriptionState(storage, accountId);
   const now = input.now ?? new Date();
@@ -569,7 +616,7 @@ export async function simulateBillingProviderEvent(
   if (nextSubscription) {
     await saveBillingSubscriptionState(storage, nextSubscription);
   }
-  const entitlement = (await applyBillingEvent(storage, {
+  const entitlement = (await applyBillingEventLocked(storage, {
     provider: subscription?.provider ?? "test-provider",
     providerEventId: input.providerEventId ?? `evt_${input.eventType}_${now.getTime()}`,
     accountId,
@@ -769,6 +816,10 @@ export function verifyBillingSignature(rawBody: string | Buffer, signature: stri
 }
 
 export async function applyBillingEvent(storage: IStorage, event: BillingEvent): Promise<{ idempotent: boolean; entitlement: EntitlementState }> {
+  return simulatorTransaction(storage, event.accountId, locked => applyBillingEventLocked(locked, event));
+}
+
+async function applyBillingEventLocked(storage: SimulatorSettings, event: BillingEvent): Promise<{ idempotent: boolean; entitlement: EntitlementState }> {
   // PayToday has no verified webhook protocol. It can ONLY enter through
   // protected stored-intent lookup and the transactional annual reconciler.
   await assertSimulatorMayMutate(storage, event.accountId, event.provider);

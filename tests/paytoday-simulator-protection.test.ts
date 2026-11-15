@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { InMemoryStorage } from "../server/storage";
 import { fixture } from "./helpers/paytoday-fixture";
+import { simulatorAtomicity } from "./helpers/paytoday-simulator-concurrency";
+
+test("F1 simulator transaction atomicity in memory", { timeout: 20000 }, async t => {
+  await simulatorAtomicity(t, new InMemoryStorage());
+});
 import { applyBillingEvent, cancelBillingSubscription, completeTestCheckoutSession,
   createCheckoutSession, simulateBillingProviderEvent, EntitlementDeniedError } from "../server/commercial";
 

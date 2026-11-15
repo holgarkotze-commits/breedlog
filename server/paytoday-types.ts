@@ -32,6 +32,7 @@ export type PaymentOrder = {
 };
 
 export interface PaymentTransaction {
+  hasPaymentOrder(): Promise<boolean>;
   bindProviderTransaction(hash: string, binding: ProviderTransactionBinding): Promise<void>;
   getOrder(id: string): Promise<PaymentOrder | undefined>;
   insertOrder(order: PaymentOrder): Promise<void>;

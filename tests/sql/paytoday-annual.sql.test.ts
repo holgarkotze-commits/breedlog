@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { annualConformance, fixture } from "../helpers/paytoday-fixture";
+import { simulatorAtomicity } from "../helpers/paytoday-simulator-concurrency";
 
 test("isolated PostgreSQL annual payment persistence, concurrency and atomic fault retry", async t => {
   if (process.env.CI !== "true" || process.env.BREEDLOG_ISOLATED_SQL_CERT !== "1") {
@@ -17,6 +18,16 @@ test("isolated PostgreSQL annual payment persistence, concurrency and atomic fau
     assert.equal((await pool.query("SELECT current_database() AS name")).rows[0].name, "breedlog_test");
     // Exercise the actual prepared migration ONLY on a disposable test database.
     await pool.query(readFileSync("migrations/0001_paytoday_annual_candidate.sql", "utf8"));
+    const { DatabaseStorage } = await import("../../server/storage");
+    // Hold settlement on an independent pool while simulator uses DatabaseStorage's pool.
+    const { default: pg } = await import("pg");
+    const settlementPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+    try {
+      await simulatorAtomicity(t, new DatabaseStorage(), sqlPaymentTransact(settlementPool), async workspace => ({
+        orders: (await pool.query("SELECT * FROM breedlog_payment_orders WHERE workspace=$1 ORDER BY id", [workspace])).rows,
+        ledger: (await pool.query("SELECT * FROM breedlog_provider_transactions WHERE binding->>'workspace'=$1 ORDER BY transaction_hash", [workspace])).rows,
+      }));
+    } finally { await settlementPool.end(); }
     await annualConformance(t, sqlPaymentTransact(pool), () => sqlPaymentTransact(pool));
     await t.test("late-response races retain matching SQL financial hashes and provider ledger bindings", async () => {
       const inconsistent = await pool.query(`SELECT o.id FROM breedlog_payment_orders o
