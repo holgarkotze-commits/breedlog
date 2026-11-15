@@ -15,7 +15,8 @@ try {
   Invoke-Msi '/i' '' 'install.log'
   $installed = $true
   $roots = @("$env:ProgramFiles\BreedLog", "$env:LOCALAPPDATA\BreedLog")
-  $exe = Get-ChildItem $roots -Filter 'breedlog.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+  # Cargo's package/binary name is breedlog-desktop; productName is the folder.
+  $exe = Get-ChildItem $roots -Filter 'breedlog-desktop.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
   if (!$exe) { throw 'Installed BreedLog executable was not found' }
   $signature = Get-AuthenticodeSignature $exe.FullName
   Write-Host "Installed executable Authenticode status: $($signature.Status)"
@@ -29,6 +30,11 @@ try {
   Invoke-Msi '/i' 'REINSTALL=ALL REINSTALLMODE=vomus' 'reinstall.log'
   if (!(Test-Path $exe.FullName)) { throw 'Reinstall removed the application' }
   Write-Host 'MSI install, application process launch and same-version reinstall passed. Older-version upgrade and trusted signing are separate gates.'
+} catch {
+  # Keep the actionable reason available through the Checks API when a runner
+  # log/archive download is unavailable to the build environment.
+  Write-Host "::error::$($_.Exception.Message)"
+  throw
 } finally {
   if ($installed) { Invoke-Msi '/x' '' 'uninstall.log' }
 }

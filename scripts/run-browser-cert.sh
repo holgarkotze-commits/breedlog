@@ -38,7 +38,8 @@ cat > "$RESULT_FILE" <<JSON
   "suites": [
     "tests/browser-cert/specs/offline-sync.spec.ts",
     "tests/browser-cert/specs/decision-alerts.spec.ts",
-    "tests/browser-cert/specs/hidden-animal-sync.spec.ts"
+    "tests/browser-cert/specs/hidden-animal-sync.spec.ts",
+    "tests/browser-cert/specs/service-worker-isolation.spec.ts"
   ],
   "executedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
