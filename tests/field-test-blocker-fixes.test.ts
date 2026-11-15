@@ -15,7 +15,7 @@ test('app route list includes critical pages and lazy fallback', () => {
   assert.match(app, /RouteErrorBoundary/);
 });
 
-test('data safety guards risky actions and server-empty/local-present', () => {
+test('data safety guards risky actions and replaces authoritative snapshots', () => {
   const settings = read('client/src/pages/Settings.tsx');
   const sync = read('client/src/lib/sync-manager.ts');
   assert.match(settings, /guardRiskyAction/);
@@ -23,7 +23,8 @@ test('data safety guards risky actions and server-empty/local-present', () => {
   assert.match(settings, /Export CSV Backup/);
   assert.match(settings, /performLogout/);
   assert.match(settings, /reloadLocalData/);
-  assert.match(sync, /Server returned no animals, but local animal records exist/);
+  assert.match(sync, /replaceServerSnapshot/);
+  assert.match(read('client/src/lib/indexeddb.ts'), /syncQueue/);
 });
 
 test('backup wording is honest about image references', () => {

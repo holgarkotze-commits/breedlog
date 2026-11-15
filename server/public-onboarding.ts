@@ -39,11 +39,13 @@ async function limitIdentity(identity: string, action: string, limit = 12) {
   // system_settings.key is varchar(64). Hash action and identity together:
   // the fixed prefix plus a complete SHA-256 base64url digest is 54 characters.
   const key = `auth-limit:${crypto.createHash("sha256").update(`${action}\0${identity}`).digest("base64url")}`;
-  const raw = await storage.getSystemSetting(key);
-  const previous = raw ? JSON.parse(raw) : null;
-  const count = previous?.window === window ? previous.count + 1 : 1;
-  await storage.setSystemSetting(key, JSON.stringify({ window, count }), "Authentication abuse protection");
-  if (count > limit) throw new ManagedAuthError("AUTH_RATE_LIMITED", "Too many attempts. Try again in 15 minutes.", 429);
+  let allowed: boolean;
+  try {
+    allowed = await storage.consumeAuthAttempt(key, window, limit);
+  } catch {
+    throw new ManagedAuthError("AUTH_PROTECTION_UNAVAILABLE", "Sign-in protection is temporarily unavailable. Please try again shortly.", 503);
+  }
+  if (!allowed) throw new ManagedAuthError("AUTH_RATE_LIMITED", "Too many attempts. Try again in 15 minutes.", 429);
 }
 
 async function issueRecoveryCode(accountId: string) {

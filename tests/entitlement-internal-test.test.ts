@@ -78,10 +78,15 @@ test("routes.ts calls setInternalTestEntitlement after seedMasterSimulationIfNee
   assert.ok(count >= 1, `Expected ≥1 call to setInternalTestEntitlement, found ${count}`);
 });
 
-test("routes.ts getDowngradeVisibilityContext checks isInternalTestEntitlement", () => {
-  const fnStart = routesSrc.indexOf("getDowngradeVisibilityContext");
-  const fnBody = routesSrc.slice(fnStart, fnStart + 600);
-  assert.match(fnBody, /isInternalTestEntitlement/);
+test("shared request visibility preserves the internal-test bypass without changing ordinary Free", async () => {
+  const { InMemoryStorage } = await import("../server/storage");
+  const { setInternalTestEntitlement } = await import("../server/commercial");
+  const { getAnimalVisibility } = await import("../server/animal-visibility");
+  const store = new InMemoryStorage();
+  for (let i = 0; i < 35; i++) await store.createAnimal("ordinary", { tagId: `I-${i}`, sex: "ewe" } as any);
+  assert.equal((await getAnimalVisibility(store, "ordinary"))!.hiddenAnimalIds.size, 5);
+  await setInternalTestEntitlement(store, "ordinary");
+  assert.equal(await getAnimalVisibility(store, "ordinary"), null);
 });
 
 // ─── 5. planId stays free (no elevated subscription) ─────────────────────────

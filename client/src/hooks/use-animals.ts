@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertAnimal, type AnimalWithRelations } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue, findPendingSyncItemByOperationId, deleteFromStore } from "@/lib/indexeddb";
+import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue, findPendingSyncItemByOperationId, deleteFromStore, replaceServerSnapshot } from "@/lib/indexeddb";
 import { syncManager } from "@/lib/sync-manager";
 import { clearExpiredOperationCache, getOrCreateOperationId } from "@/lib/idempotency";
 import { splitTagInput } from "@shared/tag-utils";
@@ -23,13 +23,7 @@ async function normalizeTagForClient(tagId?: string | null, explicitPrefix?: str
 }
 
 async function pruneHiddenAnimalsFromCache(serverAnimals: AnimalWithRelations[]) {
-  const serverIds = new Set(serverAnimals.map((animal) => animal.id));
-  const cachedAnimals = await getAllFromStore<AnimalWithRelations>("animals");
-  await Promise.all(
-    cachedAnimals
-      .filter((animal) => animal.id > 0 && !serverIds.has(animal.id))
-      .map((animal) => deleteFromStore("animals", animal.id)),
-  );
+  await replaceServerSnapshot({ animals: serverAnimals });
 }
 
 class AnimalVisibilityError extends Error {}
@@ -58,9 +52,10 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
         });
         if (!res.ok) throw new Error("Failed to fetch animals");
         const data = api.animals.list.responses[200].parse(await res.json());
-        await putManyInStore("animals", data);
         if (!filters?.search && !filters?.status && !filters?.sex) {
           await pruneHiddenAnimalsFromCache(data);
+        } else {
+          await putManyInStore("animals", data);
         }
         return data;
       } catch (error) {

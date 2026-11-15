@@ -208,7 +208,7 @@ test("Fix 2c: normal free account still receives AI quota enforcement", async ()
 test("Fix 2d: reset farm data remains empty (clearAllData is called in handler)", () => {
   // Source-level: the handler must call clearAllData after the pre-check
   const resetStart = routesSrc.indexOf('"/api/reset-all-data"');
-  const resetBlock = routesSrc.slice(resetStart, resetStart + 1200);
+  const resetBlock = routesSrc.slice(resetStart, routesSrc.indexOf("\n  // ===", resetStart + 30));
   assert.match(resetBlock, /clearAllData\(/, "reset handler must call clearAllData");
   assert.match(resetBlock, /getEntitlementState\(/, "reset handler must read entitlement before reset");
   assert.match(resetBlock, /isInternalTestEntitlement\(/, "reset handler must check internal-test predicate");

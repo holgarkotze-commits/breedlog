@@ -59,7 +59,7 @@ type EntitlementResponse = {
   };
   downgradeProjection: {
     visibleAnimalIds: number[];
-    hiddenAnimalIds: number[];
+    hiddenAnimalCount: number;
     rule: string;
   };
 };
@@ -923,7 +923,7 @@ export default function Settings() {
   };
 
   const currentPlan = entitlementData ? BREEDLOG_PLANS[entitlementData.entitlement.planId] : null;
-  const hiddenAnimalCount = entitlementData?.downgradeProjection.hiddenAnimalIds.length ?? 0;
+  const hiddenAnimalCount = entitlementData?.downgradeProjection.hiddenAnimalCount ?? 0;
   const visibleAnimalCount = entitlementData?.downgradeProjection.visibleAnimalIds.length ?? 0;
   const runtimePlatform = detectRuntimePlatform();
   const configuredApiOrigin = getConfiguredApiOrigin();
@@ -939,7 +939,7 @@ export default function Settings() {
           <CardHeader><CardTitle>Farmer account</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm break-all">{account.email}</p>
-            {isTrial && <p className="text-sm">Free trial: 30 active animals, 1 active device, 5 individual PDFs per month. No card or charge. Paid plans and AI are coming soon.</p>}
+            {isTrial && <p className="text-sm">Free trial: First 30 registered animals, including inactive records, 1 active device, 5 individual PDFs per month. No card or charge. Paid plans and AI are coming soon.</p>}
             <p className="text-xs text-muted-foreground">Keep your saved recovery code private. Made by STITCH WORX.</p>
             <Button variant="outline" onClick={() => void performLogout()} data-testid="button-account-signout">Sign out</Button>
           </CardContent>

@@ -4,7 +4,7 @@ import {
   removeSyncedItems,
   purgeStuckSyncItems,
   incrementSyncItemFailures,
-  putManyInStore,
+  replaceServerSnapshot,
   getAllFromStore,
   setLastSyncTime,
   deleteFromStore,
@@ -190,10 +190,12 @@ class SyncManager {
 
     try {
       const pushResult = await this.pushChanges();
+      const pullResult = await this.pullData();
+      this.notifySyncComplete();
       if (pushResult.retryableCount > 0) {
         throw new Error(`${pushResult.retryableCount} items could not be synced`);
       }
-      await this.pullData();
+      if (pullResult.failedCount > 0) throw new Error('Latest workspace data could not be refreshed');
       await removeSyncedItems();
       
       const now = Date.now();
@@ -402,12 +404,17 @@ class SyncManager {
     let successCount = 0;
     let failedCount = 0;
 
-    // Pull data in parallel for faster sync
+    const { getCurrentUserId } = await import('./indexeddb');
+    const owner = await getCurrentUserId();
+    const snapshot: Record<string, any[]> = {};
+    // These are full authoritative collections in both manual and automatic
+    // sync. No cursor/delta response can be treated as a full snapshot.
     await Promise.all(endpoints.map(async ({ url, store }) => {
       try {
         const response = await fetch(url, { 
           credentials: 'include',
-          headers 
+          headers,
+          cache: 'no-store',
         });
         
         // Check content type before parsing
@@ -420,23 +427,21 @@ class SyncManager {
         
         const data = await response.json();
         const items = Array.isArray(data) ? data : data ? [data] : [];
-        if (store === 'animals' && items.length === 0) {
-          const localAnimals = await getAllFromStore<any>('animals');
-          if (Array.isArray(localAnimals) && localAnimals.length > 0) {
-            console.warn('[SyncManager] Server returned no animals, but local animal records exist. Keeping local data to prevent silent replacement.');
-            failedCount++;
-            return;
-          }
-        }
-        if (items.length > 0) {
-          await putManyInStore(store, items);
-        }
+        snapshot[store] = items;
         successCount++;
       } catch (error) {
         console.warn(`[SyncManager] Failed to pull ${store}:`, error);
         failedCount++;
       }
     }));
+    if (failedCount === 0) {
+      const response = await fetch('/api/device/info', { credentials: 'include', cache: 'no-store', headers });
+      const session = response.ok ? await response.json() : null;
+      if (!owner || owner !== await getCurrentUserId() || !session?.registered || session.userId !== owner) {
+        throw new Error('Workspace changed during refresh. Sign in again before syncing.');
+      }
+      await replaceServerSnapshot(snapshot);
+    }
     
     return { successCount, failedCount };
   }
@@ -526,12 +531,12 @@ class SyncManager {
       this.updateState({ failedItems: pushResult.failedCount });
 
       // Determine result based on push AND pull phases
-      const hasErrors = pushResult.failedCount > 0 || pullResult.failedCount > 0;
+      const hasErrors = pushResult.failedCount > 0 || pushResult.retryableCount > 0 || pullResult.failedCount > 0;
       
       if (hasErrors) {
         const errorParts = [];
-        if (pushResult.failedCount > 0) {
-          errorParts.push(`${pushResult.failedCount} item(s) failed to push`);
+        if (pushResult.failedCount + pushResult.retryableCount > 0) {
+          errorParts.push(`${pushResult.failedCount + pushResult.retryableCount} item(s) failed to push`);
         }
         if (pullResult.failedCount > 0) {
           errorParts.push(`${pullResult.failedCount} endpoint(s) failed to pull`);

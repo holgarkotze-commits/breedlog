@@ -70,6 +70,21 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Verify debug emulator install, launch and replacement
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash scripts/verify-android-install.sh android/app/build/outputs/apk/debug/app-debug.apk
+
       - name: Prepare optional Android release signing
         id: prepare-signing
         shell: bash
@@ -123,7 +138,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          apksigner verify --print-certs android/app/build/outputs/apk/release/*.apk
+          signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$signer"
+          "$signer" verify --verbose --print-certs android/app/build/outputs/apk/release/*.apk
 
       - name: Upload signed release Android artifacts
         if: steps.prepare-signing.outputs.release_status == 'signed'

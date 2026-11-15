@@ -225,6 +225,7 @@ export interface IStorage {
   
   // System Settings (global app config)
   getSystemSetting(key: string): Promise<string | undefined>;
+  consumeAuthAttempt(key: string, window: number, limit: number): Promise<boolean>;
   setSystemSetting(key: string, value: string, description?: string): Promise<void>;
   deleteSystemSetting(key: string): Promise<void>;
   listSystemSettings(prefix: string): Promise<Array<{ key: string; value: string }>>;
@@ -1050,6 +1051,30 @@ export class DatabaseStorage implements IStorage {
   }
   
   // === SYSTEM SETTINGS ===
+  async consumeAuthAttempt(key: string, window: number, limit: number): Promise<boolean> {
+    // One statement holds the unique-key row lock through increment + RETURNING.
+    // No read/modify/write gap across requests, connections or server processes.
+    // An old-window request cannot roll a newer counter back at the boundary.
+    // Malformed persisted JSON/counters cause an error, never a fresh allowance.
+    const result = await pool.query(`
+      INSERT INTO system_settings (key, value, description)
+      VALUES ($1, jsonb_build_object('window', $2::bigint, 'count', 1)::text, 'Authentication abuse protection')
+      ON CONFLICT (key) DO UPDATE SET
+        value = CASE WHEN (system_settings.value::jsonb->>'window')::bigint < $2::bigint
+          THEN jsonb_build_object('window', $2::bigint, 'count', 1)::text
+          ELSE jsonb_build_object(
+            'window', (system_settings.value::jsonb->>'window')::bigint,
+            'count', LEAST((system_settings.value::jsonb->>'count')::bigint + 1, $3::bigint + 1)
+          )::text END,
+        updated_at = now()
+      WHERE (system_settings.value::jsonb->>'count')::bigint >= 1
+        AND (system_settings.value::jsonb->>'window')::bigint >= 0
+      RETURNING value`, [key, window, limit]);
+    if (!result.rows.length) return false;
+    const state = JSON.parse(result.rows[0].value);
+    return state.window === window && Number.isSafeInteger(state.count) && state.count > 0 && state.count <= limit;
+  }
+
   async getSystemSetting(key: string): Promise<string | undefined> {
     const results = await db.select()
       .from(systemSettings)
@@ -1808,6 +1833,18 @@ export class InMemoryStorage implements IStorage {
     for (const userId of userIds) {
       this.users.delete(userId);
     }
+  }
+  async consumeAuthAttempt(key: string, window: number, limit: number): Promise<boolean> {
+    // No await between read and write: atomic within this in-memory instance.
+    const raw = this.settings.get(key);
+    const previous = raw ? JSON.parse(raw) : null;
+    if (previous && (!Number.isSafeInteger(previous.window) || !Number.isSafeInteger(previous.count) || previous.count < 1)) {
+      throw new Error("Invalid authentication counter");
+    }
+    const state = !previous || previous.window < window ? { window, count: 1 }
+      : { window: previous.window, count: Math.min(previous.count + 1, limit + 1) };
+    this.settings.set(key, JSON.stringify(state));
+    return state.window === window && state.count <= limit;
   }
   async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
   async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }

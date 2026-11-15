@@ -8,7 +8,8 @@ const DEVICE_OFFLINE_HEALTH = 'da05aabb-cc11-2233-4455-667788990055';
 const DEVICE_OFFLINE_MATING = 'da06aabb-cc11-2233-4455-667788990066';
 const DEVICE_OFFLINE_MATING_UPDATE = 'da07aabb-cc11-2233-4455-667788990077';
 const DEVICE_SYNC_DEDUP = 'da08aabb-cc11-2233-4455-667788990088';
-const INVITE_CODE = 'U2A2ZAVQ';
+// Every browser fixture gets its own ordinary beta workspace, never the shared master simulation.
+const inviteCodes = new Map<string, string>();
 
 async function registerDevice(baseURL: string, deviceId: string): Promise<string> {
   const res = await fetch(`${baseURL}/api/device/register`, {
@@ -22,10 +23,17 @@ async function registerDevice(baseURL: string, deviceId: string): Promise<string
 }
 
 async function validateInviteCode(baseURL: string, deviceId: string): Promise<void> {
+  if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(baseURL)) throw new Error('Browser fixture creation requires localhost');
+  const created = await fetch(`${baseURL}/api/admin/invite-codes`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Pin': process.env.ADMIN_PIN || '0000' },
+    body: JSON.stringify({ notes: 'Isolated browser certification', expiryDays: 30, maxUses: 2 }),
+  });
+  if (created.status !== 201) throw new Error(`fixture invite creation failed: ${created.status}`);
+  const invite = await created.json(); inviteCodes.set(deviceId, invite.code);
   const res = await fetch(`${baseURL}/api/beta/validate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code: INVITE_CODE, deviceId, deviceType: 'desktop' }),
+    body: JSON.stringify({ code: inviteCodes.get(deviceId), deviceId, deviceType: 'desktop' }),
   });
   if (!res.ok) throw new Error(`validate failed: ${res.status} ${await res.text()}`);
   const data = (await res.json()) as { success: boolean };
