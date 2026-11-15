@@ -18,14 +18,15 @@ async function registerDevice(baseURL: string, deviceId: string): Promise<string
     body: JSON.stringify({ deviceId, deviceName: 'Decision Alert E2E Spec' }),
   });
   if (!res.ok) throw new Error(`register failed: ${res.status} ${await res.text()}`);
-  const data = (await res.json()) as { deviceToken: string };
-  return data.deviceToken;
+  const data = (await res.json()) as { token: string };
+  if (!data.token) throw new Error("Device fixture returned no token");
+  return data.token;
 }
 
 async function validateInviteCode(baseURL: string, deviceId: string): Promise<void> {
   if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(baseURL)) throw new Error('Browser fixture creation requires localhost');
   const created = await fetch(`${baseURL}/api/admin/invite-codes`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Pin': process.env.ADMIN_PIN || '0000' },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `AdminPin ${process.env.ADMIN_PIN || '0000'}` },
     body: JSON.stringify({ notes: 'Isolated browser certification', expiryDays: 30, maxUses: 2 }),
   });
   if (created.status !== 201) throw new Error(`fixture invite creation failed: ${created.status}`);
@@ -38,6 +39,13 @@ async function validateInviteCode(baseURL: string, deviceId: string): Promise<vo
   if (!res.ok) throw new Error(`validate failed: ${res.status} ${await res.text()}`);
   const data = (await res.json()) as { success: boolean };
   if (!data.success) throw new Error('validate returned success=false');
+}
+
+async function fixtureRam(baseURL: string, token: string): Promise<number> {
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  const response = await fetch(`${baseURL}/api/animals`, { method: 'POST', headers, body: JSON.stringify({ tagId: `RAM-${Date.now()}`, sex: 'ram' }) });
+  if (!response.ok) throw new Error(`fixture ram creation failed: ${response.status}`);
+  return (await response.json()).id;
 }
 
 async function prepareAndOpenDashboard(page: Page, deviceId: string, deviceToken: string): Promise<void> {
@@ -75,7 +83,7 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
     await fetch(`${baseURL}/api/mating-groups`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
-      body: JSON.stringify({ name: 'DA Cert Ram Group', dateOut: dateOutStr }),
+      body: JSON.stringify({ ramId: await fixtureRam(baseURL, deviceToken), dateIn: new Date().toISOString().slice(0, 10), status: 'active', name: 'DA Cert Ram Group', dateOut: dateOutStr }),
     });
 
     await prepareAndOpenDashboard(page, DEVICE_ALERT, deviceToken);
@@ -144,7 +152,7 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
     await fetch(`${baseURL}/api/mating-groups`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
-      body: JSON.stringify({ name: 'DA Dismiss Test Group', dateOut: dateOutStr }),
+      body: JSON.stringify({ ramId: await fixtureRam(baseURL, deviceToken), dateIn: new Date().toISOString().slice(0, 10), status: 'active', name: 'DA Dismiss Test Group', dateOut: dateOutStr }),
     });
 
     await prepareAndOpenDashboard(page, DEVICE_DISMISS, deviceToken);
@@ -179,6 +187,11 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
 
     const deviceToken = await registerDevice(baseURL, DEVICE_REAPPEAR);
     await validateInviteCode(baseURL, DEVICE_REAPPEAR);
+    const group = await fetch(`${baseURL}/api/mating-groups`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deviceToken}` },
+      body: JSON.stringify({ name: 'Active lambing-season fixture', ramId: await fixtureRam(baseURL, deviceToken), dateIn: '2026-07-01', status: 'active' }),
+    });
+    expect(group.status).toBe(201);
 
     // Freeze browser time to 15 July 2026 — deterministically inside lambing season
     // regardless of when this test runs in the real calendar.
@@ -457,7 +470,7 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
     await page.waitForLoadState('networkidle');
 
     // Step 3: Seed the syncQueue with a pending offline mating-group create.
-    const seeded = await page.evaluate(async (dateOut: string) => {
+    const seeded = await page.evaluate(async ({dateOut, ramId}: {dateOut: string; ramId: number}) => {
       return new Promise<boolean>((resolve, reject) => {
         const openReq = indexedDB.open('breedlog-offline', 4);
         openReq.onerror = () => reject(openReq.error);
@@ -475,7 +488,7 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
             entity: 'matingGroups',
             data: {
               name: 'Offline Ram Group Alpha',
-              dateOut,
+              dateOut, ramId, dateIn: new Date().toISOString().slice(0, 10), status: 'active',
             },
             tempId,
             timestamp: Date.now(),
@@ -489,7 +502,7 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
           tx.onerror = () => { db.close(); reject(tx.error); };
         };
       });
-    }, dateOutStr);
+    }, {dateOut: dateOutStr, ramId: await fixtureRam(baseURL, deviceToken)});
 
     if (!seeded) throw new Error('Failed to seed syncQueue — store not found in breedlog-offline');
 
@@ -525,7 +538,7 @@ test.describe('Decision Assist alerts – Dashboard certification', () => {
         Authorization: `Bearer ${deviceToken}`,
       },
       credentials: 'include',
-      body: JSON.stringify({ name: 'Group To Be Updated Offline', dateOut: farDateStr }),
+      body: JSON.stringify({ ramId: await fixtureRam(baseURL, deviceToken), dateIn: new Date().toISOString().slice(0, 10), status: 'active', name: 'Group To Be Updated Offline', dateOut: farDateStr }),
     });
     if (!groupRes.ok) throw new Error(`Failed to create mating group: ${groupRes.status}`);
     const { id: groupId } = await groupRes.json();

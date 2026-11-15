@@ -140,7 +140,8 @@ jobs:
           set -euo pipefail
           signer=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           test -n "$signer"
-          "$signer" verify --verbose --print-certs android/app/build/outputs/apk/release/*.apk
+          export PATH="$(dirname "$signer"):$PATH"
+          apksigner verify --print-certs --verbose android/app/build/outputs/apk/release/*.apk
 
       - name: Upload signed release Android artifacts
         if: steps.prepare-signing.outputs.release_status == 'signed'

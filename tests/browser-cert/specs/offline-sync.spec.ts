@@ -22,7 +22,8 @@ test.describe('BreedLog offline + sync certification', () => {
 
     await resetServer(baseURL);
     await context.setExtraHTTPHeaders(authHeaders);
-    await page.goto('/');
+    await page.goto('/auth/login');
+    await page.waitForLoadState('networkidle');
     await page.evaluate(async () => {
       const db = await import(/* @vite-ignore */ '/src/lib/indexeddb.ts');
       await db.setCurrentUserId('browser-cert-user');

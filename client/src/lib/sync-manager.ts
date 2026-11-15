@@ -314,6 +314,26 @@ class SyncManager {
   }
 
   private async processSyncItem(item: SyncQueueItem): Promise<void> {
+    const data = { ...(item.data as Record<string, any>) };
+    for (const key of ['animalId', 'damId', 'sireId', 'ramId', 'eweId', 'matingGroupId']) {
+      if (typeof data[key] === 'number' && data[key] < 0) {
+        const mapped = await getServerIdForTemp(data[key], key === 'matingGroupId' ? 'matingGroups' : 'animals');
+        if (!mapped) throw new Error('Offline relationship is waiting for its original record to sync');
+        data[key] = mapped;
+      }
+    }
+    if (Array.isArray(data.eweIds)) data.eweIds = await Promise.all(data.eweIds.map(async (id: number) => {
+      if (id >= 0) return id;
+      const mapped = await getServerIdForTemp(id, 'animals');
+      if (!mapped) throw new Error('Offline group is waiting for its original animal to sync');
+      return mapped;
+    }));
+    if (Array.isArray(data.treatments)) data.treatments = await Promise.all(data.treatments.map(async (row: any) => {
+      if (!(row.animalId < 0)) return row;
+      const mapped = await getServerIdForTemp(row.animalId, 'animals');
+      if (!mapped) throw new Error('Offline treatment is waiting for its original animal to sync');
+      return { ...row, animalId: mapped };
+    }));
     const entityEndpoints: Record<string, string> = {
       animals: '/api/animals',
       breedingEvents: '/api/breeding-events',
@@ -322,17 +342,18 @@ class SyncManager {
       healthRecords: '/api/health-records',
       documents: '/api/documents',
       farmSettings: '/api/farm-settings',
+      flockHealthEvents: '/api/flock-health-events',
+      animalImages: `/api/animals/${data.animalId}/images`,
     };
 
     const endpoint = entityEndpoints[item.entity];
     if (!endpoint) {
-      console.warn(`[SyncManager] Unknown entity: ${item.entity}`);
-      return;
+      throw new Error(`Unsupported sync entity retained for recovery: ${item.entity}`);
     }
 
     switch (item.action) {
       case 'create':
-        const payloadData = item.data as Record<string, unknown>;
+        const payloadData = data;
         const idempotencyKey = item.operationId || (typeof payloadData.clientId === "string" ? payloadData.clientId : undefined);
         const payload = idempotencyKey
           ? { ...payloadData, clientId: idempotencyKey }
@@ -359,10 +380,11 @@ class SyncManager {
           }
         }
         if (updateId > 0) {
-          const dataWithId = { ...(item.data as Record<string, unknown>), id: updateId };
-          await apiRequest('PUT', `${endpoint}/${updateId}`, dataWithId);
+          const dataWithId = { ...data, id: updateId };
+          const method = item.entity === 'matingGroups' ? 'PATCH' : item.entity === 'farmSettings' ? 'POST' : 'PUT';
+          await apiRequest(method, item.entity === 'farmSettings' ? endpoint : `${endpoint}/${updateId}`, dataWithId);
         } else {
-          console.log(`[SyncManager] Skipping update for unsynced temp ID: ${updateId}`);
+          throw new Error('Offline update is waiting for its original record to sync');
         }
         break;
       case 'delete':

@@ -377,6 +377,9 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
           if (item.action === 'delete') { rows.delete(id); continue; }
           const row = { ...rows.get(id), ...data, id };
           if (name === 'animals') {
+            // Derived detail objects from an older Premium read are not writes.
+            // Never let a retained patch reintroduce their hidden nested rows.
+            for (const key of ['dam', 'sire', 'grandparents', 'offspringAsDam', 'offspringAsSire']) delete row[key];
             for (const parent of ['dam', 'sire']) {
               if (row[`${parent}Id`] > 0 && !visibleIds.has(row[`${parent}Id`])) {
                 row[`${parent}Id`] = null;

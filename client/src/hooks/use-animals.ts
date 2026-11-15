@@ -32,6 +32,7 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
   const queryKey = [api.animals.list.path, filters];
   
   return useQuery({
+    networkMode: "always",
     queryKey,
     queryFn: async () => {
       const url = new URL(api.animals.list.path, window.location.origin);
@@ -82,6 +83,7 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
 
 export function useAnimal(id: number) {
   return useQuery({
+    networkMode: "always",
     queryKey: [api.animals.get.path, id],
     queryFn: async () => {
       // HYBRID FETCH: Check local IndexedDB first for temp IDs (negative) or as fallback
@@ -158,6 +160,7 @@ export function useCreateAnimal() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (data: InsertAnimal) => {
       clearExpiredOperationCache();
       const operationId = getOrCreateOperationId("animals", data as Record<string, unknown>);
@@ -372,6 +375,7 @@ export function useUpdateAnimal() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async ({ id, ...updates }: { id: number } & Partial<InsertAnimal>) => {
       // Use robust connectivity check (actual API ping, not just navigator.onLine)
       const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
@@ -517,6 +521,7 @@ export function useUpdateAnimal() {
 
 export function useFamilyTree(id: number) {
   return useQuery({
+    networkMode: "always",
     queryKey: [api.animals.familyTree.path, id],
     queryFn: async () => {
       const url = buildUrl(api.animals.familyTree.path, { id });
@@ -539,6 +544,7 @@ export function useDeleteAnimal() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (id: number) => {
       const existing = await getFromStore<AnimalWithRelations>("animals", id);
       await deleteFromStore("animals", id);
@@ -547,14 +553,8 @@ export function useDeleteAnimal() {
       const isOnline = await isApiReachable();
       if (isOnline && id > 0) {
         const url = buildUrl(api.animals.delete.path, { id });
-        const token = getDeviceToken();
-        const headers: Record<string, string> = {};
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-        const res = await fetch(url, {
-          method: api.animals.delete.method,
-          headers,
-          credentials: "include",
-        });
+        const { apiRequest } = await import("@/lib/queryClient");
+        const res = await apiRequest(api.animals.delete.method, url);
         if (res.ok) return;
         if (res.status >= 400 && res.status < 500) {
           throw new Error("Failed to delete animal");
@@ -590,6 +590,7 @@ export function useDeleteAnimal() {
 // Animal Images Hooks
 export function useAnimalImages(animalId: number) {
   return useQuery({
+    networkMode: "always",
     queryKey: ["/api/animals", animalId, "images"],
     queryFn: async () => {
       try {
@@ -624,6 +625,7 @@ export function useUploadAnimalImage() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async ({ animalId, imageData, fileName, caption }: { animalId: number; imageData: string; fileName: string; caption?: string }) => {
       // OFFLINE-FIRST: Always save locally first for instant response
       const tempId = -Date.now();
