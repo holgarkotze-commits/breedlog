@@ -283,7 +283,7 @@ export async function registerRoutes(
       pricingVersion: BREEDLOG_PRICING_VERSION,
       pricing,
       products: pricing.priceApproved ? Object.values(BILLING_CATALOG)
-        .filter(product => pricing.currency === "NAD" || product.billingPeriod !== "addon")
+        .filter(product => product.billingPeriod !== "addon")
         .map(product => ({ productCode: product.productCode, planId: product.planId, billingPeriod: product.billingPeriod,
           currency: pricing.currency, amountMinor: product.billingPeriod === "monthly" ? pricing.monthlyMinor
             : product.billingPeriod === "annual" ? pricing.annualMinor : Math.round(product.amountNad * 100) })) : [],
@@ -615,7 +615,7 @@ export async function registerRoutes(
       const nextStatus = input.status ?? existing.status ?? "active";
       const wasActive = (existing.status ?? "active") === "active";
       if (!wasActive && nextStatus === "active") {
-        await assertCanCreateAnimal(storage, userId);
+        await assertCanCreateAnimal(storage, userId, true);
       }
       const animal = await storage.updateAnimal(userId, animalId, input);
       res.json(animal);

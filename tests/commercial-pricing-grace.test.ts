@@ -4,7 +4,7 @@ import { localizedPricing, defaultBillingCurrency, effectivePaidAccess, BREEDLOG
 import { assertAnnualConfig } from "../server/paytoday-annual";
 import { fixtureConfig } from "./helpers/paytoday-fixture";
 import { InMemoryStorage } from "../server/storage";
-import { getEntitlementState, projectDowngradedAnimalVisibility } from "../server/commercial";
+import { getEntitlementState, projectDowngradedAnimalVisibility, assertCanCreateAnimal, createCheckoutSession } from "../server/commercial";
 
 test("approved NAD/ZAR minor-unit prices, savings and explicit non-chargeable international localization", () => {
   assert.deepEqual(Object.keys(BREEDLOG_PLANS), ["free", "premium"]);
@@ -35,7 +35,18 @@ test("approved NAD/ZAR minor-unit prices, savings and explicit non-chargeable in
 test("server-authoritative grace ends exactly at 72h, preserves all records and restores visibility", async () => {
   const store = new InMemoryStorage(), workspace = "grace-preserved-farm";
   const state = { accountId: workspace, planId: "premium" as const, status: "active" as const, source: "billing_event",
-    pricingVersion: BREEDLOG_PRICING_VERSION, billingPeriod: "monthly", paidUntil: "2030-02-01T12:00:00.000Z", paymentOrderId: "original" };
+    pricingVersion: BREEDLOG_PRICING_VERSION, billingPeriod: "monthly", paidUntil: "2030-02-01T12:00:00.000Z", paymentOrderId: "original", renewalFailure: { verified: true as const, paidPeriodId: "original",
+      dueAt: "2030-02-01T12:00:00.000Z", observedAt: "2030-02-01T12:00:00.000Z", renewalOrderId: "failed-renewal" } };
+  const boundary = new Date("2030-02-01T12:00:00.000Z");
+  for (const paidUntil of [undefined, "", "not-a-date", "2030-02-31T12:00:00Z", "2029-12-01T00:00:00Z"]) {
+    assert.equal(effectivePaidAccess({ ...state, paidUntil }, boundary).planId, "free");
+  }
+  assert.equal(effectivePaidAccess({ ...state, renewalFailure: undefined }, boundary).planId, "free");
+  assert.equal(effectivePaidAccess({ ...state, status: "grace_period", renewalFailure: undefined }, boundary).graceUntil, undefined);
+  for (const patch of [{ dueAt: "2030-01-01T12:00:00Z" }, { paidPeriodId: "old-period" }, { observedAt: "2031-01-01T12:00:00Z" }, { verified: false }]) {
+    assert.equal(effectivePaidAccess({ ...state, renewalFailure: { ...state.renewalFailure, ...patch } as any }, boundary).planId, "free");
+  }
+  assert.equal(effectivePaidAccess({ ...state, source: "internal_test", paidUntil: undefined }, boundary).planId, "premium");
   await store.setSystemSetting(`commercial:entitlement:${workspace}`, JSON.stringify(state));
   for (let i = 0; i < 35; i++) await store.createAnimal(workspace, { tagId: `GRACE-${i}`, sex: "ewe", status: i === 34 ? "culled" : "active" } as any);
   assert.equal((await getEntitlementState(store, workspace, new Date("2030-02-04T11:59:59.999Z"))).planId, "premium");
@@ -54,15 +65,42 @@ test("renewal notice is visible across app screens for grace and expired access"
   const { QueryClient, QueryClientProvider } = await import("@tanstack/react-query");
   const { PaymentGraceNotice } = await import("../client/src/components/PaymentGraceNotice");
   const { Router } = await import("wouter");
-  const now = Date.now();
-  for (const [age, active] of [[3600000, true], [73 * 3600000, false]] as const) {
-    const client = new QueryClient();
-    const due = now - age;
-    client.setQueryData(["/api/entitlements/me"], { entitlement: { planId: "premium", status: "active", billingPeriod: "monthly", paidUntil: new Date(due).toISOString() } });
+  const deadline = "2030-02-04T12:00:00.000Z";
+  const cases = [
+    { planId: "premium", status: "active", paidUntil: "2000-01-01T00:00:00Z", expected: null },
+    { planId: "premium", status: "active", graceUntil: deadline, expected: null },
+    { planId: "premium", status: "grace_period", expected: null },
+    { planId: "premium", status: "grace_period", graceUntil: "invalid", expected: null },
+    { planId: "premium", status: "grace_period", graceUntil: "2030-02-31T00:00:00Z", expected: null },
+    { planId: "premium", status: "grace_period", graceUntil: deadline, expected: /Premium remains active/ },
+    { planId: "free", status: "expired", graceUntil: deadline, expected: /now on Free/ },
+  ];
+  for (const { expected, ...entitlement } of cases) {
+    const client = new QueryClient(); client.setQueryData(["/api/entitlements/me"], { entitlement });
     const markup = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(Router, { ssrPath: "/settings" }, React.createElement(PaymentGraceNotice, { isAuthenticated: true }))));
-    assert.match(markup, /role="status"/); assert.match(markup, /All records are preserved/); assert.match(markup, /href="\/settings"/);
-    assert.ok(markup.includes(new Date(due + 72 * 3600000).toISOString()));
-    assert.match(markup, active ? /Premium remains active/ : /now on Free/);
+    if (expected) {
+      assert.match(markup, expected); assert.match(markup, /All records are preserved/); assert.ok(markup.includes(deadline));
+    } else assert.equal(markup, "");
     client.clear();
   }
+});
+
+test("Free registration counts culled originals and permits reactivation within the same thirty slots", async () => {
+  const store = new InMemoryStorage(), id = "free-original-slots";
+  for (let i = 0; i < 30; i++) {
+    await assertCanCreateAnimal(store, id);
+    await store.createAnimal(id, { tagId: `SLOT-${i}`, sex: "ewe", status: i < 2 ? "culled" : "active" } as any);
+  }
+  await assert.rejects(() => assertCanCreateAnimal(store, id), /originally registered/);
+  await assertCanCreateAnimal(store, id, true);
+  assert.equal(projectDowngradedAnimalVisibility(await store.getAnimals(id, {})).visible.length, 30);
+});
+
+test("unapproved PDF add-on sale is unavailable outside explicit simulator mode", async () => {
+  const old = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = "production";
+    await assert.rejects(() => createCheckoutSession(new InMemoryStorage(), "addon-disabled", "addon_pdf_250"),
+      (error: any) => error.code === "ADDON_SALES_UNAVAILABLE" && error.status === 503);
+  } finally { if (old === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = old; }
 });

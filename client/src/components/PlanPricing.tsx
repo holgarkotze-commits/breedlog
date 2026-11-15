@@ -38,6 +38,6 @@ export function PlanPricing() {
     </div> : <p>{isError ? "Pricing could not be loaded. Checkout is unavailable." : price ? `${price.currency} prices are awaiting approval. No chargeable quote or automatic FX conversion is available.` : "Loading prices…"}</p>}
     <div className="flex flex-wrap gap-2"><Button disabled>Monthly payment unavailable</Button><Button disabled variant="outline">Annual payment unavailable</Button></div>
     <p className="text-muted-foreground">Checkout is not enabled. Monthly payments require an explicit customer-initiated invoice; automatic debits are not available.</p>
-    <p className="text-muted-foreground">Unpaid monthly renewal has 72 hours of Premium grace from its scheduled due time. At expiry, Free shows the first 30 originally registered animals. All other records remain preserved and return on verified payment. Cancellation ends at the paid term; annual payments do not auto-renew.</p>
+    <p className="text-muted-foreground">Only a verified failed monthly renewal can receive 72 hours of Premium grace tied to its original due time. Expiry alone provides no grace. At expiry, Free shows the first 30 originally registered animals. All other records remain preserved and return on verified payment. Cancellation ends at the paid term; annual payments do not auto-renew.</p>
   </section>;
 }

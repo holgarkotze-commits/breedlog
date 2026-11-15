@@ -3,7 +3,7 @@ import type { AnnualOffer, PaymentOrder, PaymentTransact, PaymentTransaction } f
 import { PaymentRejected, PaymentUnavailable } from "./paytoday-types";
 import { installedPayTodayContract } from "./paytoday-adapter";
 import type { Contact, PayTodayProvider } from "./paytoday-adapter";
-import { BREEDLOG_PRICING_VERSION, premiumPrice, effectivePaidAccess, type BillingCurrency } from "@shared/commercial";
+import { BREEDLOG_PRICING_VERSION, premiumPrice, effectivePaidAccess, paidTermTime, type BillingCurrency } from "@shared/commercial";
 
 export interface AnnualPaymentConfig {
   enabled: boolean;
@@ -158,6 +158,27 @@ export class AnnualPayToday {
         throw new PaymentRejected();
       }
       const now = this.now();
+      if (payment.status === "failed" && saved.renewalOf && saved.offer.product === "breedlog_premium_monthly" &&
+          !["paid", "revoked"].includes(state.status)) {
+        const previous = await tx.getOrder(saved.renewalOf);
+        const current = JSON.parse(await tx.getSetting(entitlementKey(workspace)) ?? "null");
+        const sub = JSON.parse(await tx.getSetting(subscriptionKey(workspace)) ?? "null");
+        const dueAt = previous?.state.periodEnd;
+        const due = Date.parse(dueAt ?? "");
+        if (previous?.state.status === "paid" && previous.offer.product === "breedlog_premium_monthly" &&
+            current?.paymentOrderId === saved.renewalOf && sub?.paymentOrderId === saved.renewalOf &&
+            current.billingPeriod === "monthly" && !current.cancelAtPeriodEnd && !sub.cancelAtPeriodEnd &&
+            !["refunded", "cancelled"].includes(current.status) && current.paidUntil === dueAt && sub.currentPeriodEnd === dueAt &&
+            Number.isFinite(due) && Date.parse(saved.createdAt) >= due && now.getTime() >= Date.parse(saved.createdAt)) {
+          const oldFailure = current.renewalFailure;
+          const renewalFailure = oldFailure?.verified === true && oldFailure.paidPeriodId === saved.renewalOf && oldFailure.dueAt === dueAt &&
+            oldFailure.renewalOrderId && paidTermTime(oldFailure.observedAt) >= due && paidTermTime(oldFailure.observedAt) <= now.getTime() ? oldFailure : {
+            verified: true, paidPeriodId: saved.renewalOf, dueAt, observedAt: now.toISOString(), renewalOrderId: saved.id,
+          };
+          await tx.setSetting(entitlementKey(workspace), JSON.stringify({ ...current, renewalFailure }));
+          await tx.setSetting(subscriptionKey(workspace), JSON.stringify({ ...sub, renewalFailure }));
+        }
+      }
       // Pending/failed intent state alone is not evidence of a completed payment.
       // Do not expire a pending order merely because its confirmation arrived late.
       const needsTransaction = payment.status === "success" || state.status === "paid" ||

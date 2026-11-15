@@ -233,19 +233,23 @@ export async function annualLifecycle(
       const f = fixture(transact, config), initial = await f.create();
       assert.equal((await f.service.reconcile(f.workspace, initial.orderId)).periodEnd, "2030-02-01T12:00:00.000Z");
       f.setNow("2030-02-01T12:00:00Z");
-      const grace = await f.restart(fresh()).subscription(f.workspace);
-      assert.equal(grace.planId, "premium"); assert.equal(grace.status, "grace_period");
-      assert.equal(grace.graceUntil, "2030-02-04T12:00:00.000Z");
+      const noFailure = await f.restart(fresh()).subscription(f.workspace);
+      assert.equal(noFailure.planId, "free"); assert.equal(noFailure.graceUntil, undefined);
       const attempts = await Promise.allSettled(Array.from({ length: 5 }, () => f.restart(fresh()).create(f.workspace, f.contact)));
       assert.equal(attempts.filter(r => r.status === "fulfilled").length, 1);
       const renewal = (attempts.find(r => r.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof f.create>>>).value;
       assert.equal((await transact(f.workspace, tx => tx.getOrder(renewal.orderId)))!.renewalOf, initial.orderId);
       f.edit(p => { p.intent.transaction_status = "failed"; });
       await f.service.reconcile(f.workspace, renewal.orderId);
+      const grace = await f.restart(fresh()).subscription(f.workspace);
+      assert.equal(grace.planId, "premium"); assert.equal(grace.status, "grace_period");
+      assert.equal(grace.graceUntil, "2030-02-04T12:00:00.000Z");
+      const evidence = (await transact(f.workspace, tx => tx.getSetting("commercial:entitlement:" + f.workspace)))!;
       f.setNow("2030-02-04T11:59:59.999Z");
       assert.equal((await f.service.subscription(f.workspace)).planId, "premium");
       await f.service.reconcile(f.workspace, renewal.orderId);
       assert.equal((await f.service.subscription(f.workspace)).graceUntil, grace.graceUntil);
+      assert.equal((await transact(f.workspace, tx => tx.getSetting("commercial:entitlement:" + f.workspace)))!, evidence, "duplicate failure must preserve original evidence");
       f.setNow("2030-02-04T12:00:00Z");
       assert.equal((await f.restart(fresh()).subscription(f.workspace)).planId, "free");
       f.edit(p => { p.intent.transaction_status = "success"; });
@@ -283,6 +287,23 @@ export async function annualLifecycle(
     f.setNow("2030-03-01T12:00:00Z");
     assert.equal((await f.service.subscription(f.workspace)).planId, "free");
     assert.equal((await f.service.subscription(f.workspace)).graceUntil, undefined);
+  });
+
+  await t.test("late first failure cannot open a fresh grace window; a later verified payment restores access", async () => {
+    const config = fixtureConfig(); config.offer = { ...config.offer, product: "breedlog_premium_monthly" };
+    const f = fixture(transact, config), first = await f.create(); await f.service.reconcile(f.workspace, first.orderId);
+    f.setNow("2030-02-05T12:00:00Z"); const renewal = await f.create();
+    f.edit(p => { p.intent.transaction_status = "pending"; });
+    await f.service.reconcile(f.workspace, renewal.orderId);
+    assert.equal((await f.service.subscription(f.workspace)).graceUntil, undefined);
+    f.edit(p => { p.intent.transaction_status = "failed"; });
+    await f.service.reconcile(f.workspace, renewal.orderId);
+    const failed = await f.restart(fresh()).subscription(f.workspace);
+    assert.equal(failed.planId, "free"); assert.equal(failed.graceUntil, "2030-02-04T12:00:00.000Z");
+    f.edit(p => { p.intent.transaction_status = "success"; });
+    assert.equal((await f.service.reconcile(f.workspace, renewal.orderId)).periodEnd, "2030-03-05T12:00:00.000Z");
+    assert.equal((await f.service.subscription(f.workspace)).planId, "premium");
+    assert.equal((await f.service.subscription(f.workspace)).renewalFailure, undefined);
   });
 
 }

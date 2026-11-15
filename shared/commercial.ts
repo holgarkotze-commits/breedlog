@@ -99,18 +99,41 @@ export function localizedPricing(country?: string, locale?: string, override?: s
     renewalMode: "customer_initiated" as const, graceHours: 72 };
 }
 
-// Computed on every authorization/read, with no stale expiry writes that could
-// race and overwrite a newer payment. A duplicated failure cannot extend grace.
+// Persisted only by verified server-side renewal confirmation, never by a
+// browser hint or the mere passage of a paid-term deadline.
+export type VerifiedRenewalFailure = {
+  verified: true;
+  paidPeriodId: string;
+  dueAt: string;
+  observedAt: string;
+  renewalOrderId: string;
+};
+
+export function paidTermTime(value: unknown): number {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) return NaN;
+  const n = Date.parse(value);
+  if (!Number.isFinite(n) || new Date(n).toISOString() !== value.replace(/Z$/, value.includes(".") ? "Z" : ".000Z")) return NaN;
+  return n;
+}
+
+// Every authorization/read derives its projection without writing an expiry
+// over a newer payment. Grace belongs to an original failed renewal period.
 export function effectivePaidAccess<T extends { planId: BreedLogPlanId; status: string; paidUntil?: string;
-  billingPeriod?: string; cancelAtPeriodEnd?: boolean }>(state: T, now = new Date()): T & { graceUntil?: string } {
-  if (["refunded", "cancelled"].includes(state.status)) return { ...state, planId: "free" };
-  if (state.planId !== "premium" || !state.paidUntil) return state;
-  const due = Date.parse(state.paidUntil), time = now.getTime();
-  if (!Number.isFinite(due)) return { ...state, planId: "free", status: "expired" };
-  if (time < due) return state;
-  const graceUntil = new Date(due + PAYMENT_GRACE_MS).toISOString();
-  if (state.billingPeriod === "monthly" && !state.cancelAtPeriodEnd && time < due + PAYMENT_GRACE_MS) {
-    return { ...state, planId: "premium", status: "grace_period", graceUntil };
-  }
-  return { ...state, planId: "free", status: "expired", ...(state.billingPeriod === "monthly" && !state.cancelAtPeriodEnd ? { graceUntil } : {}) };
+  source?: string; paymentOrderId?: string; subscriptionId?: string; renewalFailure?: VerifiedRenewalFailure;
+  billingPeriod?: string; cancelAtPeriodEnd?: boolean; graceUntil?: string }>(state: T, now = new Date()): T & { graceUntil?: string } {
+  const { graceUntil: _discardStaleDeadline, ...clean } = state;
+  if (state.source === "internal_test") return state;
+  if (["refunded", "cancelled"].includes(state.status)) return { ...clean, planId: "free" } as T;
+  if (state.planId !== "premium") return clean as T;
+  const due = paidTermTime(state.paidUntil), time = now.getTime();
+  if (!Number.isFinite(due) || !Number.isFinite(time)) return { ...clean, planId: "free", status: "expired" } as T;
+  if (time < due) return { ...clean, status: state.status === "grace_period" ? "active" : state.status } as T;
+  const f = state.renewalFailure;
+  const observed = paidTermTime(f?.observedAt);
+  const verified = state.billingPeriod === "monthly" && !state.cancelAtPeriodEnd && f?.verified === true &&
+    !!f.renewalOrderId && !!f.paidPeriodId && f.paidPeriodId === (state.paymentOrderId ?? state.subscriptionId) &&
+    paidTermTime(f.dueAt) === due && Number.isFinite(observed) && observed >= due && observed <= time;
+  const graceUntil = verified ? new Date(due + PAYMENT_GRACE_MS).toISOString() : undefined;
+  if (verified && time < due + PAYMENT_GRACE_MS) return { ...clean, planId: "premium", status: "grace_period", graceUntil } as T;
+  return { ...clean, planId: "free", status: "expired", ...(graceUntil ? { graceUntil } : {}) } as T;
 }

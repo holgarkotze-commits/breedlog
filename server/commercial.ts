@@ -7,7 +7,9 @@ import {
   getBreedLogPlan,
   monthWindowKey,
   effectivePaidAccess,
+  paidTermTime,
   type BreedLogPlanId,
+  type VerifiedRenewalFailure,
 } from "@shared/commercial";
 
 const ENTITLEMENT_PREFIX = "commercial:entitlement:";
@@ -50,6 +52,8 @@ export const billingEventSchema = z.object({
     "subscription.expired",
   ]),
   planId: z.enum(["free", "premium"]).optional(),
+  paidUntil: z.string().datetime().optional(),
+  billingPeriod: z.enum(["monthly", "annual"]).optional(),
   effectiveAt: z.string().datetime().optional(),
   subscriptionId: z.string().max(160).optional(),
   customerId: z.string().max(160).optional(),
@@ -69,6 +73,7 @@ export type EntitlementState = {
   effectiveAt: string;
   updatedAt: string;
   paidUntil?: string;
+  renewalFailure?: VerifiedRenewalFailure;
   billingPeriod?: "monthly" | "annual";
   cancelAtPeriodEnd?: boolean;
   graceUntil?: string;
@@ -134,6 +139,7 @@ export type BillingSubscriptionState = {
   status: "pending" | "active" | "grace_period" | "payment_failed" | "cancelled" | "refunded" | "expired";
   currentPeriodStart: string;
   currentPeriodEnd: string;
+  renewalFailure?: VerifiedRenewalFailure;
   graceUntil?: string;
   renewalMode?: "customer_initiated" | "recurring";
   autoRenew?: boolean;
@@ -340,9 +346,9 @@ export async function listBillingAuditEntries(storage: IStorage, accountId: stri
 export async function getBillingSubscriptionState(storage: IStorage, accountId: string): Promise<BillingSubscriptionState | null> {
   const raw = await storage.getSystemSetting(settingKeyForSubscription(accountId));
   const state = raw ? JSON.parse(raw) as BillingSubscriptionState & { paymentOrderId?: string } : null;
-  if (state?.provider === "paytoday" && state.paymentOrderId) {
+  if (state?.planId === "premium") {
     const access = effectivePaidAccess({ ...state, paidUntil: state.currentPeriodEnd });
-    return { ...state, status: access.status, graceUntil: access.graceUntil };
+    return { ...state, planId: access.planId, status: access.status, graceUntil: access.graceUntil };
   }
   return state;
 }
@@ -362,6 +368,7 @@ export async function createCheckoutSession(
   options: { provider?: string; returnUrl?: string; cancelUrl?: string; metadata?: Record<string, unknown> } = {},
 ): Promise<BillingCheckoutSession> {
   const catalog = BILLING_CATALOG[productCode];
+  if (productCode === "addon_pdf_250" && !areBillingTestRoutesEnabled()) throw new EntitlementDeniedError("ADDON_SALES_UNAVAILABLE", "PDF add-on sales are awaiting price approval.", 503);
   if (!catalog) {
     throw new EntitlementDeniedError("UNKNOWN_PRODUCT", `Unknown billing product: ${productCode}`, 400);
   }
@@ -608,17 +615,17 @@ export async function setInternalTestEntitlement(storage: IStorage, accountId: s
   return state;
 }
 
-export async function assertCanCreateAnimal(storage: IStorage, accountId: string): Promise<void> {
+export async function assertCanCreateAnimal(storage: IStorage, accountId: string, existingRegistration = false): Promise<void> {
   const entitlement = await getEntitlementState(storage, accountId);
   if (isInternalTestEntitlement(entitlement)) return; // internal test — unlimited animals
   const plan = getBreedLogPlan(entitlement.planId);
   const activeLimit = plan.limits.activeAnimals;
   if (activeLimit === "unlimited") return;
-  const activeAnimals = (await storage.getAnimals(accountId, { status: "active" })).length;
+  const activeAnimals = (await storage.getAnimals(accountId, existingRegistration ? { status: "active" } : {})).length;
   if (activeAnimals >= activeLimit) {
     throw new EntitlementDeniedError(
       "ACTIVE_ANIMAL_LIMIT_REACHED",
-      `Free accounts are limited to ${activeLimit} active animals. Upgrade to Premium to add more active animals.`,
+      `Free accounts retain the first ${activeLimit} originally registered animals, including inactive and culled records. Upgrade to Premium to register more.`,
     );
   }
 }
@@ -771,7 +778,7 @@ export async function applyBillingEvent(storage: IStorage, event: BillingEvent):
 
   const now = new Date().toISOString();
   const existingEntitlement = await getEntitlementState(storage, event.accountId);
-  const nextPlan: BreedLogPlanId =
+  let nextPlan: BreedLogPlanId =
     event.eventType === "subscription.refunded" ||
     event.eventType === "subscription.reversed" ||
     event.eventType === "subscription.cancelled" ||
@@ -787,6 +794,32 @@ export async function applyBillingEvent(storage: IStorage, event: BillingEvent):
     : event.eventType === "subscription.expired" ? "expired"
     : "active";
 
+  const raw = await storage.getSystemSetting(settingKeyForEntitlement(event.accountId));
+  const previous = raw ? JSON.parse(raw) as EntitlementState : existingEntitlement;
+  const settlement = ["subscription.created", "subscription.renewed"].includes(event.eventType);
+  const storedSub = await storage.getSystemSetting(settingKeyForSubscription(event.accountId));
+  const ownedSub = storedSub ? JSON.parse(storedSub) as BillingSubscriptionState : null;
+  if (!settlement && ["subscription.payment_failed", "subscription.grace_period"].includes(event.eventType)) nextPlan = previous.planId;
+
+  const paidUntil = settlement ? event.paidUntil ?? ownedSub?.currentPeriodEnd : previous.paidUntil;
+  const billingPeriod = settlement ? event.billingPeriod ?? ownedSub?.billingPeriod : previous.billingPeriod;
+  let renewalFailure = settlement ? undefined : previous.renewalFailure;
+  // Generic events are simulator-only at the HTTP boundary. A grace status
+  // alone is not payment-failure proof; an owned due period is indispensable.
+  const due = Date.parse(paidUntil ?? "");
+  const observed = Date.parse(event.effectiveAt ?? now);
+  if (event.eventType === "subscription.payment_failed" && billingPeriod === "monthly" &&
+      event.subscriptionId && event.subscriptionId === previous.subscriptionId && ownedSub?.subscriptionId === event.subscriptionId &&
+      ownedSub.currentPeriodEnd === paidUntil && !ownedSub.cancelAtPeriodEnd && !["refunded", "cancelled"].includes(previous.status) &&
+      Number.isFinite(due) && observed >= due && observed <= Date.now()) {
+    renewalFailure = previous.renewalFailure?.verified === true && previous.renewalFailure.paidPeriodId === (previous.paymentOrderId ?? event.subscriptionId) &&
+      previous.renewalFailure.dueAt === paidUntil && previous.renewalFailure.renewalOrderId && paidTermTime(previous.renewalFailure.observedAt) >= due &&
+      paidTermTime(previous.renewalFailure.observedAt) <= observed ? previous.renewalFailure : {
+      verified: true, dueAt: paidUntil!, paidPeriodId: previous.paymentOrderId ?? event.subscriptionId,
+      observedAt: event.effectiveAt ?? now, renewalOrderId: event.providerEventId,
+    };
+  }
+  if (ownedSub && renewalFailure) await saveBillingSubscriptionState(storage, { ...ownedSub, renewalFailure });
   const entitlement = await setEntitlementState(storage, {
     accountId: event.accountId,
     planId: nextPlan,
@@ -796,8 +829,9 @@ export async function applyBillingEvent(storage: IStorage, event: BillingEvent):
     subscriptionId: event.subscriptionId ?? existingEntitlement.subscriptionId,
     customerId: event.customerId ?? existingEntitlement.customerId,
     effectiveAt: event.effectiveAt ?? now,
+    paidUntil, billingPeriod, renewalFailure,
     updatedAt: now,
   });
   await storage.setSystemSetting(eventKey, JSON.stringify({ event, appliedAt: now }), "Idempotency record for billing event");
-  return { idempotent: false, entitlement };
+  return { idempotent: false, entitlement: await getEntitlementState(storage, event.accountId) };
 }
