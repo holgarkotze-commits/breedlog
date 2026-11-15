@@ -9,6 +9,7 @@ import {
 } from "./managed-auth";
 import { BREEDLOG_PLANS } from "../shared/commercial";
 import { canSendTransactionalEmail } from "./email";
+import { setNativeCookieAttributes } from "./device-auth";
 
 export const PUBLIC_TRIAL_SOURCE = "public_free_trial";
 const provider = createManagedAuthProvider(storage);
@@ -26,6 +27,7 @@ async function newAccountDevice() {
 
 async function establishSession(req: Request, accountId: string, userId: string, deviceId: string) {
   await new Promise<void>((resolve, reject) => req.session.regenerate(err => err ? reject(err) : resolve()));
+  setNativeCookieAttributes(req);
   req.session.accountId = accountId;
   req.session.userId = userId;
   req.session.deviceId = deviceId;

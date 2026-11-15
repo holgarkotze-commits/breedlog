@@ -93,6 +93,46 @@ test("native shell preflight receives the trusted CORS contract", async () => {
   assert.match(response.headers.get("access-control-allow-headers") ?? "", /Content-Type/i);
 });
 
+test("actual Android default origin receives credentialed CORS", async () => {
+  const response = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "OPTIONS", headers: { Origin: "https://localhost", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" },
+  });
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), "https://localhost");
+  assert.equal(response.headers.get("access-control-allow-credentials"), "true");
+});
+
+test("secure native account sessions work while web and untrusted-origin CSRF protection remains", async () => {
+  for (const origin of ["https://localhost", TAURI_ORIGIN]) {
+    const headers = { "Content-Type": "application/json", Origin: origin, "Sec-Fetch-Site": "cross-site", "X-Forwarded-Proto": "https" };
+    const response = await fetch(`${BASE_URL}/api/auth/register`, {
+      method: "POST", headers,
+      body: JSON.stringify({ email: `native-${crypto.randomUUID()}@example.test`, password: "Native-session-test-password", acceptedTerms: true }),
+    });
+    assert.equal(response.status, 201, origin);
+    const cookie = response.headers.get("set-cookie")!;
+    assert.match(cookie, /HttpOnly/); assert.match(cookie, /Secure/); assert.match(cookie, /SameSite=None/);
+    const session = cookie.split(";")[0];
+    const created = await fetch(`${BASE_URL}/api/animals`, {
+      method: "POST", headers: { ...headers, Cookie: session }, body: JSON.stringify({ tagId: `NATIVE-${origin}`, sex: "ewe" }),
+    });
+    assert.equal(created.status, 201);
+    const before = await (await fetch(`${BASE_URL}/api/animals`, { headers: { ...headers, Cookie: session } })).json();
+    assert.equal(before.length, 1);
+    for (const badOrigin of ["https://evil.example", "https://localhost.evil.example", "null"]) {
+      const denied = await fetch(`${BASE_URL}/api/animals`, {
+        method: "POST", headers: { ...headers, Cookie: session, Origin: badOrigin }, body: JSON.stringify({ tagId: "FORGED", sex: "ewe" }),
+      });
+      assert.equal(denied.status, 403);
+      assert.equal(denied.headers.get("access-control-allow-origin"), null);
+    }
+    const form = await fetch(`${BASE_URL}/api/animals`, { method: "POST", headers: { ...headers, Cookie: session, "Content-Type": "text/plain" }, body: "forged" });
+    assert.equal(form.status, 415);
+    const after = await (await fetch(`${BASE_URL}/api/animals`, { headers: { ...headers, Cookie: session } })).json();
+    assert.deepEqual(after, before);
+  }
+});
+
 test("production app preflight receives the trusted credentialed CORS contract", async () => {
   const response = await fetch(`${BASE_URL}/api/version`, {
     method: "OPTIONS",
