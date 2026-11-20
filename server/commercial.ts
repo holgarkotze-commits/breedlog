@@ -707,7 +707,7 @@ export function projectDowngradedAnimalVisibility<T extends { id: number; create
   return {
     visible: animals.filter((animal) => visibleIds.has(animal.id)),
     hidden: animals.filter((animal) => !visibleIds.has(animal.id)),
-    rule: "first_30_originally_added",
+    rule: "first_30_active_with_inactive_history",
   };
 }
 
