@@ -30,7 +30,7 @@ export const BREEDLOG_PLANS: Record<BreedLogPlanId, BreedLogPlan> = {
     limits: {
       activeAnimals: 30,
       activeDevices: 1,
-      individualPdfExportsPerMonth: 5,
+      individualPdfExportsPerMonth: 0,
       batchPdfExportsPerMonth: 0,
       aiActionsPerMonth: 10,
       manualBackups: "rolling_7_day",
