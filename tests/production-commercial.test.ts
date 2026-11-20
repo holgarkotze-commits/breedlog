@@ -115,9 +115,7 @@ test("Free monthly usage quotas are enforced by the backend usage ledger", async
     () => reserveUsage(storage, userId, "aiActions", new Date("2026-07-13T00:00:00Z")),
     /aiActions monthly quota/,
   );
-  for (let i = 0; i < 5; i++) {
-    await reserveUsage(storage, userId, "individualPdfExports", new Date("2026-07-13T00:00:00Z"));
-  }
+  // Free PDF exports are Premium-only under the approved commercial policy.
   await assert.rejects(
     () => reserveUsage(storage, userId, "individualPdfExports", new Date("2026-07-13T00:00:00Z")),
     /individualPdfExports monthly quota/,
