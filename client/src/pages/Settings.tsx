@@ -1,3 +1,4 @@
+import { PlanPricing } from "@/components/PlanPricing";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
 import { useFarmSettings, useSaveFarmSettings } from "@/hooks/use-farm-settings";
@@ -51,13 +52,14 @@ type EntitlementResponse = {
   entitlement: {
     planId: "free" | "premium";
     status: "active" | "grace_period" | "cancelled" | "payment_failed" | "refunded" | "expired";
+    graceUntil?: string;
     pricingVersion: string;
     effectiveAt: string;
     updatedAt: string;
   };
   downgradeProjection: {
     visibleAnimalIds: number[];
-    hiddenAnimalIds: number[];
+    hiddenAnimalCount: number;
     rule: string;
   };
 };
@@ -283,6 +285,7 @@ export default function Settings() {
 
   const { data: entitlementData, isLoading: entitlementLoading } = useQuery<EntitlementResponse>({
     queryKey: ["/api/entitlements/me"],
+    refetchInterval: 5000,
     enabled: !!user,
   });
 
@@ -920,7 +923,7 @@ export default function Settings() {
   };
 
   const currentPlan = entitlementData ? BREEDLOG_PLANS[entitlementData.entitlement.planId] : null;
-  const hiddenAnimalCount = entitlementData?.downgradeProjection.hiddenAnimalIds.length ?? 0;
+  const hiddenAnimalCount = entitlementData?.downgradeProjection.hiddenAnimalCount ?? 0;
   const visibleAnimalCount = entitlementData?.downgradeProjection.visibleAnimalIds.length ?? 0;
   const runtimePlatform = detectRuntimePlatform();
   const configuredApiOrigin = getConfiguredApiOrigin();
@@ -936,7 +939,7 @@ export default function Settings() {
           <CardHeader><CardTitle>Farmer account</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm break-all">{account.email}</p>
-            {isTrial && <p className="text-sm">Free trial: 30 active animals, 1 active device, 5 individual PDFs per month. No card or charge. Paid plans and AI are coming soon.</p>}
+            {isTrial && <p className="text-sm">Free trial: First 30 registered animals, including inactive records, 1 active device, 5 individual PDFs per month. No card or charge. Paid plans and AI are coming soon.</p>}
             <p className="text-xs text-muted-foreground">Keep your saved recovery code private. Made by STITCH WORX.</p>
             <Button variant="outline" onClick={() => void performLogout()} data-testid="button-account-signout">Sign out</Button>
           </CardContent>
@@ -1402,6 +1405,7 @@ export default function Settings() {
              </div>
 
              <div className="p-4 bg-secondary rounded border border-border space-y-4" data-testid="card-plan-entitlements">
+                <PlanPricing />
                 <div>
                   <h4 className="font-bold text-sm uppercase mb-2">Plan & Entitlements</h4>
                   <p className="text-xs text-muted-foreground">
@@ -1435,7 +1439,7 @@ export default function Settings() {
                       </div>
                     </div>
                     <div className="rounded border border-border bg-background/70 p-3 text-xs">
-                      <p><strong>Downgrade visibility rule:</strong> first 30 active animals originally added remain visible.</p>
+                      <p><strong>Downgrade visibility rule:</strong> first 30 originally registered animals remain visible.</p>
                       <p><strong>Visible under Free:</strong> {visibleAnimalCount}</p>
                       <p><strong>Hidden on downgrade:</strong> {hiddenAnimalCount}</p>
                     </div>

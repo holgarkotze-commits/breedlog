@@ -143,6 +143,7 @@ export function useCreateFlockHealthEvent() {
   const { isOnline } = useNetworkStatus();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (data: CreateFlockHealthEventInput) => {
       const tempId = -Date.now();
       const tempRecord = { 

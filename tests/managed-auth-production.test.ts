@@ -198,6 +198,7 @@ test("device limits enforce free one-device and premium three-device boundaries"
     accountId: registered.profile.workspaceUserId,
     eventType: "subscription.created",
     planId: "premium",
+    paidUntil: "2099-01-01T00:00:00Z",
     effectiveAt: new Date().toISOString(),
   });
 

@@ -66,5 +66,21 @@ jobs:
       - name: Production build
         run: npm run build
 
+      - name: Install browser certification runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser certification — offline UI and hidden-animal sync
+        run: npm run test:browser-cert
+
+      - name: Retain browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: breedlog-browser-acceptance
+          path: |
+            test-results/
+            artifacts/browser-certification/
+          if-no-files-found: warn
+
       - name: Push DB schema
         run: npm run db:push
