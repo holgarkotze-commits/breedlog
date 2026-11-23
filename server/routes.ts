@@ -270,6 +270,10 @@ export async function registerRoutes(
   });
 
   app.post("/api/billing/checkout-session", requireAuth, async (req, res) => {
+    // Until the merchant contract is verified, only explicitly enabled isolated tests may create sessions.
+    if (!billingTestRoutesEnabled) {
+      return res.status(503).json({ code: "PAYMENTS_UNAVAILABLE", message: "Checkout is not yet available." });
+    }
     try {
       const userId = getUserId(req);
       if (req.body?.provider === "paytoday") {
@@ -305,6 +309,9 @@ export async function registerRoutes(
   registerPayTodayReturns(app, requireAuth);
 
   app.post("/api/billing/portal-session", requireAuth, async (req, res) => {
+    if (!billingTestRoutesEnabled) {
+      return res.status(503).json({ code: "PAYMENTS_UNAVAILABLE", message: "Billing portal is not yet available." });
+    }
     const userId = getUserId(req);
     res.status(201).json(await createBillingPortalSession(storage, userId));
   });
