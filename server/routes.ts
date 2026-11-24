@@ -536,7 +536,9 @@ export async function registerRoutes(
       const createInput = idempotencyKey ? { ...input, clientId: idempotencyKey } : input;
       const visibility = await getDowngradeVisibilityContext(userId);
       if (!isAnimalVisible(visibility, input.damId) || !isAnimalVisible(visibility, input.sireId)) return hiddenAnimalNotFound(res);
-      await assertCanCreateAnimal(storage, userId);
+      if ((createInput.status ?? "active") === "active") {
+        await assertCanCreateAnimal(storage, userId);
+      }
       const animal = await storage.createAnimal(userId, createInput);
       res.status(201).json(animal);
     } catch (err) {
@@ -599,7 +601,7 @@ export async function registerRoutes(
       const nextStatus = input.status ?? existing.status ?? "active";
       const wasActive = (existing.status ?? "active") === "active";
       if (!wasActive && nextStatus === "active") {
-        await assertCanCreateAnimal(storage, userId, true);
+        await assertCanCreateAnimal(storage, userId);
       }
       const animal = await storage.updateAnimal(userId, animalId, input);
       res.json(redactAnimalParents(visibility, animal));
@@ -1104,10 +1106,11 @@ export async function registerRoutes(
   app.get(api.settings.export.path, requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const visibility = await getDowngradeVisibilityContext(userId);
-      const animals = filterRowsForVisibleAnimals(visibility, await storage.getAnimals(userId), [
-        (animal) => animal.id,
-      ]);
+      const entitlement = await getEntitlementState(storage, userId);
+      if (entitlement.planId !== "premium" && !isInternalTestEntitlement(entitlement)) {
+        return res.status(403).json({ code: "PREMIUM_REQUIRED", message: "CSV export requires Premium." });
+      }
+      const animals = await storage.getAnimals(userId);
       const farmSettings = await storage.getFarmSettings(userId);
       const csvRows = buildBreedLogCsvRows(animals, farmSettings?.studPrefix || null);
       const csvData = buildBreedLogCsvContent(csvRows);
@@ -1277,7 +1280,9 @@ export async function registerRoutes(
 
       for (const animal of parsed.rowsToCreate) {
         try {
-          await assertCanCreateAnimal(storage, userId);
+          if ((animal.status ?? "active") === "active") {
+            await assertCanCreateAnimal(storage, userId);
+          }
           await storage.createAnimal(userId, animal);
           created += 1;
         } catch (err) {

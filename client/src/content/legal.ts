@@ -85,8 +85,8 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
       {
         heading: "Plans and Pricing",
         body: [
-          "BreedLog has exactly two plans: Free and Premium. Free is limited to the first 30 originally registered animals, including inactive records, 5 individual PDF exports per month, 10 AI actions per month, 1 active device, one manual backup in a rolling seven-day window, and retention of the latest 4 weekly automatic backups.",
-          "Monthly payments are customer-initiated unless verified recurring debit and consent are available. Only a server-verified failed monthly renewal grants exactly 72 hours of Premium grace measured from the original paid-term due time; an unpaid renewal without verified failure does not grant grace. The server shows the exact UTC grace expiry; repeated failures do not extend it. At expiry, Free access shows only the first 30 originally registered animals; all other records are preserved and restored on verified payment. Cancellation ends access at the paid term without grace; refunds/reversals may end it sooner. Annual expiry does not imply automatic renewal. Checkout stays unavailable until payment-provider and release acceptance. International prices beyond NAD/ZAR are not approved. Premium is priced at N$79.99 monthly or N$799 yearly (South Africa: R79.99 monthly or R799 yearly; annual saves 16.8%), with unlimited animals, up to 3 active devices, AI fair-use controls, up to 1,000 individual PDFs per month, 50 batch PDFs per month, optional quota add-ons, retention of the latest 12 weekly automatic backups, and unlimited manual backups.",
+          "BreedLog has exactly two plans: Free and Premium. Free includes the oldest 30 active animals plus inactive history, 10 AI actions per month, 1 active device, one manual backup in a rolling seven-day window, and retention of the latest 4 weekly automatic backups. Printing and exports require Premium.",
+          "Monthly payments are customer-initiated unless verified recurring debit and consent are available. Only a server-verified failed monthly renewal grants exactly 72 hours of Premium grace measured from the original paid-term due time; an unpaid renewal without verified failure does not grant grace. The server shows the exact UTC grace expiry; repeated failures do not extend it. At expiry, Free access shows the oldest 30 active animals and inactive history; all other records are preserved and restored on verified payment. Cancellation ends access at the paid term without grace; refunds/reversals may end it sooner. Annual expiry does not imply automatic renewal. Checkout stays unavailable until payment-provider and release acceptance. International prices beyond NAD/ZAR are not approved. Premium is priced at N$79.99 monthly or N$799 yearly (South Africa: R79.99 monthly or R799 yearly; annual saves 16.8%), with unlimited animals, up to 3 active devices, AI fair-use controls, up to 1,000 individual PDFs per month, 50 batch PDFs per month, retention of the latest 12 weekly automatic backups, and unlimited manual backups.",
         ],
       },
       {
@@ -99,7 +99,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
       {
         heading: "Downgrade and Restoration",
         body: [
-          "Downgrading from Premium to Free must preserve all data. Only the first 30 originally registered animals, including inactive animals, remain visible; all later registrations are hidden without deletion.",
+          "Downgrading from Premium to Free must preserve all data. The oldest 30 active animals and inactive history remain visible. Additional active animals are preserved and become accessible on Premium.",
           "Premium reactivation must restore the exact retained workspace without reordering visible animals or destroying records, lineage, or relationships.",
         ],
       },

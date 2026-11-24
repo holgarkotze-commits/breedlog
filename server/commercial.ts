@@ -675,13 +675,13 @@ export async function setInternalTestEntitlement(storage: IStorage, accountId: s
   return state;
 }
 
-export async function assertCanCreateAnimal(storage: IStorage, accountId: string, existingRegistration = false): Promise<void> {
+export async function assertCanCreateAnimal(storage: IStorage, accountId: string): Promise<void> {
   const entitlement = await getEntitlementState(storage, accountId);
   if (isInternalTestEntitlement(entitlement)) return; // internal test — unlimited animals
   const plan = getBreedLogPlan(entitlement.planId);
   const activeLimit = plan.limits.activeAnimals;
   if (activeLimit === "unlimited") return;
-  const activeAnimals = (await storage.getAnimals(accountId, { status: "active" })).length;
+  const activeAnimals = (await storage.getAnimals(accountId)).filter(animal => (animal.status ?? "active") === "active").length;
   if (activeAnimals >= activeLimit) {
     throw new EntitlementDeniedError(
       "ACTIVE_ANIMAL_LIMIT_REACHED",
@@ -694,14 +694,14 @@ export function projectDowngradedAnimalVisibility<T extends { id: number; create
   animals: T[],
 ): DowngradeProjection<T> {
   // Only active animals consume the Free limit; retain inactive/culled history.
-  const activeAnimals = animals.filter((animal) => animal.status === "active")
+  const activeAnimals = animals.filter((animal) => (animal.status ?? "active") === "active")
     .sort((a, b) => {
       const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return aTime - bTime || a.id - b.id;
     });
   const visibleIds = new Set([
-    ...animals.filter((animal) => animal.status !== "active").map((animal) => animal.id),
+    ...animals.filter((animal) => (animal.status ?? "active") !== "active").map((animal) => animal.id),
     ...activeAnimals.slice(0, BREEDLOG_PLANS.free.limits.activeAnimals as number).map((animal) => animal.id),
   ]);
   return {

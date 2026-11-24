@@ -106,7 +106,7 @@ test("billing webhook verification uses the captured raw request body", async ()
   assert.equal(response.status, 200);
 });
 
-test("individual PDF quota is inferred and enforced even when quotaClass is omitted", async () => {
+test("Free cannot create an individual PDF even when quotaClass is omitted", async () => {
   const userId = "export-quota-user";
   const deviceId = "export-quota-device";
   await fetch(`${BASE_URL}/api/reset-all-data`, {
@@ -123,30 +123,11 @@ test("individual PDF quota is inferred and enforced even when quotaClass is omit
   assert.equal(animalResponse.status, 201);
   const animal = await animalResponse.json() as { id: number };
 
-  for (let index = 0; index < 5; index += 1) {
-    const response = await fetch(`${BASE_URL}/api/exported-documents`, {
-      method: "POST",
-      headers: testHeaders(userId, deviceId),
-      body: JSON.stringify({
-        name: `animal-${index}.pdf`,
-        documentType: "individual",
-        subfolder: "individual",
-        animalId: animal.id,
-        metadata: {
-          exportType: "pdf",
-          animalCount: 1,
-          status: "success",
-        },
-      }),
-    });
-    assert.equal(response.status, 201);
-  }
-
   const blocked = await fetch(`${BASE_URL}/api/exported-documents`, {
     method: "POST",
     headers: testHeaders(userId, deviceId),
     body: JSON.stringify({
-      name: "animal-6.pdf",
+      name: "animal.pdf",
       documentType: "individual",
       subfolder: "individual",
       animalId: animal.id,
@@ -160,7 +141,7 @@ test("individual PDF quota is inferred and enforced even when quotaClass is omit
   assert.equal(blocked.status, 403);
 });
 
-test("CSV import enforces the original registration limit for Free accounts", async () => {
+test("CSV import enforces the active-animal limit for Free accounts", async () => {
   const userId = "csv-cap-user";
   const deviceId = "csv-cap-device";
   await fetch(`${BASE_URL}/api/reset-all-data`, {
@@ -183,7 +164,7 @@ test("CSV import enforces the original registration limit for Free accounts", as
   const body = await response.json() as { created: number; failed: number; errors: string[] };
   assert.equal(body.created, 30);
   assert.equal(body.failed, 1);
-  assert.match(body.errors[0], /first 30 originally registered animals/);
+  assert.match(body.errors[0], /30 active animals/);
 
   const animals = await fetch(`${BASE_URL}/api/animals`, {
     headers: testHeaders(userId, deviceId),
@@ -245,8 +226,8 @@ test("reactivating an inactive animal cannot bypass the Free active-animal cap",
   });
   assert.equal(animals.status, 200);
   const visible = await animals.json() as Array<{ id: number; status?: string }>;
-  assert.equal(visible.length, 30, "Free shows the first 30 registrations, including the inactive original");
-  assert.equal(visible.filter(animal => (animal.status ?? "active") === "active").length, 29);
+  assert.equal(visible.length, 31, "Free shows 30 active animals and inactive history");
+  assert.equal(visible.filter(animal => (animal.status ?? "active") === "active").length, 30);
   assert.equal(visible.find(animal => animal.id === inactiveAnimal.id)?.status, "inactive");
   // Verify the cap against the full preserved herd after a signed test-only
   // upgrade; the visibility projection must not conceal an accidental write.

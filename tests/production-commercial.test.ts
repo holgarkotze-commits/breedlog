@@ -33,7 +33,7 @@ function animal(index: number) {
 test("locked commercial catalogue exposes exactly Free and Premium plans", () => {
   assert.deepEqual(Object.keys(BREEDLOG_PLANS).sort(), ["free", "premium"]);
   assert.equal(BREEDLOG_PLANS.free.limits.activeAnimals, 30);
-  assert.equal(BREEDLOG_PLANS.free.limits.individualPdfExportsPerMonth, 5);
+  assert.equal(BREEDLOG_PLANS.free.limits.individualPdfExportsPerMonth, 0);
   assert.equal(BREEDLOG_PLANS.free.limits.aiActionsPerMonth, 10);
   assert.equal(BREEDLOG_PLANS.free.limits.activeDevices, 1);
   assert.equal(BREEDLOG_PLANS.free.limits.retainedWeeklyAutomaticBackups, 4);
