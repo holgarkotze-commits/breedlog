@@ -145,3 +145,53 @@ test('real account UI saves an animal offline immediately and drains it on recon
     expect(result.result).toBe('SYNC_PARTIAL_ERROR'); expect(result.queue).toHaveLength(1);
   } finally { await context.setOffline(false); await context.close(); }
 });
+
+test('verified Premium export access works offline and respects the paid deadline', async ({ browser, baseURL }) => {
+  if (!baseURL || !/^http:\/\/(127\.0\.0\.1|localhost):/.test(baseURL)) throw new Error('Synthetic billing fixtures require isolated localhost');
+  const workspace = `export-browser-${Date.now()}`;
+  const context = await browser.newContext({
+    extraHTTPHeaders: { 'x-test-user-id': workspace, 'x-test-device-id': 'export-device' },
+    serviceWorkers: 'block',
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto(baseURL + '/auth/login');
+    const authorize = () => page.evaluate(async workspaceId => {
+      const { setCurrentUserId } = await import(/* @vite-ignore */ '/src/lib/indexeddb.ts');
+      const { authorizeExport } = await import(/* @vite-ignore */ '/src/lib/export-access.ts');
+      await setCurrentUserId(workspaceId);
+      return authorizeExport();
+    }, workspace);
+    expect(await authorize()).toBe(false);
+    const checkout = await context.request.post(baseURL + '/api/billing/checkout-session', {
+      data: { productCode: 'premium_monthly' },
+    });
+    expect(checkout.status()).toBe(201);
+    const { sessionId } = await checkout.json();
+    expect((await context.request.post(baseURL + `/api/billing/test/checkout/${sessionId}/complete`, { data: {} })).ok()).toBeTruthy();
+    expect(await authorize()).toBe('online');
+    await page.evaluate(async () => {
+      const db = await import(/* @vite-ignore */ '/src/lib/indexeddb.ts');
+      const access = await db.getFromStore('metadata', 'verifiedExportAccess');
+      if (!access?.value?.validUntil) throw new Error('Missing verified paid deadline');
+    });
+    await context.setOffline(true);
+    expect(await authorize()).toBe('offline');
+    await page.evaluate(async () => {
+      const db = await import(/* @vite-ignore */ '/src/lib/indexeddb.ts');
+      await db.setCurrentUserId('another-workspace');
+      const { authorizeExport } = await import(/* @vite-ignore */ '/src/lib/export-access.ts');
+      if (await authorizeExport()) throw new Error('Another workspace inherited Premium');
+    });
+    await page.clock.setFixedTime(new Date('2100-01-01T00:00:00Z'));
+    expect(await authorize()).toBe(false);
+    await page.clock.setFixedTime(new Date());
+    await context.setOffline(false);
+    expect((await context.request.post(baseURL + '/api/billing/test/simulate', { data: { eventType: 'subscription.refunded' } })).ok()).toBeTruthy();
+    expect(await authorize()).toBe(false);
+    await context.setOffline(true);
+    expect(await authorize()).toBe(false);
+  } finally {
+    await context.close();
+  }
+});

@@ -1,4 +1,4 @@
-import { authorizeExport } from "@/lib/export-access";
+import { authorizeExport, fetchExportEntitlement } from "@/lib/export-access";
 import { PlanPricing } from "@/components/PlanPricing";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
@@ -286,6 +286,7 @@ export default function Settings() {
 
   const { data: entitlementData, isLoading: entitlementLoading } = useQuery<EntitlementResponse>({
     queryKey: ["/api/entitlements/me"],
+    queryFn: fetchExportEntitlement,
     refetchInterval: 5000,
     enabled: !!user,
   });

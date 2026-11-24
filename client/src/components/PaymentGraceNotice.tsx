@@ -2,7 +2,7 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { paidTermTime } from "@shared/commercial";
-import { apiRequest } from "@/lib/queryClient";
+import { fetchExportEntitlement } from "@/lib/export-access";
 
 type NoticeEntitlement = {
   planId: "free" | "premium"; status: string; graceUntil?: string;
@@ -10,7 +10,7 @@ type NoticeEntitlement = {
 export function PaymentGraceNotice({ isAuthenticated }: { isAuthenticated: boolean }) {
   const { data } = useQuery<{ entitlement: NoticeEntitlement }>({
     queryKey: ["/api/entitlements/me"], enabled: isAuthenticated, staleTime: 15_000, refetchInterval: 30_000,
-    queryFn: async () => (await apiRequest("GET", "/api/entitlements/me")).json(),
+    queryFn: fetchExportEntitlement,
   });
   if (!isAuthenticated || !data) return null;
   // Only a server projection may authorize status or the deadline. The browser

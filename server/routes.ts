@@ -379,7 +379,9 @@ export async function registerRoutes(
     const entitlement = await getEntitlementState(storage, userId);
     const animals = await storage.getAnimals(userId, {});
     const downgradeProjection = projectDowngradedAnimalVisibility(animals);
+    res.setHeader("Cache-Control", "no-store");
     res.json({
+      workspaceUserId: userId,
       entitlement,
       downgradeProjection: {
         visibleAnimalIds: (entitlement.planId === "free" && !isInternalTestEntitlement(entitlement) ? downgradeProjection.visible : animals).map((animal) => animal.id),
