@@ -23,7 +23,7 @@ export function PaymentGraceNotice({ isAuthenticated }: { isAuthenticated: boole
   return <aside role="status" className="mb-4 space-y-1 rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-sm" aria-label="Payment renewal notice">
     <p className="font-semibold">{active ? "Verified monthly renewal failed — Premium remains active during authorized grace." : "Your payment grace period ended. Your farm is now on Free."}</p>
     <p>{active ? "Grace ends" : "Grace ended"}: <time dateTime={state.graceUntil}>{new Date(state.graceUntil).toISOString()} (UTC)</time>.</p>
-    <p>All records are preserved. {active ? "After the deadline, Free shows the oldest 30 active animals and inactive history." : "Free shows the oldest 30 active animals and inactive history."} Verified payment restores access.</p>
+    <p>All records are preserved. {active ? "After the deadline, Free shows the first 30 originally registered animals, including inactive ones." : "Free shows the first 30 originally registered animals, including inactive ones."} Verified payment restores access.</p>
     <Link href="/settings" className="font-semibold underline">Review payment status and the existing invoice</Link>
   </aside>;
 }

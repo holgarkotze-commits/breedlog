@@ -45,7 +45,7 @@ test("locked commercial catalogue exposes exactly Free and Premium plans", () =>
   assert.equal(BREEDLOG_PLANS.premium.limits.batchPdfExportsPerMonth, 50);
 });
 
-test("Free accounts are server-limited to 30 active animals", async () => {
+test("Free accounts are server-limited to 30 original registrations", async () => {
   const userId = "commercial-free-limit";
   await storage.clearAllData(userId);
   for (let i = 1; i <= 30; i++) {

@@ -538,9 +538,7 @@ export async function registerRoutes(
       const createInput = idempotencyKey ? { ...input, clientId: idempotencyKey } : input;
       const visibility = await getDowngradeVisibilityContext(userId);
       if (!isAnimalVisible(visibility, input.damId) || !isAnimalVisible(visibility, input.sireId)) return hiddenAnimalNotFound(res);
-      if ((createInput.status ?? "active") === "active") {
-        await assertCanCreateAnimal(storage, userId);
-      }
+      await assertCanCreateAnimal(storage, userId);
       const animal = await storage.createAnimal(userId, createInput);
       res.status(201).json(animal);
     } catch (err) {
@@ -603,7 +601,7 @@ export async function registerRoutes(
       const nextStatus = input.status ?? existing.status ?? "active";
       const wasActive = (existing.status ?? "active") === "active";
       if (!wasActive && nextStatus === "active") {
-        await assertCanCreateAnimal(storage, userId);
+        await assertCanCreateAnimal(storage, userId, true);
       }
       const animal = await storage.updateAnimal(userId, animalId, input);
       res.json(redactAnimalParents(visibility, animal));
@@ -1174,9 +1172,7 @@ export async function registerRoutes(
           }
           try {
             const status = record.status || "active";
-            if (status === "active") {
-              await assertCanCreateAnimal(storage, userId);
-            }
+            await assertCanCreateAnimal(storage, userId);
             await storage.createAnimal(userId, {
               tagId,
               sex: record.sex || 'ewe',
@@ -1295,9 +1291,7 @@ export async function registerRoutes(
 
       for (const animal of parsed.rowsToCreate) {
         try {
-          if ((animal.status ?? "active") === "active") {
-            await assertCanCreateAnimal(storage, userId);
-          }
+          await assertCanCreateAnimal(storage, userId);
           await storage.createAnimal(userId, animal);
           created += 1;
         } catch (err) {

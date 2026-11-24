@@ -164,7 +164,7 @@ test("CSV import enforces the active-animal limit for Free accounts", async () =
   const body = await response.json() as { created: number; failed: number; errors: string[] };
   assert.equal(body.created, 30);
   assert.equal(body.failed, 1);
-  assert.match(body.errors[0], /30 active animals/);
+  assert.match(body.errors[0], /30 originally registered animals/);
 
   const animals = await fetch(`${BASE_URL}/api/animals`, {
     headers: testHeaders(userId, deviceId),
@@ -226,8 +226,8 @@ test("reactivating an inactive animal cannot bypass the Free active-animal cap",
   });
   assert.equal(animals.status, 200);
   const visible = await animals.json() as Array<{ id: number; status?: string }>;
-  assert.equal(visible.length, 31, "Free shows 30 active animals and inactive history");
-  assert.equal(visible.filter(animal => (animal.status ?? "active") === "active").length, 30);
+  assert.equal(visible.length, 30, "Free shows the first 30 original registrations");
+  assert.equal(visible.filter(animal => (animal.status ?? "active") === "active").length, 29);
   assert.equal(visible.find(animal => animal.id === inactiveAnimal.id)?.status, "inactive");
   // Verify the cap against the full preserved herd after a signed test-only
   // upgrade; the visibility projection must not conceal an accidental write.

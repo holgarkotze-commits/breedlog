@@ -17,11 +17,11 @@ test("35 original animals: all read/write surfaces enforce downgrade and verifie
   await setEntitlementState(storage, { accountId: user, planId: "premium", status: "active", source: "test-provider", paidUntil: "2031-01-01T00:00:00Z", updatedAt: new Date().toISOString() });
   const animals = [];
   for (let i = 1; i <= 35; i++) animals.push(await storage.createAnimal(user, {
-    tagId: `R2-${i}`, name: i > 33 ? `PRIVATE-HIDDEN-${i}` : `Visible ${i}`, sex: i % 2 ? "ram" : "ewe",
+    tagId: `R2-${i}`, name: i > 30 ? `PRIVATE-HIDDEN-${i}` : `Visible ${i}`, sex: i % 2 ? "ram" : "ewe",
     status: i <= 3 ? "culled" : "active", createdAt: new Date(2026, 0, i), clientId: `r2-operation-${i}`,
-    notes: i > 33 ? `SECRET-RECORD-${i}` : null,
+    notes: i > 30 ? `SECRET-RECORD-${i}` : null,
   } as any));
-  const v = animals[3], h = animals[33];
+  const v = animals[3], h = animals[30];
   await storage.updateAnimal(user, v.id, { sireId: h.id, externalSireInfo: h.name });
   await storage.createHealthRecord(user, { animalId: h.id, date: "2026-01-01", type: "treatment", treatment: "HIDDEN-TREATMENT" });
   await storage.createPerformanceRecord(user, { animalId: h.id, date: "2026-01-01", type: "weighing", weight: "91" });
@@ -65,18 +65,18 @@ test("35 original animals: all read/write surfaces enforce downgrade and verifie
       }
       assert.equal((await request("/api/settings/export")).status, 403);
       const list = (await request("/api/animals")).body;
-      assert.equal(list.length, 33); assert.equal(list.filter((row: any) => row.status === "culled").length, 3);
+      assert.equal(list.length, 30); assert.equal(list.filter((row: any) => row.status === "culled").length, 3);
       assert.equal((await request("/api/animals/culled")).body.length, 3);
       assert.equal((await request(`/api/animals/${v.id}`)).body.sireId, null);
       const ent = (await request("/api/entitlements/me")).body;
-      assert.equal(ent.downgradeProjection.hiddenAnimalCount, 2);
+      assert.equal(ent.downgradeProjection.hiddenAnimalCount, 5);
       assert.equal(ent.downgradeProjection.hiddenAnimalIds, undefined);
       const line = (await request(`/api/genetics/line-performance/${bloodline.id}`)).body;
       assert.equal(line.activeAnimals, 0); assert.equal(line.matingsRecorded, 0);
       const aiData = await getVisibleAIData(storage, user);
       const context = JSON.stringify(buildBreedLogAIContext(aiData));
       assert.doesNotMatch(context, /PRIVATE-HIDDEN|SECRET-RECORD|HIDDEN-TREATMENT/);
-      assert.equal(aiData.animals.length, 33); assert.equal(aiData.healthRecords.length, 0);
+      assert.equal(aiData.animals.length, 30); assert.equal(aiData.healthRecords.length, 0);
     });
     await t.test("queued writes, replay, deletion and backups cannot reach hidden records", async () => {
       for (const device of ["device-a", "device-b"]) {

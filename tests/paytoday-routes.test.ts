@@ -135,9 +135,9 @@ test("monthly grace expiry enforces read/write visibility on other devices and v
   const base = `http://127.0.0.1:${(server.address() as any).port}`;
   const headers = { "Content-Type": "application/json", "x-test-user-id": f.workspace, "x-test-device-id": "another-farm-device" };
   try {
-    const listed = await (await fetch(base + "/api/animals", { headers })).json(); assert.equal(listed.length, 31);
-    assert.equal((await fetch(base + `/api/animals/${ids[33]}`, { headers })).status, 404);
-    assert.equal((await fetch(base + `/api/animals/${ids[33]}`, { method: "PUT", headers, body: JSON.stringify({ name: "bypass" }) })).status, 404);
+    const listed = await (await fetch(base + "/api/animals", { headers })).json(); assert.equal(listed.length, 30);
+    assert.equal((await fetch(base + `/api/animals/${ids[34]}`, { headers })).status, 404);
+    assert.equal((await fetch(base + `/api/animals/${ids[34]}`, { method: "PUT", headers, body: JSON.stringify({ name: "bypass" }) })).status, 404);
     assert.equal((await storage.getAnimals(f.workspace, {})).length, 35);
     assert.equal((await fetch(base + "/api/billing/checkout-session", { method: "POST", headers,
       body: JSON.stringify({ provider: "paytoday", productCode: "premium_monthly", currency: "USD", contact: f.contact }) })).status, 503);
@@ -147,6 +147,6 @@ test("monthly grace expiry enforces read/write visibility on other devices and v
     assert.equal(zar.pricing.currency, "ZAR"); assert.equal(zar.products[0].amountMinor, 7999);
     f.setNow(new Date().toISOString()); const next = await f.create(); await f.service.reconcile(f.workspace, next.orderId);
     const restored = await (await fetch(base + "/api/animals", { headers })).json(); assert.equal(restored.length, 35);
-    assert.equal((await fetch(base + `/api/animals/${ids[33]}`, { headers })).status, 200);
+    assert.equal((await fetch(base + `/api/animals/${ids[34]}`, { headers })).status, 200);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });

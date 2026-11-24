@@ -120,7 +120,7 @@ export type UsageState = {
 export type DowngradeProjection<T extends { id: number; createdAt?: Date | string | null; status?: string | null }> = {
   visible: T[];
   hidden: T[];
-  rule: "first_30_active_with_inactive_history";
+  rule: "first_30_originally_added";
 };
 
 export type BillingProductCode = "premium_monthly" | "premium_annual" | "addon_pdf_250";
@@ -675,17 +675,19 @@ export async function setInternalTestEntitlement(storage: IStorage, accountId: s
   return state;
 }
 
-export async function assertCanCreateAnimal(storage: IStorage, accountId: string): Promise<void> {
+export async function assertCanCreateAnimal(storage: IStorage, accountId: string, reactivation = false): Promise<void> {
   const entitlement = await getEntitlementState(storage, accountId);
   if (isInternalTestEntitlement(entitlement)) return; // internal test — unlimited animals
   const plan = getBreedLogPlan(entitlement.planId);
   const activeLimit = plan.limits.activeAnimals;
   if (activeLimit === "unlimited") return;
-  const activeAnimals = (await storage.getAnimals(accountId)).filter(animal => (animal.status ?? "active") === "active").length;
-  if (activeAnimals >= activeLimit) {
+  const animals = await storage.getAnimals(accountId);
+  const count = reactivation ? animals.filter(animal => (animal.status ?? "active") === "active").length : animals.length;
+  if (count >= activeLimit) {
     throw new EntitlementDeniedError(
       "ACTIVE_ANIMAL_LIMIT_REACHED",
-      `Free accounts may register up to ${activeLimit} active animals. Inactive and culled history is retained.`,
+      reactivation ? `Free accounts may have up to ${activeLimit} active animals.`
+        : `Free includes the first ${activeLimit} originally registered animals, including inactive ones.`,
     );
   }
 }
@@ -693,21 +695,18 @@ export async function assertCanCreateAnimal(storage: IStorage, accountId: string
 export function projectDowngradedAnimalVisibility<T extends { id: number; createdAt?: Date | string | null; status?: string | null }>(
   animals: T[],
 ): DowngradeProjection<T> {
-  // Only active animals consume the Free limit; retain inactive/culled history.
-  const activeAnimals = animals.filter((animal) => (animal.status ?? "active") === "active")
-    .sort((a, b) => {
-      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return aTime - bTime || a.id - b.id;
-    });
-  const visibleIds = new Set([
-    ...animals.filter((animal) => (animal.status ?? "active") !== "active").map((animal) => animal.id),
-    ...activeAnimals.slice(0, BREEDLOG_PLANS.free.limits.activeAnimals as number).map((animal) => animal.id),
-  ]);
+  const registeredAnimals = [...animals].sort((a, b) => {
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return aTime - bTime || a.id - b.id;
+  });
+  const visibleIds = new Set(registeredAnimals
+    .slice(0, BREEDLOG_PLANS.free.limits.activeAnimals as number)
+    .map(animal => animal.id));
   return {
     visible: animals.filter((animal) => visibleIds.has(animal.id)),
     hidden: animals.filter((animal) => !visibleIds.has(animal.id)),
-    rule: "first_30_active_with_inactive_history",
+    rule: "first_30_originally_added",
   };
 }
 

@@ -52,8 +52,8 @@ test("server-authoritative grace ends exactly at 72h, preserves all records and 
   assert.equal((await getEntitlementState(store, workspace, new Date("2030-02-04T11:59:59.999Z"))).planId, "premium");
   assert.equal((await getEntitlementState(store, workspace, new Date("2030-02-04T12:00:00.000Z"))).planId, "free");
   const animals = await store.getAnimals(workspace, {}), projection = projectDowngradedAnimalVisibility(animals);
-  assert.equal(animals.length, 35); assert.equal(projection.visible.length, 31); assert.equal(projection.hidden.length, 4);
-  assert.ok(projection.visible.some(a => a.status === "culled"), "culled history remains visible");
+  assert.equal(animals.length, 35); assert.equal(projection.visible.length, 30); assert.equal(projection.hidden.length, 5);
+  assert.ok(projection.hidden.some(a => a.status === "culled"), "later inactive registrations remain hidden");
   await store.setSystemSetting(`commercial:entitlement:${workspace}`, JSON.stringify({ ...state, paidUntil: "2030-03-01T12:00:00Z", paymentOrderId: "verified-renewal" }));
   assert.equal((await getEntitlementState(store, workspace, new Date("2030-02-05T00:00:00Z"))).planId, "premium");
   assert.deepEqual(await store.getAnimals(workspace, {}), animals);
@@ -85,18 +85,14 @@ test("renewal notice is visible across app screens for grace and expired access"
   }
 });
 
-test("Free registration reuses slots freed by culled animals", async () => {
+test("Free registration counts original records even after culling", async () => {
   const store = new InMemoryStorage(), id = "free-original-slots";
   for (let i = 0; i < 30; i++) {
     await assertCanCreateAnimal(store, id);
     await store.createAnimal(id, { tagId: `SLOT-${i}`, sex: "ewe", status: i < 2 ? "culled" : "active" } as any);
   }
-  for (let i = 30; i < 32; i++) {
-    await assertCanCreateAnimal(store, id);
-    await store.createAnimal(id, { tagId: `SLOT-${i}`, sex: "ewe", status: "active" });
-  }
-  await assert.rejects(() => assertCanCreateAnimal(store, id), /30 active animals/);
-  assert.equal(projectDowngradedAnimalVisibility(await store.getAnimals(id, {})).visible.length, 32);
+  await assert.rejects(() => assertCanCreateAnimal(store, id), /30 originally registered animals/);
+  assert.equal(projectDowngradedAnimalVisibility(await store.getAnimals(id, {})).visible.length, 30);
 });
 
 test("unapproved PDF add-on sale is unavailable outside explicit simulator mode", async () => {

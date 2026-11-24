@@ -942,7 +942,7 @@ export default function Settings() {
           <CardHeader><CardTitle>Farmer account</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm break-all">{account.email}</p>
-            {isTrial && <p className="text-sm">Free trial: Up to 30 active animals plus inactive history, 1 active device, and Premium-only printing and exports. No card or charge. Paid plans and AI are coming soon.</p>}
+            {isTrial && <p className="text-sm">Free trial: first 30 originally registered animals, including inactive ones, 1 active device, and Premium-only printing and exports. No card or charge. Paid plans and AI are coming soon.</p>}
             <p className="text-xs text-muted-foreground">Keep your saved recovery code private. Made by STITCH WORX.</p>
             <Button variant="outline" onClick={() => void performLogout()} data-testid="button-account-signout">Sign out</Button>
           </CardContent>
@@ -1442,7 +1442,7 @@ export default function Settings() {
                       </div>
                     </div>
                     <div className="rounded border border-border bg-background/70 p-3 text-xs">
-                      <p><strong>Downgrade visibility rule:</strong> The oldest 30 active animals and inactive history remain visible.</p>
+                      <p><strong>Downgrade visibility rule:</strong> The first 30 originally registered animals, including inactive ones, remain visible.</p>
                       <p><strong>Visible under Free:</strong> {visibleAnimalCount}</p>
                       <p><strong>Hidden on downgrade:</strong> {hiddenAnimalCount}</p>
                     </div>
