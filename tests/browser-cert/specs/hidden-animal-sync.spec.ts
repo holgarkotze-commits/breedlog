@@ -195,3 +195,25 @@ test('verified Premium export access works offline and respects the paid deadlin
     await context.close();
   }
 });
+
+test('downgrade keeps hidden flock treatments out of the readable cache and retains the queue', async ({ page }) => {
+  await page.goto('/auth/login');
+  const result = await page.evaluate(async () => {
+    const db = await import(/* @vite-ignore */ '/src/lib/indexeddb.ts');
+    await db.addToSyncQueue({
+      action: 'create', entity: 'flockHealthEvents', tempId: -101,
+      data: { treatments: [{ animalId: 31 }] },
+    });
+    await db.addToSyncQueue({
+      action: 'create', entity: 'flockHealthEvents', tempId: -102,
+      data: { treatments: [{ animalId: 1 }] },
+    });
+    await db.replaceServerSnapshot({ animals: [{ id: 1 }] });
+    return {
+      visible: (await db.getAllFromStore('flockHealthEvents')).map(row => row.id),
+      pending: (await db.getPendingSyncItems()).map(row => row.tempId).sort(),
+    };
+  });
+  expect(result.visible).toEqual([-102]);
+  expect(result.pending).toEqual([-101, -102]);
+});

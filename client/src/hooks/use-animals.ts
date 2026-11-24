@@ -549,15 +549,20 @@ export function useDeleteAnimal() {
       const existing = await getFromStore<AnimalWithRelations>("animals", id);
       await deleteFromStore("animals", id);
 
-      const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
+      const { isApiReachable } = await import("@/lib/queryClient");
       const isOnline = await isApiReachable();
       if (isOnline && id > 0) {
         const url = buildUrl(api.animals.delete.path, { id });
         const { apiRequest } = await import("@/lib/queryClient");
-        const res = await apiRequest(api.animals.delete.method, url);
-        if (res.ok) return;
-        if (res.status >= 400 && res.status < 500) {
-          throw new Error("Failed to delete animal");
+        try {
+          await apiRequest(api.animals.delete.method, url);
+          return;
+        } catch (error) {
+          const status = error instanceof Error ? Number(/^(\d{3}):/.exec(error.message)?.[1]) : NaN;
+          if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
+            if (existing) await putInStore("animals", existing);
+            throw error;
+          }
         }
       }
 

@@ -1688,19 +1688,17 @@ export async function registerRoutes(
   app.post("/api/flock-health-events", requireAuth, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { treatments, ...eventData } = req.body;
-      const visibility = await getDowngradeVisibilityContext(userId);
-      if (Array.isArray(treatments) && treatments.some(row => !isAnimalVisible(visibility, row.animalId))) return hiddenAnimalNotFound(res);
-      const event = await storage.createFlockHealthEvent(userId, eventData);
-      
-      if (treatments && treatments.length > 0) {
-        const treatmentRecords = treatments.map((t: any) => ({
-          ...t,
-          eventId: event.id,
-        }));
-        await storage.createFlockHealthTreatments(userId, treatmentRecords);
+      const { treatments = [], clientId, ...eventData } = req.body;
+      const operationId = req.header("X-Idempotency-Key")?.trim();
+      if ((operationId && operationId.length > 200) || !Array.isArray(treatments)) {
+        return res.status(400).json({ message: "Invalid flock-health submission." });
       }
-      
+      const visibility = await getDowngradeVisibilityContext(userId);
+      if (treatments.some(row => !isAnimalVisible(visibility, row.animalId))) return hiddenAnimalNotFound(res);
+      const event = await storage.createFlockHealthReport(userId, eventData, treatments, operationId);
+      if ((await storage.getFlockHealthTreatments(userId, event.id)).some(row => !isAnimalVisible(visibility, row.animalId))) {
+        return hiddenAnimalNotFound(res);
+      }
       res.status(201).json(event);
     } catch (err: any) {
       console.error("Create flock health event error:", err);

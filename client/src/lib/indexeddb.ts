@@ -39,6 +39,10 @@ export function hasStorageWarningBeenShown(): boolean {
   return storageWarningShown;
 }
 
+export function hasVisibleFlockTreatments(data: { treatments?: { animalId: number }[] }, visibleIds: Set<number>): boolean {
+  return (data.treatments ?? []).every(({ animalId }) => visibleIds.has(animalId));
+}
+
 export interface SyncQueueItem {
   id: string;
   action: 'create' | 'update' | 'delete';
@@ -352,6 +356,7 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
     const isCached = snapshot[name] === undefined;
     snapshot[name] = cachedRows[index].filter(row => {
       if (isCached && revoked && ['documents', 'exportedDocuments', 'flockHealthEvents'].includes(name)) return false;
+      if (name === "flockHealthEvents" && !hasVisibleFlockTreatments(row, allowed)) return false;
       return [row.animalId, row.ramId, row.eweId, ...(row.eweIds ?? [])].every(ref =>
         typeof ref !== 'number' || ref < 0 || allowed.has(ref));
     });
@@ -374,6 +379,7 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
           if (id > 0 && !rows.has(id)) continue;
           if (name !== 'animals' && [data.animalId, data.ramId, data.eweId, ...(data.eweIds ?? [])]
             .some(ref => typeof ref === 'number' && ref > 0 && !visibleIds.has(ref))) continue;
+          if (name === "flockHealthEvents" && !hasVisibleFlockTreatments(data, visibleIds)) continue;
           if (item.action === 'delete') { rows.delete(id); continue; }
           const row = { ...rows.get(id), ...data, id };
           if (name === 'animals') {

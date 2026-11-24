@@ -117,6 +117,16 @@ test("35 original animals: all read/write surfaces enforce downgrade and verifie
       assert.equal((await request("/api/documents")).body.length, 1);
       assert.equal((await request(`/api/flock-health-events/${flock.id}`)).body.treatments[0].animalId, h.id);
     });
+    await t.test("a replay preserves one flock-health report and one treatment", async () => {
+      const body = { eventDate: "2026-01-02", productName: "Replay fixture", treatments: [{ animalId: v.id }] };
+      const submit = () => request("/api/flock-health-events", "POST", body, "device-a", { "X-Idempotency-Key": "flock-report-replay" });
+      const [first, retry] = await Promise.all([submit(), submit()]);
+      assert.equal(first.status, 201);
+      assert.equal(retry.status, 201);
+      assert.equal(first.body.id, retry.body.id);
+      assert.equal((await storage.getFlockHealthTreatments(user, first.body.id)).length, 1);
+      assert.equal((await storage.getFlockHealthEvents(user)).filter(row => row.productName === "Replay fixture").length, 1);
+    });
   } finally {
     server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
   }

@@ -166,6 +166,7 @@ export interface IStorage {
   // Flock Health Events
   getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]>;
   getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined>;
+  createFlockHealthReport(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>, treatments: Omit<InsertFlockHealthTreatment, 'userId' | 'eventId'>[], operationId?: string): Promise<FlockHealthEvent>;
   createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>): Promise<FlockHealthEvent>;
   getFlockHealthTreatments(userId: string, eventId: number): Promise<FlockHealthTreatment[]>;
   createFlockHealthTreatments(userId: string, treatments: Omit<InsertFlockHealthTreatment, 'userId'>[]): Promise<FlockHealthTreatment[]>;
@@ -643,6 +644,28 @@ export class DatabaseStorage implements IStorage {
     return event;
   }
   
+  async createFlockHealthReport(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>, treatments: Omit<InsertFlockHealthTreatment, 'userId' | 'eventId'>[], operationId?: string): Promise<FlockHealthEvent> {
+    const key = operationId ? "flock:" + crypto.createHash("sha256").update(JSON.stringify([userId, operationId])).digest("base64url") : undefined;
+    return db.transaction(async tx => {
+      if (key) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+        const [entry] = await tx.select().from(systemSettings).where(eq(systemSettings.key, key));
+        if (entry) {
+          const [existing] = await tx.select().from(flockHealthEvents)
+            .where(and(eq(flockHealthEvents.id, Number(entry.value)), eq(flockHealthEvents.userId, userId)));
+          if (existing) return existing;
+        }
+      }
+      const [created] = await tx.insert(flockHealthEvents).values({ ...event, userId }).returning();
+      if (treatments.length) {
+        await tx.insert(flockHealthTreatments).values(treatments.map(row => ({ ...row, userId, eventId: created.id })));
+      }
+      if (key) await tx.insert(systemSettings).values({ key, value: String(created.id) })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: String(created.id) } });
+      return created;
+    });
+  }
+
   async createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>): Promise<FlockHealthEvent> {
     const [newEvent] = await db.insert(flockHealthEvents).values({ ...event, userId }).returning();
     return newEvent;
@@ -1611,6 +1634,18 @@ export class InMemoryStorage implements IStorage {
   }
   async getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]> { return [...this.flockEvents.values()].filter(e => e.userId === userId); }
   async getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined> { const e = this.flockEvents.get(id); return e?.userId === userId ? e : undefined; }
+  async createFlockHealthReport(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>, treatments: Omit<InsertFlockHealthTreatment, 'userId' | 'eventId'>[], operationId?: string): Promise<FlockHealthEvent> {
+    const key = operationId ? "flock:" + crypto.createHash("sha256").update(JSON.stringify([userId, operationId])).digest("base64url") : undefined;
+    const existing = key ? this.flockEvents.get(Number(this.settings.get(key))) : undefined;
+    if (existing?.userId === userId) return existing;
+    const created = { ...event, id: this.nextId("genericSeq"), userId, createdAt: this.now() } as FlockHealthEvent;
+    this.flockEvents.set(created.id, created);
+    const writes = this.createFlockHealthTreatments(userId, treatments.map(row => ({ ...row, eventId: created.id })));
+    if (key) this.settings.set(key, String(created.id));
+    await writes;
+    return created;
+  }
+
   async createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, "userId">): Promise<FlockHealthEvent> { const id = this.nextId("genericSeq"); const v = { id, ...event, userId, createdAt: this.now() } as FlockHealthEvent; this.flockEvents.set(id, v); return v; }
   async getFlockHealthTreatments(userId: string, eventId: number): Promise<FlockHealthTreatment[]> { return [...this.flockTreatments.values()].filter(t => t.userId === userId && t.eventId === eventId); }
   async createFlockHealthTreatments(userId: string, treatments: Omit<InsertFlockHealthTreatment, "userId">[]): Promise<FlockHealthTreatment[]> { return treatments.map(t => { const id = this.nextId("genericSeq"); const v = { id, ...t, userId } as FlockHealthTreatment; this.flockTreatments.set(id, v); return v; }); }
