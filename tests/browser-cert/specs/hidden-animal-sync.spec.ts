@@ -17,8 +17,8 @@ test('two offline devices retain queued hidden writes and restore after Premium 
   for (let i = 1; i <= 35; i++) animals.push(await api('/api/animals', 'POST', {
     tagId: `BROWSER-${i}`, sex: i % 2 ? 'ram' : 'ewe', status: i <= 3 ? 'culled' : 'active', notes: `original-${i}`,
   }));
-  await api(`/api/animals/${animals[3].id}`, 'PUT', { sireId: animals[30].id });
-  await api('/api/health-records', 'POST', { animalId: animals[30].id, date: '2026-01-01', type: 'treatment', treatment: 'private health' });
+  await api(`/api/animals/${animals[3].id}`, 'PUT', { sireId: animals[33].id });
+  await api('/api/health-records', 'POST', { animalId: animals[33].id, date: '2026-01-01', type: 'treatment', treatment: 'private health' });
   const contexts = await Promise.all(['device-a', 'device-b'].map(device => browser.newContext({
     extraHTTPHeaders: { ...headers, 'x-test-device-id': device }, serviceWorkers: 'block',
   })));
@@ -55,23 +55,23 @@ test('two offline devices retain queued hidden writes and restore after Premium 
         id: ids[0], sireId: ids[1], sire: { id: ids[1], notes: 'hidden nested value' },
         grandparents: { paternalGrandsire: { id: ids[1] } },
       }, operationId: crypto.randomUUID() });
-    }, [animals[3].id, animals[30].id]);
+    }, [animals[3].id, animals[33].id]);
     expect((await cached(pages[0])).queue).toHaveLength(2);
     await api('/api/billing/test/simulate', 'POST', { eventType: 'subscription.refunded' });
     await contexts[0].setOffline(false);
-    await expect.poll(async () => (await cached(pages[0])).animals.length).toBe(30);
+    await expect.poll(async () => (await cached(pages[0])).animals.length).toBe(33);
     expect(await sync(pages[1])).toBe('SYNC_COMPLETE');
     for (const page of pages) {
       const data = await cached(page);
-      expect(data.animals).toHaveLength(30); expect(data.health).toHaveLength(0);
-      expect(data.animals.some((row: any) => row.id === animals[30].id || row.sireId === animals[30].id)).toBeFalsy();
+      expect(data.animals).toHaveLength(33); expect(data.health).toHaveLength(0);
+      expect(data.animals.some((row: any) => row.id === animals[33].id || row.sireId === animals[33].id)).toBeFalsy();
       expect(JSON.stringify(data.animals)).not.toContain('hidden nested value');
     }
     const pending = (await cached(pages[0])).queue;
     expect(pending).toHaveLength(2);
-    expect(pending.some(item => (item.data as any).id === animals[30].id)).toBeTruthy();
+    expect(pending.some(item => (item.data as any).id === animals[33].id)).toBeTruthy();
     await contexts[0].setOffline(true);
-    expect((await cached(pages[0])).animals).toHaveLength(30);
+    expect((await cached(pages[0])).animals).toHaveLength(33);
     await upgrade();
     await contexts[0].setOffline(false);
     await expect.poll(async () => (await cached(pages[0])).queue.length, { timeout: 20_000 }).toBe(0);
@@ -81,7 +81,7 @@ test('two offline devices retain queued hidden writes and restore after Premium 
       expect((await cached(page)).animals).toHaveLength(35);
       expect((await cached(page)).health).toHaveLength(1);
     }
-    expect((await api(`/api/animals/${animals[30].id}`)).notes).toBe(`offline-edit-${animals[30].id}`);
+    expect((await api(`/api/animals/${animals[33].id}`)).notes).toBe(`offline-edit-${animals[33].id}`);
     expect((await api('/api/animals')).filter((row: any) => row.status === 'culled')).toHaveLength(3);
   } finally {
     await Promise.all(contexts.map(context => context.close()));
