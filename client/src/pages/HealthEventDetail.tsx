@@ -43,7 +43,7 @@ export default function HealthEventDetail() {
   const activeAnimals = animals?.filter(a => a.status === 'active') || [];
   const eventAnimals = event?.treatAllAnimals ? activeAnimals : treatmentAnimals;
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     if (!event) return;
     
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
@@ -106,7 +106,7 @@ export default function HealthEventDetail() {
     </div>`).join("");
 
     const html = wrapExportDocument(title, css, pageHtml);
-    openExportPrintDialog(html);
+    if (!await openExportPrintDialog(html)) return;
 
     createExportedDoc.mutate({
       name: `Health Event PDF - ${event.eventName || event.productName} - ${format(new Date(event.eventDate), "dd MMM yyyy")}`,

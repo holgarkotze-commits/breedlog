@@ -1103,13 +1103,26 @@ export async function registerRoutes(
 
 
   // === SETTINGS / EXPORT / IMPORT ===
-  app.get(api.settings.export.path, requireAuth, async (req, res) => {
+  const requirePremiumExport = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const entitlement = await getEntitlementState(storage, getUserId(req));
+      if (entitlement.planId !== "premium" && !isInternalTestEntitlement(entitlement)) {
+        return res.status(403).json({ code: "PREMIUM_REQUIRED", message: "Printing and exports require Premium." });
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  app.post("/api/exports/authorize", requireAuth, requirePremiumExport, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.sendStatus(204);
+  });
+
+  app.get(api.settings.export.path, requireAuth, requirePremiumExport, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const entitlement = await getEntitlementState(storage, userId);
-      if (entitlement.planId !== "premium" && !isInternalTestEntitlement(entitlement)) {
-        return res.status(403).json({ code: "PREMIUM_REQUIRED", message: "CSV export requires Premium." });
-      }
       const animals = await storage.getAnimals(userId);
       const farmSettings = await storage.getFarmSettings(userId);
       const csvRows = buildBreedLogCsvRows(animals, farmSettings?.studPrefix || null);
@@ -1370,7 +1383,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/exported-documents", requireAuth, async (req, res) => {
+  app.post("/api/exported-documents", requireAuth, requirePremiumExport, async (req, res) => {
     try {
       const userId = getUserId(req);
       const visibility = await getDowngradeVisibilityContext(userId);

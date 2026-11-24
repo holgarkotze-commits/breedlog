@@ -7,6 +7,7 @@
 //   own date/url/title chrome. body { margin: 10mm } restores equivalent visual
 //   margins inside the printable content area.
 
+import { authorizeExport } from "@/lib/export-access";
 import { trackAnalyticsEvent } from "@/lib/project-analytics";
 
 export const GROUP_ROWS_PER_PAGE = 20;
@@ -221,9 +222,13 @@ export function wrapExportDocument(title: string, css: string, pagesHtml: string
 }
 
 /** Open the result in the browser print dialog */
-export function openExportPrintDialog(htmlContent: string): void {
+export async function openExportPrintDialog(htmlContent: string): Promise<boolean> {
   const w = window.open('', '_blank');
-  if (!w) return;
+  if (!await authorizeExport()) {
+    w?.close();
+    return false;
+  }
+  if (!w || w.closed) return false;
   trackAnalyticsEvent("document_preview_opened", { format: "pdf" });
 
   // A blob URL is reliable in Android/PWA standalone mode, where writing into
@@ -243,4 +248,5 @@ export function openExportPrintDialog(htmlContent: string): void {
   w.onload = printOnce;
   w.location.href = blobUrl;
   setTimeout(printOnce, 2500);
+  return true;
 }

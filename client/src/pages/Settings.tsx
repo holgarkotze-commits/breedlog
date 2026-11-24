@@ -1,3 +1,4 @@
+import { authorizeExport } from "@/lib/export-access";
 import { PlanPricing } from "@/components/PlanPricing";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
@@ -800,6 +801,7 @@ export default function Settings() {
   };
 
   const exportCSV = async () => {
+    if (!await authorizeExport()) return;
     const { rows } = buildAnimalExportRows();
     const content = buildBreedLogCsvContent(rows);
     await shareOrDownloadFile(content, `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.csv`, "text/csv", "Herd database exported as CSV.");
@@ -813,7 +815,7 @@ export default function Settings() {
     });
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     const data = getExportData();
     const fb = data.farmBranding;
     const totalPages = Math.max(1, Math.ceil(data.animals.length / GROUP_ROWS_PER_PAGE));
@@ -867,7 +869,7 @@ export default function Settings() {
     `;
     const htmlContent = wrapExportDocument("Herd Database Export", css, pagesHtml);
     
-    openExportPrintDialog(htmlContent);
+    if (!await openExportPrintDialog(htmlContent)) return;
     toast({ title: "PDF Ready", description: "Print dialog opened for PDF export" });
   };
 
@@ -1625,7 +1627,8 @@ export default function Settings() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => {
+                          onClick={async () => {
+                            if (!await authorizeExport()) return;
                             const link = document.createElement('a');
                             link.href = doc.fileUrl;
                             link.download = doc.fileName;

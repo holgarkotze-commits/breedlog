@@ -1,3 +1,4 @@
+import { authorizeExport } from "@/lib/export-access";
 import { Layout } from "@/components/Layout";
 import { useBreedingEvents } from "@/hooks/use-breeding";
 import { useMatingGroups, useCreateMatingGroup, useUpdateMatingGroup, useDeleteMatingGroup } from "@/hooks/use-mating-groups";
@@ -130,7 +131,8 @@ export default function Breeding() {
     URL.revokeObjectURL(url);
   };
 
-  const exportCSV = () => {
+  const exportCSV = async () => {
+    if (!await authorizeExport()) return;
     const exportData = getExportData();
     if (exportData.length === 0) return;
     
@@ -201,11 +203,11 @@ export default function Breeding() {
         ${!continuation && group.notes ? `<p class="group-notes"><strong>Group notes:</strong> ${escapeHtmlText(sanitizePublicNote(group.notes))}</p>` : ""}
         ${renderExportFooter(farmSettings)}
       </div>`).join("");
-    openExportPrintDialog(wrapExportDocument(title, css, pagesHtml));
+    return openExportPrintDialog(wrapExportDocument(title, css, pagesHtml));
   };
 
-  const exportPDF = () => {
-    exportMatingGroupsReport();
+  const exportPDF = async () => {
+    if (!await exportMatingGroupsReport()) return;
     createExportedDoc.mutate({
       name: getDocumentFileName("MatingGroups", "Report"),
       documentType: "breeding",
