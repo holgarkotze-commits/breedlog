@@ -25,9 +25,9 @@ export function TrialWelcome() {
           <aside className="border-t border-border bg-secondary/45 p-6 sm:p-8 md:border-l md:border-t-0">
             <h2 className="text-base font-bold">Included on the free plan</h2>
             <div className="mt-5 space-y-4">
-              <div className="flex items-start gap-3"><div className="mt-0.5 rounded-lg bg-card p-2 text-primary"><Sheep className="h-4 w-4" /></div><div><p className="text-sm font-semibold">30 active animals</p><p className="mt-0.5 text-xs text-muted-foreground">Room for your working flock.</p></div></div>
+              <div className="flex items-start gap-3"><div className="mt-0.5 rounded-lg bg-card p-2 text-primary"><Sheep className="h-4 w-4" /></div><div><p className="text-sm font-semibold">First 30 originally registered animals, including inactive ones</p><p className="mt-0.5 text-xs text-muted-foreground">Later registrations are preserved and become accessible on Premium.</p></div></div>
               <div className="flex items-start gap-3"><div className="mt-0.5 rounded-lg bg-card p-2 text-primary"><MonitorSmartphone className="h-4 w-4" /></div><div><p className="text-sm font-semibold">1 active device</p><p className="mt-0.5 text-xs text-muted-foreground">Keep one signed-in device at a time.</p></div></div>
-              <div className="flex items-start gap-3"><div className="mt-0.5 rounded-lg bg-card p-2 text-primary"><FileText className="h-4 w-4" /></div><div><p className="text-sm font-semibold">5 individual PDFs each month</p><p className="mt-0.5 text-xs text-muted-foreground">Print the records you need.</p></div></div>
+              <div className="flex items-start gap-3"><div className="mt-0.5 rounded-lg bg-card p-2 text-primary"><FileText className="h-4 w-4" /></div><div><p className="text-sm font-semibold">Printing and exports with Premium</p><p className="mt-0.5 text-xs text-muted-foreground">Premium lets you print and export your records.</p></div></div>
             </div>
             <div className="mt-6 rounded-xl border border-border bg-card/75 p-4">
               <div className="flex items-center gap-2"><LockKeyhole className="h-4 w-4 text-primary" /><p className="text-sm font-semibold">Your data stays private</p></div>

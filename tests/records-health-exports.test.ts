@@ -66,7 +66,7 @@ test("canonical template exports wrapExportDocument", () => {
 });
 
 test("canonical template exports openExportPrintDialog", () => {
-  assert.match(templateSrc, /export\s+function\s+openExportPrintDialog/);
+  assert.match(templateSrc, /export\s+async\s+function\s+openExportPrintDialog/);
 });
 
 test("canonical PDF preview uses a blob URL for Android/PWA compatibility", () => {

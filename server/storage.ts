@@ -1,4 +1,6 @@
-import { db } from "./db";
+import { db, pool } from "./db";
+import { memoryPaymentTransact, sqlPaymentTransact } from "./paytoday-store";
+import type { PaymentTransact } from "./paytoday-types";
 import crypto from "crypto";
 import type {
   Account,
@@ -103,6 +105,8 @@ export class DuplicateAnimalNameError extends Error {
 }
 
 export interface IStorage {
+  paymentTransaction: PaymentTransact;
+  withAnimalWriteLock<T>(userId: string, work: (storage: IStorage) => Promise<T>): Promise<T>;
   // Animals - ALL methods now require userId for data isolation
   getAnimals(userId: string, filters?: { search?: string; status?: string; sex?: string }): Promise<Animal[]>;
   getAnimal(userId: string, id: number): Promise<Animal | undefined>;
@@ -148,7 +152,7 @@ export interface IStorage {
   
   // Animal Images
   getAnimalImages(userId: string, animalId: number): Promise<AnimalImage[]>;
-  createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>): Promise<AnimalImage>;
+  createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>, operationId?: string): Promise<AnimalImage>;
   deleteAnimalImage(userId: string, id: number): Promise<void>;
   createEidScanEvent(userId: string, event: Omit<InsertEidScanEvent, 'userId'>): Promise<EidScanEvent>;
   
@@ -163,6 +167,7 @@ export interface IStorage {
   // Flock Health Events
   getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]>;
   getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined>;
+  createFlockHealthReport(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>, treatments: Omit<InsertFlockHealthTreatment, 'userId' | 'eventId'>[], operationId?: string): Promise<FlockHealthEvent>;
   createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>): Promise<FlockHealthEvent>;
   getFlockHealthTreatments(userId: string, eventId: number): Promise<FlockHealthTreatment[]>;
   createFlockHealthTreatments(userId: string, treatments: Omit<InsertFlockHealthTreatment, 'userId'>[]): Promise<FlockHealthTreatment[]>;
@@ -222,6 +227,7 @@ export interface IStorage {
   
   // System Settings (global app config)
   getSystemSetting(key: string): Promise<string | undefined>;
+  consumeAuthAttempt(key: string, window: number, limit: number): Promise<boolean>;
   setSystemSetting(key: string, value: string, description?: string): Promise<void>;
   deleteSystemSetting(key: string): Promise<void>;
   listSystemSettings(prefix: string): Promise<Array<{ key: string; value: string }>>;
@@ -260,6 +266,17 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // Keep the limit check and its animal write on the same connection.
+  constructor(private readonly animalDb: Pick<typeof db, "select" | "insert" | "update"> = db) {}
+
+  async withAnimalWriteLock<T>(userId: string, work: (storage: IStorage) => Promise<T>): Promise<T> {
+    return db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"breedlog:animal-limit:" + userId}, 0))`);
+      return work(new DatabaseStorage(tx));
+    });
+  }
+
+  paymentTransaction = sqlPaymentTransact(pool);
   private normalizeTagId(tagId?: string | null): string {
     return canonicalizeTag(tagId, undefined);
   }
@@ -283,7 +300,7 @@ export class DatabaseStorage implements IStorage {
       conditions.push(ne(animals.id, excludeAnimalId));
     }
 
-    const [existing] = await db.select().from(animals).where(and(...conditions)).limit(1);
+    const [existing] = await this.animalDb.select().from(animals).where(and(...conditions)).limit(1);
     if (existing) {
       throw new DuplicateElectronicIdError(normalized);
     }
@@ -293,7 +310,7 @@ export class DatabaseStorage implements IStorage {
     const incoming = splitTagInput(tagId, studPrefix);
     if (!incoming.canonicalTag) return;
 
-    const existingAnimals = await db.select().from(animals).where(eq(animals.userId, userId));
+    const existingAnimals = await this.animalDb.select().from(animals).where(eq(animals.userId, userId));
     const duplicate = existingAnimals.find((animal) => {
       if (excludeAnimalId !== undefined && animal.id === excludeAnimalId) return false;
       const candidate = splitTagInput(animal.tagId, animal.studPrefix);
@@ -322,7 +339,7 @@ export class DatabaseStorage implements IStorage {
     if (excludeAnimalId !== undefined) {
       conditions.push(ne(animals.id, excludeAnimalId));
     }
-    const [existing] = await db.select().from(animals).where(and(...conditions)).limit(1);
+    const [existing] = await this.animalDb.select().from(animals).where(and(...conditions)).limit(1);
     if (existing) {
       throw new DuplicateAnimalNameError(name!.trim());
     }
@@ -350,12 +367,12 @@ export class DatabaseStorage implements IStorage {
       )!);
     }
     
-    const results = await db.select().from(animals).where(and(...conditions));
+    const results = await this.animalDb.select().from(animals).where(and(...conditions));
     return results;
   }
 
   async getAnimal(userId: string, id: number): Promise<Animal | undefined> {
-    const [animal] = await db.select().from(animals).where(
+    const [animal] = await this.animalDb.select().from(animals).where(
       and(eq(animals.id, id), eq(animals.userId, userId))
     );
     return animal;
@@ -372,7 +389,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAnimalByClientId(userId: string, clientId: string): Promise<Animal | undefined> {
-    const [animal] = await db.select().from(animals).where(
+    const [animal] = await this.animalDb.select().from(animals).where(
       and(eq(animals.userId, userId), eq(animals.clientId, clientId))
     );
     return animal;
@@ -386,7 +403,7 @@ export class DatabaseStorage implements IStorage {
     await this.assertUniqueAnimalName(userId, animal.name);
     await this.assertUniqueElectronicId(userId, normalizedElectronicId);
 
-    const [newAnimal] = await db.insert(animals).values({
+    const [newAnimal] = await this.animalDb.insert(animals).values({
       ...animal,
       tagId: normalizedTag.canonicalTag,
       rawTag: normalizedTag.rawTag || null,
@@ -423,7 +440,7 @@ export class DatabaseStorage implements IStorage {
       await this.assertUniqueElectronicId(userId, updates.electronicId, id);
     }
 
-    const [updatedAnimal] = await db
+    const [updatedAnimal] = await this.animalDb
       .update(animals)
       .set(updates)
       .where(and(eq(animals.id, id), eq(animals.userId, userId)))
@@ -540,7 +557,7 @@ export class DatabaseStorage implements IStorage {
   
   // Farm Settings - one per user
   async getFarmSettings(userId: string): Promise<FarmSettings | undefined> {
-    const [settings] = await db.select().from(farmSettings)
+    const [settings] = await this.animalDb.select().from(farmSettings)
       .where(eq(farmSettings.userId, userId))
       .limit(1);
     return settings;
@@ -586,9 +603,24 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(animalImages.uploadedAt));
   }
   
-  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>): Promise<AnimalImage> {
-    const [newImage] = await db.insert(animalImages).values({ ...image, userId }).returning();
-    return newImage;
+  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>, operationId?: string): Promise<AnimalImage> {
+    const key = operationId ? "image:" + crypto.createHash("sha256").update(JSON.stringify([userId, image.animalId, operationId])).digest("base64url") : undefined;
+    return db.transaction(async tx => {
+      if (key) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+        const [entry] = await tx.select().from(systemSettings).where(eq(systemSettings.key, key));
+        if (entry) {
+          const [existing] = await tx.select().from(animalImages).where(and(
+            eq(animalImages.id, Number(entry.value)), eq(animalImages.userId, userId), eq(animalImages.animalId, image.animalId),
+          ));
+          if (existing) return existing;
+        }
+      }
+      const [created] = await tx.insert(animalImages).values({ ...image, userId }).returning();
+      if (key) await tx.insert(systemSettings).values({ key, value: String(created.id) })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: String(created.id) } });
+      return created;
+    });
   }
   
   async deleteAnimalImage(userId: string, id: number): Promise<void> {
@@ -638,6 +670,28 @@ export class DatabaseStorage implements IStorage {
     return event;
   }
   
+  async createFlockHealthReport(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>, treatments: Omit<InsertFlockHealthTreatment, 'userId' | 'eventId'>[], operationId?: string): Promise<FlockHealthEvent> {
+    const key = operationId ? "flock:" + crypto.createHash("sha256").update(JSON.stringify([userId, operationId])).digest("base64url") : undefined;
+    return db.transaction(async tx => {
+      if (key) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+        const [entry] = await tx.select().from(systemSettings).where(eq(systemSettings.key, key));
+        if (entry) {
+          const [existing] = await tx.select().from(flockHealthEvents)
+            .where(and(eq(flockHealthEvents.id, Number(entry.value)), eq(flockHealthEvents.userId, userId)));
+          if (existing) return existing;
+        }
+      }
+      const [created] = await tx.insert(flockHealthEvents).values({ ...event, userId }).returning();
+      if (treatments.length) {
+        await tx.insert(flockHealthTreatments).values(treatments.map(row => ({ ...row, userId, eventId: created.id })));
+      }
+      if (key) await tx.insert(systemSettings).values({ key, value: String(created.id) })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: String(created.id) } });
+      return created;
+    });
+  }
+
   async createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>): Promise<FlockHealthEvent> {
     const [newEvent] = await db.insert(flockHealthEvents).values({ ...event, userId }).returning();
     return newEvent;
@@ -1046,15 +1100,39 @@ export class DatabaseStorage implements IStorage {
   }
   
   // === SYSTEM SETTINGS ===
+  async consumeAuthAttempt(key: string, window: number, limit: number): Promise<boolean> {
+    // One statement holds the unique-key row lock through increment + RETURNING.
+    // No read/modify/write gap across requests, connections or server processes.
+    // An old-window request cannot roll a newer counter back at the boundary.
+    // Malformed persisted JSON/counters cause an error, never a fresh allowance.
+    const result = await pool.query(`
+      INSERT INTO system_settings (key, value, description)
+      VALUES ($1, jsonb_build_object('window', $2::bigint, 'count', 1)::text, 'Authentication abuse protection')
+      ON CONFLICT (key) DO UPDATE SET
+        value = CASE WHEN (system_settings.value::jsonb->>'window')::bigint < $2::bigint
+          THEN jsonb_build_object('window', $2::bigint, 'count', 1)::text
+          ELSE jsonb_build_object(
+            'window', (system_settings.value::jsonb->>'window')::bigint,
+            'count', LEAST((system_settings.value::jsonb->>'count')::bigint + 1, $3::bigint + 1)
+          )::text END,
+        updated_at = now()
+      WHERE (system_settings.value::jsonb->>'count')::bigint >= 1
+        AND (system_settings.value::jsonb->>'window')::bigint >= 0
+      RETURNING value`, [key, window, limit]);
+    if (!result.rows.length) return false;
+    const state = JSON.parse(result.rows[0].value);
+    return state.window === window && Number.isSafeInteger(state.count) && state.count > 0 && state.count <= limit;
+  }
+
   async getSystemSetting(key: string): Promise<string | undefined> {
-    const results = await db.select()
+    const results = await this.animalDb.select()
       .from(systemSettings)
       .where(eq(systemSettings.key, key));
     return results[0]?.value;
   }
   
   async setSystemSetting(key: string, value: string, description?: string): Promise<void> {
-    await db.insert(systemSettings)
+    await this.animalDb.insert(systemSettings)
       .values({ key, value, description })
       .onConflictDoUpdate({
         target: systemSettings.key,
@@ -1391,6 +1469,22 @@ export class DatabaseStorage implements IStorage {
 }
 
 export class InMemoryStorage implements IStorage {
+  private animalWriteLocks = new Map<string, Promise<void>>();
+
+  async withAnimalWriteLock<T>(userId: string, work: (storage: IStorage) => Promise<T>): Promise<T> {
+    const previous = this.animalWriteLocks.get(userId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>(resolve => { release = resolve; });
+    this.animalWriteLocks.set(userId, current);
+    await previous;
+    try {
+      return await work(this);
+    } finally {
+      release();
+      if (this.animalWriteLocks.get(userId) === current) this.animalWriteLocks.delete(userId);
+    }
+  }
+
   private animalSeq = 1;
   private breedingSeq = 1;
   private matingSeq = 1;
@@ -1415,6 +1509,7 @@ export class InMemoryStorage implements IStorage {
   private inviteCodes = new Map<number, InviteCode>();
   private activations = new Map<number, UserActivation>();
   private settings = new Map<string, string>();
+  paymentTransaction = memoryPaymentTransact(this.settings);
   private accounts = new Map<string, Account>();
   private accountWorkspacesMap = new Map<string, AccountWorkspace>();
   private accountDevicesMap = new Map<string, AccountDevice>();
@@ -1549,7 +1644,15 @@ export class InMemoryStorage implements IStorage {
   }
   async deleteDocument(userId: string, id: number): Promise<void> { const d = this.documents.get(id); if (d?.userId === userId) this.documents.delete(id); }
   async getAnimalImages(userId: string, animalId: number): Promise<AnimalImage[]> { return [...this.animalImages.values()].filter(i => i.userId === userId && i.animalId === animalId); }
-  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, "userId">): Promise<AnimalImage> { const id = this.nextId("genericSeq"); const v = { id, ...image, userId, uploadedAt: this.now() } as AnimalImage; this.animalImages.set(id, v); return v; }
+  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, "userId">, operationId?: string): Promise<AnimalImage> {
+    const key = operationId ? "image:" + crypto.createHash("sha256").update(JSON.stringify([userId, image.animalId, operationId])).digest("base64url") : undefined;
+    const existing = key ? this.animalImages.get(Number(this.settings.get(key))) : undefined;
+    if (existing?.userId === userId && existing.animalId === image.animalId) return existing;
+    const created = { ...image, id: this.nextId("genericSeq"), userId, uploadedAt: this.now() } as AnimalImage;
+    this.animalImages.set(created.id, created);
+    if (key) this.settings.set(key, String(created.id));
+    return created;
+  }
   async deleteAnimalImage(userId: string, id: number): Promise<void> { const i = this.animalImages.get(id); if (i?.userId === userId) this.animalImages.delete(id); }
   async createEidScanEvent(userId: string, event: Omit<InsertEidScanEvent, "userId">): Promise<EidScanEvent> { const id = this.nextId("genericSeq"); const v = { id, ...event, userId, createdAt: this.now(), scannedAt: this.now() } as EidScanEvent; this.eidEvents.set(id, v); return v; }
   async getExportedDocuments(userId: string, subfolder?: string): Promise<ExportedDocument[]> { return [...this.exportedDocuments.values()].filter(d => d.userId === userId && (!subfolder || d.subfolder === subfolder)); }
@@ -1581,6 +1684,18 @@ export class InMemoryStorage implements IStorage {
   }
   async getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]> { return [...this.flockEvents.values()].filter(e => e.userId === userId); }
   async getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined> { const e = this.flockEvents.get(id); return e?.userId === userId ? e : undefined; }
+  async createFlockHealthReport(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>, treatments: Omit<InsertFlockHealthTreatment, 'userId' | 'eventId'>[], operationId?: string): Promise<FlockHealthEvent> {
+    const key = operationId ? "flock:" + crypto.createHash("sha256").update(JSON.stringify([userId, operationId])).digest("base64url") : undefined;
+    const existing = key ? this.flockEvents.get(Number(this.settings.get(key))) : undefined;
+    if (existing?.userId === userId) return existing;
+    const created = { ...event, id: this.nextId("genericSeq"), userId, createdAt: this.now() } as FlockHealthEvent;
+    this.flockEvents.set(created.id, created);
+    const writes = this.createFlockHealthTreatments(userId, treatments.map(row => ({ ...row, eventId: created.id })));
+    if (key) this.settings.set(key, String(created.id));
+    await writes;
+    return created;
+  }
+
   async createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, "userId">): Promise<FlockHealthEvent> { const id = this.nextId("genericSeq"); const v = { id, ...event, userId, createdAt: this.now() } as FlockHealthEvent; this.flockEvents.set(id, v); return v; }
   async getFlockHealthTreatments(userId: string, eventId: number): Promise<FlockHealthTreatment[]> { return [...this.flockTreatments.values()].filter(t => t.userId === userId && t.eventId === eventId); }
   async createFlockHealthTreatments(userId: string, treatments: Omit<InsertFlockHealthTreatment, "userId">[]): Promise<FlockHealthTreatment[]> { return treatments.map(t => { const id = this.nextId("genericSeq"); const v = { id, ...t, userId } as FlockHealthTreatment; this.flockTreatments.set(id, v); return v; }); }
@@ -1803,6 +1918,18 @@ export class InMemoryStorage implements IStorage {
     for (const userId of userIds) {
       this.users.delete(userId);
     }
+  }
+  async consumeAuthAttempt(key: string, window: number, limit: number): Promise<boolean> {
+    // No await between read and write: atomic within this in-memory instance.
+    const raw = this.settings.get(key);
+    const previous = raw ? JSON.parse(raw) : null;
+    if (previous && (!Number.isSafeInteger(previous.window) || !Number.isSafeInteger(previous.count) || previous.count < 1)) {
+      throw new Error("Invalid authentication counter");
+    }
+    const state = !previous || previous.window < window ? { window, count: 1 }
+      : { window: previous.window, count: Math.min(previous.count + 1, limit + 1) };
+    this.settings.set(key, JSON.stringify(state));
+    return state.window === window && state.count <= limit;
   }
   async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
   async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }

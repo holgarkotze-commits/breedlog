@@ -159,13 +159,17 @@ export async function apiRequest(
                           url.includes('/api/auth/') ||
                           url.includes('/api/admin/');
   
+  // Cookie-authenticated writes require a JSON entity, including DELETE and
+  // bodyless POST actions. Preserve that CSRF boundary for queued mutations.
+  const write = !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());
+  const payload = data === undefined && write ? {} : data;
   const res = await fetch(url, {
     method,
     headers: {
-      ...getAuthHeaders(!!data),
+      ...getAuthHeaders(payload !== undefined),
       ...(options?.headers || {}),
     },
-    body: data ? JSON.stringify(data) : undefined,
+    body: payload === undefined ? undefined : JSON.stringify(payload),
     credentials: "include",
     cache: isAuthEndpoint ? "no-store" : undefined,
   });

@@ -364,6 +364,28 @@ const authedFetch = (path: string, opts: RequestInit = {}) =>
     },
   });
 
+test("API: export authorization and history writes require current Premium access", async () => {
+  const authorize = () => authedFetch("/api/exports/authorize", { method: "POST", body: "{}" });
+  const denied = await authorize();
+  assert.equal(denied.status, 403);
+  assert.equal((await denied.json()).code, "PREMIUM_REQUIRED");
+  const blocked = await authedFetch("/api/exported-documents", {
+    method: "POST",
+    body: JSON.stringify({ name: "herd.csv", documentType: "herd", subfolder: "herd" }),
+  });
+  assert.equal(blocked.status, 403);
+  const checkout = await authedFetch("/api/billing/checkout-session", {
+    method: "POST", body: JSON.stringify({ productCode: "premium_monthly" }),
+  });
+  assert.equal(checkout.status, 201);
+  const { sessionId } = await checkout.json();
+  const applied = await authedFetch(`/api/billing/test/checkout/${sessionId}/complete`, { method: "POST", body: "{}" });
+  assert.equal(applied.status, 200);
+  const allowed = await authorize();
+  assert.equal(allowed.status, 204);
+  assert.equal(allowed.headers.get("cache-control"), "no-store");
+});
+
 test("API: POST /api/exported-documents saves document with subfolder", async () => {
   const res = await authedFetch("/api/exported-documents", {
     method: "POST",

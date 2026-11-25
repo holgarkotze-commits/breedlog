@@ -1,3 +1,4 @@
+import { authorizeExport } from "@/lib/export-access";
 import { useState, useRef, useEffect, useMemo, lazy, Suspense } from "react";
 import { Layout } from "@/components/Layout";
 import { useAnimals, useCreateAnimal, useDeleteAnimal, useRemoveFromHerd, useClassifyRamLamb, useConfirmCull, useMoveToEwes, useMoveToRams, useUpdateAnimal, useSetRamType } from "@/hooks/use-animals";
@@ -207,7 +208,7 @@ export default function Animals() {
   
   // Unified PDF Export Handler with quality selection.
   // Compresses the farm logo once at the requested quality level, stores it in
-  // pendingExportLogoRef, then delegates to the appropriate synchronous export
+  // pendingExportLogoRef, then delegates to the appropriate export
   // function. Each export function reads getExportLogoImg() which reads the ref.
   const handlePDFExport = async (quality: PDFQuality): Promise<void> => {
     const rawLogo = farmSettings?.logoUrl;
@@ -217,28 +218,28 @@ export default function Animals() {
     try {
       switch (pdfExportType) {
         case 'fullHerd':
-          exportFullHerdPDF();
+          await exportFullHerdPDF();
           break;
         case 'rams':
-          exportHerdPDF("rams");
+          await exportHerdPDF("rams");
           break;
         case 'ewes':
-          exportHerdPDF("ewes");
+          await exportHerdPDF("ewes");
           break;
         case 'lambs':
-          exportHerdPDF("lambs");
+          await exportHerdPDF("lambs");
           break;
         case 'culled':
-          exportCulledPDF();
+          await exportCulledPDF();
           break;
         case 'sold':
-          exportSoldPDF();
+          await exportSoldPDF();
           break;
         case 'ramsRegister':
-          exportRamsPDF();
+          await exportRamsPDF();
           break;
         case 'ewesRegister':
-          exportEwesPDF();
+          await exportEwesPDF();
           break;
       }
     } finally {
@@ -301,7 +302,8 @@ export default function Animals() {
   };
 
   // Export all active animals as CSV
-  const handleExportHerdCsv = () => {
+  const handleExportHerdCsv = async () => {
+    if (!await authorizeExport()) return;
     const activeAnimals = (allAnimals || []).filter(isActiveAnimal);
     if (activeAnimals.length === 0) {
       toast({ title: "No Animals", description: "No active animals to export", variant: "destructive" });
@@ -320,7 +322,7 @@ export default function Animals() {
 
   type ExportColumn = readonly [string, string];
   type ExportSection = { label: string; subtitle: string; rows: Record<string, string | number | null>[]; columns: readonly ExportColumn[] };
-  const exportCanonicalSections = (
+  const exportCanonicalSections = async (
     documentTitle: string,
     sections: ExportSection[],
     metadata: Record<string, unknown>,
@@ -354,17 +356,18 @@ export default function Animals() {
         ${renderExportFooter(fb)}
       </div>
     `).join("");
-    openExportPrintDialog(wrapExportDocument(
+    if (!await openExportPrintDialog(wrapExportDocument(
       `${fb?.studName || fb?.farmName || "BreedLog"} - ${documentTitle}`,
       getCanonicalGroupCSS(),
       pagesHtml,
-    ));
+    ))) return false;
     createExportedDoc.mutate({
       name: getDocumentFileName(documentTitle.replace(/\s+/g, ""), "Export"),
       documentType: "herd",
       subfolder: "herd",
       metadata: { exportType: "pdf", pageCount: totalPages, status: "success", ...metadata },
     });
+    return true;
   };
 
   const ramColumns: readonly ExportColumn[] = [
@@ -389,7 +392,7 @@ export default function Animals() {
   ];
 
   // Full Herd Export PDF with Rams, Ewes, Lambs sections
-  const exportFullHerdPDF = () => {
+  const exportFullHerdPDF = async () => {
     if (!allAnimals || !breedingEvents) return;
     const fullActiveAnimals = allAnimals.filter(isActiveAnimal);
     const fullLambs = fullActiveAnimals.filter(a => a.birthDate && (Date.now() - new Date(a.birthDate).getTime()) / 86400000 <= 240);
@@ -408,14 +411,14 @@ export default function Animals() {
       toast({ title: "No Animals", description: "No active animals found to export", variant: "destructive" });
       return;
     }
-    exportCanonicalSections("Full Herd Register", sections, {
+    if (!await exportCanonicalSections("Full Herd Register", sections, {
       category: "full-herd", sourceSection: "full herd", animalCount: fullActiveAnimals.length,
       rowsSummary: { rams: fullRams.length, ewes: fullEwes.length, lambs: fullLambs.length },
-    });
+    })) return;
     toast({ title: "PDF Ready", description: "Full Herd Register export opened for printing" });
   };
 
-  const exportHerdPDF = (exportType: "rams" | "ewes" | "lambs") => {
+  const exportHerdPDF = async (exportType: "rams" | "ewes" | "lambs") => {
     if (!allAnimals || !breedingEvents) return;
     const activeAnimals = allAnimals.filter(isActiveAnimal);
     const isYoung = (animal: Animal) => Boolean(animal.birthDate) && (Date.now() - new Date(animal.birthDate!).getTime()) / 86400000 <= 240;
@@ -425,18 +428,18 @@ export default function Animals() {
         toast({ title: "No Rams", description: "No active adult rams found to export", variant: "destructive" });
         return;
       }
-      exportCanonicalSections("Rams Register", [{ label: "Rams", subtitle: "Active adult rams", rows: buildRamExportRows(rams, breedingEvents, allAnimals, []), columns: ramColumns }], {
+      if (!await exportCanonicalSections("Rams Register", [{ label: "Rams", subtitle: "Active adult rams", rows: buildRamExportRows(rams, breedingEvents, allAnimals, []), columns: ramColumns }], {
         category: "rams", sourceSection: "rams", animalCount: rams.length,
-      });
+      })) return;
     } else if (exportType === "ewes") {
       const ewes = activeAnimals.filter(a => a.sex?.toLowerCase() === "ewe" && !isYoung(a));
       if (!ewes.length) {
         toast({ title: "No Ewes", description: "No active adult ewes found to export", variant: "destructive" });
         return;
       }
-      exportCanonicalSections("Ewes Register", [{ label: "Ewes", subtitle: "Active adult ewes", rows: buildEweExportRows(ewes, breedingEvents, []), columns: eweColumns }], {
+      if (!await exportCanonicalSections("Ewes Register", [{ label: "Ewes", subtitle: "Active adult ewes", rows: buildEweExportRows(ewes, breedingEvents, []), columns: eweColumns }], {
         category: "ewes", sourceSection: "ewes", animalCount: ewes.length,
-      });
+      })) return;
     } else {
       const lambs = activeAnimals.filter(isYoung);
       if (!lambs.length) {
@@ -445,9 +448,9 @@ export default function Animals() {
       }
       const births = buildLambBirthRows(lambs);
       const performance = buildLambPerformanceRows(lambs);
-      exportCanonicalSections("Lambs Register", [{ label: "Lambs", subtitle: "Active lambs (240 days or younger)", rows: births.map((row, index) => ({ ...row, ...performance[index] })), columns: lambColumns }], {
+      if (!await exportCanonicalSections("Lambs Register", [{ label: "Lambs", subtitle: "Active lambs (240 days or younger)", rows: births.map((row, index) => ({ ...row, ...performance[index] })), columns: lambColumns }], {
         category: "lambs", sourceSection: "lambs", animalCount: lambs.length,
-      });
+      })) return;
     }
     toast({ title: "PDF Ready", description: `${exportType} export opened for printing` });
   };
@@ -457,7 +460,7 @@ export default function Animals() {
   // Source: only active rams (status === "active" via isActiveAnimal).
   // Columns: Total Progeny, Mating Events, Lambing Events, Lambing Rate, Avg weights.
   // "Twin Count" has been removed — it was incorrectly mapped to mating events.
-  const exportRamsPDF = () => {
+  const exportRamsPDF = async () => {
     if (!allAnimals || !breedingEvents) return;
     const canonicalRams = allAnimals.filter(a =>
       a.sex?.toLowerCase() === "ram" &&
@@ -468,13 +471,13 @@ export default function Animals() {
       toast({ title: "No Active Rams", description: "No active adult rams found to export", variant: "destructive" });
       return;
     }
-    exportCanonicalSections("Rams Register", [{ label: "Rams", subtitle: "Active adult rams", rows: buildRamExportRows(canonicalRams, breedingEvents, allAnimals, []), columns: ramColumns }], {
+    if (!await exportCanonicalSections("Rams Register", [{ label: "Rams", subtitle: "Active adult rams", rows: buildRamExportRows(canonicalRams, breedingEvents, allAnimals, []), columns: ramColumns }], {
       category: "rams-register", sourceSection: "rams", animalCount: canonicalRams.length,
-    });
+    })) return;
     toast({ title: "PDF Ready", description: `Active Rams Register (${canonicalRams.length} rams) opened for printing` });
   };
 
-  const exportEwesPDF = () => {
+  const exportEwesPDF = async () => {
     if (!allAnimals || !breedingEvents) return;
     const canonicalEwes = allAnimals.filter(a =>
       a.sex?.toLowerCase() === "ewe" &&
@@ -485,40 +488,40 @@ export default function Animals() {
       toast({ title: "No Ewes", description: "No active adult ewes found to export", variant: "destructive" });
       return;
     }
-    exportCanonicalSections("Ewes Register", [{ label: "Ewes", subtitle: "Active adult ewes", rows: buildEweExportRows(canonicalEwes, breedingEvents, []), columns: eweColumns }], {
+    if (!await exportCanonicalSections("Ewes Register", [{ label: "Ewes", subtitle: "Active adult ewes", rows: buildEweExportRows(canonicalEwes, breedingEvents, []), columns: eweColumns }], {
       category: "ewes-register", sourceSection: "ewes", animalCount: canonicalEwes.length,
-    });
+    })) return;
     toast({ title: "PDF Ready", description: "Ewes Register export opened for printing" });
   };
 
   // Export Culled Animals PDF — strictly status === "culled".
   // No sold, deceased, or removed animals appear here.
   // Notes are sanitized to remove internal simulation metadata.
-  const exportCulledPDF = () => {
+  const exportCulledPDF = async () => {
     if (!allAnimals) return;
     const canonicalCulledRows = buildCullSoldRows(allAnimals.filter(a => (a.status || "").toLowerCase() === "culled"));
     if (!canonicalCulledRows.length) {
       toast({ title: "No Culled Animals", description: "No animals marked for cull to export", variant: "destructive" });
       return;
     }
-    exportCanonicalSections("Culled Animals", [{ label: "Culled animals", subtitle: "Cull register", rows: canonicalCulledRows, columns: cullSoldColumns }], {
+    if (!await exportCanonicalSections("Culled Animals", [{ label: "Culled animals", subtitle: "Cull register", rows: canonicalCulledRows, columns: cullSoldColumns }], {
       category: "culled", sourceSection: "culled", animalCount: canonicalCulledRows.length, rowsSummary: canonicalCulledRows.slice(0, 5),
-    });
+    })) return;
     toast({ title: "PDF Ready", description: `Culled Animals export (${canonicalCulledRows.length} animals) opened for printing` });
   };
 
   // Export Sold Animals PDF — status === "sold" only.
   // Notes are sanitized to remove internal simulation metadata.
-  const exportSoldPDF = () => {
+  const exportSoldPDF = async () => {
     if (!allAnimals) return;
     const canonicalSoldRows = buildCullSoldRows(allAnimals.filter(a => (a.status || "").toLowerCase() === "sold"));
     if (!canonicalSoldRows.length) {
       toast({ title: "No Sold Animals", description: "No sold animals found to export", variant: "destructive" });
       return;
     }
-    exportCanonicalSections("Sold Animals Register", [{ label: "Sold animals", subtitle: "Sold animals register", rows: canonicalSoldRows, columns: cullSoldColumns }], {
+    if (!await exportCanonicalSections("Sold Animals Register", [{ label: "Sold animals", subtitle: "Sold animals register", rows: canonicalSoldRows, columns: cullSoldColumns }], {
       category: "sold", sourceSection: "sold", animalCount: canonicalSoldRows.length, rowsSummary: canonicalSoldRows.slice(0, 5),
-    });
+    })) return;
     toast({ title: "PDF Ready", description: `Sold Animals (${canonicalSoldRows.length} animals) opened for printing` });
   };
 
@@ -1217,7 +1220,8 @@ function RamsSection({
   const studCount = allRams.filter(r => r.ramType === 'stud_ram').length;
   const commercialCount = allRams.filter(r => r.ramType === 'commercial_ram').length;
 
-  const handleExportCsv = () => {
+  const handleExportCsv = async () => {
+    if (!await authorizeExport()) return;
     const rows = buildBreedLogCsvRows(rams, undefined, allAnimals || []);
     const csv = buildBreedLogCsvContent(rows);
     const blob = new Blob([csv], { type: "text/csv" });
@@ -1605,7 +1609,8 @@ function EwesSection({
     return { ...ewe, stats };
   });
 
-  const handleExportEwesCsv = () => {
+  const handleExportEwesCsv = async () => {
+    if (!await authorizeExport()) return;
     const rows = buildBreedLogCsvRows(ewes, undefined, allAnimals || []);
     const csv = buildBreedLogCsvContent(rows);
     const blob = new Blob([csv], { type: "text/csv" });
@@ -1998,7 +2003,8 @@ function LambsSection({
     });
   };
 
-  const handleExportLambsCsv = () => {
+  const handleExportLambsCsv = async () => {
+    if (!await authorizeExport()) return;
     const rows = buildBreedLogCsvRows(lambs, undefined, allAnimals || []);
     const csv = buildBreedLogCsvContent(rows);
     const blob = new Blob([csv], { type: "text/csv" });
@@ -2458,7 +2464,8 @@ function CulledSection({
 
   const allCulled = allAnimals.filter(a => a.status === 'culled' || a.cullConfirmed === true);
 
-  const handleExportCulledCsv = () => {
+  const handleExportCulledCsv = async () => {
+    if (!await authorizeExport()) return;
     const rows = buildBreedLogCsvRows(allCulled, undefined, allAnimals || []);
     const csv = buildBreedLogCsvContent(rows);
     const blob = new Blob([csv], { type: "text/csv" });

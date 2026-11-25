@@ -49,11 +49,43 @@ test("SQL-backed farmer accounts persist with isolated sessions and one-time rec
   };
   await start();
   try {
+    await t.test("atomic fixed-window identity budgets across SQL storage instances", async () => {
+      const stores = Array.from({ length: 4 }, () => new DatabaseStorage());
+      for (const limit of [3, 5, 12]) {
+        const key = `auth-limit:${randomUUID()}`;
+        const window = Math.floor(Date.now() / 900_000);
+        const results = await Promise.all(Array.from({ length: 48 }, (_, i) => stores[i % stores.length].consumeAuthAttempt(key, window, limit)));
+        assert.equal(results.filter(Boolean).length, limit);
+        assert.equal(await new DatabaseStorage().consumeAuthAttempt(key, window, limit), false, "new instance cannot reset budget");
+        assert.equal(await stores[0].consumeAuthAttempt(key, window + 1, limit), true);
+        assert.equal(await stores[1].consumeAuthAttempt(key, window, limit), false, "late old-window arrival must not reset newer counter");
+        const next = await Promise.all(Array.from({ length: 32 }, (_, i) => stores[i % 4].consumeAuthAttempt(key, window + 1, limit)));
+        assert.equal(next.filter(Boolean).length, Math.max(0, limit - 2), "old-window request consumes defensively, never over-admits");
+      }
+      const key = `auth-limit:${randomUUID()}`;
+      await storage.setSystemSetting(key, "not-json");
+      await assert.rejects(storage.consumeAuthAttempt(key, 1, 5));
+      await storage.setSystemSetting(key, JSON.stringify({ window: 1, count: -3 }));
+      assert.equal(await storage.consumeAuthAttempt(key, 1, 5), false);
+    });
     const a = await request("/api/auth/register", { email: `sql-a-${nonce}@example.test`, password, acceptedTerms: true });
     const b = await request("/api/auth/register", { email: `sql-b-${nonce}@example.test`, password, acceptedTerms: true });
     assert.equal(a.status, 201);
     assert.equal(b.status, 201);
     assert.notEqual(a.body.profile.workspaceUserId, b.body.profile.workspaceUserId);
+    await t.test("concurrent signup/login/recovery HTTP requests cannot bypass identity budgets", async () => {
+      const email = `sql-a-${nonce}@example.test`;
+      for (const [path, body, admitted] of [
+        ["/api/auth/register", { email, password, acceptedTerms: true }, 4],
+        ["/api/auth/login", { email, password: "incorrect-password" }, 12],
+        ["/api/auth/recovery/request", { email }, 3],
+      ] as const) {
+        const results = await Promise.all(Array.from({ length: 24 }, () => request(path, body)));
+        assert.equal(results.filter(row => row.status !== 429).length, admitted, path);
+        assert.ok(results.filter(row => row.status === 429).every(row => row.body.code === "AUTH_RATE_LIMITED"));
+        assert.ok(results.every(row => row.status !== 200 && row.status !== 201), "invalid attempts must not authenticate");
+      }
+    });
     assert.deepEqual((await request("/api/animals", undefined, a.cookie)).body, []);
     const record = await request("/api/animals", { tagId: `SQL-${nonce}`, sex: "ewe" }, a.cookie);
     assert.equal(record.status, 201);

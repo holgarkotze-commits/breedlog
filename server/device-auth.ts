@@ -5,6 +5,7 @@ import createMemoryStore from "memorystore";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { pool } from "./db";
+import { isNativeAppOrigin } from "./trusted-origins";
 
 // Device session data stored in express session
 declare module "express-session" {
@@ -96,6 +97,13 @@ export function validateDeviceToken(token: string): { valid: boolean; deviceId?:
 }
 
 // Setup device-based session management
+export function setNativeCookieAttributes(req: Request) {
+  if (isNativeAppOrigin(req.headers.origin) && req.secure) {
+    req.session.cookie.sameSite = "none";
+    req.session.cookie.secure = true;
+  }
+}
+
 export function setupDeviceAuth(app: Express) {
   const sessionTtl = 30 * 24 * 60 * 60 * 1000; // 30 days
   const sessionStore = process.env.DATABASE_URL && process.env.USE_IN_MEMORY_STORAGE !== "1"
@@ -125,11 +133,16 @@ export function setupDeviceAuth(app: Express) {
   // Cookie-authenticated writes must originate from this app, not a third-party
   // form. JSON is required even for sign-in to prevent login-CSRF.
   app.use((req, res, next) => {
+    const nativeOrigin = isNativeAppOrigin(req.headers.origin);
+    // Native WebViews use the same HttpOnly account session across origins.
+    // Web sessions keep Lax. None is used only for an exact native origin over
+    // the secure backend; Origin + JSON checks below still protect all writes.
+    setNativeCookieAttributes(req);
     if (!req.path.startsWith("/api/") || ["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
     if (req.session.accountId || req.path.startsWith("/api/auth/")) {
       const origin = req.headers.origin;
       const sameOrigin = !origin || origin === `${req.protocol}://${req.get("host")}`;
-      if (!sameOrigin || (req.headers["sec-fetch-site"] === "cross-site")) {
+      if ((!sameOrigin && !nativeOrigin) || (req.headers["sec-fetch-site"] === "cross-site" && !nativeOrigin)) {
         return res.status(403).json({ message: "Use BreedLog directly to make this request.", code: "INVALID_ORIGIN" });
       }
       if (!req.is("application/json")) {

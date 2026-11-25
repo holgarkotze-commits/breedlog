@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertAnimal, type AnimalWithRelations } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue, findPendingSyncItemByOperationId, deleteFromStore } from "@/lib/indexeddb";
+import { finishPendingAnimal, savePendingAnimal, getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue, findPendingSyncItemByOperationId, deleteFromStore, replaceServerSnapshot } from "@/lib/indexeddb";
 import { syncManager } from "@/lib/sync-manager";
 import { clearExpiredOperationCache, getOrCreateOperationId } from "@/lib/idempotency";
 import { splitTagInput } from "@shared/tag-utils";
@@ -23,13 +23,7 @@ async function normalizeTagForClient(tagId?: string | null, explicitPrefix?: str
 }
 
 async function pruneHiddenAnimalsFromCache(serverAnimals: AnimalWithRelations[]) {
-  const serverIds = new Set(serverAnimals.map((animal) => animal.id));
-  const cachedAnimals = await getAllFromStore<AnimalWithRelations>("animals");
-  await Promise.all(
-    cachedAnimals
-      .filter((animal) => animal.id > 0 && !serverIds.has(animal.id))
-      .map((animal) => deleteFromStore("animals", animal.id)),
-  );
+  await replaceServerSnapshot({ animals: serverAnimals });
 }
 
 class AnimalVisibilityError extends Error {}
@@ -38,6 +32,7 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
   const queryKey = [api.animals.list.path, filters];
   
   return useQuery({
+    networkMode: "always",
     queryKey,
     queryFn: async () => {
       const url = new URL(api.animals.list.path, window.location.origin);
@@ -58,9 +53,10 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
         });
         if (!res.ok) throw new Error("Failed to fetch animals");
         const data = api.animals.list.responses[200].parse(await res.json());
-        await putManyInStore("animals", data);
         if (!filters?.search && !filters?.status && !filters?.sex) {
           await pruneHiddenAnimalsFromCache(data);
+        } else {
+          await putManyInStore("animals", data);
         }
         return data;
       } catch (error) {
@@ -87,6 +83,7 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
 
 export function useAnimal(id: number) {
   return useQuery({
+    networkMode: "always",
     queryKey: [api.animals.get.path, id],
     queryFn: async () => {
       // HYBRID FETCH: Check local IndexedDB first for temp IDs (negative) or as fallback
@@ -163,6 +160,7 @@ export function useCreateAnimal() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (data: InsertAnimal) => {
       clearExpiredOperationCache();
       const operationId = getOrCreateOperationId("animals", data as Record<string, unknown>);
@@ -218,7 +216,16 @@ export function useCreateAnimal() {
       } as unknown as AnimalWithRelations;
       
       // Save to IndexedDB immediately for instant UI response
-      await putInStore("animals", offlineAnimal);
+      const queueId = await savePendingAnimal(offlineAnimal, {
+        action: "create",
+        entity: "animals",
+        data,
+        tempId,
+        operationId,
+        clientOperationId: operationId,
+        idempotencyKey: operationId,
+        localEntityId: tempId,
+      });
       console.log("[useCreateAnimal] Saved locally with temp ID:", tempId);
       
       // If online, try immediate server save
@@ -228,7 +235,6 @@ export function useCreateAnimal() {
           const headers: Record<string, string> = { "Content-Type": "application/json" };
           if (token) headers["Authorization"] = `Bearer ${token}`;
           
-          console.log("[SYNC] Attempting to save animal. Data payload:", JSON.stringify(data));
           
           const res = await fetch(api.animals.create.path, {
             method: api.animals.create.method,
@@ -241,26 +247,13 @@ export function useCreateAnimal() {
           
           if (res.ok) {
             const created = api.animals.create.responses[201].parse(await res.json());
-            // Update IndexedDB with server data (replaces temp ID)
-            await putInStore("animals", created);
-            // Remove temp entry
-            try {
-              const { deleteFromStore } = await import("@/lib/indexeddb");
-              await deleteFromStore("animals", tempId);
-            } catch (e) {
-              console.log("[useCreateAnimal] Could not remove temp entry:", e);
-            }
+            await finishPendingAnimal(tempId, queueId, created);
             console.log("[useCreateAnimal] Server save succeeded, ID:", created.id);
             return created;
           }
           const errorText = await res.text();
-          if (res.status >= 400 && res.status < 500) {
-            try {
-              const { deleteFromStore } = await import("@/lib/indexeddb");
-              await deleteFromStore("animals", tempId);
-            } catch (e) {
-              console.log("[useCreateAnimal] Could not remove temp entry after validation error:", e);
-            }
+          if (res.status >= 400 && res.status < 500 && ![408, 429].includes(res.status)) {
+            await finishPendingAnimal(tempId, queueId);
             let message = "Failed to save animal";
             try {
               const parsed = JSON.parse(errorText);
@@ -273,25 +266,12 @@ export function useCreateAnimal() {
           // Server error - fall through to queue for sync
           console.log("[useCreateAnimal] Server returned error:", res.status, errorText);
         } catch (err) {
-          if (err instanceof Error && !/Network error/i.test(err.message)) {
+          if (err instanceof Error && !(err instanceof TypeError) && !/Network error/i.test(err.message)) {
             throw err;
           }
           console.log("[useCreateAnimal] Network error, queuing for sync:", err);
         }
       }
-      
-      // Offline or server failed - queue for sync
-      await addToSyncQueue({
-        action: "create",
-        entity: "animals",
-        data,
-        tempId,
-        operationId,
-        clientOperationId: operationId,
-        idempotencyKey: operationId,
-        localEntityId: tempId,
-      });
-      console.log("[useCreateAnimal] Queued for sync");
       
       // Trigger background sync (non-blocking)
       if (isOnline) {
@@ -377,6 +357,7 @@ export function useUpdateAnimal() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async ({ id, ...updates }: { id: number } & Partial<InsertAnimal>) => {
       // Use robust connectivity check (actual API ping, not just navigator.onLine)
       const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
@@ -522,6 +503,7 @@ export function useUpdateAnimal() {
 
 export function useFamilyTree(id: number) {
   return useQuery({
+    networkMode: "always",
     queryKey: [api.animals.familyTree.path, id],
     queryFn: async () => {
       const url = buildUrl(api.animals.familyTree.path, { id });
@@ -544,25 +526,25 @@ export function useDeleteAnimal() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (id: number) => {
       const existing = await getFromStore<AnimalWithRelations>("animals", id);
       await deleteFromStore("animals", id);
 
-      const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
+      const { isApiReachable } = await import("@/lib/queryClient");
       const isOnline = await isApiReachable();
       if (isOnline && id > 0) {
         const url = buildUrl(api.animals.delete.path, { id });
-        const token = getDeviceToken();
-        const headers: Record<string, string> = {};
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-        const res = await fetch(url, {
-          method: api.animals.delete.method,
-          headers,
-          credentials: "include",
-        });
-        if (res.ok) return;
-        if (res.status >= 400 && res.status < 500) {
-          throw new Error("Failed to delete animal");
+        const { apiRequest } = await import("@/lib/queryClient");
+        try {
+          await apiRequest(api.animals.delete.method, url);
+          return;
+        } catch (error) {
+          const status = error instanceof Error ? Number(/^(\d{3}):/.exec(error.message)?.[1]) : NaN;
+          if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
+            if (existing) await putInStore("animals", existing);
+            throw error;
+          }
         }
       }
 
@@ -595,6 +577,7 @@ export function useDeleteAnimal() {
 // Animal Images Hooks
 export function useAnimalImages(animalId: number) {
   return useQuery({
+    networkMode: "always",
     queryKey: ["/api/animals", animalId, "images"],
     queryFn: async () => {
       try {
@@ -629,9 +612,11 @@ export function useUploadAnimalImage() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async ({ animalId, imageData, fileName, caption }: { animalId: number; imageData: string; fileName: string; caption?: string }) => {
       // OFFLINE-FIRST: Always save locally first for instant response
       const tempId = -Date.now();
+      const operationId = crypto.randomUUID();
       const offlineImage = { 
         id: tempId, 
         animalId, 
@@ -652,7 +637,7 @@ export function useUploadAnimalImage() {
           // Include auth token for device-based authentication
           const { getDeviceToken } = await import("@/lib/queryClient");
           const token = getDeviceToken();
-          const uploadHeaders: Record<string, string> = { "Content-Type": "application/json" };
+          const uploadHeaders: Record<string, string> = { "Content-Type": "application/json", "X-Idempotency-Key": operationId };
           if (token) uploadHeaders["Authorization"] = `Bearer ${token}`;
           
           const res = await fetch(`/api/animals/${animalId}/images`, {
@@ -684,7 +669,8 @@ export function useUploadAnimalImage() {
       // Offline or server failed - queue for sync
       await addToSyncQueue({ 
         action: "create", 
-        entity: "animalImages", 
+        entity: "animalImages",
+        operationId,
         data: { animalId, imageData, fileName, caption }, 
         tempId 
       });

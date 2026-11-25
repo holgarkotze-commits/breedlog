@@ -33,19 +33,19 @@ function animal(index: number) {
 test("locked commercial catalogue exposes exactly Free and Premium plans", () => {
   assert.deepEqual(Object.keys(BREEDLOG_PLANS).sort(), ["free", "premium"]);
   assert.equal(BREEDLOG_PLANS.free.limits.activeAnimals, 30);
-  assert.equal(BREEDLOG_PLANS.free.limits.individualPdfExportsPerMonth, 5);
+  assert.equal(BREEDLOG_PLANS.free.limits.individualPdfExportsPerMonth, 0);
   assert.equal(BREEDLOG_PLANS.free.limits.aiActionsPerMonth, 10);
   assert.equal(BREEDLOG_PLANS.free.limits.activeDevices, 1);
   assert.equal(BREEDLOG_PLANS.free.limits.retainedWeeklyAutomaticBackups, 4);
-  assert.equal(BREEDLOG_PLANS.premium.priceNadMonthly, 149);
-  assert.equal(BREEDLOG_PLANS.premium.priceNadYearly, 1520);
+  assert.equal(BREEDLOG_PLANS.premium.priceNadMonthly, 79.99);
+  assert.equal(BREEDLOG_PLANS.premium.priceNadYearly, 799);
   assert.equal(BREEDLOG_PLANS.premium.limits.activeAnimals, "unlimited");
   assert.equal(BREEDLOG_PLANS.premium.limits.activeDevices, 3);
   assert.equal(BREEDLOG_PLANS.premium.limits.individualPdfExportsPerMonth, 1000);
   assert.equal(BREEDLOG_PLANS.premium.limits.batchPdfExportsPerMonth, 50);
 });
 
-test("Free accounts are server-limited to 30 active animals", async () => {
+test("Free accounts are server-limited to 30 original registrations", async () => {
   const userId = "commercial-free-limit";
   await storage.clearAllData(userId);
   for (let i = 1; i <= 30; i++) {
@@ -68,6 +68,7 @@ test("Premium billing events unlock unlimited active animals and are idempotent"
     accountId: userId,
     eventType: "subscription.created" as const,
     planId: "premium" as const,
+    paidUntil: "2099-01-01T00:00:00Z",
     subscriptionId: "sub_1",
     customerId: "cus_1",
   };
@@ -93,6 +94,7 @@ test("downgrade keeps first 30 originally added animals visible without deleting
     accountId: userId,
     eventType: "subscription.created",
     planId: "premium",
+    paidUntil: "2099-01-01T00:00:00Z",
   });
   for (let i = 1; i <= 34; i++) {
     await storage.createAnimal(userId, animal(i));
@@ -113,9 +115,7 @@ test("Free monthly usage quotas are enforced by the backend usage ledger", async
     () => reserveUsage(storage, userId, "aiActions", new Date("2026-07-13T00:00:00Z")),
     /aiActions monthly quota/,
   );
-  for (let i = 0; i < 5; i++) {
-    await reserveUsage(storage, userId, "individualPdfExports", new Date("2026-07-13T00:00:00Z"));
-  }
+  // Free PDF exports are Premium-only under the approved commercial policy.
   await assert.rejects(
     () => reserveUsage(storage, userId, "individualPdfExports", new Date("2026-07-13T00:00:00Z")),
     /individualPdfExports monthly quota/,
@@ -132,8 +132,8 @@ test("deterministic billing checkout, portal, cancellation, and provider events 
   const userId = "commercial-deterministic-billing";
   await storage.clearAllData(userId);
 
-  assert.equal(BILLING_CATALOG.premium_monthly.amountNad, 149);
-  assert.equal(BILLING_CATALOG.premium_annual.amountNad, 1520);
+  assert.equal(BILLING_CATALOG.premium_monthly.amountNad, 79.99);
+  assert.equal(BILLING_CATALOG.premium_annual.amountNad, 799);
 
   const checkout = await createCheckoutSession(storage, userId, "premium_monthly", {
     returnUrl: "https://app.breedlog.test/return",
@@ -146,7 +146,7 @@ test("deterministic billing checkout, portal, cancellation, and provider events 
   assert.match(portal.url, /billing\.test\.breedlog\.local\/portal\//);
 
   const completed = await completeTestCheckoutSession(storage, checkout.sessionId, {
-    now: new Date("2026-07-13T00:00:00Z"),
+    now: new Date("2090-07-13T00:00:00Z"),
   });
   assert.equal(completed.session.status, "completed");
   assert.equal(completed.subscription.planId, "premium");
@@ -158,26 +158,27 @@ test("deterministic billing checkout, portal, cancellation, and provider events 
 
   let simulated = await simulateBillingProviderEvent(storage, userId, {
     eventType: "subscription.grace_period",
-    now: new Date("2026-08-13T00:00:00Z"),
+    now: new Date("2090-08-13T00:00:00Z"),
   });
-  assert.equal(simulated.entitlement.status, "grace_period");
+  assert.equal(simulated.entitlement.status, "active");
+  assert.equal(simulated.entitlement.graceUntil, undefined, "unverified grace event cannot grant grace");
 
   simulated = await simulateBillingProviderEvent(storage, userId, {
     eventType: "subscription.payment_failed",
-    now: new Date("2026-08-14T00:00:00Z"),
+    now: new Date("2090-08-14T00:00:00Z"),
   });
   assert.equal(simulated.entitlement.status, "payment_failed");
 
   simulated = await simulateBillingProviderEvent(storage, userId, {
     eventType: "subscription.renewed",
-    now: new Date("2026-08-15T00:00:00Z"),
+    now: new Date("2090-08-15T00:00:00Z"),
   });
   assert.equal(simulated.entitlement.status, "active");
   assert.equal((await getBillingSubscriptionState(storage, userId))?.status, "active");
 
   simulated = await simulateBillingProviderEvent(storage, userId, {
     eventType: "subscription.refunded",
-    now: new Date("2026-08-16T00:00:00Z"),
+    now: new Date("2090-08-16T00:00:00Z"),
   });
   assert.equal(simulated.entitlement.planId, "free");
   assert.equal(simulated.entitlement.status, "refunded");
@@ -197,22 +198,22 @@ test("annual billing, webhook signatures, and quota add-ons remain deterministic
     cancelUrl: "https://app.breedlog.test/cancel",
   });
   const annualCompleted = await completeTestCheckoutSession(storage, annualCheckout.sessionId, {
-    now: new Date("2026-07-13T00:00:00Z"),
+    now: new Date("2090-07-13T00:00:00Z"),
   });
   assert.equal(annualCompleted.subscription.billingPeriod, "annual");
-  assert.equal(annualCompleted.subscription.currentPeriodEnd, "2027-07-13T00:00:00.000Z");
+  assert.equal(annualCompleted.subscription.currentPeriodEnd, "2091-07-13T00:00:00.000Z");
 
   const addonCheckout = await createCheckoutSession(storage, userId, "addon_pdf_250");
   const addonCompleted = await completeTestCheckoutSession(storage, addonCheckout.sessionId, {
-    now: new Date("2026-07-13T01:00:00Z"),
+    now: new Date("2090-07-13T01:00:00Z"),
   });
   assert.equal(addonCompleted.subscription.addOns.includes("addon_pdf_250"), true);
 
   for (let i = 0; i < 1250; i += 1) {
-    await reserveUsage(storage, userId, "individualPdfExports", new Date("2026-07-13T00:00:00Z"));
+    await reserveUsage(storage, userId, "individualPdfExports", new Date("2090-07-13T00:00:00Z"));
   }
   await assert.rejects(
-    () => reserveUsage(storage, userId, "individualPdfExports", new Date("2026-07-13T00:00:00Z")),
+    () => reserveUsage(storage, userId, "individualPdfExports", new Date("2090-07-13T00:00:00Z")),
     /individualPdfExports monthly quota/,
   );
 
@@ -222,6 +223,7 @@ test("annual billing, webhook signatures, and quota add-ons remain deterministic
     accountId: userId,
     eventType: "subscription.reversed",
     planId: "premium",
+    paidUntil: "2099-01-01T00:00:00Z",
   });
   const secret = "webhook-secret";
   const signature = crypto.createHmac("sha256", secret).update(body).digest("hex");
@@ -230,7 +232,7 @@ test("annual billing, webhook signatures, and quota add-ons remain deterministic
 
   const reversed = await simulateBillingProviderEvent(storage, userId, {
     eventType: "subscription.reversed",
-    now: new Date("2026-08-13T00:00:00Z"),
+    now: new Date("2090-08-13T00:00:00Z"),
   });
   assert.equal(reversed.entitlement.planId, "free");
   assert.equal(reversed.entitlement.status, "refunded");
@@ -242,7 +244,7 @@ test("immediate cancellation downgrades Premium entitlements back to Free limits
 
   const checkout = await createCheckoutSession(storage, userId, "premium_monthly");
   await completeTestCheckoutSession(storage, checkout.sessionId, {
-    now: new Date("2026-07-13T00:00:00Z"),
+    now: new Date("2090-07-13T00:00:00Z"),
   });
   assert.equal((await getEntitlementState(storage, userId)).planId, "premium");
 
@@ -252,4 +254,14 @@ test("immediate cancellation downgrades Premium entitlements back to Free limits
   const entitlement = await getEntitlementState(storage, userId);
   assert.equal(entitlement.planId, "free");
   assert.equal(entitlement.status, "cancelled");
+});
+
+test("simulated renewal restores the subscribed Premium product after expiry", async () => {
+  const userId = "commercial-expired-renewal";
+  const checkout = await createCheckoutSession(storage, userId, "premium_monthly");
+  await completeTestCheckoutSession(storage, checkout.sessionId, { now: new Date("2020-01-01T00:00:00Z") });
+  assert.equal((await getBillingSubscriptionState(storage, userId))?.planId, "free");
+  const renewed = await simulateBillingProviderEvent(storage, userId, { eventType: "subscription.renewed" });
+  assert.equal(renewed.entitlement.planId, "premium");
+  assert.equal((await getBillingSubscriptionState(storage, userId))?.planId, "premium");
 });

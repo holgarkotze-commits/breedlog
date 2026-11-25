@@ -146,9 +146,9 @@ test("free downgrade hides later animals and their related records from ordinary
   assert.ok(!healthRecords.some((record) => record.animalId === hiddenAnimalId));
 
   const entitlementsRes = await fetch(`${BASE_URL}/api/entitlements/me`, { headers: authHeaders() });
-  const entitlements = await entitlementsRes.json() as { downgradeProjection: { hiddenAnimalIds: number[]; visibleAnimalIds: number[] } };
+  const entitlements = await entitlementsRes.json() as { downgradeProjection: { hiddenAnimalCount: number; visibleAnimalIds: number[] } };
   assert.equal(entitlements.downgradeProjection.visibleAnimalIds.length, 30);
-  assert.equal(entitlements.downgradeProjection.hiddenAnimalIds.length, 10);
+  assert.equal(entitlements.downgradeProjection.hiddenAnimalCount, 10);
 });
 
 test("free downgrade also hides animals from evaluations, genetics, and mating-risk routes", async () => {

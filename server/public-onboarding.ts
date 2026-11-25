@@ -9,6 +9,7 @@ import {
 } from "./managed-auth";
 import { BREEDLOG_PLANS } from "../shared/commercial";
 import { canSendTransactionalEmail } from "./email";
+import { setNativeCookieAttributes } from "./device-auth";
 
 export const PUBLIC_TRIAL_SOURCE = "public_free_trial";
 const provider = createManagedAuthProvider(storage);
@@ -26,6 +27,7 @@ async function newAccountDevice() {
 
 async function establishSession(req: Request, accountId: string, userId: string, deviceId: string) {
   await new Promise<void>((resolve, reject) => req.session.regenerate(err => err ? reject(err) : resolve()));
+  setNativeCookieAttributes(req);
   req.session.accountId = accountId;
   req.session.userId = userId;
   req.session.deviceId = deviceId;
@@ -39,11 +41,13 @@ async function limitIdentity(identity: string, action: string, limit = 12) {
   // system_settings.key is varchar(64). Hash action and identity together:
   // the fixed prefix plus a complete SHA-256 base64url digest is 54 characters.
   const key = `auth-limit:${crypto.createHash("sha256").update(`${action}\0${identity}`).digest("base64url")}`;
-  const raw = await storage.getSystemSetting(key);
-  const previous = raw ? JSON.parse(raw) : null;
-  const count = previous?.window === window ? previous.count + 1 : 1;
-  await storage.setSystemSetting(key, JSON.stringify({ window, count }), "Authentication abuse protection");
-  if (count > limit) throw new ManagedAuthError("AUTH_RATE_LIMITED", "Too many attempts. Try again in 15 minutes.", 429);
+  let allowed: boolean;
+  try {
+    allowed = await storage.consumeAuthAttempt(key, window, limit);
+  } catch {
+    throw new ManagedAuthError("AUTH_PROTECTION_UNAVAILABLE", "Sign-in protection is temporarily unavailable. Please try again shortly.", 503);
+  }
+  if (!allowed) throw new ManagedAuthError("AUTH_RATE_LIMITED", "Too many attempts. Try again in 15 minutes.", 429);
 }
 
 async function issueRecoveryCode(accountId: string) {
@@ -156,6 +160,9 @@ export function registerPublicOnboardingRoutes(app: Express) {
   // Public trials must not call any paid AI provider or simulated checkout.
   app.use(["/api/ai", "/api/billing"], async (req, res, next) => {
     try {
+      // Approved read-only plan display is available to trials. Checkout,
+      // provider calls and simulated upgrades remain blocked below.
+      if (req.method === "GET" && req.originalUrl.split("?")[0] === "/api/billing/catalog") return next();
       const workspace = req.session.accountId ? await storage.getAccountWorkspace(req.session.accountId) : null;
       if (workspace?.migrationSource === PUBLIC_TRIAL_SOURCE) {
         return res.status(403).json({ code: "COMING_SOON", message: "AI and paid plans are coming soon. Your free trial remains available." });

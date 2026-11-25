@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { requireDeviceAuth, getUserId } from "../device-auth";
 import { storage } from "../storage";
+import { getAnimalVisibility, getVisibleAIData, hasHiddenAnimals, isAnimalVisible } from "../animal-visibility";
 import { EntitlementDeniedError, reserveUsage } from "../commercial";
 import {
   askProviders,
@@ -213,12 +214,7 @@ export function registerAIRoutes(app: Express): void {
   app.get("/api/ai/context-summary", requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req)!;
-      const [animals, breedingEvents, healthRecords, flockHealthEvents] = await Promise.all([
-        storage.getAnimals(userId, {}),
-        storage.getBreedingEvents(userId),
-        storage.getAllHealthRecords(userId),
-        storage.getFlockHealthEvents(userId),
-      ]);
+      const { animals, breedingEvents, healthRecords, flockHealthEvents } = await getVisibleAIData(storage, userId);
       res.json({
         animalsCount: animals.length,
         breedingEventsCount: breedingEvents.length,
@@ -237,7 +233,8 @@ export function registerAIRoutes(app: Express): void {
   app.get("/api/ai/history", requireAuth, async (req: Request, res: Response) => {
     const userId = getUserId(req)!;
     try {
-      const exchanges = await loadMemory(storage, userId);
+      const visibility = await getAnimalVisibility(storage, userId);
+      const exchanges = hasHiddenAnimals(visibility) ? [] : await loadMemory(storage, userId);
       res.json({ exchanges: toPublicHistory(exchanges) });
     } catch {
       res.json({ exchanges: [] });
@@ -290,32 +287,14 @@ export function registerAIRoutes(app: Express): void {
     }
 
     // Load workspace data — always rebuilt fresh, never from memory
-    let animals: Awaited<ReturnType<typeof storage.getAnimals>>;
-    let breedingEvents: Awaited<ReturnType<typeof storage.getBreedingEvents>>;
-    let performanceRecords: Awaited<ReturnType<typeof storage.getAllPerformanceRecords>>;
-    let healthRecords: Awaited<ReturnType<typeof storage.getAllHealthRecords>>;
-    let flockHealthEvents: Awaited<ReturnType<typeof storage.getFlockHealthEvents>>;
-    let matingGroups: Awaited<ReturnType<typeof storage.getMatingGroups>>;
-    let farmSettings: Awaited<ReturnType<typeof storage.getFarmSettings>>;
-
+    let data: Awaited<ReturnType<typeof getVisibleAIData>>;
     try {
-      [animals, breedingEvents, performanceRecords, healthRecords, flockHealthEvents, matingGroups, farmSettings] =
-        await Promise.all([
-          storage.getAnimals(userId, {}),
-          storage.getBreedingEvents(userId),
-          storage.getAllPerformanceRecords(userId),
-          storage.getAllHealthRecords(userId),
-          storage.getFlockHealthEvents(userId),
-          storage.getMatingGroups(userId),
-          storage.getFarmSettings(userId),
-        ]);
-    } catch (err) {
-      if (err instanceof EntitlementDeniedError) {
-        return res.status(err.status).json({ error: err.message, code: err.code });
-      }
-      const msg = err instanceof Error ? err.message : String(err);
-      return res.status(500).json({ error: "Failed to load workspace data.", detail: msg });
+      data = await getVisibleAIData(storage, userId);
+    } catch {
+      return res.status(503).json({ error: "Workspace data is temporarily unavailable." });
     }
+    if (!isAnimalVisible(data.visibility, animalId)) return res.status(404).json({ error: "Animal not found or not available in this workspace." });
+    const { animals, breedingEvents, performanceRecords, healthRecords, flockHealthEvents, matingGroups, farmSettings } = data;
 
     const context = buildBreedLogAIContext({
       animals,
@@ -350,7 +329,7 @@ export function registerAIRoutes(app: Express): void {
     const userMessageText = buildUserMessage(question, context);
 
     // Load prior conversation memory
-    const priorExchanges = await loadMemory(storage, userId);
+    const priorExchanges = hasHiddenAnimals(data.visibility) ? [] : await loadMemory(storage, userId);
     const historyMessages = buildHistoryMessages(priorExchanges);
 
     // Assemble full provider messages array:

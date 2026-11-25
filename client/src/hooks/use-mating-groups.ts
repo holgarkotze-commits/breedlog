@@ -45,6 +45,7 @@ export function useCreateMatingGroup() {
   const { isOnline } = useNetworkStatus();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (data: InsertMatingGroup) => {
       const tempId = -Date.now();
       const tempRecord = { ...data, id: tempId } as MatingGroup;
@@ -83,6 +84,7 @@ export function useUpdateMatingGroup() {
   const { isOnline } = useNetworkStatus();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async ({ id, data }: { id: number; data: Partial<InsertMatingGroup> }) => {
       const existing = await getAllFromStore<MatingGroup>('matingGroups');
       const current = existing.find(g => g.id === id);
@@ -123,6 +125,7 @@ export function useDeleteMatingGroup() {
   const { isOnline } = useNetworkStatus();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (id: number) => {
       await deleteFromStore('matingGroups', id);
 

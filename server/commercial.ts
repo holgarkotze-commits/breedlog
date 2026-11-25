@@ -1,12 +1,17 @@
 import crypto from "crypto";
 import { z } from "zod";
 import type { IStorage } from "./storage";
+import type { InsertAnimal } from "@shared/schema";
+import type { PaymentTransaction } from "./paytoday-types";
 import {
   BREEDLOG_PLANS,
   BREEDLOG_PRICING_VERSION,
   getBreedLogPlan,
   monthWindowKey,
+  effectivePaidAccess,
+  paidTermTime,
   type BreedLogPlanId,
+  type VerifiedRenewalFailure,
 } from "@shared/commercial";
 
 const ENTITLEMENT_PREFIX = "commercial:entitlement:";
@@ -22,6 +27,33 @@ const BILLING_AUDIT_PREFIX = "commercial:audit:";
 // it first so the internal-test bypass survives server restarts and billing
 // event replay without depending on the billing entitlement key.
 const MASTER_WORKSPACE_PREFIX = "commercial:master_workspace:";
+
+type BillingSettings = Pick<IStorage, "getSystemSetting" | "setSystemSetting">;
+type SimulatorSettings = BillingSettings & Pick<PaymentTransaction, "hasPaymentOrder">;
+
+async function simulatorTransaction<T>(storage: IStorage, accountId: string,
+  run: (settings: SimulatorSettings) => Promise<T>): Promise<T> {
+  let denial: EntitlementDeniedError | undefined;
+  try {
+    return await storage.paymentTransaction(accountId, async tx => {
+      try {
+        // Never call the outer storage or start a nested payment transaction
+        // from a locked simulator operation. All settings/audit writes stage
+        // on the same connection and roll back together on any failure.
+        return await run({ getSystemSetting: key => tx.getSetting(key),
+          setSystemSetting: (key, value) => tx.setSetting(key, value),
+          hasPaymentOrder: () => tx.hasPaymentOrder() });
+      } catch (error) {
+        if (error instanceof EntitlementDeniedError) denial = error;
+        throw error;
+      }
+    });
+  } catch (error) {
+    // SQL sanitizes transaction errors. Preserve only our safe business denial
+    // after rollback; database/provider diagnostics remain redacted.
+    throw denial ?? error;
+  }
+}
 
 export class EntitlementDeniedError extends Error {
   constructor(
@@ -49,6 +81,8 @@ export const billingEventSchema = z.object({
     "subscription.expired",
   ]),
   planId: z.enum(["free", "premium"]).optional(),
+  paidUntil: z.string().datetime().optional(),
+  billingPeriod: z.enum(["monthly", "annual"]).optional(),
   effectiveAt: z.string().datetime().optional(),
   subscriptionId: z.string().max(160).optional(),
   customerId: z.string().max(160).optional(),
@@ -67,6 +101,12 @@ export type EntitlementState = {
   customerId?: string;
   effectiveAt: string;
   updatedAt: string;
+  paidUntil?: string;
+  renewalFailure?: VerifiedRenewalFailure;
+  billingPeriod?: "monthly" | "annual";
+  cancelAtPeriodEnd?: boolean;
+  graceUntil?: string;
+  paymentOrderId?: string;
 };
 
 export type UsageState = {
@@ -128,6 +168,10 @@ export type BillingSubscriptionState = {
   status: "pending" | "active" | "grace_period" | "payment_failed" | "cancelled" | "refunded" | "expired";
   currentPeriodStart: string;
   currentPeriodEnd: string;
+  renewalFailure?: VerifiedRenewalFailure;
+  graceUntil?: string;
+  renewalMode?: "customer_initiated" | "recurring";
+  autoRenew?: boolean;
   cancelAtPeriodEnd: boolean;
   addOns: string[];
   updatedAt: string;
@@ -150,14 +194,14 @@ export const BILLING_CATALOG: Record<BillingProductCode, BillingCatalogEntry> = 
     productCode: "premium_monthly",
     planId: "premium",
     billingPeriod: "monthly",
-    amountNad: 149,
+    amountNad: 79.99,
     currency: "NAD",
   },
   premium_annual: {
     productCode: "premium_annual",
     planId: "premium",
     billingPeriod: "annual",
-    amountNad: 1520,
+    amountNad: 799,
     currency: "NAD",
   },
   addon_pdf_250: {
@@ -226,7 +270,7 @@ function periodEnd(start: Date, billingPeriod: "monthly" | "annual"): Date {
   return next;
 }
 
-async function createBillingAuditEntry(storage: IStorage, accountId: string, eventType: string, payload: Record<string, unknown>) {
+async function createBillingAuditEntry(storage: BillingSettings, accountId: string, eventType: string, payload: Record<string, unknown>) {
   const auditId = `bill_${crypto.randomUUID().slice(0, 12)}`;
   const entry: BillingAuditEntry = {
     auditId,
@@ -239,7 +283,7 @@ async function createBillingAuditEntry(storage: IStorage, accountId: string, eve
   return entry;
 }
 
-export async function getEntitlementState(storage: IStorage, accountId: string): Promise<EntitlementState> {
+export async function getEntitlementState(storage: BillingSettings, accountId: string, at = new Date()): Promise<EntitlementState> {
   // Check the permanent master-workspace marker first.  This key is written by
   // setInternalTestEntitlement at activation time and is never overwritten by
   // billing events.  Checking it here makes internal-test bypass survive server
@@ -270,7 +314,10 @@ export async function getEntitlementState(storage: IStorage, accountId: string):
   }
 
   const raw = await storage.getSystemSetting(settingKeyForEntitlement(accountId));
-  if (raw) return JSON.parse(raw) as EntitlementState;
+  if (raw) {
+    const state = JSON.parse(raw) as EntitlementState;
+    return effectivePaidAccess(state, at);
+  }
   const now = new Date().toISOString();
   return {
     accountId,
@@ -283,7 +330,7 @@ export async function getEntitlementState(storage: IStorage, accountId: string):
   };
 }
 
-export async function setEntitlementState(storage: IStorage, state: EntitlementState): Promise<EntitlementState> {
+export async function setEntitlementState(storage: BillingSettings, state: EntitlementState): Promise<EntitlementState> {
   const normalized: EntitlementState = {
     ...state,
     pricingVersion: BREEDLOG_PRICING_VERSION,
@@ -325,17 +372,33 @@ export async function listBillingAuditEntries(storage: IStorage, accountId: stri
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export async function getBillingSubscriptionState(storage: IStorage, accountId: string): Promise<BillingSubscriptionState | null> {
+export async function getBillingSubscriptionState(storage: BillingSettings, accountId: string): Promise<BillingSubscriptionState | null> {
   const raw = await storage.getSystemSetting(settingKeyForSubscription(accountId));
-  return raw ? JSON.parse(raw) as BillingSubscriptionState : null;
+  const state = raw ? JSON.parse(raw) as BillingSubscriptionState & { paymentOrderId?: string } : null;
+  if (state?.planId === "premium") {
+    const access = effectivePaidAccess({ ...state, paidUntil: state.currentPeriodEnd });
+    return { ...state, planId: access.planId, status: access.status, graceUntil: access.graceUntil };
+  }
+  return state;
 }
 
-export async function saveBillingSubscriptionState(storage: IStorage, subscription: BillingSubscriptionState): Promise<void> {
+export async function saveBillingSubscriptionState(storage: BillingSettings, subscription: BillingSubscriptionState): Promise<void> {
   await storage.setSystemSetting(
     settingKeyForSubscription(subscription.accountId),
     JSON.stringify(subscription),
     "Deterministic billing subscription state",
   );
+}
+
+async function assertSimulatorMayMutate(storage: SimulatorSettings, accountId: string, provider?: string): Promise<void> {
+  // Read raw records: rejection must not rebuild entitlements or write any
+  // provisional subscription, idempotency or audit state before this guard.
+  const subscription = parseJson<BillingSubscriptionState | null>(await storage.getSystemSetting(settingKeyForSubscription(accountId)), null);
+  const entitlement = parseJson<EntitlementState | null>(await storage.getSystemSetting(settingKeyForEntitlement(accountId)), null);
+  const protectedOrder = await storage.hasPaymentOrder();
+  if (protectedOrder || provider?.toLowerCase() === "paytoday" || subscription?.provider.toLowerCase() === "paytoday" || entitlement?.paymentOrderId) {
+    throw new EntitlementDeniedError("UNVERIFIED_PROVIDER", "This provider requires protected order reconciliation.", 403);
+  }
 }
 
 export async function createCheckoutSession(
@@ -345,6 +408,7 @@ export async function createCheckoutSession(
   options: { provider?: string; returnUrl?: string; cancelUrl?: string; metadata?: Record<string, unknown> } = {},
 ): Promise<BillingCheckoutSession> {
   const catalog = BILLING_CATALOG[productCode];
+  if (productCode === "addon_pdf_250" && !areBillingTestRoutesEnabled()) throw new EntitlementDeniedError("ADDON_SALES_UNAVAILABLE", "PDF add-on sales are awaiting price approval.", 503);
   if (!catalog) {
     throw new EntitlementDeniedError("UNKNOWN_PRODUCT", `Unknown billing product: ${productCode}`, 400);
   }
@@ -366,7 +430,7 @@ export async function createCheckoutSession(
   return session;
 }
 
-export async function getCheckoutSession(storage: IStorage, sessionId: string): Promise<BillingCheckoutSession | null> {
+export async function getCheckoutSession(storage: BillingSettings, sessionId: string): Promise<BillingCheckoutSession | null> {
   const raw = await storage.getSystemSetting(settingKeyForCheckoutSession(sessionId));
   return raw ? JSON.parse(raw) as BillingCheckoutSession : null;
 }
@@ -390,9 +454,23 @@ export async function completeTestCheckoutSession(
   sessionId: string,
   options: { now?: Date } = {},
 ): Promise<{ session: BillingCheckoutSession; subscription: BillingSubscriptionState; entitlement: EntitlementState }> {
+  // Discovery is read-only; re-read and validate ownership under the lock.
   const session = await getCheckoutSession(storage, sessionId);
+  if (!session) throw new EntitlementDeniedError("UNKNOWN_CHECKOUT_SESSION", "Checkout session was not found.", 404);
+  return simulatorTransaction(storage, session.accountId, locked => completeTestCheckoutSessionLocked(locked, sessionId, session.accountId, options));
+}
+
+async function completeTestCheckoutSessionLocked(storage: SimulatorSettings, sessionId: string, accountId: string,
+  options: { now?: Date }) {
+  const session = await getCheckoutSession(storage, sessionId);
+  if (session && session.accountId !== accountId) throw new EntitlementDeniedError("CHECKOUT_ACCOUNT_CHANGED", "Checkout ownership changed.", 409);
   if (!session) {
     throw new EntitlementDeniedError("UNKNOWN_CHECKOUT_SESSION", "Checkout session was not found.", 404);
+  }
+  await assertSimulatorMayMutate(storage, session.accountId, session.provider);
+  const currentEntitlement = await getEntitlementState(storage, session.accountId);
+  if (session.provider !== "test-provider" || currentEntitlement.paymentOrderId) {
+    throw new EntitlementDeniedError("PROTECTED_PAYMENT_ORDER", "A protected annual payment cannot be completed through the simulator.", 403);
   }
   if (session.status === "completed") {
     const subscription = await getBillingSubscriptionState(storage, session.accountId);
@@ -447,7 +525,7 @@ export async function completeTestCheckoutSession(
     updatedAt: now.toISOString(),
   };
   await saveBillingSubscriptionState(storage, subscription);
-  const entitlement = (await applyBillingEvent(storage, {
+  const entitlement = (await applyBillingEventLocked(storage, {
     provider: session.provider,
     providerEventId: `evt_checkout_${sessionId}`,
     accountId: session.accountId,
@@ -469,10 +547,18 @@ export async function cancelBillingSubscription(
   accountId: string,
   options: { atPeriodEnd?: boolean; now?: Date } = {},
 ): Promise<BillingSubscriptionState> {
+  return simulatorTransaction(storage, accountId, locked => cancelBillingSubscriptionLocked(locked, accountId, options));
+}
+
+async function cancelBillingSubscriptionLocked(storage: SimulatorSettings, accountId: string, options: { atPeriodEnd?: boolean; now?: Date }) {
   const subscription = await getBillingSubscriptionState(storage, accountId);
   if (!subscription) {
     throw new EntitlementDeniedError("SUBSCRIPTION_NOT_FOUND", "No active billing subscription exists for this account.", 404);
   }
+  if (subscription.provider === "paytoday") {
+    throw new EntitlementDeniedError("ONCE_OFF_ANNUAL", "Once-off annual access expires automatically; there is no recurring charge to cancel.", 409);
+  }
+  await assertSimulatorMayMutate(storage, accountId, subscription.provider);
   const now = options.now ?? new Date();
   const updated: BillingSubscriptionState = {
     ...subscription,
@@ -483,7 +569,7 @@ export async function cancelBillingSubscription(
   await saveBillingSubscriptionState(storage, updated);
   await createBillingAuditEntry(storage, accountId, "subscription.cancel_requested", { atPeriodEnd: updated.cancelAtPeriodEnd });
   if (options.atPeriodEnd === false) {
-    await applyBillingEvent(storage, {
+    await applyBillingEventLocked(storage, {
       provider: updated.provider,
       providerEventId: `evt_cancel_${updated.subscriptionId}_${now.getTime()}`,
       accountId,
@@ -502,11 +588,21 @@ export async function simulateBillingProviderEvent(
   accountId: string,
   input: { eventType: BillingEvent["eventType"]; providerEventId?: string; now?: Date },
 ) {
+  return simulatorTransaction(storage, accountId, locked => simulateBillingProviderEventLocked(locked, accountId, input));
+}
+
+async function simulateBillingProviderEventLocked(storage: SimulatorSettings, accountId: string,
+  input: { eventType: BillingEvent["eventType"]; providerEventId?: string; now?: Date }) {
+  await assertSimulatorMayMutate(storage, accountId);
   const subscription = await getBillingSubscriptionState(storage, accountId);
   const now = input.now ?? new Date();
+  const planId = subscription && input.eventType === "subscription.renewed"
+    ? BILLING_CATALOG[subscription.productCode]?.planId ?? subscription.planId
+    : subscription?.planId ?? "free";
   const nextSubscription: BillingSubscriptionState | null = subscription
     ? {
         ...subscription,
+        planId,
         status:
           input.eventType === "subscription.grace_period" ? "grace_period"
           : input.eventType === "subscription.payment_failed" ? "payment_failed"
@@ -525,12 +621,12 @@ export async function simulateBillingProviderEvent(
   if (nextSubscription) {
     await saveBillingSubscriptionState(storage, nextSubscription);
   }
-  const entitlement = (await applyBillingEvent(storage, {
+  const entitlement = (await applyBillingEventLocked(storage, {
     provider: subscription?.provider ?? "test-provider",
     providerEventId: input.providerEventId ?? `evt_${input.eventType}_${now.getTime()}`,
     accountId,
     eventType: input.eventType,
-    planId: subscription?.planId ?? "free",
+    planId,
     subscriptionId: subscription?.subscriptionId,
     customerId: subscription?.customerId,
     effectiveAt: now.toISOString(),
@@ -584,35 +680,65 @@ export async function setInternalTestEntitlement(storage: IStorage, accountId: s
   return state;
 }
 
-export async function assertCanCreateAnimal(storage: IStorage, accountId: string): Promise<void> {
+export async function assertCanCreateAnimal(storage: IStorage, accountId: string, reactivation = false): Promise<void> {
   const entitlement = await getEntitlementState(storage, accountId);
   if (isInternalTestEntitlement(entitlement)) return; // internal test — unlimited animals
   const plan = getBreedLogPlan(entitlement.planId);
   const activeLimit = plan.limits.activeAnimals;
   if (activeLimit === "unlimited") return;
-  const activeAnimals = (await storage.getAnimals(accountId, { status: "active" })).length;
-  if (activeAnimals >= activeLimit) {
+  const animals = await storage.getAnimals(accountId);
+  const count = reactivation ? animals.filter(animal => (animal.status ?? "active") === "active").length : animals.length;
+  if (count >= activeLimit) {
     throw new EntitlementDeniedError(
       "ACTIVE_ANIMAL_LIMIT_REACHED",
-      `Free accounts are limited to ${activeLimit} active animals. Upgrade to Premium to add more active animals.`,
+      reactivation ? `Free accounts may have up to ${activeLimit} active animals.`
+        : `Free includes the first ${activeLimit} originally registered animals, including inactive ones.`,
     );
   }
+}
+
+/** One account lock covers the count, duplicate replay lookup and committed insert. */
+export async function createAnimalWithinLimit(
+  storage: IStorage, accountId: string, input: Omit<InsertAnimal, "userId">,
+) {
+  return storage.withAnimalWriteLock(accountId, async locked => {
+    if (input.clientId) {
+      const existing = await locked.getAnimalByClientId(accountId, input.clientId);
+      if (existing) return { animal: existing, created: false };
+    }
+    await assertCanCreateAnimal(locked, accountId);
+    return { animal: await locked.createAnimal(accountId, input), created: true };
+  });
+}
+
+/** Re-read status under the same lock used by creates and import rows. */
+export async function updateAnimalWithinLimit(
+  storage: IStorage, accountId: string, animalId: number, input: Partial<Omit<InsertAnimal, "userId">>,
+) {
+  return storage.withAnimalWriteLock(accountId, async locked => {
+    const existing = await locked.getAnimal(accountId, animalId);
+    if (!existing) return undefined;
+    if ((existing.status ?? "active") !== "active" && (input.status ?? existing.status ?? "active") === "active") {
+      await assertCanCreateAnimal(locked, accountId, true);
+    }
+    return locked.updateAnimal(accountId, animalId, input);
+  });
 }
 
 export function projectDowngradedAnimalVisibility<T extends { id: number; createdAt?: Date | string | null; status?: string | null }>(
   animals: T[],
 ): DowngradeProjection<T> {
-  const activeAnimals = animals
-    .filter((animal) => (animal.status ?? "active") === "active")
-    .sort((a, b) => {
-      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return aTime - bTime || a.id - b.id;
-    });
-  const visibleIds = new Set(activeAnimals.slice(0, BREEDLOG_PLANS.free.limits.activeAnimals as number).map((animal) => animal.id));
+  const registeredAnimals = [...animals].sort((a, b) => {
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return aTime - bTime || a.id - b.id;
+  });
+  const visibleIds = new Set(registeredAnimals
+    .slice(0, BREEDLOG_PLANS.free.limits.activeAnimals as number)
+    .map(animal => animal.id));
   return {
-    visible: animals.filter((animal) => visibleIds.has(animal.id) || (animal.status ?? "active") !== "active"),
-    hidden: animals.filter((animal) => !visibleIds.has(animal.id) && (animal.status ?? "active") === "active"),
+    visible: animals.filter((animal) => visibleIds.has(animal.id)),
+    hidden: animals.filter((animal) => !visibleIds.has(animal.id)),
     rule: "first_30_originally_added",
   };
 }
@@ -726,6 +852,13 @@ export function verifyBillingSignature(rawBody: string | Buffer, signature: stri
 }
 
 export async function applyBillingEvent(storage: IStorage, event: BillingEvent): Promise<{ idempotent: boolean; entitlement: EntitlementState }> {
+  return simulatorTransaction(storage, event.accountId, locked => applyBillingEventLocked(locked, event));
+}
+
+async function applyBillingEventLocked(storage: SimulatorSettings, event: BillingEvent): Promise<{ idempotent: boolean; entitlement: EntitlementState }> {
+  // PayToday has no verified webhook protocol. It can ONLY enter through
+  // protected stored-intent lookup and the transactional annual reconciler.
+  await assertSimulatorMayMutate(storage, event.accountId, event.provider);
   const eventKey = settingKeyForBillingEvent(event.provider, event.providerEventId);
   const existing = await storage.getSystemSetting(eventKey);
   if (existing) {
@@ -741,7 +874,7 @@ export async function applyBillingEvent(storage: IStorage, event: BillingEvent):
 
   const now = new Date().toISOString();
   const existingEntitlement = await getEntitlementState(storage, event.accountId);
-  const nextPlan: BreedLogPlanId =
+  let nextPlan: BreedLogPlanId =
     event.eventType === "subscription.refunded" ||
     event.eventType === "subscription.reversed" ||
     event.eventType === "subscription.cancelled" ||
@@ -757,6 +890,32 @@ export async function applyBillingEvent(storage: IStorage, event: BillingEvent):
     : event.eventType === "subscription.expired" ? "expired"
     : "active";
 
+  const raw = await storage.getSystemSetting(settingKeyForEntitlement(event.accountId));
+  const previous = raw ? JSON.parse(raw) as EntitlementState : existingEntitlement;
+  const settlement = ["subscription.created", "subscription.renewed"].includes(event.eventType);
+  const storedSub = await storage.getSystemSetting(settingKeyForSubscription(event.accountId));
+  const ownedSub = storedSub ? JSON.parse(storedSub) as BillingSubscriptionState : null;
+  if (!settlement && ["subscription.payment_failed", "subscription.grace_period"].includes(event.eventType)) nextPlan = previous.planId;
+
+  const paidUntil = settlement ? event.paidUntil ?? ownedSub?.currentPeriodEnd : previous.paidUntil;
+  const billingPeriod = settlement ? event.billingPeriod ?? ownedSub?.billingPeriod : previous.billingPeriod;
+  let renewalFailure = settlement ? undefined : previous.renewalFailure;
+  // Generic events are simulator-only at the HTTP boundary. A grace status
+  // alone is not payment-failure proof; an owned due period is indispensable.
+  const due = Date.parse(paidUntil ?? "");
+  const observed = Date.parse(event.effectiveAt ?? now);
+  if (event.eventType === "subscription.payment_failed" && billingPeriod === "monthly" &&
+      event.subscriptionId && event.subscriptionId === previous.subscriptionId && ownedSub?.subscriptionId === event.subscriptionId &&
+      ownedSub.currentPeriodEnd === paidUntil && !ownedSub.cancelAtPeriodEnd && !["refunded", "cancelled"].includes(previous.status) &&
+      Number.isFinite(due) && observed >= due && observed <= Date.now()) {
+    renewalFailure = previous.renewalFailure?.verified === true && previous.renewalFailure.paidPeriodId === (previous.paymentOrderId ?? event.subscriptionId) &&
+      previous.renewalFailure.dueAt === paidUntil && previous.renewalFailure.renewalOrderId && paidTermTime(previous.renewalFailure.observedAt) >= due &&
+      paidTermTime(previous.renewalFailure.observedAt) <= observed ? previous.renewalFailure : {
+      verified: true, dueAt: paidUntil!, paidPeriodId: previous.paymentOrderId ?? event.subscriptionId,
+      observedAt: event.effectiveAt ?? now, renewalOrderId: event.providerEventId,
+    };
+  }
+  if (ownedSub && renewalFailure) await saveBillingSubscriptionState(storage, { ...ownedSub, renewalFailure });
   const entitlement = await setEntitlementState(storage, {
     accountId: event.accountId,
     planId: nextPlan,
@@ -766,8 +925,9 @@ export async function applyBillingEvent(storage: IStorage, event: BillingEvent):
     subscriptionId: event.subscriptionId ?? existingEntitlement.subscriptionId,
     customerId: event.customerId ?? existingEntitlement.customerId,
     effectiveAt: event.effectiveAt ?? now,
+    paidUntil, billingPeriod, renewalFailure,
     updatedAt: now,
   });
   await storage.setSystemSetting(eventKey, JSON.stringify({ event, appliedAt: now }), "Idempotency record for billing event");
-  return { idempotent: false, entitlement };
+  return { idempotent: false, entitlement: await getEntitlementState(storage, event.accountId) };
 }

@@ -12,10 +12,10 @@ test("PDF export lifecycle analytics records quality only", () => {
   assert.match(pdfDialog, /await onExport\(quality\);\s*trackAnalyticsEvent\("pdf_export_completed",\s*\{\s*quality\s*\}\)/);
 });
 
-test("document previews are tracked only after a popup opens", () => {
+test("document previews are tracked only after authorization and an open popup", () => {
   assert.match(
     exportTemplate,
-    /if \(!w\) return;\s*trackAnalyticsEvent\("document_preview_opened",\s*\{\s*format: "pdf"\s*\}\)/,
+    /if \(!await authorizeExport\(\)\) \{\s*w\?\.close\(\);\s*return false;\s*\}\s*if \(!w \|\| w\.closed\) return false;\s*trackAnalyticsEvent\("document_preview_opened",\s*\{\s*format: "pdf"\s*\}\)/,
   );
 });
 

@@ -1,3 +1,5 @@
+import { authorizeExport, fetchExportEntitlement } from "@/lib/export-access";
+import { PlanPricing } from "@/components/PlanPricing";
 import { Layout } from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
 import { useFarmSettings, useSaveFarmSettings } from "@/hooks/use-farm-settings";
@@ -51,13 +53,14 @@ type EntitlementResponse = {
   entitlement: {
     planId: "free" | "premium";
     status: "active" | "grace_period" | "cancelled" | "payment_failed" | "refunded" | "expired";
+    graceUntil?: string;
     pricingVersion: string;
     effectiveAt: string;
     updatedAt: string;
   };
   downgradeProjection: {
     visibleAnimalIds: number[];
-    hiddenAnimalIds: number[];
+    hiddenAnimalCount: number;
     rule: string;
   };
 };
@@ -283,6 +286,8 @@ export default function Settings() {
 
   const { data: entitlementData, isLoading: entitlementLoading } = useQuery<EntitlementResponse>({
     queryKey: ["/api/entitlements/me"],
+    queryFn: fetchExportEntitlement,
+    refetchInterval: 5000,
     enabled: !!user,
   });
 
@@ -797,6 +802,7 @@ export default function Settings() {
   };
 
   const exportCSV = async () => {
+    if (!await authorizeExport()) return;
     const { rows } = buildAnimalExportRows();
     const content = buildBreedLogCsvContent(rows);
     await shareOrDownloadFile(content, `breedlog-export-${format(new Date(), "yyyy-MM-dd")}.csv`, "text/csv", "Herd database exported as CSV.");
@@ -810,7 +816,7 @@ export default function Settings() {
     });
   };
 
-  const exportPDF = () => {
+  const exportPDF = async () => {
     const data = getExportData();
     const fb = data.farmBranding;
     const totalPages = Math.max(1, Math.ceil(data.animals.length / GROUP_ROWS_PER_PAGE));
@@ -864,7 +870,7 @@ export default function Settings() {
     `;
     const htmlContent = wrapExportDocument("Herd Database Export", css, pagesHtml);
     
-    openExportPrintDialog(htmlContent);
+    if (!await openExportPrintDialog(htmlContent)) return;
     toast({ title: "PDF Ready", description: "Print dialog opened for PDF export" });
   };
 
@@ -920,7 +926,7 @@ export default function Settings() {
   };
 
   const currentPlan = entitlementData ? BREEDLOG_PLANS[entitlementData.entitlement.planId] : null;
-  const hiddenAnimalCount = entitlementData?.downgradeProjection.hiddenAnimalIds.length ?? 0;
+  const hiddenAnimalCount = entitlementData?.downgradeProjection.hiddenAnimalCount ?? 0;
   const visibleAnimalCount = entitlementData?.downgradeProjection.visibleAnimalIds.length ?? 0;
   const runtimePlatform = detectRuntimePlatform();
   const configuredApiOrigin = getConfiguredApiOrigin();
@@ -936,7 +942,7 @@ export default function Settings() {
           <CardHeader><CardTitle>Farmer account</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm break-all">{account.email}</p>
-            {isTrial && <p className="text-sm">Free trial: 30 active animals, 1 active device, 5 individual PDFs per month. No card or charge. Paid plans and AI are coming soon.</p>}
+            {isTrial && <p className="text-sm">Free trial: first 30 originally registered animals, including inactive ones, 1 active device, and Premium-only printing and exports. No card or charge. Paid plans and AI are coming soon.</p>}
             <p className="text-xs text-muted-foreground">Keep your saved recovery code private. Made by STITCH WORX.</p>
             <Button variant="outline" onClick={() => void performLogout()} data-testid="button-account-signout">Sign out</Button>
           </CardContent>
@@ -1402,6 +1408,7 @@ export default function Settings() {
              </div>
 
              <div className="p-4 bg-secondary rounded border border-border space-y-4" data-testid="card-plan-entitlements">
+                <PlanPricing />
                 <div>
                   <h4 className="font-bold text-sm uppercase mb-2">Plan & Entitlements</h4>
                   <p className="text-xs text-muted-foreground">
@@ -1435,7 +1442,7 @@ export default function Settings() {
                       </div>
                     </div>
                     <div className="rounded border border-border bg-background/70 p-3 text-xs">
-                      <p><strong>Downgrade visibility rule:</strong> first 30 active animals originally added remain visible.</p>
+                      <p><strong>Downgrade visibility rule:</strong> The first 30 originally registered animals, including inactive ones, remain visible.</p>
                       <p><strong>Visible under Free:</strong> {visibleAnimalCount}</p>
                       <p><strong>Hidden on downgrade:</strong> {hiddenAnimalCount}</p>
                     </div>
@@ -1621,7 +1628,8 @@ export default function Settings() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => {
+                          onClick={async () => {
+                            if (!await authorizeExport()) return;
                             const link = document.createElement('a');
                             link.href = doc.fileUrl;
                             link.download = doc.fileName;

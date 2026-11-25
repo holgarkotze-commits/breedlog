@@ -4,7 +4,7 @@ import {
   removeSyncedItems,
   purgeStuckSyncItems,
   incrementSyncItemFailures,
-  putManyInStore,
+  replaceServerSnapshot,
   getAllFromStore,
   setLastSyncTime,
   deleteFromStore,
@@ -190,10 +190,12 @@ class SyncManager {
 
     try {
       const pushResult = await this.pushChanges();
+      const pullResult = await this.pullData();
+      this.notifySyncComplete();
       if (pushResult.retryableCount > 0) {
         throw new Error(`${pushResult.retryableCount} items could not be synced`);
       }
-      await this.pullData();
+      if (pullResult.failedCount > 0) throw new Error('Latest workspace data could not be refreshed');
       await removeSyncedItems();
       
       const now = Date.now();
@@ -312,6 +314,26 @@ class SyncManager {
   }
 
   private async processSyncItem(item: SyncQueueItem): Promise<void> {
+    const data = { ...(item.data as Record<string, any>) };
+    for (const key of ['animalId', 'damId', 'sireId', 'ramId', 'eweId', 'matingGroupId']) {
+      if (typeof data[key] === 'number' && data[key] < 0) {
+        const mapped = await getServerIdForTemp(data[key], key === 'matingGroupId' ? 'matingGroups' : 'animals');
+        if (!mapped) throw new Error('Offline relationship is waiting for its original record to sync');
+        data[key] = mapped;
+      }
+    }
+    if (Array.isArray(data.eweIds)) data.eweIds = await Promise.all(data.eweIds.map(async (id: number) => {
+      if (id >= 0) return id;
+      const mapped = await getServerIdForTemp(id, 'animals');
+      if (!mapped) throw new Error('Offline group is waiting for its original animal to sync');
+      return mapped;
+    }));
+    if (Array.isArray(data.treatments)) data.treatments = await Promise.all(data.treatments.map(async (row: any) => {
+      if (!(row.animalId < 0)) return row;
+      const mapped = await getServerIdForTemp(row.animalId, 'animals');
+      if (!mapped) throw new Error('Offline treatment is waiting for its original animal to sync');
+      return { ...row, animalId: mapped };
+    }));
     const entityEndpoints: Record<string, string> = {
       animals: '/api/animals',
       breedingEvents: '/api/breeding-events',
@@ -320,18 +342,19 @@ class SyncManager {
       healthRecords: '/api/health-records',
       documents: '/api/documents',
       farmSettings: '/api/farm-settings',
+      flockHealthEvents: '/api/flock-health-events',
+      animalImages: `/api/animals/${data.animalId}/images`,
     };
 
     const endpoint = entityEndpoints[item.entity];
     if (!endpoint) {
-      console.warn(`[SyncManager] Unknown entity: ${item.entity}`);
-      return;
+      throw new Error(`Unsupported sync entity retained for recovery: ${item.entity}`);
     }
 
     switch (item.action) {
       case 'create':
-        const payloadData = item.data as Record<string, unknown>;
-        const idempotencyKey = item.operationId || (typeof payloadData.clientId === "string" ? payloadData.clientId : undefined);
+        const payloadData = data;
+        const idempotencyKey = item.operationId || (typeof payloadData.clientId === "string" ? payloadData.clientId : ["flockHealthEvents", "animalImages"].includes(item.entity) ? item.id : undefined);
         const payload = idempotencyKey
           ? { ...payloadData, clientId: idempotencyKey }
           : payloadData;
@@ -357,10 +380,11 @@ class SyncManager {
           }
         }
         if (updateId > 0) {
-          const dataWithId = { ...(item.data as Record<string, unknown>), id: updateId };
-          await apiRequest('PUT', `${endpoint}/${updateId}`, dataWithId);
+          const dataWithId = { ...data, id: updateId };
+          const method = item.entity === 'matingGroups' ? 'PATCH' : item.entity === 'farmSettings' ? 'POST' : 'PUT';
+          await apiRequest(method, item.entity === 'farmSettings' ? endpoint : `${endpoint}/${updateId}`, dataWithId);
         } else {
-          console.log(`[SyncManager] Skipping update for unsynced temp ID: ${updateId}`);
+          throw new Error('Offline update is waiting for its original record to sync');
         }
         break;
       case 'delete':
@@ -402,12 +426,17 @@ class SyncManager {
     let successCount = 0;
     let failedCount = 0;
 
-    // Pull data in parallel for faster sync
+    const { getCurrentUserId } = await import('./indexeddb');
+    const owner = await getCurrentUserId();
+    const snapshot: Record<string, any[]> = {};
+    // These are full authoritative collections in both manual and automatic
+    // sync. No cursor/delta response can be treated as a full snapshot.
     await Promise.all(endpoints.map(async ({ url, store }) => {
       try {
         const response = await fetch(url, { 
           credentials: 'include',
-          headers 
+          headers,
+          cache: 'no-store',
         });
         
         // Check content type before parsing
@@ -420,23 +449,21 @@ class SyncManager {
         
         const data = await response.json();
         const items = Array.isArray(data) ? data : data ? [data] : [];
-        if (store === 'animals' && items.length === 0) {
-          const localAnimals = await getAllFromStore<any>('animals');
-          if (Array.isArray(localAnimals) && localAnimals.length > 0) {
-            console.warn('[SyncManager] Server returned no animals, but local animal records exist. Keeping local data to prevent silent replacement.');
-            failedCount++;
-            return;
-          }
-        }
-        if (items.length > 0) {
-          await putManyInStore(store, items);
-        }
+        snapshot[store] = items;
         successCount++;
       } catch (error) {
         console.warn(`[SyncManager] Failed to pull ${store}:`, error);
         failedCount++;
       }
     }));
+    if (failedCount === 0) {
+      const response = await fetch('/api/device/info', { credentials: 'include', cache: 'no-store', headers });
+      const session = response.ok ? await response.json() : null;
+      if (!owner || owner !== await getCurrentUserId() || !session?.registered || session.userId !== owner) {
+        throw new Error('Workspace changed during refresh. Sign in again before syncing.');
+      }
+      await replaceServerSnapshot(snapshot);
+    }
     
     return { successCount, failedCount };
   }
@@ -526,12 +553,12 @@ class SyncManager {
       this.updateState({ failedItems: pushResult.failedCount });
 
       // Determine result based on push AND pull phases
-      const hasErrors = pushResult.failedCount > 0 || pullResult.failedCount > 0;
+      const hasErrors = pushResult.failedCount > 0 || pushResult.retryableCount > 0 || pullResult.failedCount > 0;
       
       if (hasErrors) {
         const errorParts = [];
-        if (pushResult.failedCount > 0) {
-          errorParts.push(`${pushResult.failedCount} item(s) failed to push`);
+        if (pushResult.failedCount + pushResult.retryableCount > 0) {
+          errorParts.push(`${pushResult.failedCount + pushResult.retryableCount} item(s) failed to push`);
         }
         if (pullResult.failedCount > 0) {
           errorParts.push(`${pullResult.failedCount} endpoint(s) failed to pull`);

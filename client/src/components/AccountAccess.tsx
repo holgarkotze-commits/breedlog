@@ -284,7 +284,7 @@ export default function AccountAccess({ onAuthenticated, onLegacy }: AccountAcce
                 <>
                   <div className="rounded-xl border border-border bg-background/70 px-4 py-3">
                     <p className="text-sm font-semibold">Free plan for your flock</p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">30 active animals · 1 active device · 5 individual PDFs per month</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">First 30 originally registered animals, including inactive ones · 1 active device · Premium-only printing and exports</p>
                     <p className="mt-1 text-xs text-muted-foreground">No card and no charge. Paid plans and AI features are coming soon.</p>
                   </div>
                   <div className="flex items-start gap-3">

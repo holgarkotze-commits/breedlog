@@ -1,6 +1,5 @@
-const STATIC_CACHE = 'breedlog-static-v3';
-const API_CACHE = 'breedlog-api-v3';
-const APP_SHELL_CACHE = 'breedlog-shell-v3';
+const STATIC_CACHE = 'breedlog-static-v4';
+const APP_SHELL_CACHE = 'breedlog-shell-v4';
 
 const STATIC_ASSETS = [
   '/',
@@ -17,19 +16,6 @@ const STATIC_ASSETS = [
   '/icons/icon-512x512.png'
 ];
 
-const API_ROUTES = [
-  '/api/animals',
-  '/api/breeding-events',
-  '/api/mating-groups',
-  '/api/performance-records',
-  '/api/health-records',
-  '/api/farm-settings',
-  '/api/documents',
-  '/api/exported-documents',
-  '/api/beta/access',
-  '/api/auth/user'
-];
-
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing service worker...');
   event.waitUntil(
@@ -42,7 +28,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating service worker...');
-  const validCaches = [STATIC_CACHE, API_CACHE, APP_SHELL_CACHE];
+  const validCaches = [STATIC_CACHE, APP_SHELL_CACHE];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -69,23 +55,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (request.mode === 'navigate') {
-    event.respondWith(handleNavigationRequest(request));
+  // Account/entitlement data belongs only in the workspace-owned IndexedDB
+  // projection. An origin-wide HTTP cache can resurrect Premium rows or a
+  // previous account's records after downgrade/logout, including filtered URLs.
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request));
     return;
   }
 
-  // Keep selected data APIs network-first with cached fallback for offline continuity.
-  // Sensitive/auth/admin/version endpoints are always network-only.
-  if (url.pathname.startsWith('/api/')) {
-    const isOfflineCapableApi = API_ROUTES.some((route) => (
-      url.pathname === route || url.pathname.startsWith(`${route}/`)
-    ));
-
-    if (isOfflineCapableApi) {
-      event.respondWith(networkFirstStrategy(request, API_CACHE, true));
-    } else {
-      event.respondWith(fetch(request));
-    }
+  if (request.mode === 'navigate') {
+    event.respondWith(handleNavigationRequest(request));
     return;
   }
 
@@ -101,27 +80,6 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(staleWhileRevalidate(request));
 });
-
-async function networkFirstStrategy(request, cacheName = API_CACHE, shouldCache = true) {
-  try {
-    const networkResponse = await fetch(request);
-    if (shouldCache && networkResponse.ok) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, networkResponse.clone());
-    }
-    return networkResponse;
-  } catch (error) {
-    console.log('[SW] Network failed, trying cache for:', request.url);
-    const cachedResponse = await caches.match(request);
-    if (cachedResponse) {
-      return cachedResponse;
-    }
-    return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-}
 
 async function cacheFirstStrategy(request) {
   const cachedResponse = await caches.match(request);

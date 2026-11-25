@@ -14,10 +14,10 @@ test("canonical template supplies the shared builders and standard page layouts"
     "renderExportHeader",
     "renderExportFooter",
     "wrapExportDocument",
-    "openExportPrintDialog",
   ]) {
     assert.match(template, new RegExp(`export function ${builder}`));
   }
+  assert.match(template, /export async function openExportPrintDialog/);
   assert.match(template, /GROUP_ROWS_PER_PAGE\s*=\s*20/);
   assert.match(template, /size:\s*A4 landscape/);
   assert.match(template, /size:\s*A4 portrait/);

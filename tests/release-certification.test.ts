@@ -36,8 +36,8 @@ test('sync manager performs push + pull and reconnect checks', () => {
 });
 
 test('animals workflow supports offline-first create with queued sync', () => {
-  assert.match(animalsHookSource, /await putInStore\("animals", offlineAnimal\)/);
-  assert.match(animalsHookSource, /await addToSyncQueue\(\{\s*action:\s*"create",\s*entity:\s*"animals"/s);
+  assert.match(animalsHookSource, /await savePendingAnimal\(offlineAnimal, \{\s*action:\s*"create",\s*entity:\s*"animals"/);
+  assert.match(indexedDbSource, /db\.transaction\(\["animals", "syncQueue"\], "readwrite"\)[\s\S]*?tx\.objectStore\("animals"\)\.put\(row\)[\s\S]*?tx\.objectStore\("syncQueue"\)\.put/);
   assert.match(animalsHookSource, /idempotencyKey:\s*operationId/);
   assert.match(animalsHookSource, /clientOperationId:\s*operationId/);
   assert.match(animalsHookSource, /syncManager\.sync\(\)/);
