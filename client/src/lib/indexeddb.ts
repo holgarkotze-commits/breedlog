@@ -401,7 +401,7 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
           if (name !== 'animals' && [data.animalId, data.ramId, data.eweId, ...(data.eweIds ?? [])]
             .some(ref => typeof ref === 'number' && ref > 0 && !visibleIds.has(ref))) continue;
           if (item.action === 'delete') { rows.delete(id); continue; }
-          const row = { ...rows.get(id), ...data, id };
+          const row: Record<string, any> = { ...rows.get(id), ...data, id };
           if (name === 'animals') {
             // Derived detail objects from an older Premium read are not writes.
             // Never let a retained patch reintroduce their hidden nested rows.
