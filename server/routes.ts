@@ -1687,10 +1687,11 @@ export async function registerRoutes(
       const visibility = await getDowngradeVisibilityContext(userId);
       if (treatments.some(row => !isAnimalVisible(visibility, row.animalId))) return hiddenAnimalNotFound(res);
       const event = await storage.createFlockHealthReport(userId, eventData, treatments, operationId);
-      if ((await storage.getFlockHealthTreatments(userId, event.id)).some(row => !isAnimalVisible(visibility, row.animalId))) {
+      const savedTreatments = await storage.getFlockHealthTreatments(userId, event.id);
+      if (savedTreatments.some(row => !isAnimalVisible(visibility, row.animalId))) {
         return hiddenAnimalNotFound(res);
       }
-      res.status(201).json(event);
+      res.status(201).json({ ...event, treatments: savedTreatments });
     } catch (err: any) {
       console.error("Create flock health event error:", err);
       res.status(500).json({ message: err.message });

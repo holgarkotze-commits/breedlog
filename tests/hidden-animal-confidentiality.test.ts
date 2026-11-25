@@ -124,6 +124,8 @@ test("35 original animals: all read/write surfaces enforce downgrade and verifie
       assert.equal(first.status, 201);
       assert.equal(retry.status, 201);
       assert.equal(first.body.id, retry.body.id);
+      assert.deepEqual(first.body.treatments, retry.body.treatments);
+      assert.deepEqual(first.body.treatments.map((row: { animalId: number }) => row.animalId), [v.id]);
       assert.equal((await storage.getFlockHealthTreatments(user, first.body.id)).length, 1);
       assert.equal((await storage.getFlockHealthEvents(user)).filter(row => row.productName === "Replay fixture").length, 1);
     });
