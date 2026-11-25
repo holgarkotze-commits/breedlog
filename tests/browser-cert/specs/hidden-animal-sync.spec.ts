@@ -225,10 +225,16 @@ test('snapshots retain unsynced animals and apply edits to the mapped server rec
     await db.putInStore('animals', { id: -201, tagId: 'LOCAL' });
     await db.putInStore('metadata', { key: 'tempId:animals:-202', serverId: 2 });
     await db.addToSyncQueue({ action: 'update', entity: 'animals', tempId: -202, data: { id: -202, notes: 'queued update' } });
+    await db.addToSyncQueue({ action: 'create', entity: 'flockHealthEvents', tempId: -203,
+      data: { treatments: [{ animalId: -201 }, { animalId: -202 }] } });
     await db.replaceServerSnapshot({ animals: [{ id: 2, tagId: 'SYNCED' }] });
-    return (await db.getAllFromStore('animals')).sort((a, b) => a.id - b.id);
+    return {
+      animals: (await db.getAllFromStore('animals')).sort((a, b) => a.id - b.id),
+      reports: await db.getAllFromStore('flockHealthEvents'),
+    };
   });
-  expect(result).toEqual([
+  expect(result.reports).toEqual([{ id: -203, treatments: [{ animalId: -201 }, { animalId: 2 }] }]);
+  expect(result.animals).toEqual([
     { id: -201, tagId: 'LOCAL' },
     { id: 2, tagId: 'SYNCED', notes: 'queued update' },
   ]);

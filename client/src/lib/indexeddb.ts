@@ -356,12 +356,11 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
     const isCached = snapshot[name] === undefined;
     snapshot[name] = cachedRows[index].filter(row => {
       if (isCached && revoked && ['documents', 'exportedDocuments', 'flockHealthEvents'].includes(name)) return false;
-      if (name === "flockHealthEvents" && !hasVisibleFlockTreatments(row, allowed)) return false;
       return [row.animalId, row.ramId, row.eweId, ...(row.eweIds ?? [])].every(ref =>
         typeof ref !== 'number' || ref < 0 || allowed.has(ref));
     });
   }
-  const names = Object.keys(snapshot);
+  const names = Object.keys(snapshot).sort((a, b) => Number(b === "animals") - Number(a === "animals"));
   return new Promise((resolve, reject) => {
     const tx = db.transaction([...names, 'syncQueue', 'metadata'], 'readwrite');
     const queue = tx.objectStore('syncQueue').getAll();
@@ -373,9 +372,9 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
       applied = true;
       const ids = new Map<string, number>(metadata.result.map(row => [row.key, row.serverId]));
       const pending = (queue.result as SyncQueueItem[]).filter(item => !item.synced).sort((a, b) => a.timestamp - b.timestamp);
-      const visibleIds = new Set((snapshot.animals ?? []).map(row => row.id));
+      let visibleIds = new Set((snapshot.animals ?? []).map(row => row.id));
       for (const name of names) {
-        const rows = new Map(snapshot[name].map(row => [row.id, row]));
+        const rows = new Map<number, Record<string, any>>((snapshot[name] ?? []).map(row => [row.id, row]));
         if (name === 'animals') {
           for (const row of localAnimals.result) {
             if (row.id < 0 && !ids.has(`tempId:animals:${row.id}`)) {
@@ -401,7 +400,6 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
           if (id < 0 && item.action === 'update' && !rows.has(id)) continue;
           if (name !== 'animals' && [data.animalId, data.ramId, data.eweId, ...(data.eweIds ?? [])]
             .some(ref => typeof ref === 'number' && ref > 0 && !visibleIds.has(ref))) continue;
-          if (name === "flockHealthEvents" && !hasVisibleFlockTreatments(data, visibleIds)) continue;
           if (item.action === 'delete') { rows.delete(id); continue; }
           const row = { ...rows.get(id), ...data, id };
           if (name === 'animals') {
@@ -416,6 +414,18 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
             }
           }
           rows.set(id, row);
+        }
+        if (name === "animals") visibleIds = new Set(rows.keys());
+        if (name === "flockHealthEvents") {
+          for (const [id, report] of rows) {
+            if (!Array.isArray(report.treatments)) continue;
+            const treatments = report.treatments.map(row => ({
+              ...row,
+              animalId: ids.get(`tempId:animals:${row.animalId}`) ?? row.animalId,
+            }));
+            if (hasVisibleFlockTreatments({ treatments }, visibleIds)) rows.set(id, { ...report, treatments });
+            else rows.delete(id);
+          }
         }
         const store = tx.objectStore(name);
         store.clear();
