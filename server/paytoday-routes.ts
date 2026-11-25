@@ -20,10 +20,11 @@ export function requireAnnualService(service?: AnnualPayToday): AnnualPayToday {
 export async function createAnnualCheckout(service: AnnualPayToday | undefined, workspace: string, body: unknown) {
   const active = requireAnnualService(service); // fail closed before parsing/storing PII
   const input = z.object({
-    provider: z.literal("paytoday"), productCode: z.literal("premium_annual"),
+    provider: z.literal("paytoday"), productCode: z.enum(["premium_annual", "premium_monthly"]),
+    currency: z.enum(["NAD", "ZAR", "USD", "GBP", "EUR"]).optional(),
     contact: contactSchema,
   }).strict().parse(body);
-  return active.create(workspace, input.contact);
+  return active.create(workspace, input.contact, { productCode: input.productCode, currency: input.currency });
 }
 
 export function registerPayTodayReturns(app: Express, auth: RequestHandler, service?: AnnualPayToday) {
@@ -44,6 +45,19 @@ export function registerPayTodayReturns(app: Express, auth: RequestHandler, serv
         message: status === 503 ? new PaymentUnavailable().message : new PaymentRejected().message });
     }
   };
+  if (service) {
+    app.post("/api/billing/subscription/cancel", auth, async (req, res) => {
+      try {
+        const workspace = getUserId(req);
+        if (!workspace) throw new PaymentRejected();
+        res.setHeader("Cache-Control", "no-store");
+        res.json(await service.cancel(workspace));
+      } catch (err) {
+        const status = err instanceof PaymentUnavailable ? 503 : 409;
+        res.status(status).json({ message: status === 503 ? new PaymentUnavailable().message : new PaymentRejected().message });
+      }
+    });
+  }
   app.get("/api/billing/paytoday/return", auth, handle);
   app.post("/api/billing/paytoday/reconcile", auth, handle);
 }

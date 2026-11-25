@@ -46,6 +46,10 @@ export type FinalizedTransaction = {
 };
 export interface PayTodayProvider {
   create(invoice: string, offer: AnnualOffer, contact: Contact, returnUrl: string): Promise<{ url: string; token: string }>;
+  // Optional server-side operations capability: recover the ORIGINAL intent by
+  // invoice using an independently verified provider contract. Never create or
+  // retry a payment here. The live adapter intentionally does not implement it.
+  recoverIntent?(invoice: string, offer: AnnualOffer): Promise<{ token: string }>;
   lookup(token: string): Promise<{ status: string; invoice: string; amountMinor?: number; merchant?: string; currency?: string; paymentToken?: string; transaction?: FinalizedTransaction; intentNonPayable?: boolean }>;
 }
 
@@ -109,6 +113,9 @@ export class PayTodayAdapter implements PayTodayProvider {
 
   async lookup(token: string) {
     const bearer = await this.authorize();
+    // Observed transport includes a secret in the path. Never log this URL or
+    // attach it as an error cause/diagnostic/metric label. Provider-side log
+    // handling and any alternative transport must be confirmed before activation.
     const claims = await this.request(`/web/payment/lookup/${encodeURIComponent(token)}/`, "lookup", undefined, bearer);
     const intent = claims.intent ?? claims.data?.intent;
     if (!intent || typeof intent !== "object") throw new PaymentRejected();

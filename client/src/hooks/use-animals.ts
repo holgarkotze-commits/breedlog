@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, buildUrl } from "@shared/routes";
 import { type InsertAnimal, type AnimalWithRelations } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue, findPendingSyncItemByOperationId, deleteFromStore } from "@/lib/indexeddb";
+import { getAllFromStore, getFromStore, putInStore, putManyInStore, addToSyncQueue, findPendingSyncItemByOperationId, deleteFromStore, replaceServerSnapshot } from "@/lib/indexeddb";
 import { syncManager } from "@/lib/sync-manager";
 import { clearExpiredOperationCache, getOrCreateOperationId } from "@/lib/idempotency";
 import { splitTagInput } from "@shared/tag-utils";
@@ -23,13 +23,7 @@ async function normalizeTagForClient(tagId?: string | null, explicitPrefix?: str
 }
 
 async function pruneHiddenAnimalsFromCache(serverAnimals: AnimalWithRelations[]) {
-  const serverIds = new Set(serverAnimals.map((animal) => animal.id));
-  const cachedAnimals = await getAllFromStore<AnimalWithRelations>("animals");
-  await Promise.all(
-    cachedAnimals
-      .filter((animal) => animal.id > 0 && !serverIds.has(animal.id))
-      .map((animal) => deleteFromStore("animals", animal.id)),
-  );
+  await replaceServerSnapshot({ animals: serverAnimals });
 }
 
 class AnimalVisibilityError extends Error {}
@@ -38,6 +32,7 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
   const queryKey = [api.animals.list.path, filters];
   
   return useQuery({
+    networkMode: "always",
     queryKey,
     queryFn: async () => {
       const url = new URL(api.animals.list.path, window.location.origin);
@@ -58,9 +53,10 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
         });
         if (!res.ok) throw new Error("Failed to fetch animals");
         const data = api.animals.list.responses[200].parse(await res.json());
-        await putManyInStore("animals", data);
         if (!filters?.search && !filters?.status && !filters?.sex) {
           await pruneHiddenAnimalsFromCache(data);
+        } else {
+          await putManyInStore("animals", data);
         }
         return data;
       } catch (error) {
@@ -87,6 +83,7 @@ export function useAnimals(filters?: { search?: string; status?: string; sex?: s
 
 export function useAnimal(id: number) {
   return useQuery({
+    networkMode: "always",
     queryKey: [api.animals.get.path, id],
     queryFn: async () => {
       // HYBRID FETCH: Check local IndexedDB first for temp IDs (negative) or as fallback
@@ -163,6 +160,7 @@ export function useCreateAnimal() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (data: InsertAnimal) => {
       clearExpiredOperationCache();
       const operationId = getOrCreateOperationId("animals", data as Record<string, unknown>);
@@ -377,6 +375,7 @@ export function useUpdateAnimal() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async ({ id, ...updates }: { id: number } & Partial<InsertAnimal>) => {
       // Use robust connectivity check (actual API ping, not just navigator.onLine)
       const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
@@ -522,6 +521,7 @@ export function useUpdateAnimal() {
 
 export function useFamilyTree(id: number) {
   return useQuery({
+    networkMode: "always",
     queryKey: [api.animals.familyTree.path, id],
     queryFn: async () => {
       const url = buildUrl(api.animals.familyTree.path, { id });
@@ -544,25 +544,25 @@ export function useDeleteAnimal() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (id: number) => {
       const existing = await getFromStore<AnimalWithRelations>("animals", id);
       await deleteFromStore("animals", id);
 
-      const { isApiReachable, getDeviceToken } = await import("@/lib/queryClient");
+      const { isApiReachable } = await import("@/lib/queryClient");
       const isOnline = await isApiReachable();
       if (isOnline && id > 0) {
         const url = buildUrl(api.animals.delete.path, { id });
-        const token = getDeviceToken();
-        const headers: Record<string, string> = {};
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-        const res = await fetch(url, {
-          method: api.animals.delete.method,
-          headers,
-          credentials: "include",
-        });
-        if (res.ok) return;
-        if (res.status >= 400 && res.status < 500) {
-          throw new Error("Failed to delete animal");
+        const { apiRequest } = await import("@/lib/queryClient");
+        try {
+          await apiRequest(api.animals.delete.method, url);
+          return;
+        } catch (error) {
+          const status = error instanceof Error ? Number(/^(\d{3}):/.exec(error.message)?.[1]) : NaN;
+          if (status >= 400 && status < 500 && ![408, 429].includes(status)) {
+            if (existing) await putInStore("animals", existing);
+            throw error;
+          }
         }
       }
 
@@ -595,6 +595,7 @@ export function useDeleteAnimal() {
 // Animal Images Hooks
 export function useAnimalImages(animalId: number) {
   return useQuery({
+    networkMode: "always",
     queryKey: ["/api/animals", animalId, "images"],
     queryFn: async () => {
       try {
@@ -629,6 +630,7 @@ export function useUploadAnimalImage() {
   const { toast } = useToast();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async ({ animalId, imageData, fileName, caption }: { animalId: number; imageData: string; fileName: string; caption?: string }) => {
       // OFFLINE-FIRST: Always save locally first for instant response
       const tempId = -Date.now();

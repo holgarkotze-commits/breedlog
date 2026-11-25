@@ -14,6 +14,14 @@ export function sqlPaymentTransact(pool: pg.Pool): PaymentTransact {
       await c.query("SET LOCAL statement_timeout='10s'");
       await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", ["breedlog:annual:" + workspace]);
       const result = await run({
+        async hasPaymentOrder() {
+          // Ordinary simulator-only databases need not have the prepared
+          // PayToday migration. No table means no protected order can exist.
+          const table = await c.query("SELECT to_regclass('breedlog_payment_orders') AS name");
+          if (!table.rows[0].name) return false;
+          const orders = await c.query("SELECT 1 FROM breedlog_payment_orders WHERE workspace=$1 LIMIT 1", [workspace]);
+          return !!orders.rowCount;
+        },
         async bindProviderTransaction(hash, binding) {
           if (binding.workspace !== workspace) throw new PaymentRejected();
           await c.query("INSERT INTO breedlog_provider_transactions (transaction_hash,binding) VALUES ($1,$2) ON CONFLICT DO NOTHING",
@@ -77,6 +85,7 @@ export function memoryPaymentTransact(settings: Map<string, string>): PaymentTra
     const writes = new Map<string, string>();
     try {
       const result = await run({
+        async hasPaymentOrder() { return [...staged.values()].some(order => order.workspace === workspace); },
         async bindProviderTransaction(hash, binding) {
           if (binding.workspace !== workspace) throw new PaymentRejected();
           const saved = stagedTransactions.get(hash);

@@ -63,6 +63,7 @@ test("automatic backup retention keeps latest 4 for Free and 12 for Premium", as
     await setEntitlementState(storage, {
       accountId: premiumUserId,
       planId: "premium",
+      paidUntil: "2099-01-01T00:00:00Z",
       status: "active",
       source: "billing_event",
       pricingVersion: "2026-07-locked-commercial-model",

@@ -39,6 +39,10 @@ export function hasStorageWarningBeenShown(): boolean {
   return storageWarningShown;
 }
 
+export function hasVisibleFlockTreatments(data: { treatments?: { animalId: number }[] }, visibleIds: Set<number>): boolean {
+  return (data.treatments ?? []).every(({ animalId }) => visibleIds.has(animalId));
+}
+
 export interface SyncQueueItem {
   id: string;
   action: 'create' | 'update' | 'delete';
@@ -333,6 +337,72 @@ export async function putManyInStore<T>(storeName: string, items: T[]): Promise<
 
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
+  });
+}
+
+// Replace the authoritative server view atomically, rather than accumulating
+// records that were deleted, moved, or hidden by a plan change. Pending writes
+// remain in syncQueue even when their target is no longer readable. They can be
+// retried after access is restored without exposing the old row in offline UI.
+export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Promise<void> {
+  const db = await openDatabase();
+  const allowed = new Set((snapshot.animals ?? []).map(row => row.id));
+  const previousAnimals = await getAllFromStore<{ id: number }>('animals');
+  const revoked = previousAnimals.some(row => row.id > 0 && !allowed.has(row.id));
+  const relatedStores = ['breedingEvents', 'matingGroups', 'healthRecords', 'performanceRecords', 'documents', 'evaluations', 'animalImages', 'exportedDocuments', 'flockHealthEvents', 'flockHealthTreatments'];
+  snapshot = { ...snapshot };
+  const cachedRows = await Promise.all(relatedStores.map(name => snapshot[name] ?? getAllFromStore<any>(name)));
+  for (const [index, name] of relatedStores.entries()) {
+    const isCached = snapshot[name] === undefined;
+    snapshot[name] = cachedRows[index].filter(row => {
+      if (isCached && revoked && ['documents', 'exportedDocuments', 'flockHealthEvents'].includes(name)) return false;
+      if (name === "flockHealthEvents" && !hasVisibleFlockTreatments(row, allowed)) return false;
+      return [row.animalId, row.ramId, row.eweId, ...(row.eweIds ?? [])].every(ref =>
+        typeof ref !== 'number' || ref < 0 || allowed.has(ref));
+    });
+  }
+  const names = Object.keys(snapshot);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([...names, 'syncQueue'], 'readwrite');
+    const queue = tx.objectStore('syncQueue').getAll();
+    queue.onsuccess = () => {
+      const pending = (queue.result as SyncQueueItem[]).filter(item => !item.synced).sort((a, b) => a.timestamp - b.timestamp);
+      const visibleIds = new Set((snapshot.animals ?? []).map(row => row.id));
+      for (const name of names) {
+        const rows = new Map(snapshot[name].map(row => [row.id, row]));
+        for (const item of pending.filter(item => item.entity === name)) {
+          const data = item.data as Record<string, any>;
+          const id = item.tempId ?? data.id;
+          if (typeof id !== 'number') continue;
+          // Hidden server rows stay only in the retained retry queue. A local
+          // create has a negative ID and has never been accepted by the server.
+          if (id > 0 && !rows.has(id)) continue;
+          if (name !== 'animals' && [data.animalId, data.ramId, data.eweId, ...(data.eweIds ?? [])]
+            .some(ref => typeof ref === 'number' && ref > 0 && !visibleIds.has(ref))) continue;
+          if (name === "flockHealthEvents" && !hasVisibleFlockTreatments(data, visibleIds)) continue;
+          if (item.action === 'delete') { rows.delete(id); continue; }
+          const row = { ...rows.get(id), ...data, id };
+          if (name === 'animals') {
+            // Derived detail objects from an older Premium read are not writes.
+            // Never let a retained patch reintroduce their hidden nested rows.
+            for (const key of ['dam', 'sire', 'grandparents', 'offspringAsDam', 'offspringAsSire']) delete row[key];
+            for (const parent of ['dam', 'sire']) {
+              if (row[`${parent}Id`] > 0 && !visibleIds.has(row[`${parent}Id`])) {
+                row[`${parent}Id`] = null;
+                row[`external${parent === 'dam' ? 'Dam' : 'Sire'}Info`] = null;
+              }
+            }
+          }
+          rows.set(id, row);
+        }
+        const store = tx.objectStore(name);
+        store.clear();
+        rows.forEach(row => store.put(row));
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('Offline snapshot was not committed'));
   });
 }
 

@@ -3,7 +3,7 @@ import type { AnnualOffer, PaymentOrder, PaymentTransact, PaymentTransaction } f
 import { PaymentRejected, PaymentUnavailable } from "./paytoday-types";
 import { installedPayTodayContract } from "./paytoday-adapter";
 import type { Contact, PayTodayProvider } from "./paytoday-adapter";
-import { BREEDLOG_PRICING_VERSION } from "@shared/commercial";
+import { BREEDLOG_PRICING_VERSION, premiumPrice, effectivePaidAccess, paidTermTime, type BillingCurrency } from "@shared/commercial";
 
 export interface AnnualPaymentConfig {
   enabled: boolean;
@@ -17,11 +17,15 @@ export interface AnnualPaymentConfig {
 
 export function assertAnnualConfig(config: AnnualPaymentConfig | undefined): asserts config is AnnualPaymentConfig {
   if (!config?.enabled || !config.merchantAuthorizationRef || !config.priceApprovalRef || !config.contractEvidenceRef ||
-      config.offer.product !== "breedlog_premium_annual" || config.offer.provider !== "paytoday" ||
+      !["breedlog_premium_annual", "breedlog_premium_monthly"].includes(config.offer.product) || config.offer.provider !== "paytoday" ||
       !Number.isSafeInteger(config.offer.amountMinor) || config.offer.amountMinor <= 0 ||
-      config.offer.currency !== "NAD" || !config.offer.version || !config.offer.merchant ||
+      !["NAD", "ZAR"].includes(config.offer.currency) || !config.offer.version || !config.offer.merchant ||
       !config.offer.contractVersion || !["sandbox", "production"].includes(config.offer.environment) ||
       config.encryptionKey.length !== 32) throw new PaymentUnavailable();
+  if (config.offer.environment === "production" && (config.offer.amountMinor !== premiumPrice(config.offer.currency as BillingCurrency,
+      config.offer.product === "breedlog_premium_monthly" ? "monthly" : "annual") || config.offer.version !== BREEDLOG_PRICING_VERSION)) {
+    throw new PaymentUnavailable();
+  }
   try {
     const u = new URL(config.returnOrigin);
     if (u.protocol !== "https:" || u.origin !== config.returnOrigin) throw new Error();
@@ -62,12 +66,14 @@ function checkedOrder(order: PaymentOrder | undefined, workspace: string, config
   return order;
 }
 
-function annualEnd(start: Date): Date {
+function periodEnd(start: Date, monthly: boolean): Date {
   const end = new Date(start);
-  const month = start.getUTCMonth();
-  end.setUTCFullYear(end.getUTCFullYear() + 1);
-  // A leap-day purchase expires on Feb 28, not March 1.
-  if (end.getUTCMonth() !== month) end.setUTCDate(0);
+  const day = start.getUTCDate();
+  end.setUTCDate(1);
+  if (monthly) end.setUTCMonth(end.getUTCMonth() + 1);
+  else end.setUTCFullYear(end.getUTCFullYear() + 1);
+  const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0)).getUTCDate();
+  end.setUTCDate(Math.min(day, last));
   return end;
 }
 
@@ -93,7 +99,9 @@ export class AnnualPayToday {
     this.config.encryptionKey = Buffer.from(config.encryptionKey);
   }
 
-  async create(workspace: string, contact: Contact) {
+  async create(workspace: string, contact: Contact, selection?: { productCode: string; currency?: string }) {
+    if (selection && (selection.productCode !== this.config.offer.product.replace("breedlog_", "") ||
+        (selection.currency && selection.currency !== this.config.offer.currency))) throw new PaymentRejected();
     const now = this.now();
     const order: PaymentOrder = {
       id: "BREEDLOG-" + crypto.randomBytes(16).toString("hex").toUpperCase(), workspace,
@@ -105,6 +113,10 @@ export class AnnualPayToday {
       const current = JSON.parse(await tx.getSetting(entitlementKey(workspace)) ?? "null");
       // No overlapping periods or implicit automatic renewal.
       if (current?.planId === "premium" && (!current.paidUntil || current.paidUntil > now.toISOString())) throw new PaymentRejected();
+      const sub = JSON.parse(await tx.getSetting(subscriptionKey(workspace)) ?? "null");
+      if (this.config.offer.product === "breedlog_premium_monthly" && sub?.provider === "paytoday" &&
+          sub.billingPeriod === "monthly" && !sub.cancelAtPeriodEnd && sub.paymentOrderId === current?.paymentOrderId &&
+          ["active", "grace_period", "payment_failed", "expired"].includes(sub.status)) order.renewalOf = sub.paymentOrderId;
       await tx.insertOrder(order);
     });
     // Intentionally no automatic retry of createIntent (provider-side
@@ -114,18 +126,39 @@ export class AnnualPayToday {
     try {
       const created = await this.provider.create(order.id, order.offer, contact,
         `${this.config.returnOrigin}/api/billing/paytoday/return?order=${order.id}`);
-      if (!created.token || !created.url) throw new PaymentRejected();
-      await this.transact(workspace, async tx => {
+      if (typeof created.token !== "string" || !created.token || created.token.length > 4096 || !created.url) throw new PaymentRejected();
+      return await this.transact(workspace, async tx => {
         const saved = checkedOrder(await tx.getOrder(order.id), workspace, this.config);
-        await tx.updateOrderState(saved.id, { status: "pending", intentCipher: seal(created.token, this.config.encryptionKey) });
+        // The provider call is outside the transaction. Invoice recovery may
+        // already have reconciled/refunded this order while create was waiting.
+        // Re-read under the workspace/row lock and only advance the reservation;
+        // never replace the recovered intent or financial/period evidence.
+        const state = saved.state;
+        if (state.intentCipher && open(state.intentCipher, this.config.encryptionKey) !== created.token) throw new PaymentRejected();
+        if (state.status === "creating") {
+          await tx.updateOrderState(saved.id, { ...state, status: "pending",
+            intentCipher: state.intentCipher ?? seal(created.token, this.config.encryptionKey) });
+          return { orderId: saved.id, checkoutUrl: created.url, status: "pending" as const };
+        }
+        if (!state.intentCipher) throw new PaymentRejected();
+        if (state.status === "pending" && !state.checkoutResolved) {
+          return { orderId: saved.id, checkoutUrl: created.url, status: "pending" as const };
+        }
+        const status = state.status === "paid" && state.periodEnd && state.periodEnd <= this.now().toISOString()
+          ? "expired" as const : state.status;
+        return { orderId: saved.id, status, ...(state.periodEnd ? { periodEnd: state.periodEnd } : {}) };
       });
-      return { orderId: order.id, checkoutUrl: created.url, status: "pending" as const };
     } catch { throw new PaymentRejected(); }
   }
 
   async reconcile(workspace: string, id: string) {
     const order = await this.transact(workspace, async tx => checkedOrder(await tx.getOrder(id), workspace, this.config));
-    if (!order.state.intentCipher) throw new PaymentRejected();
+    if (!order.state.intentCipher) {
+      if (order.state.status !== "creating") throw new PaymentRejected();
+      // Preserve the reservation and original reference for support. Neither a
+      // browser deadline nor a lost token proves that another create is safe.
+      return { orderId: id, status: "recovery_required" as const };
+    }
     // Token is loaded ONLY from this order, never a browser/callback payload.
     let payment: Awaited<ReturnType<PayTodayProvider["lookup"]>>;
     try { payment = await this.provider.lookup(open(order.state.intentCipher, this.config.encryptionKey)); }
@@ -141,6 +174,27 @@ export class AnnualPayToday {
         throw new PaymentRejected();
       }
       const now = this.now();
+      if (payment.status === "failed" && saved.renewalOf && saved.offer.product === "breedlog_premium_monthly" &&
+          !["paid", "revoked"].includes(state.status)) {
+        const previous = await tx.getOrder(saved.renewalOf);
+        const current = JSON.parse(await tx.getSetting(entitlementKey(workspace)) ?? "null");
+        const sub = JSON.parse(await tx.getSetting(subscriptionKey(workspace)) ?? "null");
+        const dueAt = previous?.state.periodEnd;
+        const due = Date.parse(dueAt ?? "");
+        if (previous?.state.status === "paid" && previous.offer.product === "breedlog_premium_monthly" &&
+            current?.paymentOrderId === saved.renewalOf && sub?.paymentOrderId === saved.renewalOf &&
+            current.billingPeriod === "monthly" && !current.cancelAtPeriodEnd && !sub.cancelAtPeriodEnd &&
+            !["refunded", "cancelled"].includes(current.status) && current.paidUntil === dueAt && sub.currentPeriodEnd === dueAt &&
+            Number.isFinite(due) && Date.parse(saved.createdAt) >= due && now.getTime() >= Date.parse(saved.createdAt)) {
+          const oldFailure = current.renewalFailure;
+          const renewalFailure = oldFailure?.verified === true && oldFailure.paidPeriodId === saved.renewalOf && oldFailure.dueAt === dueAt &&
+            oldFailure.renewalOrderId && paidTermTime(oldFailure.observedAt) >= due && paidTermTime(oldFailure.observedAt) <= now.getTime() ? oldFailure : {
+            verified: true, paidPeriodId: saved.renewalOf, dueAt, observedAt: now.toISOString(), renewalOrderId: saved.id,
+          };
+          await tx.setSetting(entitlementKey(workspace), JSON.stringify({ ...current, renewalFailure }));
+          await tx.setSetting(subscriptionKey(workspace), JSON.stringify({ ...sub, renewalFailure }));
+        }
+      }
       // Pending/failed intent state alone is not evidence of a completed payment.
       // Do not expire a pending order merely because its confirmation arrived late.
       const needsTransaction = payment.status === "success" || state.status === "paid" ||
@@ -191,7 +245,12 @@ export class AnnualPayToday {
           bindingVersion: "transaction-v1", finalizedAt: finalized.toISOString() });
         return { orderId: id, status: "revoked" };
       }
-      if (["rejected", "revoked"].includes(state.status)) return { orderId: id, status: state.status };
+      // A failed attempt is provisional unless the provider proved the intent
+      // non-payable. A later verified, timely financial success must settle the
+      // same unresolved order. Refunds and definitively closed orders stay shut.
+      if (state.status === "revoked" || (state.status === "rejected" && state.checkoutResolved)) {
+        return { orderId: id, status: state.status };
+      }
       if (state.status === "paid") return { orderId: id,
         status: state.periodEnd && state.periodEnd <= this.now().toISOString() ? "expired" : "paid", periodEnd: state.periodEnd };
       if (payment.status !== "success") {
@@ -199,31 +258,95 @@ export class AnnualPayToday {
         return { orderId: id, status: "rejected" };
       }
       await this.activate(tx, saved, paymentHash, finalized, now);
-      const end = annualEnd(finalized).toISOString();
+      const end = periodEnd(finalized, saved.offer.product === "breedlog_premium_monthly").toISOString();
       return { orderId: id, status: end <= now.toISOString() ? "expired" : "paid", periodEnd: end };
+    });
+  }
+
+  // Server-side operations only; no browser token or new HTTP/admin surface.
+  // Remains unavailable on the live adapter until invoice recovery is verified.
+  async recoverIntent(workspace: string, id: string) {
+    const order = await this.transact(workspace, async tx => checkedOrder(await tx.getOrder(id), workspace, this.config));
+    if (order.state.intentCipher) return this.reconcile(workspace, id);
+    if (order.state.status !== "creating") throw new PaymentRejected();
+    if (!this.provider.recoverIntent) return { orderId: id, status: "recovery_required" as const };
+    let token: string;
+    try {
+      const recovered = await this.provider.recoverIntent(order.id, structuredClone(order.offer));
+      token = recovered.token;
+      if (typeof token !== "string" || !token || token.length > 4096) throw new PaymentRejected();
+      // Recovery evidence must match the frozen invoice and commercial context
+      // BEFORE persisting a token. Entitlements still require full reconciliation.
+      const payment = await this.provider.lookup(token);
+      if (payment.invoice !== order.id || payment.amountMinor !== order.offer.amountMinor ||
+          payment.currency !== order.offer.currency || payment.merchant !== order.offer.merchant ||
+          typeof payment.paymentToken !== "string" || !payment.paymentToken || payment.paymentToken.length > 4096) {
+        throw new PaymentRejected();
+      }
+    } catch { throw new PaymentRejected(); }
+    await this.transact(workspace, async tx => {
+      const saved = checkedOrder(await tx.getOrder(id), workspace, this.config);
+      if (saved.state.intentCipher) {
+        if (open(saved.state.intentCipher, this.config.encryptionKey) !== token) throw new PaymentRejected();
+        return;
+      }
+      if (saved.state.status !== "creating") throw new PaymentRejected();
+      await tx.updateOrderState(id, { ...saved.state, status: "pending", intentCipher: seal(token, this.config.encryptionKey) });
+    });
+    return this.reconcile(workspace, id);
+  }
+
+  // Customer-initiated monthly renewal needs no provider autopay promise.
+  // Exact server deadlines are derived from the verified paid term, not retries.
+  async subscription(workspace: string) {
+    return this.transact(workspace, async tx => {
+      const state = JSON.parse(await tx.getSetting(entitlementKey(workspace)) ?? "null");
+      if (!state) return null;
+      return effectivePaidAccess(state, this.now());
+    });
+  }
+
+  async cancel(workspace: string) {
+    return this.transact(workspace, async tx => {
+      const sub = JSON.parse(await tx.getSetting(subscriptionKey(workspace)) ?? "null");
+      const ent = JSON.parse(await tx.getSetting(entitlementKey(workspace)) ?? "null");
+      if (!sub || sub.provider !== "paytoday" || sub.paymentOrderId !== ent?.paymentOrderId) throw new PaymentRejected();
+      // This lane never enrolls automatic debits. A real recurring adapter must
+      // verify remote cancellation before exposing that different capability.
+      if (sub.autoRenew) throw new PaymentUnavailable();
+      await tx.setSetting(subscriptionKey(workspace), JSON.stringify({ ...sub, cancelAtPeriodEnd: true, updatedAt: this.now().toISOString() }));
+      await tx.setSetting(entitlementKey(workspace), JSON.stringify({ ...ent, cancelAtPeriodEnd: true }));
+      return { cancelAtPeriodEnd: true, paidUntil: ent.paidUntil };
     });
   }
 
   private async activate(tx: PaymentTransaction, order: PaymentOrder, paymentHash: string, finalized: Date, now: Date) {
     if (await tx.getSetting(`commercial:master_workspace:${order.workspace}`) === "1") throw new PaymentRejected();
     const existing = JSON.parse(await tx.getSetting(entitlementKey(order.workspace)) ?? "null");
+    if (order.renewalOf && existing?.paymentOrderId !== order.renewalOf) {
+      throw new PaymentRejected();
+    }
     if (existing && ((existing.planId === "premium" && !existing.paidUntil) ||
-        (existing.paidUntil && existing.paidUntil > finalized.toISOString()))) throw new PaymentRejected();
-    const start = finalized.toISOString(), end = annualEnd(finalized).toISOString();
-    const active = end > now.toISOString();
+        (existing.planId === "premium" && existing.paidUntil && existing.paidUntil > finalized.toISOString()))) throw new PaymentRejected();
+    const billingPeriod = order.offer.product === "breedlog_premium_monthly" ? "monthly" : "annual";
+    const start = finalized.toISOString(), end = periodEnd(finalized, billingPeriod === "monthly").toISOString();
+    // A separately authorized invoice that was already payable must still be
+    // fulfilled after cancellation; carry the stop-at-term instruction forward.
+    const cancelAtPeriodEnd = !!(order.renewalOf && existing?.cancelAtPeriodEnd);
+    const access = effectivePaidAccess({ planId: "premium" as const, status: "active", billingPeriod, paidUntil: end, cancelAtPeriodEnd }, now);
     await tx.updateOrderState(order.id, { ...order.state, status: "paid", paymentHash,
       bindingVersion: "transaction-v1", finalizedAt: start, periodStart: start, periodEnd: end });
     await tx.setSetting(entitlementKey(order.workspace), JSON.stringify({
-      accountId: order.workspace, planId: active ? "premium" : "free", status: active ? "active" : "expired", source: "billing_event",
+      accountId: order.workspace, planId: access.planId, status: access.status, source: "billing_event",
       pricingVersion: BREEDLOG_PRICING_VERSION, offerVersion: order.offer.version,
       subscriptionId: order.id, effectiveAt: start, updatedAt: now.toISOString(), paidUntil: end,
-      paymentOrderId: order.id,
+      paymentOrderId: order.id, billingPeriod, cancelAtPeriodEnd,
     }));
     await tx.setSetting(subscriptionKey(order.workspace), JSON.stringify({
       accountId: order.workspace, provider: "paytoday", subscriptionId: order.id,
-      customerId: "", productCode: "premium_annual", planId: "premium", billingPeriod: "annual",
-      status: active ? "active" : "expired", currentPeriodStart: start, currentPeriodEnd: end, cancelAtPeriodEnd: true,
-      autoRenew: false, addOns: [], updatedAt: now.toISOString(), paymentOrderId: order.id,
+      customerId: "", productCode: billingPeriod === "monthly" ? "premium_monthly" : "premium_annual", planId: "premium", billingPeriod,
+      status: access.status, currentPeriodStart: start, currentPeriodEnd: end, cancelAtPeriodEnd,
+      renewalMode: "customer_initiated", autoRenew: false, addOns: [], updatedAt: now.toISOString(), paymentOrderId: order.id,
     }));
   }
 }

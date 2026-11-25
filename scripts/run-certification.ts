@@ -9,6 +9,8 @@ const record = (passed: boolean) => writeFileSync(resultPath, JSON.stringify({
 record(false);
 for (const args of [
   ["npm", ["run", "test:cert:unit"]],
+  // Exercise the read-only probe against disposable local fixtures during certification.
+  [process.execPath, ["--test", "scripts/hosted-readonly-smoke.test.mjs"]],
   [process.execPath, ["--import", "tsx", "scripts/certify-onboarding-sql.ts"]],
 ] as const) {
   const result = spawnSync(args[0], [...args[1]], { stdio: "inherit", timeout: 240_000 });

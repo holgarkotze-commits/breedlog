@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS breedlog_payment_orders (
   payment_hash varchar(64) UNIQUE,
   CHECK (snapshot->>'workspace' = workspace),
   CHECK (snapshot->>'id' = id),
-  CHECK (snapshot->'offer'->>'product' = 'breedlog_premium_annual'),
+  CHECK (snapshot->'offer'->>'product' IN ('breedlog_premium_annual', 'breedlog_premium_monthly')),
   CHECK (snapshot->'offer'->>'provider' = 'paytoday')
 );
 -- An uncertain provider outcome is not a lease: time/browser expiry never frees
@@ -39,3 +39,19 @@ CREATE TRIGGER breedlog_payment_snapshot_immutable BEFORE UPDATE ON breedlog_pay
 FOR EACH ROW EXECUTE FUNCTION breedlog_keep_payment_snapshot();
 -- Snapshot columns are immutable through the only application write API.
 -- State/unique payment binding and existing commercial settings commit together.
+
+-- Candidate-only, explicit migration: widen an existing annual-only check when
+-- this prepared script is rerun against an earlier candidate test database.
+DO $$
+DECLARE old_check record;
+BEGIN
+  FOR old_check IN SELECT conname FROM pg_constraint WHERE conrelid='breedlog_payment_orders'::regclass
+    AND contype='c' AND pg_get_constraintdef(oid) LIKE '%breedlog_premium_annual%'
+    AND pg_get_constraintdef(oid) NOT LIKE '%breedlog_premium_monthly%'
+  LOOP EXECUTE format('ALTER TABLE breedlog_payment_orders DROP CONSTRAINT %I', old_check.conname); END LOOP;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='breedlog_payment_orders'::regclass AND conname='breedlog_payment_product') THEN
+    ALTER TABLE breedlog_payment_orders ADD CONSTRAINT breedlog_payment_product
+      CHECK (snapshot->'offer'->>'product' IN ('breedlog_premium_annual','breedlog_premium_monthly'));
+  END IF;
+END;
+$$;

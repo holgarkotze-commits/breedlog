@@ -6,6 +6,7 @@ import { formatApiLogBody } from "./observability";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { pool } from "./db";
+import { resolveCorsOrigin } from "./trusted-origins";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,26 +23,6 @@ declare module "http" {
 
 // Remove fingerprinting header
 app.disable("x-powered-by");
-
-const TRUSTED_NATIVE_APP_ORIGINS = new Set([
-  "http://tauri.localhost",
-  "https://tauri.localhost",
-  "tauri://localhost",
-  "capacitor://localhost",
-  "http://localhost",
-]);
-
-function resolveCorsOrigin(originHeader: string | undefined) {
-  if (!originHeader) return null;
-  if (TRUSTED_NATIVE_APP_ORIGINS.has(originHeader)) {
-    return originHeader;
-  }
-  const configuredOrigins = (process.env.BREEDLOG_CORS_ORIGINS ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-  return configuredOrigins.includes(originHeader) ? originHeader : null;
-}
 
 // Trust proxy in production (Replit uses a reverse proxy)
 app.set("trust proxy", 1);

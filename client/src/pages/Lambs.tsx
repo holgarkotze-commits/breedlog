@@ -189,7 +189,7 @@ export default function Lambs() {
       [...ewePages, ...ramPages].join('\n')
     );
 
-    openExportPrintDialog(html);
+    if (!await openExportPrintDialog(html)) return;
     const pageCount = eweChunks.length + ramChunks.length;
     createExportedDoc.mutate({
       name: `Lambs_HerdExport_${new Date().toISOString().slice(0,10)}.pdf`,

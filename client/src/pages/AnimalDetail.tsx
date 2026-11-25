@@ -1,3 +1,4 @@
+import { authorizeExport } from "@/lib/export-access";
 import { useRoute, useLocation } from "wouter";
 import { useAnimal, useFamilyTree, useUpdateAnimal, useAnimals, useAnimalImages, useUploadAnimalImage, useDeleteAnimalImage, useRemoveFromHerd } from "@/hooks/use-animals";
 import { usePerformanceRecords, useHealthRecords, useCreatePerformanceRecord } from "@/hooks/use-records";
@@ -1189,7 +1190,8 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
         URL.revokeObjectURL(url);
     };
     
-    const handleExportCSV = () => {
+    const handleExportCSV = async () => {
+      if (!await authorizeExport()) return;
         const data = getProfileData();
         
         const farmHeader = data.farmBranding ? [
@@ -1243,6 +1245,8 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
     const [isPdfExportOpen, setIsPdfExportOpen] = useState(false);
 
     const handleExportPDF = async (quality: PDFQuality = 'high') => {
+        const exportAccess = await authorizeExport();
+        if (!exportAccess) return;
         toast({ title: "Preparing PDF...", description: "Building performance datasheet, please wait." });
 
         let nativePhotoBase64: string | null = null;
@@ -1308,7 +1312,7 @@ function ExportProfileButton({ animal, farmSettings }: { animal: AnimalWithRelat
         }, quality);
         // This request records the export and enforces the existing individual-PDF quota.
         // No preview tab is opened, so a rejected request cannot leave a blank screen.
-        await createExportedDoc.mutateAsync({
+        if (exportAccess === "online") await createExportedDoc.mutateAsync({
             name: nativeFilename,
             documentType: "individual",
             subfolder: "individual",

@@ -166,6 +166,7 @@ export interface IStorage {
   // Flock Health Events
   getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]>;
   getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined>;
+  createFlockHealthReport(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>, treatments: Omit<InsertFlockHealthTreatment, 'userId' | 'eventId'>[], operationId?: string): Promise<FlockHealthEvent>;
   createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>): Promise<FlockHealthEvent>;
   getFlockHealthTreatments(userId: string, eventId: number): Promise<FlockHealthTreatment[]>;
   createFlockHealthTreatments(userId: string, treatments: Omit<InsertFlockHealthTreatment, 'userId'>[]): Promise<FlockHealthTreatment[]>;
@@ -225,6 +226,7 @@ export interface IStorage {
   
   // System Settings (global app config)
   getSystemSetting(key: string): Promise<string | undefined>;
+  consumeAuthAttempt(key: string, window: number, limit: number): Promise<boolean>;
   setSystemSetting(key: string, value: string, description?: string): Promise<void>;
   deleteSystemSetting(key: string): Promise<void>;
   listSystemSettings(prefix: string): Promise<Array<{ key: string; value: string }>>;
@@ -642,6 +644,28 @@ export class DatabaseStorage implements IStorage {
     return event;
   }
   
+  async createFlockHealthReport(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>, treatments: Omit<InsertFlockHealthTreatment, 'userId' | 'eventId'>[], operationId?: string): Promise<FlockHealthEvent> {
+    const key = operationId ? "flock:" + crypto.createHash("sha256").update(JSON.stringify([userId, operationId])).digest("base64url") : undefined;
+    return db.transaction(async tx => {
+      if (key) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+        const [entry] = await tx.select().from(systemSettings).where(eq(systemSettings.key, key));
+        if (entry) {
+          const [existing] = await tx.select().from(flockHealthEvents)
+            .where(and(eq(flockHealthEvents.id, Number(entry.value)), eq(flockHealthEvents.userId, userId)));
+          if (existing) return existing;
+        }
+      }
+      const [created] = await tx.insert(flockHealthEvents).values({ ...event, userId }).returning();
+      if (treatments.length) {
+        await tx.insert(flockHealthTreatments).values(treatments.map(row => ({ ...row, userId, eventId: created.id })));
+      }
+      if (key) await tx.insert(systemSettings).values({ key, value: String(created.id) })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: String(created.id) } });
+      return created;
+    });
+  }
+
   async createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>): Promise<FlockHealthEvent> {
     const [newEvent] = await db.insert(flockHealthEvents).values({ ...event, userId }).returning();
     return newEvent;
@@ -1050,6 +1074,30 @@ export class DatabaseStorage implements IStorage {
   }
   
   // === SYSTEM SETTINGS ===
+  async consumeAuthAttempt(key: string, window: number, limit: number): Promise<boolean> {
+    // One statement holds the unique-key row lock through increment + RETURNING.
+    // No read/modify/write gap across requests, connections or server processes.
+    // An old-window request cannot roll a newer counter back at the boundary.
+    // Malformed persisted JSON/counters cause an error, never a fresh allowance.
+    const result = await pool.query(`
+      INSERT INTO system_settings (key, value, description)
+      VALUES ($1, jsonb_build_object('window', $2::bigint, 'count', 1)::text, 'Authentication abuse protection')
+      ON CONFLICT (key) DO UPDATE SET
+        value = CASE WHEN (system_settings.value::jsonb->>'window')::bigint < $2::bigint
+          THEN jsonb_build_object('window', $2::bigint, 'count', 1)::text
+          ELSE jsonb_build_object(
+            'window', (system_settings.value::jsonb->>'window')::bigint,
+            'count', LEAST((system_settings.value::jsonb->>'count')::bigint + 1, $3::bigint + 1)
+          )::text END,
+        updated_at = now()
+      WHERE (system_settings.value::jsonb->>'count')::bigint >= 1
+        AND (system_settings.value::jsonb->>'window')::bigint >= 0
+      RETURNING value`, [key, window, limit]);
+    if (!result.rows.length) return false;
+    const state = JSON.parse(result.rows[0].value);
+    return state.window === window && Number.isSafeInteger(state.count) && state.count > 0 && state.count <= limit;
+  }
+
   async getSystemSetting(key: string): Promise<string | undefined> {
     const results = await db.select()
       .from(systemSettings)
@@ -1586,6 +1634,18 @@ export class InMemoryStorage implements IStorage {
   }
   async getFlockHealthEvents(userId: string): Promise<FlockHealthEvent[]> { return [...this.flockEvents.values()].filter(e => e.userId === userId); }
   async getFlockHealthEvent(userId: string, id: number): Promise<FlockHealthEvent | undefined> { const e = this.flockEvents.get(id); return e?.userId === userId ? e : undefined; }
+  async createFlockHealthReport(userId: string, event: Omit<InsertFlockHealthEvent, 'userId'>, treatments: Omit<InsertFlockHealthTreatment, 'userId' | 'eventId'>[], operationId?: string): Promise<FlockHealthEvent> {
+    const key = operationId ? "flock:" + crypto.createHash("sha256").update(JSON.stringify([userId, operationId])).digest("base64url") : undefined;
+    const existing = key ? this.flockEvents.get(Number(this.settings.get(key))) : undefined;
+    if (existing?.userId === userId) return existing;
+    const created = { ...event, id: this.nextId("genericSeq"), userId, createdAt: this.now() } as FlockHealthEvent;
+    this.flockEvents.set(created.id, created);
+    const writes = this.createFlockHealthTreatments(userId, treatments.map(row => ({ ...row, eventId: created.id })));
+    if (key) this.settings.set(key, String(created.id));
+    await writes;
+    return created;
+  }
+
   async createFlockHealthEvent(userId: string, event: Omit<InsertFlockHealthEvent, "userId">): Promise<FlockHealthEvent> { const id = this.nextId("genericSeq"); const v = { id, ...event, userId, createdAt: this.now() } as FlockHealthEvent; this.flockEvents.set(id, v); return v; }
   async getFlockHealthTreatments(userId: string, eventId: number): Promise<FlockHealthTreatment[]> { return [...this.flockTreatments.values()].filter(t => t.userId === userId && t.eventId === eventId); }
   async createFlockHealthTreatments(userId: string, treatments: Omit<InsertFlockHealthTreatment, "userId">[]): Promise<FlockHealthTreatment[]> { return treatments.map(t => { const id = this.nextId("genericSeq"); const v = { id, ...t, userId } as FlockHealthTreatment; this.flockTreatments.set(id, v); return v; }); }
@@ -1808,6 +1868,18 @@ export class InMemoryStorage implements IStorage {
     for (const userId of userIds) {
       this.users.delete(userId);
     }
+  }
+  async consumeAuthAttempt(key: string, window: number, limit: number): Promise<boolean> {
+    // No await between read and write: atomic within this in-memory instance.
+    const raw = this.settings.get(key);
+    const previous = raw ? JSON.parse(raw) : null;
+    if (previous && (!Number.isSafeInteger(previous.window) || !Number.isSafeInteger(previous.count) || previous.count < 1)) {
+      throw new Error("Invalid authentication counter");
+    }
+    const state = !previous || previous.window < window ? { window, count: 1 }
+      : { window: previous.window, count: Math.min(previous.count + 1, limit + 1) };
+    this.settings.set(key, JSON.stringify(state));
+    return state.window === window && state.count <= limit;
   }
   async getSystemSetting(key: string): Promise<string | undefined> { return this.settings.get(key); }
   async setSystemSetting(key: string, value: string): Promise<void> { this.settings.set(key, value); }

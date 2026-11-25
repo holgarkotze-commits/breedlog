@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { FlockHealthEvent, InsertFlockHealthEvent, FlockHealthTreatment } from "@shared/schema";
 import { useNetworkStatus } from "@/hooks/use-network-status";
-import { getAllFromStore, putManyInStore, putInStore, addToSyncQueue, getPendingSyncItems } from "@/lib/indexeddb";
+import { getAllFromStore, putManyInStore, putInStore, addToSyncQueue, getPendingSyncItems, hasVisibleFlockTreatments } from "@/lib/indexeddb";
 import { trackAnalyticsEvent } from "@/lib/project-analytics";
 
 export type FlockHealthEventWithTreatments = FlockHealthEvent & {
@@ -38,8 +38,10 @@ export function useFlockHealthEvents() {
       // This ensures follow-up alerts generated from this data include records
       // the farmer created while offline that haven't reached the server yet.
       const pendingItems = await getPendingSyncItems();
+      const visibleIds = new Set((await getAllFromStore<{ id: number }>("animals")).map(row => row.id));
       const pendingHealthEvents = pendingItems
-        .filter(item => item.entity === 'flockHealthEvents' && item.action === 'create')
+        .filter(item => item.entity === 'flockHealthEvents' && item.action === 'create' &&
+          hasVisibleFlockTreatments(item.data as FlockHealthEventWithTreatments, visibleIds))
         .map(item => ({
           ...(item.data as object),
           id: item.tempId ?? -(item.timestamp),
@@ -143,6 +145,7 @@ export function useCreateFlockHealthEvent() {
   const { isOnline } = useNetworkStatus();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (data: CreateFlockHealthEventInput) => {
       const tempId = -Date.now();
       const tempRecord = { 
@@ -158,6 +161,7 @@ export function useCreateFlockHealthEvent() {
         await addToSyncQueue({
           entity: 'flockHealthEvents',
           action: 'create',
+          operationId: crypto.randomUUID(),
           data: data,
           tempId: tempId,
         });

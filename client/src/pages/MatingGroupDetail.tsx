@@ -1,3 +1,4 @@
+import { authorizeExport } from "@/lib/export-access";
 import { Layout } from "@/components/Layout";
 import { useMatingGroups, useUpdateMatingGroup, useDeleteMatingGroup } from "@/hooks/use-mating-groups";
 import { useAnimals } from "@/hooks/use-animals";
@@ -159,7 +160,8 @@ export default function MatingGroupDetail() {
     URL.revokeObjectURL(url);
   };
   
-  const exportCSV = () => {
+  const exportCSV = async () => {
+    if (!await authorizeExport()) return;
     const g = getGroupExportData();
     const farmInfo = farmSettings ? [
       `"Farm/Stud","${farmSettings.studName || farmSettings.farmName || ''}"`,
@@ -178,7 +180,7 @@ export default function MatingGroupDetail() {
     downloadFile(content, `${safeName}-${format(new Date(), "yyyy-MM-dd")}.csv`, "text/csv");
   };
   
-  const exportPDF = () => {
+  const exportPDF = async () => {
     {
     const g = getGroupExportData();
     const exportDate = format(new Date(), "dd/MM/yyyy HH:mm");
@@ -212,7 +214,7 @@ export default function MatingGroupDetail() {
       ${page === 0 && g.notes ? `<p class="notes"><strong>Group notes:</strong> ${escapeHtmlText(sanitizePublicNote(g.notes))}</p>` : ""}
       ${renderExportFooter(farmSettings)}
     </div>`).join("");
-    openExportPrintDialog(wrapExportDocument(title, css, pages));
+    if (!await openExportPrintDialog(wrapExportDocument(title, css, pages))) return;
     createExportedDoc.mutate({
       name: getDocumentFileName("MatingGroup"),
       documentType: "breeding",

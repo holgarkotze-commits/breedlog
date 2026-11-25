@@ -17,6 +17,7 @@ export function usePerformanceRecords(animalId: number) {
   const { isOnline } = useNetworkStatus();
 
   return useQuery({
+    networkMode: "always",
     queryKey: [api.records.performance.list.path, animalId],
     queryFn: async () => {
       if (!isOnline) {
@@ -52,6 +53,7 @@ export function useCreatePerformanceRecord() {
   const { isOnline } = useNetworkStatus();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (data: InsertPerformanceRecord) => {
       const tempId = -Date.now();
       const tempRecord = { ...data, id: tempId, createdAt: new Date().toISOString() } as unknown as PerformanceRecord;
@@ -99,6 +101,7 @@ export function useHealthRecords(animalId: number) {
   const { isOnline } = useNetworkStatus();
 
   return useQuery({
+    networkMode: "always",
     queryKey: [api.records.health.list.path, animalId],
     queryFn: async () => {
       if (!isOnline) {
@@ -157,6 +160,7 @@ export function useCreateHealthRecord() {
   const { isOnline } = useNetworkStatus();
 
   return useMutation({
+    networkMode: "always",
     mutationFn: async (data: InsertHealthRecord) => {
       const tempId = -Date.now();
       const tempRecord = { ...data, id: tempId, createdAt: new Date().toISOString() } as unknown as HealthRecord;

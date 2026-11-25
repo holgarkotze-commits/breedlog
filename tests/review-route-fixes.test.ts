@@ -81,7 +81,7 @@ test("billing webhook verification uses the captured raw request body", async ()
     providerEventId: "evt-raw-body-1",
     accountId: "webhook-raw-body-account",
     eventType: "subscription.created",
-    planId: "premium",
+    planId: "premium", paidUntil: "2099-01-01T00:00:00Z",
   }, null, 2);
   const signature = createHmac("sha256", "webhook-secret").update(rawBody).digest("hex");
 
@@ -106,7 +106,7 @@ test("billing webhook verification uses the captured raw request body", async ()
   assert.equal(response.status, 200);
 });
 
-test("individual PDF quota is inferred and enforced even when quotaClass is omitted", async () => {
+test("Free cannot create an individual PDF even when quotaClass is omitted", async () => {
   const userId = "export-quota-user";
   const deviceId = "export-quota-device";
   await fetch(`${BASE_URL}/api/reset-all-data`, {
@@ -123,30 +123,11 @@ test("individual PDF quota is inferred and enforced even when quotaClass is omit
   assert.equal(animalResponse.status, 201);
   const animal = await animalResponse.json() as { id: number };
 
-  for (let index = 0; index < 5; index += 1) {
-    const response = await fetch(`${BASE_URL}/api/exported-documents`, {
-      method: "POST",
-      headers: testHeaders(userId, deviceId),
-      body: JSON.stringify({
-        name: `animal-${index}.pdf`,
-        documentType: "individual",
-        subfolder: "individual",
-        animalId: animal.id,
-        metadata: {
-          exportType: "pdf",
-          animalCount: 1,
-          status: "success",
-        },
-      }),
-    });
-    assert.equal(response.status, 201);
-  }
-
   const blocked = await fetch(`${BASE_URL}/api/exported-documents`, {
     method: "POST",
     headers: testHeaders(userId, deviceId),
     body: JSON.stringify({
-      name: "animal-6.pdf",
+      name: "animal.pdf",
       documentType: "individual",
       subfolder: "individual",
       animalId: animal.id,
@@ -160,7 +141,7 @@ test("individual PDF quota is inferred and enforced even when quotaClass is omit
   assert.equal(blocked.status, 403);
 });
 
-test("CSV import enforces the active animal limit for Free accounts", async () => {
+test("CSV import enforces the active-animal limit for Free accounts", async () => {
   const userId = "csv-cap-user";
   const deviceId = "csv-cap-device";
   await fetch(`${BASE_URL}/api/reset-all-data`, {
@@ -183,7 +164,7 @@ test("CSV import enforces the active animal limit for Free accounts", async () =
   const body = await response.json() as { created: number; failed: number; errors: string[] };
   assert.equal(body.created, 30);
   assert.equal(body.failed, 1);
-  assert.match(body.errors[0], /Free accounts are limited to 30 active animals/);
+  assert.match(body.errors[0], /30 originally registered animals/);
 
   const animals = await fetch(`${BASE_URL}/api/animals`, {
     headers: testHeaders(userId, deviceId),
@@ -200,6 +181,11 @@ test("reactivating an inactive animal cannot bypass the Free active-animal cap",
     headers: testHeaders(userId, deviceId),
     body: JSON.stringify({ confirmPhrase: "RESET BREEDLOG" }),
   });
+
+  const seedEvent = JSON.stringify({ providerEventId: "evt-reactivation-seed", accountId: userId,
+    eventType: "subscription.created", planId: "premium", paidUntil: "2099-01-01T00:00:00Z" });
+  assert.equal((await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, { method: "POST",
+    headers: { "Content-Type": "application/json", "X-BreedLog-Signature": createHmac("sha256", "webhook-secret").update(seedEvent).digest("hex") }, body: seedEvent })).status, 202);
 
   let response = await fetch(`${BASE_URL}/api/animals`, {
     method: "POST",
@@ -222,6 +208,10 @@ test("reactivating an inactive animal cannot bypass the Free active-animal cap",
     assert.equal(response.status, 201);
   }
 
+  const down = JSON.stringify({ providerEventId: "evt-reactivation-downgrade", accountId: userId, eventType: "subscription.refunded", planId: "premium" });
+  assert.equal((await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, { method: "POST",
+    headers: { "Content-Type": "application/json", "X-BreedLog-Signature": createHmac("sha256", "webhook-secret").update(down).digest("hex") }, body: down })).status, 202);
+
   response = await fetch(`${BASE_URL}/api/animals/${inactiveAnimal.id}`, {
     method: "PUT",
     headers: testHeaders(userId, deviceId),
@@ -235,8 +225,24 @@ test("reactivating an inactive animal cannot bypass the Free active-animal cap",
     headers: testHeaders(userId, deviceId),
   });
   assert.equal(animals.status, 200);
-  const rows = await animals.json() as Array<{ status?: string }>;
+  const visible = await animals.json() as Array<{ id: number; status?: string }>;
+  assert.equal(visible.length, 30, "Free shows the first 30 original registrations");
+  assert.equal(visible.filter(animal => (animal.status ?? "active") === "active").length, 29);
+  assert.equal(visible.find(animal => animal.id === inactiveAnimal.id)?.status, "inactive");
+  // Verify the cap against the full preserved herd after a signed test-only
+  // upgrade; the visibility projection must not conceal an accidental write.
+  const event = JSON.stringify({ providerEventId: "evt-reactivation-preserved-cap", accountId: userId,
+    eventType: "subscription.created", planId: "premium", paidUntil: "2099-01-01T00:00:00Z" });
+  const signature = createHmac("sha256", "webhook-secret").update(event).digest("hex");
+  const upgraded = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, { method: "POST",
+    headers: { "Content-Type": "application/json", "X-BreedLog-Signature": signature }, body: event });
+  assert.equal(upgraded.status, 202);
+  const applied = await upgraded.json() as { idempotent: boolean; entitlement: { planId: string } };
+  assert.equal(applied.idempotent, false); assert.equal(applied.entitlement.planId, "premium");
+  const rows = await (await fetch(`${BASE_URL}/api/animals`, { headers: testHeaders(userId, deviceId) })).json() as Array<{ id: number; status?: string }>;
+  assert.equal(rows.length, 31, "all records were preserved");
   assert.equal(rows.filter((animal) => (animal.status ?? "active") === "active").length, 30);
+  assert.equal(rows.find(animal => animal.id === inactiveAnimal.id)?.status, "inactive");
 });
 
 test("revoked managed account sessions can no longer authenticate protected requests", async () => {
@@ -266,7 +272,7 @@ test("revoked managed account sessions can no longer authenticate protected requ
     providerEventId: "evt-managed-device-premium",
     accountId,
     eventType: "subscription.created",
-    planId: "premium",
+    planId: "premium", paidUntil: "2099-01-01T00:00:00Z",
   });
   const signature = createHmac("sha256", "webhook-secret").update(rawBody).digest("hex");
   response = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, {
@@ -333,7 +339,7 @@ test("hidden-animal EID scans do not leak matched animal identifiers into scan e
     providerEventId: "evt-hidden-eid-premium",
     accountId: userId,
     eventType: "subscription.created",
-    planId: "premium",
+    planId: "premium", paidUntil: "2099-01-01T00:00:00Z",
   });
   let signature = createHmac("sha256", "webhook-secret").update(rawBody).digest("hex");
   let response = await fetch(`${BASE_URL}/api/billing/webhook/test-provider`, {

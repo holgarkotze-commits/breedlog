@@ -1,3 +1,4 @@
+import { authorizeExport } from "@/lib/export-access";
 import { useState } from "react";
 import {
   getCanonicalGroupCSS,
@@ -240,7 +241,7 @@ export default function Records() {
   };
 
   // ── Export: Culled ────────────────────────────────────────────────────────
-  const exportCulledPDF = (_quality?: PDFQuality) => {
+  const exportCulledPDF = async (_quality?: PDFQuality) => {
     const animals = filterAnimals(culledAnimals, "culled");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching culled animals to export", variant: "destructive" }); return; }
     const rows = animals.map(a => `<tr>
@@ -253,13 +254,14 @@ export default function Records() {
     </tr>`);
     const meta = `Total: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}${reasonFilter !== "all" ? ` | Reason: ${reasonFilter}` : ""}${dateFrom || dateTo ? ` | Period: ${dateFrom || "—"} to ${dateTo || "—"}` : ""}`;
     const html = buildPagedPdf("Culled Animals Report", `${farmLabel} — Records`, "<th>Animal ID</th><th>Sex</th><th>DOB</th><th>Cull Date</th><th>Cull Reason</th><th>Notes</th>", rows, meta);
-    openExportPrintDialog(html);
+    if (!await openExportPrintDialog(html)) return;
     const totalPages = Math.max(1, Math.ceil(animals.length / GROUP_ROWS_PER_PAGE));
     createExportedDoc.mutate({ name: `CulledReport_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "culled", subfolder: "culled", metadata: { exportType: "pdf", category: "culled", sourceSection: "records-culled", animalCount: animals.length, pageCount: totalPages, status: "success", filters: { sex: sexFilter, reason: reasonFilter, dateFrom, dateTo } } });
     toast({ title: "PDF Ready", description: `Culled report (${animals.length} animals) opened for printing` });
   };
 
-  const exportCulledCSV = () => {
+  const exportCulledCSV = async () => {
+    if (!await authorizeExport()) return;
     const animals = filterAnimals(culledAnimals, "culled");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching culled animals to export", variant: "destructive" }); return; }
     const header = ["Animal ID", "Sex", "DOB", "Cull Date", "Cull Reason", "Notes"].join(",");
@@ -272,7 +274,7 @@ export default function Records() {
   };
 
   // ── Export: Sold ──────────────────────────────────────────────────────────
-  const exportSoldPDF = (_quality?: PDFQuality) => {
+  const exportSoldPDF = async (_quality?: PDFQuality) => {
     const animals = filterAnimals(soldAnimals, "sold");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching sold/removed animals to export", variant: "destructive" }); return; }
     const rows = animals.map(a => `<tr>
@@ -284,13 +286,14 @@ export default function Records() {
     </tr>`);
     const meta = `Total: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}${statusFilter !== "all" ? ` | Status: ${statusFilter}` : ""}`;
     const html = buildPagedPdf("Sold / Removed Animals Report", `${farmLabel} — Records`, "<th>Animal ID</th><th>Sex</th><th>DOB</th><th>Status</th><th>Notes</th>", rows, meta);
-    openExportPrintDialog(html);
+    if (!await openExportPrintDialog(html)) return;
     const totalPages = Math.max(1, Math.ceil(animals.length / GROUP_ROWS_PER_PAGE));
     createExportedDoc.mutate({ name: `SoldReport_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "sold", subfolder: "sold", metadata: { exportType: "pdf", category: "sold", sourceSection: "records-sold", animalCount: animals.length, pageCount: totalPages, status: "success", filters: { sex: sexFilter, status: statusFilter } } });
     toast({ title: "PDF Ready", description: `Sold/Removed report (${animals.length} animals) opened for printing` });
   };
 
-  const exportSoldCSV = () => {
+  const exportSoldCSV = async () => {
+    if (!await authorizeExport()) return;
     const animals = filterAnimals(soldAnimals, "sold");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching sold/removed animals to export", variant: "destructive" }); return; }
     const header = ["Animal ID", "Sex", "DOB", "Status", "Notes"].join(",");
@@ -302,7 +305,7 @@ export default function Records() {
   };
 
   // ── Export: Deceased ──────────────────────────────────────────────────────
-  const exportDeceasedPDF = (_quality?: PDFQuality) => {
+  const exportDeceasedPDF = async (_quality?: PDFQuality) => {
     const animals = filterAnimals(deceasedAnimals, "deceased");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching deceased animals to export", variant: "destructive" }); return; }
     const rows = animals.map(a => `<tr>
@@ -313,13 +316,14 @@ export default function Records() {
     </tr>`);
     const meta = `Total: ${animals.length}${sexFilter !== "all" ? ` | Sex: ${sexFilter}` : ""}`;
     const html = buildPagedPdf("Deceased Animals Report", `${farmLabel} — Records`, "<th>Animal ID</th><th>Sex</th><th>DOB</th><th>Notes</th>", rows, meta);
-    openExportPrintDialog(html);
+    if (!await openExportPrintDialog(html)) return;
     const totalPages = Math.max(1, Math.ceil(animals.length / GROUP_ROWS_PER_PAGE));
     createExportedDoc.mutate({ name: `DeceasedReport_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "deceased", subfolder: "deceased", metadata: { exportType: "pdf", category: "deceased", sourceSection: "records-deceased", animalCount: animals.length, pageCount: totalPages, status: "success", filters: { sex: sexFilter } } });
     toast({ title: "PDF Ready", description: `Deceased report (${animals.length} animals) opened for printing` });
   };
 
-  const exportDeceasedCSV = () => {
+  const exportDeceasedCSV = async () => {
+    if (!await authorizeExport()) return;
     const animals = filterAnimals(deceasedAnimals, "deceased");
     if (animals.length === 0) { toast({ title: "No Data", description: "No matching deceased animals to export", variant: "destructive" }); return; }
     const header = ["Animal ID", "Sex", "DOB", "Notes"].join(",");
@@ -333,7 +337,7 @@ export default function Records() {
   // ── Export: Productivity — Lambing ────────────────────────────────────────
   const filteredLambingEvents = lambingEvents.filter(e => inDateRange(e.lambingDate, prodDateFrom, prodDateTo));
 
-  const exportLambingPDF = (_quality?: PDFQuality) => {
+  const exportLambingPDF = async (_quality?: PDFQuality) => {
     if (filteredLambingEvents.length === 0) { toast({ title: "No Data", description: "No lambing events match the current filters", variant: "destructive" }); return; }
     const rows = filteredLambingEvents.map(e => {
       const ewe = allAnimals?.find(a => a.id === e.eweId);
@@ -348,13 +352,14 @@ export default function Records() {
     });
     const meta = `Total lambing events: ${filteredLambingEvents.length}${prodDateFrom || prodDateTo ? ` | Period: ${prodDateFrom || "—"} to ${prodDateTo || "—"}` : ""}`;
     const html = buildPagedPdf("Lambing Outcomes Report", `${farmLabel} — Productivity`, "<th>Ewe ID</th><th>Ram ID</th><th>Lambing Date</th><th>Lamb Count</th><th>Notes</th>", rows, meta);
-    openExportPrintDialog(html);
+    if (!await openExportPrintDialog(html)) return;
     const totalPages = Math.max(1, Math.ceil(filteredLambingEvents.length / GROUP_ROWS_PER_PAGE));
     createExportedDoc.mutate({ name: `LambingOutcomes_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "productivity", subfolder: "productivity", metadata: { exportType: "pdf", category: "lambing", sourceSection: "records-productivity", animalCount: filteredLambingEvents.length, pageCount: totalPages, status: "success" } });
     toast({ title: "PDF Ready", description: `Lambing report (${filteredLambingEvents.length} events) opened for printing` });
   };
 
-  const exportLambingCSV = () => {
+  const exportLambingCSV = async () => {
+    if (!await authorizeExport()) return;
     if (filteredLambingEvents.length === 0) { toast({ title: "No Data", description: "No lambing events match the current filters", variant: "destructive" }); return; }
     const header = ["Ewe ID", "Ram ID", "Lambing Date", "Lamb Count", "Notes"].join(",");
     const rows = filteredLambingEvents.map(e => {
@@ -374,7 +379,7 @@ export default function Records() {
     return true;
   });
 
-  const exportMatingPDF = (_quality?: PDFQuality) => {
+  const exportMatingPDF = async (_quality?: PDFQuality) => {
     if (filteredMatingGroups.length === 0) { toast({ title: "No Data", description: "No mating groups match the current filters", variant: "destructive" }); return; }
     const rows = filteredMatingGroups.map(g => {
       const ram = allAnimals?.find(a => a.id === g.ramId);
@@ -391,13 +396,14 @@ export default function Records() {
     });
     const meta = `Total groups: ${filteredMatingGroups.length}${prodDateFrom || prodDateTo ? ` | Date In: ${prodDateFrom || "—"} to ${prodDateTo || "—"}` : ""}`;
     const html = buildPagedPdf("Mating Groups Report", `${farmLabel} — Productivity`, "<th>Group Name</th><th>Ram</th><th>Ewes</th><th>Date In</th><th>Date Out</th><th>Season</th><th>Status</th><th>Notes</th>", rows, meta);
-    openExportPrintDialog(html);
+    if (!await openExportPrintDialog(html)) return;
     const totalPages = Math.max(1, Math.ceil(filteredMatingGroups.length / GROUP_ROWS_PER_PAGE));
     createExportedDoc.mutate({ name: `MatingGroups_${format(new Date(), "yyyy-MM-dd_HHmm")}.pdf`, documentType: "productivity", subfolder: "productivity", metadata: { exportType: "pdf", category: "mating-groups", sourceSection: "records-productivity", animalCount: filteredMatingGroups.length, pageCount: totalPages, status: "success" } });
     toast({ title: "PDF Ready", description: `Mating groups report (${filteredMatingGroups.length} groups) opened for printing` });
   };
 
-  const exportMatingCSV = () => {
+  const exportMatingCSV = async () => {
+    if (!await authorizeExport()) return;
     if (filteredMatingGroups.length === 0) { toast({ title: "No Data", description: "No mating groups match the current filters", variant: "destructive" }); return; }
     const header = ["Group Name", "Ram ID", "Ewe Count", "Date In", "Date Out", "Season", "Status", "Notes"].join(",");
     const rows = filteredMatingGroups.map(g => {

@@ -33,7 +33,7 @@ const allowlist = [
 ];
 
 const NATIVE_BUILD_TARGETS = new Set(["windows", "android"]);
-const REQUIRED_PRODUCTION_APP_ORIGIN = "https://app.breedlog.com";
+const REQUIRED_PRODUCTION_APP_ORIGIN = "https://breedlog.stitchworx.net";
 
 function assertNativeApiOriginContract() {
   const nativeTarget = process.env.BREEDLOG_NATIVE_BUILD_TARGET?.trim();
