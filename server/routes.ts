@@ -676,12 +676,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "imageData and fileName are required" });
       }
       
+      const operationId = req.header("X-Idempotency-Key")?.trim();
+      if (operationId && operationId.length > 200) return res.status(400).json({ message: "Invalid upload operation ID." });
       const image = await storage.createAnimalImage(userId, {
         animalId,
         imageData,
         fileName,
         caption: caption || null
-      });
+      }, operationId);
       res.status(201).json(image);
     } catch (err) {
       if (err instanceof z.ZodError) {

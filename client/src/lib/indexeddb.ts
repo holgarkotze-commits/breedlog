@@ -363,20 +363,42 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
   }
   const names = Object.keys(snapshot);
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([...names, 'syncQueue'], 'readwrite');
+    const tx = db.transaction([...names, 'syncQueue', 'metadata'], 'readwrite');
     const queue = tx.objectStore('syncQueue').getAll();
-    queue.onsuccess = () => {
+    const metadata = tx.objectStore('metadata').getAll();
+    const localAnimals = tx.objectStore('animals').getAll();
+    let applied = false;
+    const overlay = () => {
+      if (applied || [queue, metadata, localAnimals].some(request => request.readyState !== 'done')) return;
+      applied = true;
+      const ids = new Map<string, number>(metadata.result.map(row => [row.key, row.serverId]));
       const pending = (queue.result as SyncQueueItem[]).filter(item => !item.synced).sort((a, b) => a.timestamp - b.timestamp);
       const visibleIds = new Set((snapshot.animals ?? []).map(row => row.id));
       for (const name of names) {
         const rows = new Map(snapshot[name].map(row => [row.id, row]));
+        if (name === 'animals') {
+          for (const row of localAnimals.result) {
+            if (row.id < 0 && !ids.has(`tempId:animals:${row.id}`)) {
+              const { dam, sire, grandparents, offspringAsDam, offspringAsSire, ...safe } = row;
+              for (const parent of ['damId', 'sireId']) {
+                if (safe[parent] > 0 && !visibleIds.has(safe[parent])) {
+                  safe[parent] = null;
+                  safe[parent === 'damId' ? 'externalDamInfo' : 'externalSireInfo'] = null;
+                }
+              }
+              rows.set(row.id, safe);
+            }
+          }
+        }
         for (const item of pending.filter(item => item.entity === name)) {
           const data = item.data as Record<string, any>;
-          const id = item.tempId ?? data.id;
+          const localId = item.tempId ?? data.id;
+          const id = ids.get(`tempId:${name}:${localId}`) ?? localId;
           if (typeof id !== 'number') continue;
           // Hidden server rows stay only in the retained retry queue. A local
           // create has a negative ID and has never been accepted by the server.
           if (id > 0 && !rows.has(id)) continue;
+          if (id < 0 && item.action === 'update' && !rows.has(id)) continue;
           if (name !== 'animals' && [data.animalId, data.ramId, data.eweId, ...(data.eweIds ?? [])]
             .some(ref => typeof ref === 'number' && ref > 0 && !visibleIds.has(ref))) continue;
           if (name === "flockHealthEvents" && !hasVisibleFlockTreatments(data, visibleIds)) continue;
@@ -400,6 +422,7 @@ export async function replaceServerSnapshot(snapshot: Record<string, any[]>): Pr
         rows.forEach(row => store.put(row));
       }
     };
+    queue.onsuccess = metadata.onsuccess = localAnimals.onsuccess = overlay;
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error ?? new Error('Offline snapshot was not committed'));
@@ -427,6 +450,35 @@ export async function clearStore(storeName: string): Promise<void> {
 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error);
+  });
+}
+
+export async function savePendingAnimal(row: { id: number }, item: PendingSyncInput): Promise<string> {
+  const db = await openDatabase();
+  const id = crypto.randomUUID();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(["animals", "syncQueue"], "readwrite");
+    tx.objectStore("animals").put(row);
+    tx.objectStore("syncQueue").put({ ...item, id, synced: 0, syncStatus: "pending", timestamp: Date.now() });
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error);
+  });
+  return id;
+}
+
+export async function finishPendingAnimal(tempId: number, queueId: string, created?: { id: number }): Promise<void> {
+  const db = await openDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(["animals", "syncQueue", "metadata"], "readwrite");
+    const animals = tx.objectStore("animals");
+    if (created) {
+      animals.put(created);
+      tx.objectStore("metadata").put({ key: `tempId:animals:${tempId}`, tempId, serverId: created.id, entity: "animals" });
+    }
+    animals.delete(tempId);
+    tx.objectStore("syncQueue").delete(queueId);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error);
   });
 }
 

@@ -59,12 +59,13 @@ authorization. No real provider request is wired into the application.
 No provider-confirmed contract is installed. Checkout and reconciliation return
 unavailable until a reviewed contract verifies JWTs and exact merchant, currency
 and amount units, and an explicitly approved merchant and versioned annual price
-are composed into the existing billing lane. There is no approved new public
-price, buy button, automatic recurring charge or settlement assertion.
+are composed into the existing billing lane. Public checkout remains disabled. The Premium catalogue lists N$79.99 monthly
+and N$799 annually.
 
 `migrations/0001_paytoday_annual_candidate.sql` is prepared only: no startup
 migration applies it. Apply/review only under separate deployment authority.
-The existing Free/public-trial restrictions and public price catalogue are unchanged.
+Free includes the first 30 originally registered animals, including inactive ones.
+Printing and exports require Premium.
 Intent tokens are encrypted at rest; only order IDs/status and approved hosted
 checkout URLs may reach a client. Reconciliation uses the stored intent, never
 browser-supplied payment status or tokens. Annual periods expire to Free without

@@ -129,6 +129,16 @@ test("35 original animals: all read/write surfaces enforce downgrade and verifie
       assert.equal((await storage.getFlockHealthTreatments(user, first.body.id)).length, 1);
       assert.equal((await storage.getFlockHealthEvents(user)).filter(row => row.productName === "Replay fixture").length, 1);
     });
+    await t.test("one offline image upload is stored once on retry", async () => {
+      const submit = () => request(`/api/animals/${v.id}/images`, "POST",
+        { fileName: "offline-replay.jpg", imageData: "data:image/jpeg;base64,AAAA" },
+        "device-a", { "X-Idempotency-Key": "offline-image-replay" });
+      const [first, retry] = await Promise.all([submit(), submit()]);
+      assert.equal(first.status, 201);
+      assert.equal(retry.status, 201);
+      assert.equal(first.body.id, retry.body.id);
+      assert.equal((await storage.getAnimalImages(user, v.id)).length, 1);
+    });
   } finally {
     server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
   }

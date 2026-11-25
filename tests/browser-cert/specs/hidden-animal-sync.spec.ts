@@ -217,3 +217,19 @@ test('downgrade keeps hidden flock treatments out of the readable cache and reta
   expect(result.visible).toEqual([-102]);
   expect(result.pending).toEqual([-101, -102]);
 });
+
+test('snapshots retain unsynced animals and apply edits to the mapped server record', async ({ page }) => {
+  await page.goto('/auth/login');
+  const result = await page.evaluate(async () => {
+    const db = await import(/* @vite-ignore */ '/src/lib/indexeddb.ts');
+    await db.putInStore('animals', { id: -201, tagId: 'LOCAL' });
+    await db.putInStore('metadata', { key: 'tempId:animals:-202', serverId: 2 });
+    await db.addToSyncQueue({ action: 'update', entity: 'animals', tempId: -202, data: { id: -202, notes: 'queued update' } });
+    await db.replaceServerSnapshot({ animals: [{ id: 2, tagId: 'SYNCED' }] });
+    return (await db.getAllFromStore('animals')).sort((a, b) => a.id - b.id);
+  });
+  expect(result).toEqual([
+    { id: -201, tagId: 'LOCAL' },
+    { id: 2, tagId: 'SYNCED', notes: 'queued update' },
+  ]);
+});

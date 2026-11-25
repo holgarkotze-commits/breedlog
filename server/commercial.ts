@@ -596,9 +596,13 @@ async function simulateBillingProviderEventLocked(storage: SimulatorSettings, ac
   await assertSimulatorMayMutate(storage, accountId);
   const subscription = await getBillingSubscriptionState(storage, accountId);
   const now = input.now ?? new Date();
+  const planId = subscription && input.eventType === "subscription.renewed"
+    ? BILLING_CATALOG[subscription.productCode]?.planId ?? subscription.planId
+    : subscription?.planId ?? "free";
   const nextSubscription: BillingSubscriptionState | null = subscription
     ? {
         ...subscription,
+        planId,
         status:
           input.eventType === "subscription.grace_period" ? "grace_period"
           : input.eventType === "subscription.payment_failed" ? "payment_failed"
@@ -622,7 +626,7 @@ async function simulateBillingProviderEventLocked(storage: SimulatorSettings, ac
     providerEventId: input.providerEventId ?? `evt_${input.eventType}_${now.getTime()}`,
     accountId,
     eventType: input.eventType,
-    planId: subscription?.planId ?? "free",
+    planId,
     subscriptionId: subscription?.subscriptionId,
     customerId: subscription?.customerId,
     effectiveAt: now.toISOString(),

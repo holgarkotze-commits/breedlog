@@ -354,7 +354,7 @@ class SyncManager {
     switch (item.action) {
       case 'create':
         const payloadData = data;
-        const idempotencyKey = item.operationId || (typeof payloadData.clientId === "string" ? payloadData.clientId : item.entity === "flockHealthEvents" ? item.id : undefined);
+        const idempotencyKey = item.operationId || (typeof payloadData.clientId === "string" ? payloadData.clientId : ["flockHealthEvents", "animalImages"].includes(item.entity) ? item.id : undefined);
         const payload = idempotencyKey
           ? { ...payloadData, clientId: idempotencyKey }
           : payloadData;

@@ -152,7 +152,7 @@ export interface IStorage {
   
   // Animal Images
   getAnimalImages(userId: string, animalId: number): Promise<AnimalImage[]>;
-  createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>): Promise<AnimalImage>;
+  createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>, operationId?: string): Promise<AnimalImage>;
   deleteAnimalImage(userId: string, id: number): Promise<void>;
   createEidScanEvent(userId: string, event: Omit<InsertEidScanEvent, 'userId'>): Promise<EidScanEvent>;
   
@@ -603,9 +603,24 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(animalImages.uploadedAt));
   }
   
-  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>): Promise<AnimalImage> {
-    const [newImage] = await db.insert(animalImages).values({ ...image, userId }).returning();
-    return newImage;
+  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, 'userId'>, operationId?: string): Promise<AnimalImage> {
+    const key = operationId ? "image:" + crypto.createHash("sha256").update(JSON.stringify([userId, image.animalId, operationId])).digest("base64url") : undefined;
+    return db.transaction(async tx => {
+      if (key) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+        const [entry] = await tx.select().from(systemSettings).where(eq(systemSettings.key, key));
+        if (entry) {
+          const [existing] = await tx.select().from(animalImages).where(and(
+            eq(animalImages.id, Number(entry.value)), eq(animalImages.userId, userId), eq(animalImages.animalId, image.animalId),
+          ));
+          if (existing) return existing;
+        }
+      }
+      const [created] = await tx.insert(animalImages).values({ ...image, userId }).returning();
+      if (key) await tx.insert(systemSettings).values({ key, value: String(created.id) })
+        .onConflictDoUpdate({ target: systemSettings.key, set: { value: String(created.id) } });
+      return created;
+    });
   }
   
   async deleteAnimalImage(userId: string, id: number): Promise<void> {
@@ -1629,7 +1644,15 @@ export class InMemoryStorage implements IStorage {
   }
   async deleteDocument(userId: string, id: number): Promise<void> { const d = this.documents.get(id); if (d?.userId === userId) this.documents.delete(id); }
   async getAnimalImages(userId: string, animalId: number): Promise<AnimalImage[]> { return [...this.animalImages.values()].filter(i => i.userId === userId && i.animalId === animalId); }
-  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, "userId">): Promise<AnimalImage> { const id = this.nextId("genericSeq"); const v = { id, ...image, userId, uploadedAt: this.now() } as AnimalImage; this.animalImages.set(id, v); return v; }
+  async createAnimalImage(userId: string, image: Omit<InsertAnimalImage, "userId">, operationId?: string): Promise<AnimalImage> {
+    const key = operationId ? "image:" + crypto.createHash("sha256").update(JSON.stringify([userId, image.animalId, operationId])).digest("base64url") : undefined;
+    const existing = key ? this.animalImages.get(Number(this.settings.get(key))) : undefined;
+    if (existing?.userId === userId && existing.animalId === image.animalId) return existing;
+    const created = { ...image, id: this.nextId("genericSeq"), userId, uploadedAt: this.now() } as AnimalImage;
+    this.animalImages.set(created.id, created);
+    if (key) this.settings.set(key, String(created.id));
+    return created;
+  }
   async deleteAnimalImage(userId: string, id: number): Promise<void> { const i = this.animalImages.get(id); if (i?.userId === userId) this.animalImages.delete(id); }
   async createEidScanEvent(userId: string, event: Omit<InsertEidScanEvent, "userId">): Promise<EidScanEvent> { const id = this.nextId("genericSeq"); const v = { id, ...event, userId, createdAt: this.now(), scannedAt: this.now() } as EidScanEvent; this.eidEvents.set(id, v); return v; }
   async getExportedDocuments(userId: string, subfolder?: string): Promise<ExportedDocument[]> { return [...this.exportedDocuments.values()].filter(d => d.userId === userId && (!subfolder || d.subfolder === subfolder)); }

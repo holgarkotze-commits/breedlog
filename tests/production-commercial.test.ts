@@ -255,3 +255,13 @@ test("immediate cancellation downgrades Premium entitlements back to Free limits
   assert.equal(entitlement.planId, "free");
   assert.equal(entitlement.status, "cancelled");
 });
+
+test("simulated renewal restores the subscribed Premium product after expiry", async () => {
+  const userId = "commercial-expired-renewal";
+  const checkout = await createCheckoutSession(storage, userId, "premium_monthly");
+  await completeTestCheckoutSession(storage, checkout.sessionId, { now: new Date("2020-01-01T00:00:00Z") });
+  assert.equal((await getBillingSubscriptionState(storage, userId))?.planId, "free");
+  const renewed = await simulateBillingProviderEvent(storage, userId, { eventType: "subscription.renewed" });
+  assert.equal(renewed.entitlement.planId, "premium");
+  assert.equal((await getBillingSubscriptionState(storage, userId))?.planId, "premium");
+});
