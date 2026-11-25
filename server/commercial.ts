@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { z } from "zod";
 import type { IStorage } from "./storage";
+import type { InsertAnimal } from "@shared/schema";
 import type { PaymentTransaction } from "./paytoday-types";
 import {
   BREEDLOG_PLANS,
@@ -690,6 +691,34 @@ export async function assertCanCreateAnimal(storage: IStorage, accountId: string
         : `Free includes the first ${activeLimit} originally registered animals, including inactive ones.`,
     );
   }
+}
+
+/** One account lock covers the count, duplicate replay lookup and committed insert. */
+export async function createAnimalWithinLimit(
+  storage: IStorage, accountId: string, input: Omit<InsertAnimal, "userId">,
+) {
+  return storage.withAnimalWriteLock(accountId, async locked => {
+    if (input.clientId) {
+      const existing = await locked.getAnimalByClientId(accountId, input.clientId);
+      if (existing) return { animal: existing, created: false };
+    }
+    await assertCanCreateAnimal(locked, accountId);
+    return { animal: await locked.createAnimal(accountId, input), created: true };
+  });
+}
+
+/** Re-read status under the same lock used by creates and import rows. */
+export async function updateAnimalWithinLimit(
+  storage: IStorage, accountId: string, animalId: number, input: Partial<Omit<InsertAnimal, "userId">>,
+) {
+  return storage.withAnimalWriteLock(accountId, async locked => {
+    const existing = await locked.getAnimal(accountId, animalId);
+    if (!existing) return undefined;
+    if ((existing.status ?? "active") !== "active" && (input.status ?? existing.status ?? "active") === "active") {
+      await assertCanCreateAnimal(locked, accountId, true);
+    }
+    return locked.updateAnimal(accountId, animalId, input);
+  });
 }
 
 export function projectDowngradedAnimalVisibility<T extends { id: number; createdAt?: Date | string | null; status?: string | null }>(

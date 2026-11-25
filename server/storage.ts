@@ -106,6 +106,7 @@ export class DuplicateAnimalNameError extends Error {
 
 export interface IStorage {
   paymentTransaction: PaymentTransact;
+  withAnimalWriteLock<T>(userId: string, work: (storage: IStorage) => Promise<T>): Promise<T>;
   // Animals - ALL methods now require userId for data isolation
   getAnimals(userId: string, filters?: { search?: string; status?: string; sex?: string }): Promise<Animal[]>;
   getAnimal(userId: string, id: number): Promise<Animal | undefined>;
@@ -265,6 +266,16 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // Keep the limit check and its animal write on the same connection.
+  constructor(private readonly animalDb: Pick<typeof db, "select" | "insert" | "update"> = db) {}
+
+  async withAnimalWriteLock<T>(userId: string, work: (storage: IStorage) => Promise<T>): Promise<T> {
+    return db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${"breedlog:animal-limit:" + userId}, 0))`);
+      return work(new DatabaseStorage(tx));
+    });
+  }
+
   paymentTransaction = sqlPaymentTransact(pool);
   private normalizeTagId(tagId?: string | null): string {
     return canonicalizeTag(tagId, undefined);
@@ -289,7 +300,7 @@ export class DatabaseStorage implements IStorage {
       conditions.push(ne(animals.id, excludeAnimalId));
     }
 
-    const [existing] = await db.select().from(animals).where(and(...conditions)).limit(1);
+    const [existing] = await this.animalDb.select().from(animals).where(and(...conditions)).limit(1);
     if (existing) {
       throw new DuplicateElectronicIdError(normalized);
     }
@@ -299,7 +310,7 @@ export class DatabaseStorage implements IStorage {
     const incoming = splitTagInput(tagId, studPrefix);
     if (!incoming.canonicalTag) return;
 
-    const existingAnimals = await db.select().from(animals).where(eq(animals.userId, userId));
+    const existingAnimals = await this.animalDb.select().from(animals).where(eq(animals.userId, userId));
     const duplicate = existingAnimals.find((animal) => {
       if (excludeAnimalId !== undefined && animal.id === excludeAnimalId) return false;
       const candidate = splitTagInput(animal.tagId, animal.studPrefix);
@@ -328,7 +339,7 @@ export class DatabaseStorage implements IStorage {
     if (excludeAnimalId !== undefined) {
       conditions.push(ne(animals.id, excludeAnimalId));
     }
-    const [existing] = await db.select().from(animals).where(and(...conditions)).limit(1);
+    const [existing] = await this.animalDb.select().from(animals).where(and(...conditions)).limit(1);
     if (existing) {
       throw new DuplicateAnimalNameError(name!.trim());
     }
@@ -356,12 +367,12 @@ export class DatabaseStorage implements IStorage {
       )!);
     }
     
-    const results = await db.select().from(animals).where(and(...conditions));
+    const results = await this.animalDb.select().from(animals).where(and(...conditions));
     return results;
   }
 
   async getAnimal(userId: string, id: number): Promise<Animal | undefined> {
-    const [animal] = await db.select().from(animals).where(
+    const [animal] = await this.animalDb.select().from(animals).where(
       and(eq(animals.id, id), eq(animals.userId, userId))
     );
     return animal;
@@ -378,7 +389,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAnimalByClientId(userId: string, clientId: string): Promise<Animal | undefined> {
-    const [animal] = await db.select().from(animals).where(
+    const [animal] = await this.animalDb.select().from(animals).where(
       and(eq(animals.userId, userId), eq(animals.clientId, clientId))
     );
     return animal;
@@ -392,7 +403,7 @@ export class DatabaseStorage implements IStorage {
     await this.assertUniqueAnimalName(userId, animal.name);
     await this.assertUniqueElectronicId(userId, normalizedElectronicId);
 
-    const [newAnimal] = await db.insert(animals).values({
+    const [newAnimal] = await this.animalDb.insert(animals).values({
       ...animal,
       tagId: normalizedTag.canonicalTag,
       rawTag: normalizedTag.rawTag || null,
@@ -429,7 +440,7 @@ export class DatabaseStorage implements IStorage {
       await this.assertUniqueElectronicId(userId, updates.electronicId, id);
     }
 
-    const [updatedAnimal] = await db
+    const [updatedAnimal] = await this.animalDb
       .update(animals)
       .set(updates)
       .where(and(eq(animals.id, id), eq(animals.userId, userId)))
@@ -546,7 +557,7 @@ export class DatabaseStorage implements IStorage {
   
   // Farm Settings - one per user
   async getFarmSettings(userId: string): Promise<FarmSettings | undefined> {
-    const [settings] = await db.select().from(farmSettings)
+    const [settings] = await this.animalDb.select().from(farmSettings)
       .where(eq(farmSettings.userId, userId))
       .limit(1);
     return settings;
@@ -1099,14 +1110,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSystemSetting(key: string): Promise<string | undefined> {
-    const results = await db.select()
+    const results = await this.animalDb.select()
       .from(systemSettings)
       .where(eq(systemSettings.key, key));
     return results[0]?.value;
   }
   
   async setSystemSetting(key: string, value: string, description?: string): Promise<void> {
-    await db.insert(systemSettings)
+    await this.animalDb.insert(systemSettings)
       .values({ key, value, description })
       .onConflictDoUpdate({
         target: systemSettings.key,
@@ -1443,6 +1454,22 @@ export class DatabaseStorage implements IStorage {
 }
 
 export class InMemoryStorage implements IStorage {
+  private animalWriteLocks = new Map<string, Promise<void>>();
+
+  async withAnimalWriteLock<T>(userId: string, work: (storage: IStorage) => Promise<T>): Promise<T> {
+    const previous = this.animalWriteLocks.get(userId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>(resolve => { release = resolve; });
+    this.animalWriteLocks.set(userId, current);
+    await previous;
+    try {
+      return await work(this);
+    } finally {
+      release();
+      if (this.animalWriteLocks.get(userId) === current) this.animalWriteLocks.delete(userId);
+    }
+  }
+
   private animalSeq = 1;
   private breedingSeq = 1;
   private matingSeq = 1;

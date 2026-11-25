@@ -21,7 +21,8 @@ import {
   EntitlementDeniedError,
   applyBillingEvent,
   areBillingTestRoutesEnabled,
-  assertCanCreateAnimal,
+  createAnimalWithinLimit,
+  updateAnimalWithinLimit,
   billingEventSchema,
   cancelBillingSubscription,
   completeTestCheckoutSession,
@@ -538,8 +539,12 @@ export async function registerRoutes(
       const createInput = idempotencyKey ? { ...input, clientId: idempotencyKey } : input;
       const visibility = await getDowngradeVisibilityContext(userId);
       if (!isAnimalVisible(visibility, input.damId) || !isAnimalVisible(visibility, input.sireId)) return hiddenAnimalNotFound(res);
-      await assertCanCreateAnimal(storage, userId);
-      const animal = await storage.createAnimal(userId, createInput);
+      const { animal, created } = await createAnimalWithinLimit(storage, userId, createInput);
+      if (!created) {
+        const replayVisibility = await getDowngradeVisibilityContext(userId);
+        if (!isAnimalVisible(replayVisibility, animal.id)) return hiddenAnimalNotFound(res);
+        return res.status(200).json(redactAnimalParents(replayVisibility, animal));
+      }
       res.status(201).json(animal);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -594,16 +599,10 @@ export async function registerRoutes(
       }
       const input = api.animals.update.input.parse(req.body);
       if (!isAnimalVisible(visibility, input.damId) || !isAnimalVisible(visibility, input.sireId)) return hiddenAnimalNotFound(res);
-      const existing = await storage.getAnimal(userId, animalId);
-      if (!existing) {
+      const animal = await updateAnimalWithinLimit(storage, userId, animalId, input);
+      if (!animal) {
         return res.status(404).json({ message: "Animal not found" });
       }
-      const nextStatus = input.status ?? existing.status ?? "active";
-      const wasActive = (existing.status ?? "active") === "active";
-      if (!wasActive && nextStatus === "active") {
-        await assertCanCreateAnimal(storage, userId, true);
-      }
-      const animal = await storage.updateAnimal(userId, animalId, input);
       res.json(redactAnimalParents(visibility, animal));
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -1172,8 +1171,7 @@ export async function registerRoutes(
           }
           try {
             const status = record.status || "active";
-            await assertCanCreateAnimal(storage, userId);
-            await storage.createAnimal(userId, {
+            await createAnimalWithinLimit(storage, userId, {
               tagId,
               sex: record.sex || 'ewe',
               breed: record.breed || "Meatmaster",
@@ -1291,8 +1289,7 @@ export async function registerRoutes(
 
       for (const animal of parsed.rowsToCreate) {
         try {
-          await assertCanCreateAnimal(storage, userId);
-          await storage.createAnimal(userId, animal);
+          await createAnimalWithinLimit(storage, userId, animal);
           created += 1;
         } catch (err) {
           if (err instanceof DuplicateElectronicIdError || err instanceof DuplicateTagIdError || err instanceof DuplicateAnimalNameError) {
